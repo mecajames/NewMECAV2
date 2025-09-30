@@ -37,7 +37,7 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
             <img
               src="https://i0.wp.com/mecacaraudio.com/wp-content/uploads/2021/09/Meca_Logo_350v6.png?w=303&ssl=1"
               alt="MECA Car Audio"
-              className="h-12 w-auto"
+              className="h-12 w-auto mix-blend-lighten"
             />
           </div>
 
