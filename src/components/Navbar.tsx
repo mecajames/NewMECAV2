@@ -35,9 +35,9 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
             onClick={() => onNavigate('home')}
           >
             <img
-              src="https://i0.wp.com/mecacaraudio.com/wp-content/uploads/2021/09/Meca_Logo_350v6.png?w=303&ssl=1"
-              alt="MECA Car Audio"
-              className="h-12 w-auto mix-blend-lighten"
+              src="/unnamed.png"
+              alt="MECA - Mobile Electronics Competition Association"
+              className="h-12 w-auto"
             />
           </div>
 
