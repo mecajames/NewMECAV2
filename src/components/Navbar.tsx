@@ -39,7 +39,7 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
                 MECA
               </span>
               <span className="text-[10px] text-white leading-none">
-                mobile electronics competition associatn
+                mobile electronics competition association
               </span>
             </div>
           </div>
