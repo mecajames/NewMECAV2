@@ -35,9 +35,10 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
             onClick={() => onNavigate('home')}
           >
             <img
-              src="/Gemini_Generated_Image_36aik636aik636ai.png"
+              src="/MECAV2-Logo.png"
               alt="MECA - Mobile Electronics Competition Association"
-              className="h-10 w-auto"
+              className="h-10 w-auto object-contain"
+              style={{ backgroundColor: 'transparent' }}
             />
           </div>
 
