@@ -34,10 +34,11 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
             className="flex items-center cursor-pointer"
             onClick={() => onNavigate('home')}
           >
-            <div className="flex items-center gap-2">
-              <Trophy className="h-8 w-8 text-orange-500" />
-              <span className="text-xl font-bold">MECACARAUDIO</span>
-            </div>
+            <img
+              src="https://i0.wp.com/mecacaraudio.com/wp-content/uploads/2021/09/Meca_Logo_350v6.png?w=303&ssl=1"
+              alt="MECA Car Audio"
+              className="h-12 w-auto"
+            />
           </div>
 
           <div className="hidden md:flex items-center space-x-8">
