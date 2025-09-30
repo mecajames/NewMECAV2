@@ -1,4 +1,4 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -21,7 +21,9 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
     { id: 'home', label: 'Home', icon: null },
     { id: 'events', label: 'Events', icon: Calendar },
     { id: 'results', label: 'Results', icon: Trophy },
-    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
+    { id: 'standings', label: 'Standings', icon: Award },
+    { id: 'leaderboard', label: 'Top 10', icon: Trophy },
+    { id: 'rulebooks', label: 'Rulebooks', icon: BookOpen },
   ];
 
   return (
