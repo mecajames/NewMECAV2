@@ -61,9 +61,11 @@ export default function HomePage({ onNavigate }: HomePageProps) {
         }}
       >
         <div className="text-center text-white px-4">
-          <h1 className="text-5xl md:text-7xl font-bold mb-6">
-            MECACARAUDIO.COM
-          </h1>
+          <img
+            src="https://i0.wp.com/mecacaraudio.com/wp-content/uploads/2021/09/Meca_Logo_350v6.png?w=303&ssl=1"
+            alt="MECA Car Audio"
+            className="h-32 md:h-40 w-auto mx-auto mb-6"
+          />
           <p className="text-xl md:text-2xl mb-8 text-gray-200">
             The Premier Platform for Car Audio Competition Management
           </p>
