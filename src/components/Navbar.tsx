@@ -35,9 +35,9 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
             onClick={() => onNavigate('home')}
           >
             <img
-              src="/unnamed.png"
+              src="/Gemini_Generated_Image_36aik636aik636ai.png"
               alt="MECA - Mobile Electronics Competition Association"
-              className="h-12 w-auto"
+              className="h-10 w-auto"
             />
           </div>
 
