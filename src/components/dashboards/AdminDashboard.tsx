@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import EventManagement from '../admin/EventManagement';
 import ResultsEntry from '../admin/ResultsEntry';
 import RulebookManagement from '../admin/RulebookManagement';
+import MediaLibrary from '../admin/MediaLibrary';
+import SiteSettings from '../admin/SiteSettings';
 
 interface AdminDashboardProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks';
+type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings';
 
 export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
   const [currentView, setCurrentView] = useState<AdminView>('overview');
@@ -69,6 +71,20 @@ export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       color: 'purple',
     },
     {
+      icon: ImageIcon,
+      title: 'Media Library',
+      description: 'Manage images, videos, and documents',
+      action: 'media' as AdminView,
+      color: 'pink',
+    },
+    {
+      icon: Settings,
+      title: 'Site Settings',
+      description: 'Configure homepage and site-wide settings',
+      action: 'settings' as AdminView,
+      color: 'indigo',
+    },
+    {
       icon: Users,
       title: 'Manage Users',
       description: 'View and manage user accounts and roles',
@@ -91,6 +107,8 @@ export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       blue: 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20',
       green: 'bg-green-500/10 text-green-500 hover:bg-green-500/20',
       purple: 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20',
+      pink: 'bg-pink-500/10 text-pink-500 hover:bg-pink-500/20',
+      indigo: 'bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20',
     };
     return colors[color] || colors.orange;
   };
@@ -103,6 +121,10 @@ export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         return <ResultsEntry />;
       case 'rulebooks':
         return <RulebookManagement />;
+      case 'media':
+        return <MediaLibrary />;
+      case 'settings':
+        return <SiteSettings />;
       case 'users':
         return (
           <div className="bg-slate-800 rounded-xl p-8 text-center">
