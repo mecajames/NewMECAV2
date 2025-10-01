@@ -80,3 +80,18 @@ export interface CompetitionResult {
   event?: Event;
   competitor?: Profile;
 }
+
+export type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
+export type RulebookStatus = 'active' | 'inactive' | 'archive';
+
+export interface Rulebook {
+  id: string;
+  title: string;
+  category: RulebookCategory;
+  season: string;
+  pdf_url: string;
+  status: RulebookStatus;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}

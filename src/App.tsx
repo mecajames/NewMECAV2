@@ -11,13 +11,16 @@ import ResultsPage from './pages/ResultsPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import StandingsPage from './pages/StandingsPage';
 import RulebooksPage from './pages/RulebooksPage';
+import RulebookDetailPage from './pages/RulebookDetailPage';
+import RulebookArchivePage from './pages/RulebookArchivePage';
 import DashboardPage from './pages/DashboardPage';
 import MembershipPage from './pages/MembershipPage';
 
-type Page = 'home' | 'login' | 'signup' | 'events' | 'event-detail' | 'results' | 'leaderboard' | 'standings' | 'rulebooks' | 'dashboard' | 'membership';
+type Page = 'home' | 'login' | 'signup' | 'events' | 'event-detail' | 'results' | 'leaderboard' | 'standings' | 'rulebooks' | 'rulebook-detail' | 'rulebook-archive' | 'dashboard' | 'membership';
 
 interface PageData {
   eventId?: string;
+  rulebookId?: string;
 }
 
 function App() {
@@ -53,7 +56,15 @@ function App() {
       case 'standings':
         return <StandingsPage />;
       case 'rulebooks':
-        return <RulebooksPage />;
+        return <RulebooksPage onNavigate={handleNavigate} />;
+      case 'rulebook-detail':
+        return pageData.rulebookId ? (
+          <RulebookDetailPage rulebookId={pageData.rulebookId} />
+        ) : (
+          <RulebooksPage onNavigate={handleNavigate} />
+        );
+      case 'rulebook-archive':
+        return <RulebookArchivePage onNavigate={handleNavigate} />;
       case 'dashboard':
         return <DashboardPage onNavigate={handleNavigate} />;
       case 'membership':
