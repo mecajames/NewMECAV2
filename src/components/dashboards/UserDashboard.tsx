@@ -65,7 +65,7 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">My Dashboard</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">My MECA</h1>
           <p className="text-gray-400">Welcome back, {profile?.full_name}</p>
         </div>
 

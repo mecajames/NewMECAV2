@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Read(//e/Organizations Logos/Events Fliers/**)",
+      "Bash(magick:*)",
+      "Bash(convert:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Read(//c/Users/jryan/OneDrive/Pictures One Drive/Snagit 2025/Snagit Jpg-png/**)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo create:*)",
+      "Bash(gh auth:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(gh repo list:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(netlify:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
