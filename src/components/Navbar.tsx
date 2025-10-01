@@ -101,7 +101,8 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
               </button>
 
               {rulebooksMenuOpen && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2 z-50">
+                <div className="absolute top-full left-0 mt-0 pt-2 w-64">
+                  <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
                   <button
                     onClick={() => {
                       onNavigate('rulebooks');
@@ -146,6 +147,7 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
                       No active rulebooks
                     </div>
                   )}
+                  </div>
                 </div>
               )}
             </div>
