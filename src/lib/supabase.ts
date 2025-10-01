@@ -95,3 +95,31 @@ export interface Rulebook {
   updated_at: string;
   created_by: string;
 }
+
+export type MediaType = 'image' | 'video' | 'pdf' | 'document' | 'other';
+
+export interface MediaFile {
+  id: string;
+  title: string;
+  description?: string;
+  file_url: string;
+  file_type: MediaType;
+  file_size: number;
+  mime_type: string;
+  dimensions?: string;
+  is_external: boolean;
+  tags?: string[];
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+export interface SiteSettings {
+  id: string;
+  setting_key: string;
+  setting_value: string;
+  setting_type: string;
+  description?: string;
+  updated_at: string;
+  updated_by: string;
+}
