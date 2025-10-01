@@ -93,10 +93,12 @@ CREATE POLICY "Allow admins to manage site settings"
 -- Insert default settings
 INSERT INTO site_settings (setting_key, setting_value, setting_type, description)
 VALUES
-  ('hero_image_url', 'https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920', 'url', 'Homepage hero background image'),
+  ('hero_image_urls', 'https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920', 'json', 'Homepage hero carousel images (JSON array)'),
   ('hero_title', 'MECACARAUDIO.COM', 'text', 'Homepage hero title'),
   ('hero_subtitle', 'The Premier Platform for Car Audio Competition Management', 'text', 'Homepage hero subtitle'),
-  ('hero_button_text', 'View Events', 'text', 'Homepage hero button text')
+  ('hero_button_text', 'View Events', 'text', 'Homepage hero button text'),
+  ('hero_carousel_speed', '5000', 'number', 'Carousel transition interval in milliseconds'),
+  ('hero_carousel_direction', 'left', 'text', 'Carousel slide direction: left, right, top, bottom')
 ON CONFLICT (setting_key) DO NOTHING;
 
 -- Update triggers
