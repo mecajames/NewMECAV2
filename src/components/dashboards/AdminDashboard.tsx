@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import EventManagement from '../admin/EventManagement';
 import ResultsEntry from '../admin/ResultsEntry';
+import RulebookManagement from '../admin/RulebookManagement';
 
 interface AdminDashboardProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships';
+type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks';
 
 export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
   const [currentView, setCurrentView] = useState<AdminView>('overview');
@@ -61,6 +62,13 @@ export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       color: 'yellow',
     },
     {
+      icon: BookOpen,
+      title: 'Manage Rulebooks',
+      description: 'Upload and manage rulebook PDFs',
+      action: 'rulebooks' as AdminView,
+      color: 'purple',
+    },
+    {
       icon: Users,
       title: 'Manage Users',
       description: 'View and manage user accounts and roles',
@@ -82,6 +90,7 @@ export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       yellow: 'bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20',
       blue: 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20',
       green: 'bg-green-500/10 text-green-500 hover:bg-green-500/20',
+      purple: 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20',
     };
     return colors[color] || colors.orange;
   };
@@ -92,6 +101,8 @@ export default function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         return <EventManagement />;
       case 'results':
         return <ResultsEntry />;
+      case 'rulebooks':
+        return <RulebookManagement />;
       case 'users':
         return (
           <div className="bg-slate-800 rounded-xl p-8 text-center">

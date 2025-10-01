@@ -1,15 +1,35 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award } from 'lucide-react';
-import { useState } from 'react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase, Rulebook } from '../lib/supabase';
 
 interface NavbarProps {
-  onNavigate: (page: string) => void;
+  onNavigate: (page: string, data?: any) => void;
   currentPage: string;
 }
 
 export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
+  const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
   const { user, profile, signOut } = useAuth();
+
+  useEffect(() => {
+    fetchActiveRulebooks();
+  }, []);
+
+  const fetchActiveRulebooks = async () => {
+    const { data } = await supabase
+      .from('rulebooks')
+      .select('*')
+      .eq('status', 'active')
+      .order('category')
+      .order('season', { ascending: false });
+
+    if (data) {
+      setActiveRulebooks(data);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -23,8 +43,15 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
     { id: 'results', label: 'Results', icon: Trophy },
     { id: 'standings', label: 'Standings', icon: Award },
     { id: 'leaderboard', label: 'Top 10', icon: Trophy },
-    { id: 'rulebooks', label: 'Rulebooks', icon: BookOpen },
   ];
+
+  const groupedRulebooks = activeRulebooks.reduce((acc, rulebook) => {
+    if (!acc[rulebook.category]) {
+      acc[rulebook.category] = [];
+    }
+    acc[rulebook.category].push(rulebook);
+    return acc;
+  }, {} as Record<string, Rulebook[]>);
 
   return (
     <nav className="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
@@ -56,6 +83,72 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
                 {item.label}
               </button>
             ))}
+
+            <div className="relative"
+              onMouseEnter={() => setRulebooksMenuOpen(true)}
+              onMouseLeave={() => setRulebooksMenuOpen(false)}
+            >
+              <button
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  currentPage === 'rulebooks' || currentPage.startsWith('rulebook-')
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <BookOpen className="h-4 w-4" />
+                Rulebooks
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {rulebooksMenuOpen && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2 z-50">
+                  <button
+                    onClick={() => {
+                      onNavigate('rulebooks');
+                      setRulebooksMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  >
+                    All Rulebooks
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigate('rulebook-archive');
+                      setRulebooksMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700 pb-2 mb-2"
+                  >
+                    Archive
+                  </button>
+
+                  {Object.entries(groupedRulebooks).map(([category, rulebooks]) => (
+                    <div key={category} className="px-2">
+                      <div className="text-xs font-semibold text-orange-500 px-2 py-1 uppercase tracking-wide">
+                        {category}
+                      </div>
+                      {rulebooks.map((rulebook) => (
+                        <button
+                          key={rulebook.id}
+                          onClick={() => {
+                            onNavigate('rulebook-detail', { rulebookId: rulebook.id });
+                            setRulebooksMenuOpen(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                        >
+                          {rulebook.season}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+
+                  {activeRulebooks.length === 0 && (
+                    <div className="px-4 py-2 text-sm text-gray-500">
+                      No active rulebooks
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {user ? (
               <div className="flex items-center gap-4">
