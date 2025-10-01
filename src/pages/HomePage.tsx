@@ -1,6 +1,6 @@
 import { Calendar, Trophy, Users, Award } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { supabase, Event } from '../lib/supabase';
+import { supabase, Event, SiteSettings } from '../lib/supabase';
 
 interface HomePageProps {
   onNavigate: (page: string, data?: any) => void;
@@ -9,10 +9,38 @@ interface HomePageProps {
 export default function HomePage({ onNavigate }: HomePageProps) {
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [heroSettings, setHeroSettings] = useState({
+    image_url: 'https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920',
+    title: 'MECACARAUDIO.COM',
+    subtitle: 'The Premier Platform for Car Audio Competition Management',
+    button_text: 'View Events',
+  });
 
   useEffect(() => {
     fetchUpcomingEvents();
+    fetchHeroSettings();
   }, []);
+
+  const fetchHeroSettings = async () => {
+    const { data } = await supabase
+      .from('site_settings')
+      .select('*')
+      .in('setting_key', ['hero_image_url', 'hero_title', 'hero_subtitle', 'hero_button_text']);
+
+    if (data) {
+      const settings: any = {};
+      data.forEach((setting: SiteSettings) => {
+        settings[setting.setting_key] = setting.setting_value;
+      });
+
+      setHeroSettings({
+        image_url: settings['hero_image_url'] || heroSettings.image_url,
+        title: settings['hero_title'] || heroSettings.title,
+        subtitle: settings['hero_subtitle'] || heroSettings.subtitle,
+        button_text: settings['hero_button_text'] || heroSettings.button_text,
+      });
+    }
+  };
 
   const fetchUpcomingEvents = async () => {
     const { data, error } = await supabase
@@ -61,22 +89,22 @@ export default function HomePage({ onNavigate }: HomePageProps) {
       <div
         className="relative bg-cover bg-center h-[600px] flex items-center justify-center"
         style={{
-          backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920)',
+          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${heroSettings.image_url})`,
         }}
       >
         <div className="text-center text-white px-4">
           <h1 className="text-5xl md:text-7xl font-bold mb-6">
-            MECACARAUDIO.COM
+            {heroSettings.title}
           </h1>
           <p className="text-xl md:text-2xl mb-8 text-gray-200">
-            The Premier Platform for Car Audio Competition Management
+            {heroSettings.subtitle}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={() => onNavigate('events')}
               className="px-8 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
             >
-              View Events
+              {heroSettings.button_text}
             </button>
             <button
               onClick={() => onNavigate('signup')}
