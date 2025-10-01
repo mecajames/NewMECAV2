@@ -9,11 +9,14 @@ interface HomePageProps {
 export default function HomePage({ onNavigate }: HomePageProps) {
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [heroSettings, setHeroSettings] = useState({
-    image_url: 'https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920',
+    image_urls: ['https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920'],
     title: 'MECACARAUDIO.COM',
     subtitle: 'The Premier Platform for Car Audio Competition Management',
     button_text: 'View Events',
+    carousel_speed: 5000,
+    carousel_direction: 'left' as 'left' | 'right' | 'top' | 'bottom',
   });
 
   useEffect(() => {
@@ -21,11 +24,21 @@ export default function HomePage({ onNavigate }: HomePageProps) {
     fetchHeroSettings();
   }, []);
 
+  useEffect(() => {
+    if (heroSettings.image_urls.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev + 1) % heroSettings.image_urls.length);
+    }, heroSettings.carousel_speed);
+
+    return () => clearInterval(interval);
+  }, [heroSettings.image_urls.length, heroSettings.carousel_speed]);
+
   const fetchHeroSettings = async () => {
     const { data } = await supabase
       .from('site_settings')
       .select('*')
-      .in('setting_key', ['hero_image_url', 'hero_title', 'hero_subtitle', 'hero_button_text']);
+      .in('setting_key', ['hero_image_urls', 'hero_title', 'hero_subtitle', 'hero_button_text', 'hero_carousel_speed', 'hero_carousel_direction']);
 
     if (data) {
       const settings: any = {};
@@ -33,11 +46,25 @@ export default function HomePage({ onNavigate }: HomePageProps) {
         settings[setting.setting_key] = setting.setting_value;
       });
 
+      // Parse hero_image_urls as JSON array
+      let imageUrls: string[] = heroSettings.image_urls;
+      try {
+        const urlsValue = settings['hero_image_urls'] || '[]';
+        imageUrls = JSON.parse(urlsValue);
+        if (!Array.isArray(imageUrls)) {
+          imageUrls = [urlsValue];
+        }
+      } catch {
+        imageUrls = settings['hero_image_urls'] ? [settings['hero_image_urls']] : heroSettings.image_urls;
+      }
+
       setHeroSettings({
-        image_url: settings['hero_image_url'] || heroSettings.image_url,
+        image_urls: imageUrls.length > 0 ? imageUrls : heroSettings.image_urls,
         title: settings['hero_title'] || heroSettings.title,
         subtitle: settings['hero_subtitle'] || heroSettings.subtitle,
         button_text: settings['hero_button_text'] || heroSettings.button_text,
+        carousel_speed: parseInt(settings['hero_carousel_speed'] || '5000'),
+        carousel_direction: settings['hero_carousel_direction'] || 'left',
       });
     }
   };
@@ -84,15 +111,39 @@ export default function HomePage({ onNavigate }: HomePageProps) {
     },
   ];
 
+  const getSlideAnimation = () => {
+    switch (heroSettings.carousel_direction) {
+      case 'left':
+        return 'animate-slide-left';
+      case 'right':
+        return 'animate-slide-right';
+      case 'top':
+        return 'animate-slide-top';
+      case 'bottom':
+        return 'animate-slide-bottom';
+      default:
+        return 'animate-slide-left';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <div
-        className="relative bg-cover bg-center h-[600px] flex items-center justify-center"
-        style={{
-          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${heroSettings.image_url})`,
-        }}
-      >
-        <div className="text-center text-white px-4">
+      <div className="relative h-[600px] flex items-center justify-center overflow-hidden">
+        {/* Carousel Images */}
+        {heroSettings.image_urls.map((url, index) => (
+          <div
+            key={index}
+            className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${
+              index === currentImageIndex ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{
+              backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${url})`,
+            }}
+          />
+        ))}
+
+        {/* Content Overlay */}
+        <div className="relative z-10 text-center text-white px-4">
           <h1 className="text-5xl md:text-7xl font-bold mb-6">
             {heroSettings.title}
           </h1>
@@ -114,6 +165,24 @@ export default function HomePage({ onNavigate }: HomePageProps) {
             </button>
           </div>
         </div>
+
+        {/* Carousel Indicators */}
+        {heroSettings.image_urls.length > 1 && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 flex gap-2">
+            {heroSettings.image_urls.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentImageIndex(index)}
+                className={`w-3 h-3 rounded-full transition-all ${
+                  index === currentImageIndex
+                    ? 'bg-orange-600 w-8'
+                    : 'bg-white/50 hover:bg-white/75'
+                }`}
+                aria-label={`Go to slide ${index + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">

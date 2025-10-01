@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X } from 'lucide-react';
 import { supabase, SiteSettings as Settings, MediaFile } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -10,12 +10,15 @@ export default function SiteSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
-    hero_image_url: '',
+    hero_image_urls: [] as string[],
     hero_title: '',
     hero_subtitle: '',
     hero_button_text: '',
+    hero_carousel_speed: '5000',
+    hero_carousel_direction: 'left' as 'left' | 'right' | 'top' | 'bottom',
   });
 
   useEffect(() => {
@@ -37,11 +40,25 @@ export default function SiteSettings() {
         settingsMap[setting.setting_key] = setting.setting_value;
       });
 
+      // Parse hero_image_urls as JSON array
+      let imageUrls: string[] = [];
+      try {
+        const urlsValue = settingsMap['hero_image_urls'] || '[]';
+        imageUrls = JSON.parse(urlsValue);
+        if (!Array.isArray(imageUrls)) {
+          imageUrls = [urlsValue];
+        }
+      } catch {
+        imageUrls = settingsMap['hero_image_urls'] ? [settingsMap['hero_image_urls']] : [];
+      }
+
       setFormData({
-        hero_image_url: settingsMap['hero_image_url'] || '',
+        hero_image_urls: imageUrls,
         hero_title: settingsMap['hero_title'] || 'MECACARAUDIO.COM',
         hero_subtitle: settingsMap['hero_subtitle'] || 'The Premier Platform for Car Audio Competition Management',
         hero_button_text: settingsMap['hero_button_text'] || 'View Events',
+        hero_carousel_speed: settingsMap['hero_carousel_speed'] || '5000',
+        hero_carousel_direction: settingsMap['hero_carousel_direction'] || 'left',
       });
     }
     setLoading(false);
@@ -92,10 +109,12 @@ export default function SiteSettings() {
 
     try {
       await Promise.all([
-        saveSetting('hero_image_url', formData.hero_image_url, 'url', 'Homepage hero background image'),
+        saveSetting('hero_image_urls', JSON.stringify(formData.hero_image_urls), 'json', 'Homepage hero carousel images (JSON array)'),
         saveSetting('hero_title', formData.hero_title, 'text', 'Homepage hero title'),
         saveSetting('hero_subtitle', formData.hero_subtitle, 'text', 'Homepage hero subtitle'),
         saveSetting('hero_button_text', formData.hero_button_text, 'text', 'Homepage hero button text'),
+        saveSetting('hero_carousel_speed', formData.hero_carousel_speed, 'number', 'Carousel transition interval in milliseconds'),
+        saveSetting('hero_carousel_direction', formData.hero_carousel_direction, 'text', 'Carousel slide direction: left, right, top, bottom'),
       ]);
 
       alert('Settings saved successfully!');
@@ -107,9 +126,42 @@ export default function SiteSettings() {
     }
   };
 
+  const addImageUrl = () => {
+    setFormData({
+      ...formData,
+      hero_image_urls: [...formData.hero_image_urls, '']
+    });
+  };
+
+  const updateImageUrl = (index: number, url: string) => {
+    const newUrls = [...formData.hero_image_urls];
+    newUrls[index] = url;
+    setFormData({ ...formData, hero_image_urls: newUrls });
+  };
+
+  const removeImageUrl = (index: number) => {
+    const newUrls = formData.hero_image_urls.filter((_, i) => i !== index);
+    setFormData({ ...formData, hero_image_urls: newUrls });
+  };
+
   const selectMedia = (url: string) => {
-    setFormData({ ...formData, hero_image_url: url });
+    if (currentImageIndex !== null) {
+      updateImageUrl(currentImageIndex, url);
+    } else {
+      setFormData({
+        ...formData,
+        hero_image_urls: [...formData.hero_image_urls, url]
+      });
+    }
     setShowMediaPicker(false);
+    setCurrentImageIndex(null);
+  };
+
+  const openMediaPicker = (index?: number) => {
+    if (index !== undefined) {
+      setCurrentImageIndex(index);
+    }
+    setShowMediaPicker(true);
   };
 
   if (loading) {
@@ -133,41 +185,103 @@ export default function SiteSettings() {
         </h3>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Hero Background Image
-          </label>
-          <div className="space-y-2">
-            <input
-              type="url"
-              value={formData.hero_image_url}
-              onChange={(e) => setFormData({ ...formData, hero_image_url: e.target.value })}
-              placeholder="https://example.com/image.jpg"
-              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-300">
+              Hero Carousel Images
+            </label>
             <button
-              onClick={() => setShowMediaPicker(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+              onClick={addImageUrl}
+              className="flex items-center gap-1 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors"
             >
-              <ImageIcon className="h-5 w-5" />
-              Choose from Media Library
+              <Plus className="h-4 w-4" />
+              Add Image
             </button>
-            <p className="text-xs text-gray-400">
-              Recommended: 1920x1080px or larger (16:9 aspect ratio)
-            </p>
           </div>
-          {formData.hero_image_url && (
+          <p className="text-xs text-gray-400 mb-4">
+            Recommended: 1920x1080px or larger (16:9 aspect ratio)
+          </p>
+
+          <div className="space-y-3">
+            {formData.hero_image_urls.map((url, index) => (
+              <div key={index} className="flex gap-2">
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => updateImageUrl(index, e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <button
+                  onClick={() => openMediaPicker(index)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                  title="Choose from Media Library"
+                >
+                  <ImageIcon className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => removeImageUrl(index)}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+                  title="Remove Image"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {formData.hero_image_urls.length > 0 && (
             <div className="mt-4">
               <p className="text-sm text-gray-400 mb-2">Preview:</p>
-              <img
-                src={formData.hero_image_url}
-                alt="Hero preview"
-                className="w-full max-w-2xl h-48 object-cover rounded-lg"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://via.placeholder.com/1920x1080?text=Image+Not+Found';
-                }}
-              />
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {formData.hero_image_urls.filter(url => url).map((url, index) => (
+                  <img
+                    key={index}
+                    src={url}
+                    alt={`Hero preview ${index + 1}`}
+                    className="w-full h-32 object-cover rounded-lg"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://via.placeholder.com/1920x1080?text=Image+Not+Found';
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Carousel Speed (milliseconds)
+            </label>
+            <input
+              type="number"
+              min="1000"
+              max="30000"
+              step="1000"
+              value={formData.hero_carousel_speed}
+              onChange={(e) => setFormData({ ...formData, hero_carousel_speed: e.target.value })}
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Time between slide transitions (e.g., 5000 = 5 seconds)</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Transition Direction
+            </label>
+            <select
+              value={formData.hero_carousel_direction}
+              onChange={(e) => setFormData({ ...formData, hero_carousel_direction: e.target.value as any })}
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="left">Slide Left</option>
+              <option value="right">Slide Right</option>
+              <option value="top">Slide Up</option>
+              <option value="bottom">Slide Down</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Direction images slide during transition</p>
+          </div>
         </div>
 
         <div>
