@@ -34,14 +34,11 @@ export default function Navbar({ onNavigate, currentPage }: NavbarProps) {
             className="flex items-center cursor-pointer"
             onClick={() => onNavigate('home')}
           >
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold text-red-600 tracking-tight leading-none" style={{ fontFamily: 'Arial Black, sans-serif', fontStyle: 'italic' }}>
-                MECA
-              </span>
-              <span className="text-[10px] text-white leading-none">
-                mobile electronics competition association
-              </span>
-            </div>
+            <img
+              src="/meca-logo-transparent.png"
+              alt="MECA - Mobile Electronics Competition Association"
+              className="h-12 w-auto"
+            />
           </div>
 
           <div className="hidden md:flex items-center space-x-8">
