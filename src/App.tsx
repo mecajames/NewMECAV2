@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
@@ -61,9 +62,12 @@ function App() {
 
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-slate-900">
+      <div className="min-h-screen bg-slate-900 flex flex-col">
         <Navbar onNavigate={handleNavigate} currentPage={currentPage} />
-        {renderPage()}
+        <div className="flex-1">
+          {renderPage()}
+        </div>
+        <Footer />
       </div>
     </AuthProvider>
   );
