@@ -12,8 +12,9 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import StandingsPage from './pages/StandingsPage';
 import RulebooksPage from './pages/RulebooksPage';
 import DashboardPage from './pages/DashboardPage';
+import MembershipPage from './pages/MembershipPage';
 
-type Page = 'home' | 'login' | 'signup' | 'events' | 'event-detail' | 'results' | 'leaderboard' | 'standings' | 'rulebooks' | 'dashboard';
+type Page = 'home' | 'login' | 'signup' | 'events' | 'event-detail' | 'results' | 'leaderboard' | 'standings' | 'rulebooks' | 'dashboard' | 'membership';
 
 interface PageData {
   eventId?: string;
@@ -55,6 +56,8 @@ function App() {
         return <RulebooksPage />;
       case 'dashboard':
         return <DashboardPage onNavigate={handleNavigate} />;
+      case 'membership':
+        return <MembershipPage onNavigate={handleNavigate} />;
       default:
         return <HomePage onNavigate={handleNavigate} />;
     }

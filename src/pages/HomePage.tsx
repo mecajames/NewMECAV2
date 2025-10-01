@@ -34,21 +34,25 @@ export default function HomePage({ onNavigate }: HomePageProps) {
       icon: Calendar,
       title: 'Event Calendar',
       description: 'Browse and register for upcoming car audio competitions across the country.',
+      page: 'events',
     },
     {
       icon: Trophy,
       title: 'Competition Results',
       description: 'View detailed results from past events and track competitor performance.',
+      page: 'results',
     },
     {
       icon: Award,
       title: 'Leaderboard Rankings',
       description: 'See who are the top competitors based on points earned throughout the season.',
+      page: 'leaderboard',
     },
     {
       icon: Users,
       title: 'Membership Benefits',
       description: 'Join our community and get access to exclusive features and event discounts.',
+      page: 'membership',
     },
   ];
 
@@ -89,7 +93,8 @@ export default function HomePage({ onNavigate }: HomePageProps) {
           {features.map((feature, index) => (
             <div
               key={index}
-              className="bg-slate-800 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2"
+              onClick={() => onNavigate(feature.page)}
+              className="bg-slate-800 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2 cursor-pointer"
             >
               <feature.icon className="h-12 w-12 text-orange-500 mb-4" />
               <h3 className="text-xl font-semibold text-white mb-2">
