@@ -1,0 +1,85 @@
+# NewMECA V2 - Simple Docker Compose
+# Works with your Supabase CLI setup
+
+services:
+  # Optional: Redis cache
+  redis:
+    image: redis:7-alpine
+    container_name: newmeca-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - newmeca
+
+  # Backend (optional - can run locally)
+  backend:
+    build:
+      context: .
+      target: backend
+    container_name: newmeca-backend
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      SUPABASE_URL: ${VITE_SUPABASE_URL:-http://host.docker.internal:54321}
+      SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    volumes:
+      - ./apps/backend:/app/apps/backend
+      - ./packages:/app/packages
+      - /app/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - newmeca
+    profiles:
+      - backend
+
+  # Frontend (optional - can run locally)
+  frontend:
+    build:
+      context: .
+      target: frontend
+    container_name: newmeca-frontend
+    ports:
+      - "5174:5173"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://localhost:54321}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    volumes:
+      - ./apps/frontend:/app/apps/frontend
+      - ./packages:/app/packages
+      - /app/node_modules
+    networks:
+      - newmeca
+    profiles:
+      - frontend
+
+  # Database Analyzer - the useful tool
+  analyzer:
+    build:
+      context: .
+      target: analyzer
+    container_name: newmeca-analyzer
+    environment:
+      SUPABASE_URL: ${VITE_SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      LOCAL_DB_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
+    volumes:
+      - ./docker/analysis-output:/app/output
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - newmeca
+    profiles:
+      - tools
+
+volumes:
+  redis_data:
+
+networks:
+  newmeca:
+    driver: bridge
