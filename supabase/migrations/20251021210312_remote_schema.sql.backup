@@ -1,0 +1,491 @@
+drop policy "Admins can create rulebooks" on "public"."rulebooks";
+
+drop policy "Admins can update rulebooks" on "public"."rulebooks";
+
+drop policy "Rulebooks are viewable by everyone" on "public"."rulebooks";
+
+revoke delete on table "public"."competition_results" from "anon";
+
+revoke insert on table "public"."competition_results" from "anon";
+
+revoke references on table "public"."competition_results" from "anon";
+
+revoke select on table "public"."competition_results" from "anon";
+
+revoke trigger on table "public"."competition_results" from "anon";
+
+revoke truncate on table "public"."competition_results" from "anon";
+
+revoke update on table "public"."competition_results" from "anon";
+
+revoke delete on table "public"."competition_results" from "authenticated";
+
+revoke insert on table "public"."competition_results" from "authenticated";
+
+revoke references on table "public"."competition_results" from "authenticated";
+
+revoke select on table "public"."competition_results" from "authenticated";
+
+revoke trigger on table "public"."competition_results" from "authenticated";
+
+revoke truncate on table "public"."competition_results" from "authenticated";
+
+revoke update on table "public"."competition_results" from "authenticated";
+
+revoke delete on table "public"."competition_results" from "service_role";
+
+revoke insert on table "public"."competition_results" from "service_role";
+
+revoke references on table "public"."competition_results" from "service_role";
+
+revoke select on table "public"."competition_results" from "service_role";
+
+revoke trigger on table "public"."competition_results" from "service_role";
+
+revoke truncate on table "public"."competition_results" from "service_role";
+
+revoke update on table "public"."competition_results" from "service_role";
+
+revoke delete on table "public"."event_registrations" from "anon";
+
+revoke insert on table "public"."event_registrations" from "anon";
+
+revoke references on table "public"."event_registrations" from "anon";
+
+revoke select on table "public"."event_registrations" from "anon";
+
+revoke trigger on table "public"."event_registrations" from "anon";
+
+revoke truncate on table "public"."event_registrations" from "anon";
+
+revoke update on table "public"."event_registrations" from "anon";
+
+revoke delete on table "public"."event_registrations" from "authenticated";
+
+revoke insert on table "public"."event_registrations" from "authenticated";
+
+revoke references on table "public"."event_registrations" from "authenticated";
+
+revoke select on table "public"."event_registrations" from "authenticated";
+
+revoke trigger on table "public"."event_registrations" from "authenticated";
+
+revoke truncate on table "public"."event_registrations" from "authenticated";
+
+revoke update on table "public"."event_registrations" from "authenticated";
+
+revoke delete on table "public"."event_registrations" from "service_role";
+
+revoke insert on table "public"."event_registrations" from "service_role";
+
+revoke references on table "public"."event_registrations" from "service_role";
+
+revoke select on table "public"."event_registrations" from "service_role";
+
+revoke trigger on table "public"."event_registrations" from "service_role";
+
+revoke truncate on table "public"."event_registrations" from "service_role";
+
+revoke update on table "public"."event_registrations" from "service_role";
+
+revoke delete on table "public"."events" from "anon";
+
+revoke insert on table "public"."events" from "anon";
+
+revoke references on table "public"."events" from "anon";
+
+revoke select on table "public"."events" from "anon";
+
+revoke trigger on table "public"."events" from "anon";
+
+revoke truncate on table "public"."events" from "anon";
+
+revoke update on table "public"."events" from "anon";
+
+revoke delete on table "public"."events" from "authenticated";
+
+revoke insert on table "public"."events" from "authenticated";
+
+revoke references on table "public"."events" from "authenticated";
+
+revoke select on table "public"."events" from "authenticated";
+
+revoke trigger on table "public"."events" from "authenticated";
+
+revoke truncate on table "public"."events" from "authenticated";
+
+revoke update on table "public"."events" from "authenticated";
+
+revoke delete on table "public"."events" from "service_role";
+
+revoke insert on table "public"."events" from "service_role";
+
+revoke references on table "public"."events" from "service_role";
+
+revoke select on table "public"."events" from "service_role";
+
+revoke trigger on table "public"."events" from "service_role";
+
+revoke truncate on table "public"."events" from "service_role";
+
+revoke update on table "public"."events" from "service_role";
+
+revoke delete on table "public"."memberships" from "anon";
+
+revoke insert on table "public"."memberships" from "anon";
+
+revoke references on table "public"."memberships" from "anon";
+
+revoke select on table "public"."memberships" from "anon";
+
+revoke trigger on table "public"."memberships" from "anon";
+
+revoke truncate on table "public"."memberships" from "anon";
+
+revoke update on table "public"."memberships" from "anon";
+
+revoke delete on table "public"."memberships" from "authenticated";
+
+revoke insert on table "public"."memberships" from "authenticated";
+
+revoke references on table "public"."memberships" from "authenticated";
+
+revoke select on table "public"."memberships" from "authenticated";
+
+revoke trigger on table "public"."memberships" from "authenticated";
+
+revoke truncate on table "public"."memberships" from "authenticated";
+
+revoke update on table "public"."memberships" from "authenticated";
+
+revoke delete on table "public"."memberships" from "service_role";
+
+revoke insert on table "public"."memberships" from "service_role";
+
+revoke references on table "public"."memberships" from "service_role";
+
+revoke select on table "public"."memberships" from "service_role";
+
+revoke trigger on table "public"."memberships" from "service_role";
+
+revoke truncate on table "public"."memberships" from "service_role";
+
+revoke update on table "public"."memberships" from "service_role";
+
+revoke delete on table "public"."profiles" from "anon";
+
+revoke insert on table "public"."profiles" from "anon";
+
+revoke references on table "public"."profiles" from "anon";
+
+revoke select on table "public"."profiles" from "anon";
+
+revoke trigger on table "public"."profiles" from "anon";
+
+revoke truncate on table "public"."profiles" from "anon";
+
+revoke update on table "public"."profiles" from "anon";
+
+revoke delete on table "public"."profiles" from "authenticated";
+
+revoke insert on table "public"."profiles" from "authenticated";
+
+revoke references on table "public"."profiles" from "authenticated";
+
+revoke select on table "public"."profiles" from "authenticated";
+
+revoke trigger on table "public"."profiles" from "authenticated";
+
+revoke truncate on table "public"."profiles" from "authenticated";
+
+revoke update on table "public"."profiles" from "authenticated";
+
+revoke delete on table "public"."profiles" from "service_role";
+
+revoke insert on table "public"."profiles" from "service_role";
+
+revoke references on table "public"."profiles" from "service_role";
+
+revoke select on table "public"."profiles" from "service_role";
+
+revoke trigger on table "public"."profiles" from "service_role";
+
+revoke truncate on table "public"."profiles" from "service_role";
+
+revoke update on table "public"."profiles" from "service_role";
+
+revoke delete on table "public"."rulebooks" from "anon";
+
+revoke insert on table "public"."rulebooks" from "anon";
+
+revoke references on table "public"."rulebooks" from "anon";
+
+revoke select on table "public"."rulebooks" from "anon";
+
+revoke trigger on table "public"."rulebooks" from "anon";
+
+revoke truncate on table "public"."rulebooks" from "anon";
+
+revoke update on table "public"."rulebooks" from "anon";
+
+revoke delete on table "public"."rulebooks" from "authenticated";
+
+revoke insert on table "public"."rulebooks" from "authenticated";
+
+revoke references on table "public"."rulebooks" from "authenticated";
+
+revoke select on table "public"."rulebooks" from "authenticated";
+
+revoke trigger on table "public"."rulebooks" from "authenticated";
+
+revoke truncate on table "public"."rulebooks" from "authenticated";
+
+revoke update on table "public"."rulebooks" from "authenticated";
+
+revoke delete on table "public"."rulebooks" from "service_role";
+
+revoke insert on table "public"."rulebooks" from "service_role";
+
+revoke references on table "public"."rulebooks" from "service_role";
+
+revoke select on table "public"."rulebooks" from "service_role";
+
+revoke trigger on table "public"."rulebooks" from "service_role";
+
+revoke truncate on table "public"."rulebooks" from "service_role";
+
+revoke update on table "public"."rulebooks" from "service_role";
+
+drop index if exists "public"."rulebooks_active_idx";
+
+drop index if exists "public"."rulebooks_category_idx";
+
+drop index if exists "public"."rulebooks_year_idx";
+
+create table "public"."media_files" (
+    "id" uuid not null default gen_random_uuid(),
+    "title" text not null,
+    "description" text,
+    "file_url" text not null,
+    "file_type" text not null,
+    "file_size" bigint not null default 0,
+    "mime_type" text not null,
+    "dimensions" text,
+    "is_external" boolean default false,
+    "tags" text[],
+    "created_at" timestamp with time zone not null default now(),
+    "updated_at" timestamp with time zone not null default now(),
+    "created_by" uuid
+);
+
+
+alter table "public"."media_files" enable row level security;
+
+create table "public"."site_settings" (
+    "id" uuid not null default gen_random_uuid(),
+    "setting_key" text not null,
+    "setting_value" text not null,
+    "setting_type" text not null default 'text'::text,
+    "description" text,
+    "updated_at" timestamp with time zone not null default now(),
+    "updated_by" uuid
+);
+
+
+alter table "public"."site_settings" enable row level security;
+
+alter table "public"."rulebooks" drop column "description";
+
+alter table "public"."rulebooks" drop column "display_order";
+
+alter table "public"."rulebooks" drop column "is_active";
+
+alter table "public"."rulebooks" drop column "summary_points";
+
+alter table "public"."rulebooks" drop column "year";
+
+alter table "public"."rulebooks" add column "created_by" uuid;
+
+alter table "public"."rulebooks" add column "season" text not null;
+
+alter table "public"."rulebooks" add column "status" text not null default 'active'::text;
+
+CREATE INDEX idx_media_files_created_at ON public.media_files USING btree (created_at DESC);
+
+CREATE INDEX idx_media_files_tags ON public.media_files USING gin (tags);
+
+CREATE INDEX idx_media_files_type ON public.media_files USING btree (file_type);
+
+CREATE INDEX idx_rulebooks_category ON public.rulebooks USING btree (category);
+
+CREATE INDEX idx_rulebooks_season ON public.rulebooks USING btree (season);
+
+CREATE INDEX idx_rulebooks_status ON public.rulebooks USING btree (status);
+
+CREATE INDEX idx_site_settings_key ON public.site_settings USING btree (setting_key);
+
+CREATE UNIQUE INDEX media_files_pkey ON public.media_files USING btree (id);
+
+CREATE UNIQUE INDEX site_settings_pkey ON public.site_settings USING btree (id);
+
+CREATE UNIQUE INDEX site_settings_setting_key_key ON public.site_settings USING btree (setting_key);
+
+alter table "public"."media_files" add constraint "media_files_pkey" PRIMARY KEY using index "media_files_pkey";
+
+alter table "public"."site_settings" add constraint "site_settings_pkey" PRIMARY KEY using index "site_settings_pkey";
+
+alter table "public"."media_files" add constraint "media_files_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL not valid;
+
+alter table "public"."media_files" validate constraint "media_files_created_by_fkey";
+
+alter table "public"."media_files" add constraint "media_files_file_type_check" CHECK ((file_type = ANY (ARRAY['image'::text, 'video'::text, 'pdf'::text, 'document'::text, 'other'::text]))) not valid;
+
+alter table "public"."media_files" validate constraint "media_files_file_type_check";
+
+alter table "public"."rulebooks" add constraint "rulebooks_category_check" CHECK ((category = ANY (ARRAY['SPL Rulebook'::text, 'SQL Rulebook'::text, 'MECA Kids'::text, 'Dueling Demos'::text, 'Show and Shine'::text, 'Ride the Light'::text]))) not valid;
+
+alter table "public"."rulebooks" validate constraint "rulebooks_category_check";
+
+alter table "public"."rulebooks" add constraint "rulebooks_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL not valid;
+
+alter table "public"."rulebooks" validate constraint "rulebooks_created_by_fkey";
+
+alter table "public"."rulebooks" add constraint "rulebooks_status_check" CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'archive'::text]))) not valid;
+
+alter table "public"."rulebooks" validate constraint "rulebooks_status_check";
+
+alter table "public"."site_settings" add constraint "site_settings_setting_key_key" UNIQUE using index "site_settings_setting_key_key";
+
+alter table "public"."site_settings" add constraint "site_settings_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL not valid;
+
+alter table "public"."site_settings" validate constraint "site_settings_updated_by_fkey";
+
+set check_function_bodies = off;
+
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$function$
+;
+
+create policy "Allow admins to manage media files"
+on "public"."media_files"
+as permissive
+for all
+to public
+using ((EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role)))))
+with check ((EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role)))));
+
+
+create policy "Allow public read access to media files"
+on "public"."media_files"
+as permissive
+for select
+to public
+using (true);
+
+
+create policy "Allow admins full access to rulebooks"
+on "public"."rulebooks"
+as permissive
+for all
+to public
+using ((EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role)))))
+with check ((EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role)))));
+
+
+create policy "Allow public read access to active and archived rulebooks"
+on "public"."rulebooks"
+as permissive
+for select
+to public
+using ((status = ANY (ARRAY['active'::text, 'archive'::text])));
+
+
+create policy "Allow admins to manage site settings"
+on "public"."site_settings"
+as permissive
+for all
+to public
+using ((EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role)))))
+with check ((EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role)))));
+
+
+create policy "Allow public read access to site settings"
+on "public"."site_settings"
+as permissive
+for select
+to public
+using (true);
+
+
+CREATE TRIGGER update_media_files_updated_at BEFORE UPDATE ON public.media_files FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_site_settings_updated_at BEFORE UPDATE ON public.site_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+
+  create policy "Allow admins to delete files"
+  on "storage"."objects"
+  as permissive
+  for delete
+  to public
+using (((bucket_id = 'documents'::text) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role))))));
+
+
+
+  create policy "Allow admins to update files"
+  on "storage"."objects"
+  as permissive
+  for update
+  to public
+using (((bucket_id = 'documents'::text) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role))))))
+with check (((bucket_id = 'documents'::text) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role))))));
+
+
+
+  create policy "Allow admins to upload files"
+  on "storage"."objects"
+  as permissive
+  for insert
+  to public
+with check (((bucket_id = 'documents'::text) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'admin'::user_role))))));
+
+
+
+  create policy "Allow public read access"
+  on "storage"."objects"
+  as permissive
+  for select
+  to public
+using ((bucket_id = 'documents'::text));
+
+
+CREATE TRIGGER tr_check_filters BEFORE INSERT OR UPDATE ON realtime.subscription FOR EACH ROW EXECUTE FUNCTION realtime.subscription_check_filters();
+
+

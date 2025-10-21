@@ -1,20 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
+// Database Types
 export type UserRole = 'user' | 'event_director' | 'retailer' | 'admin';
 export type MembershipStatus = 'none' | 'active' | 'expired';
 export type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded';
 export type RegistrationStatus = 'pending' | 'confirmed' | 'cancelled';
+export type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
+export type RulebookStatus = 'active' | 'inactive' | 'archive';
+export type MediaType = 'image' | 'video' | 'pdf' | 'document' | 'other';
 
+// Profile Interface
 export interface Profile {
   id: string;
   email: string;
@@ -29,6 +23,7 @@ export interface Profile {
   updated_at: string;
 }
 
+// Event Interface
 export interface Event {
   id: string;
   title: string;
@@ -49,6 +44,7 @@ export interface Event {
   event_director?: Profile;
 }
 
+// Event Registration Interface
 export interface EventRegistration {
   id: string;
   event_id: string;
@@ -64,6 +60,7 @@ export interface EventRegistration {
   event?: Event;
 }
 
+// Competition Result Interface
 export interface CompetitionResult {
   id: string;
   event_id: string;
@@ -81,9 +78,7 @@ export interface CompetitionResult {
   competitor?: Profile;
 }
 
-export type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
-export type RulebookStatus = 'active' | 'inactive' | 'archive';
-
+// Rulebook Interface
 export interface Rulebook {
   id: string;
   title: string;
@@ -96,8 +91,7 @@ export interface Rulebook {
   created_by: string;
 }
 
-export type MediaType = 'image' | 'video' | 'pdf' | 'document' | 'other';
-
+// Media File Interface
 export interface MediaFile {
   id: string;
   title: string;
@@ -114,6 +108,7 @@ export interface MediaFile {
   created_by: string;
 }
 
+// Site Settings Interface
 export interface SiteSettings {
   id: string;
   setting_key: string;
