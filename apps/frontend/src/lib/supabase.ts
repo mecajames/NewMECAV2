@@ -19,7 +19,16 @@ const cleanKey = supabaseAnonKey.trim();
 
 console.log('Clean URL:', JSON.stringify(cleanUrl));
 
-export const supabase = createClient(cleanUrl, cleanKey);
+export const supabase = createClient(cleanUrl, cleanKey, {
+  realtime: {
+    params: {
+      eventsPerSecond: 0
+    }
+  },
+  global: {
+    headers: {}
+  }
+});
 
 // Re-export types for convenience
 export * from '../types';

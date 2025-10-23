@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X } from 'lucide-react';
 import { supabase, Event, EventRegistration } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
-interface EventDetailPageProps {
-  eventId: string;
-  onNavigate: (page: string) => void;
-}
-
-export default function EventDetailPage({ eventId, onNavigate }: EventDetailPageProps) {
+export default function EventDetailPage() {
+  const { eventId } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
@@ -25,6 +23,10 @@ export default function EventDetailPage({ eventId, onNavigate }: EventDetailPage
   const { user, profile } = useAuth();
 
   useEffect(() => {
+    if (!eventId) {
+      navigate('/events');
+      return;
+    }
     fetchEvent();
   }, [eventId]);
 
@@ -41,6 +43,7 @@ export default function EventDetailPage({ eventId, onNavigate }: EventDetailPage
   }, [profile, showRegistrationModal]);
 
   const fetchEvent = async () => {
+    if (!eventId) return;
     const { data, error } = await supabase
       .from('events')
       .select('*, event_director:profiles!events_event_director_id_fkey(*)')

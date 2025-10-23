@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Medal, TrendingUp, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import SeasonSelector from '../components/SeasonSelector';
 
 interface StandingsEntry {
   competitor_id: string;
@@ -18,19 +19,26 @@ export default function StandingsPage() {
   const [standings, setStandings] = useState<StandingsEntry[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchStandings();
-  }, [selectedClass]);
+  }, [selectedClass, selectedSeasonId]);
 
   const fetchStandings = async () => {
     setLoading(true);
 
-    const { data: results } = await supabase
+    let query = supabase
       .from('competition_results')
       .select('*')
       .order('points_earned', { ascending: false });
+
+    if (selectedSeasonId) {
+      query = query.eq('season_id', selectedSeasonId);
+    }
+
+    const { data: results } = await query;
 
     if (results) {
       const classSet = new Set<string>();
@@ -104,6 +112,15 @@ export default function StandingsPage() {
           <p className="text-gray-400 text-lg">
             Current point standings by competition class
           </p>
+        </div>
+
+        {/* Season Filter */}
+        <div className="mb-6 bg-slate-800 rounded-xl p-6">
+          <SeasonSelector
+            selectedSeasonId={selectedSeasonId}
+            onSeasonChange={setSelectedSeasonId}
+            showAllOption={true}
+          />
         </div>
 
         <div className="mb-8">

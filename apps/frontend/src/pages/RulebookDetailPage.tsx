@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { FileText, Download, Calendar, Tag } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import { supabase, Rulebook } from '../lib/supabase';
 
-interface RulebookDetailPageProps {
-  rulebookId: string;
-}
-
-export default function RulebookDetailPage({ rulebookId }: RulebookDetailPageProps) {
+export default function RulebookDetailPage() {
+  const { rulebookId } = useParams<{ rulebookId: string }>();
   const [rulebook, setRulebook] = useState<Rulebook | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pdfViewerHeight, setPdfViewerHeight] = useState('800px');
+  const [pdfViewerWidth, setPdfViewerWidth] = useState('100%');
 
   useEffect(() => {
     fetchRulebook();
+    fetchPdfViewerSettings();
   }, [rulebookId]);
 
   const fetchRulebook = async () => {
@@ -25,6 +26,30 @@ export default function RulebookDetailPage({ rulebookId }: RulebookDetailPagePro
       setRulebook(data);
     }
     setLoading(false);
+  };
+
+  const fetchPdfViewerSettings = async () => {
+    const { data: heightData } = await supabase
+      .from('site_settings')
+      .select('setting_value')
+      .eq('setting_key', 'pdf_viewer_height')
+      .single();
+
+    const { data: widthData } = await supabase
+      .from('site_settings')
+      .select('setting_value')
+      .eq('setting_key', 'pdf_viewer_width')
+      .single();
+
+    if (heightData?.setting_value) {
+      // If it's just a number, add 'px', otherwise use as-is
+      const height = heightData.setting_value;
+      setPdfViewerHeight(height.includes('px') || height.includes('%') ? height : `${height}px`);
+    }
+
+    if (widthData?.setting_value) {
+      setPdfViewerWidth(widthData.setting_value);
+    }
   };
 
   if (loading) {
@@ -83,7 +108,8 @@ export default function RulebookDetailPage({ rulebookId }: RulebookDetailPagePro
             <div className="bg-slate-900 rounded-lg p-4">
               <iframe
                 src={rulebook.pdf_url}
-                className="w-full h-[800px] rounded"
+                style={{ width: pdfViewerWidth, height: pdfViewerHeight }}
+                className="rounded"
                 title={rulebook.title}
               />
             </div>

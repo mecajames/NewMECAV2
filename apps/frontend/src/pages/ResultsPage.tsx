@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Calendar, Award, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, Event, CompetitionResult } from '../lib/supabase';
+import SeasonSelector from '../components/SeasonSelector';
 
-interface ResultsPageProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-export default function ResultsPage({ onNavigate }: ResultsPageProps) {
+export default function ResultsPage() {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
 
   useEffect(() => {
     fetchEvents();
-  }, []);
+  }, [selectedSeasonId]);
 
   useEffect(() => {
     if (selectedEventId) {
@@ -24,16 +24,26 @@ export default function ResultsPage({ onNavigate }: ResultsPageProps) {
   }, [selectedEventId]);
 
   const fetchEvents = async () => {
-    const { data, error } = await supabase
+    setLoading(true);
+    let query = supabase
       .from('events')
-      .select('*')
+      .select('*, season:seasons(*)')
       .eq('status', 'completed')
       .order('event_date', { ascending: false });
+
+    if (selectedSeasonId) {
+      query = query.eq('season_id', selectedSeasonId);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data) {
       setEvents(data);
       if (data.length > 0) {
         setSelectedEventId(data[0].id);
+      } else {
+        setSelectedEventId('');
+        setResults([]);
       }
     }
     setLoading(false);
@@ -76,6 +86,15 @@ export default function ResultsPage({ onNavigate }: ResultsPageProps) {
           <p className="text-gray-400 text-lg">
             View detailed results from completed events
           </p>
+        </div>
+
+        {/* Season Filter */}
+        <div className="mb-6 bg-slate-800 rounded-xl p-6">
+          <SeasonSelector
+            selectedSeasonId={selectedSeasonId}
+            onSeasonChange={setSelectedSeasonId}
+            showAllOption={true}
+          />
         </div>
 
         {loading ? (
@@ -125,7 +144,7 @@ export default function ResultsPage({ onNavigate }: ResultsPageProps) {
                       </p>
                     </div>
                     <button
-                      onClick={() => onNavigate('event-detail', { eventId: selectedEvent.id })}
+                      onClick={() => navigate(`/events/${selectedEvent.id}`)}
                       className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                     >
                       View Event

@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, FileText, Archive as ArchiveIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, Rulebook } from '../lib/supabase';
 
-interface RulebooksPageProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-export default function RulebooksPage({ onNavigate }: RulebooksPageProps) {
+export default function RulebooksPage() {
+  const navigate = useNavigate();
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,7 +58,7 @@ export default function RulebooksPage({ onNavigate }: RulebooksPageProps) {
             </p>
           </div>
           <button
-            onClick={() => onNavigate('rulebook-archive')}
+            onClick={() => navigate('/rulebooks/archive')}
             className="flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArchiveIcon className="h-5 w-5" />
@@ -79,7 +77,7 @@ export default function RulebooksPage({ onNavigate }: RulebooksPageProps) {
                   {categoryRulebooks.map((rulebook) => (
                     <button
                       key={rulebook.id}
-                      onClick={() => onNavigate('rulebook-detail', { rulebookId: rulebook.id })}
+                      onClick={() => navigate(`/rulebooks/${rulebook.id}`)}
                       className="bg-slate-700 hover:bg-slate-600 rounded-xl p-6 text-left transition-all transform hover:-translate-y-2 hover:shadow-xl"
                     >
                       <div className="flex items-start gap-4 mb-4">
@@ -112,7 +110,7 @@ export default function RulebooksPage({ onNavigate }: RulebooksPageProps) {
               There are currently no active rulebooks available.
             </p>
             <button
-              onClick={() => onNavigate('rulebook-archive')}
+              onClick={() => navigate('/rulebooks/archive')}
               className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               <ArchiveIcon className="h-5 w-5" />

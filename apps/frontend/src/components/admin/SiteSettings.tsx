@@ -19,6 +19,8 @@ export default function SiteSettings() {
     hero_button_text: '',
     hero_carousel_speed: '5000',
     hero_carousel_direction: 'left' as 'left' | 'right' | 'top' | 'bottom',
+    pdf_viewer_height: '800',
+    pdf_viewer_width: '100%',
   });
 
   useEffect(() => {
@@ -59,6 +61,8 @@ export default function SiteSettings() {
         hero_button_text: settingsMap['hero_button_text'] || 'View Events',
         hero_carousel_speed: settingsMap['hero_carousel_speed'] || '5000',
         hero_carousel_direction: settingsMap['hero_carousel_direction'] || 'left',
+        pdf_viewer_height: settingsMap['pdf_viewer_height'] || '800',
+        pdf_viewer_width: settingsMap['pdf_viewer_width'] || '100%',
       });
     }
     setLoading(false);
@@ -115,6 +119,8 @@ export default function SiteSettings() {
         saveSetting('hero_button_text', formData.hero_button_text, 'text', 'Homepage hero button text'),
         saveSetting('hero_carousel_speed', formData.hero_carousel_speed, 'number', 'Carousel transition interval in milliseconds'),
         saveSetting('hero_carousel_direction', formData.hero_carousel_direction, 'text', 'Carousel slide direction: left, right, top, bottom'),
+        saveSetting('pdf_viewer_height', formData.pdf_viewer_height, 'text', 'PDF viewer height in pixels'),
+        saveSetting('pdf_viewer_width', formData.pdf_viewer_width, 'text', 'PDF viewer width (percentage or pixels)'),
       ]);
 
       alert('Settings saved successfully!');
@@ -319,6 +325,44 @@ export default function SiteSettings() {
             className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
         </div>
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          PDF Viewer Settings
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              PDF Viewer Height (pixels)
+            </label>
+            <input
+              type="number"
+              min="400"
+              max="1200"
+              step="50"
+              value={formData.pdf_viewer_height}
+              onChange={(e) => setFormData({ ...formData, pdf_viewer_height: e.target.value })}
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Default: 800px | Recommended: 800-1000px for full page view</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              PDF Viewer Width
+            </label>
+            <input
+              type="text"
+              value={formData.pdf_viewer_width}
+              onChange={(e) => setFormData({ ...formData, pdf_viewer_width: e.target.value })}
+              placeholder="100% or 1200px"
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Use percentage (100%) or pixels (1200px)</p>
+          </div>
+        </div>
 
         <button
           onClick={handleSave}
@@ -326,7 +370,7 @@ export default function SiteSettings() {
           className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
         >
           <Save className="h-5 w-5" />
-          {saving ? 'Saving...' : 'Save Settings'}
+          {saving ? 'Saving...' : 'Save All Settings'}
         </button>
       </div>
 

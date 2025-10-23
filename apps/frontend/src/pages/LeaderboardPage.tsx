@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Medal, Award, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import SeasonSelector from '../components/SeasonSelector';
 
 interface LeaderboardEntry {
   competitor_id: string;
@@ -14,52 +15,71 @@ interface LeaderboardEntry {
 
 export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchLeaderboard();
-  }, []);
+  }, [selectedSeasonId]);
+
+  const processResults = (results: any[]): LeaderboardEntry[] => {
+    const aggregated: { [key: string]: LeaderboardEntry } = {};
+
+    results.forEach((result) => {
+      const key = result.competitor_id || result.competitor_name;
+      if (!aggregated[key]) {
+        aggregated[key] = {
+          competitor_id: result.competitor_id || '',
+          competitor_name: result.competitor_name,
+          total_points: 0,
+          events_participated: 0,
+          first_place: 0,
+          second_place: 0,
+          third_place: 0,
+        };
+      }
+
+      aggregated[key].total_points += result.points_earned;
+      aggregated[key].events_participated += 1;
+
+      if (result.placement === 1) aggregated[key].first_place += 1;
+      if (result.placement === 2) aggregated[key].second_place += 1;
+      if (result.placement === 3) aggregated[key].third_place += 1;
+    });
+
+    return Object.values(aggregated).sort((a, b) => b.total_points - a.total_points);
+  };
 
   const fetchLeaderboard = async () => {
     const { data, error } = await supabase.rpc('get_leaderboard');
 
     if (!error && data) {
-      setLeaderboard(data.slice(0, 10));
+      // If RPC function doesn't support season filtering, we'll need to filter manually
+      let filteredData = data;
+      if (selectedSeasonId) {
+        // Fallback to manual filtering if RPC doesn't support it
+        const { data: results } = await supabase
+          .from('competition_results')
+          .select('*')
+          .eq('season_id', selectedSeasonId);
+
+        if (results) {
+          filteredData = processResults(results);
+        }
+      }
+      setLeaderboard(filteredData.slice(0, 10));
     } else {
-      const { data: results } = await supabase
-        .from('competition_results')
-        .select('*');
+      let query = supabase.from('competition_results').select('*');
+
+      if (selectedSeasonId) {
+        query = query.eq('season_id', selectedSeasonId);
+      }
+
+      const { data: results } = await query;
 
       if (results) {
-        const aggregated: { [key: string]: LeaderboardEntry } = {};
-
-        results.forEach((result) => {
-          const key = result.competitor_id || result.competitor_name;
-          if (!aggregated[key]) {
-            aggregated[key] = {
-              competitor_id: result.competitor_id || '',
-              competitor_name: result.competitor_name,
-              total_points: 0,
-              events_participated: 0,
-              first_place: 0,
-              second_place: 0,
-              third_place: 0,
-            };
-          }
-
-          aggregated[key].total_points += result.points_earned;
-          aggregated[key].events_participated += 1;
-
-          if (result.placement === 1) aggregated[key].first_place += 1;
-          if (result.placement === 2) aggregated[key].second_place += 1;
-          if (result.placement === 3) aggregated[key].third_place += 1;
-        });
-
-        const sorted = Object.values(aggregated)
-          .sort((a, b) => b.total_points - a.total_points)
-          .slice(0, 10);
-
-        setLeaderboard(sorted);
+        const processed = processResults(results).slice(0, 10);
+        setLeaderboard(processed);
       }
     }
 
@@ -89,6 +109,15 @@ export default function LeaderboardPage() {
           <p className="text-gray-400 text-lg">
             The best competitors based on total points earned
           </p>
+        </div>
+
+        {/* Season Filter */}
+        <div className="mb-8 bg-slate-800 rounded-xl p-6">
+          <SeasonSelector
+            selectedSeasonId={selectedSeasonId}
+            onSeasonChange={setSelectedSeasonId}
+            showAllOption={true}
+          />
         </div>
 
         {loading ? (
