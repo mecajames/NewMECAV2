@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { UserPlus, Mail, Lock, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-interface SignUpPageProps {
-  onNavigate: (page: string) => void;
-}
-
-export default function SignUpPage({ onNavigate }: SignUpPageProps) {
+export default function SignUpPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -31,7 +29,7 @@ export default function SignUpPage({ onNavigate }: SignUpPageProps) {
       setError(error.message);
       setLoading(false);
     } else {
-      onNavigate('dashboard');
+      navigate('/dashboard');
     }
   };
 
@@ -123,7 +121,7 @@ export default function SignUpPage({ onNavigate }: SignUpPageProps) {
             <p className="text-gray-400">
               Already have an account?{' '}
               <button
-                onClick={() => onNavigate('login')}
+                onClick={() => navigate('/login')}
                 className="text-orange-500 hover:text-orange-400 font-semibold"
               >
                 Sign in

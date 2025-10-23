@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Calendar, MapPin, Users, DollarSign, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, Event, EventStatus } from '../lib/supabase';
 
-interface EventsPageProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-export default function EventsPage({ onNavigate }: EventsPageProps) {
+export default function EventsPage() {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<EventStatus | 'all'>('all');
@@ -19,7 +17,7 @@ export default function EventsPage({ onNavigate }: EventsPageProps) {
     setLoading(true);
     let query = supabase
       .from('events')
-      .select('*, event_director:profiles!events_event_director_id_fkey(*)')
+      .select('*, event_director:profiles!events_event_director_id_fkey(*), season:seasons(*)')
       .order('event_date', { ascending: true });
 
     if (filter !== 'all') {
@@ -44,6 +42,21 @@ export default function EventsPage({ onNavigate }: EventsPageProps) {
         return 'bg-gray-500/10 text-gray-400 border-gray-500';
       case 'cancelled':
         return 'bg-red-500/10 text-red-400 border-red-500';
+    }
+  };
+
+  const getFormatColor = (format: string) => {
+    switch (format) {
+      case 'SPL':
+        return 'bg-purple-500/10 text-purple-400 border-purple-500';
+      case 'SQL':
+        return 'bg-cyan-500/10 text-cyan-400 border-cyan-500';
+      case 'Show and Shine':
+        return 'bg-pink-500/10 text-pink-400 border-pink-500';
+      case 'Ride the Light':
+        return 'bg-yellow-500/10 text-yellow-400 border-yellow-500';
+      default:
+        return 'bg-gray-500/10 text-gray-400 border-gray-500';
     }
   };
 
@@ -94,7 +107,7 @@ export default function EventsPage({ onNavigate }: EventsPageProps) {
               <div
                 key={event.id}
                 className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1 cursor-pointer"
-                onClick={() => onNavigate('event-detail', { eventId: event.id })}
+                onClick={() => navigate(`/events/${event.id}`)}
               >
                 {event.flyer_url ? (
                   <div className="h-48 overflow-hidden">
@@ -122,6 +135,24 @@ export default function EventsPage({ onNavigate }: EventsPageProps) {
                     >
                       {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
                     </span>
+                  </div>
+
+                  {/* Season and Format Badges */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {event.season && (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-teal-500/10 text-teal-400 border-teal-500">
+                        {event.season.year} Season
+                      </span>
+                    )}
+                    {event.format && (
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(
+                          event.format
+                        )}`}
+                      >
+                        {event.format}
+                      </span>
+                    )}
                   </div>
 
                   <div className="space-y-3 mb-4">

@@ -1,12 +1,10 @@
 import { Calendar, Trophy, Users, Award } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, Event, SiteSettings } from '../lib/supabase';
 
-interface HomePageProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-export default function HomePage({ onNavigate }: HomePageProps) {
+export default function HomePage() {
+  const navigate = useNavigate();
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -152,13 +150,13 @@ export default function HomePage({ onNavigate }: HomePageProps) {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => onNavigate('events')}
+              onClick={() => navigate('/events')}
               className="px-8 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
             >
               {heroSettings.button_text}
             </button>
             <button
-              onClick={() => onNavigate('signup')}
+              onClick={() => navigate('/signup')}
               className="px-8 py-4 bg-white hover:bg-gray-100 text-slate-900 font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
             >
               Become a Member
@@ -190,7 +188,7 @@ export default function HomePage({ onNavigate }: HomePageProps) {
           {features.map((feature, index) => (
             <div
               key={index}
-              onClick={() => onNavigate(feature.page)}
+              onClick={() => navigate(`/${feature.page}`)}
               className="bg-slate-800 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2 cursor-pointer"
             >
               <feature.icon className="h-12 w-12 text-orange-500 mb-4" />
@@ -206,7 +204,7 @@ export default function HomePage({ onNavigate }: HomePageProps) {
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-3xl font-bold text-white">Upcoming Events</h2>
             <button
-              onClick={() => onNavigate('events')}
+              onClick={() => navigate('/events')}
               className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               View All Events
@@ -223,7 +221,7 @@ export default function HomePage({ onNavigate }: HomePageProps) {
                 <div
                   key={event.id}
                   className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1 cursor-pointer"
-                  onClick={() => onNavigate('event-detail', { eventId: event.id })}
+                  onClick={() => navigate(`/events/${event.id}`)}
                 >
                   {event.flyer_url ? (
                     <img
@@ -270,7 +268,7 @@ export default function HomePage({ onNavigate }: HomePageProps) {
             Join thousands of car audio enthusiasts and showcase your skills
           </p>
           <button
-            onClick={() => onNavigate('signup')}
+            onClick={() => navigate('/signup')}
             className="px-8 py-4 bg-white text-orange-600 font-semibold rounded-lg text-lg hover:bg-gray-100 transition-all transform hover:scale-105 shadow-lg"
           >
             Get Started Today

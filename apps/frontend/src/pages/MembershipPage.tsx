@@ -1,10 +1,8 @@
 import { Check, Star, Users, Trophy, Calendar, DollarSign } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-interface MembershipPageProps {
-  onNavigate: (page: string) => void;
-}
-
-export default function MembershipPage({ onNavigate }: MembershipPageProps) {
+export default function MembershipPage() {
+  const navigate = useNavigate();
   const benefits = [
     {
       icon: DollarSign,
@@ -117,7 +115,7 @@ export default function MembershipPage({ onNavigate }: MembershipPageProps) {
                   ))}
                 </ul>
                 <button
-                  onClick={() => onNavigate('signup')}
+                  onClick={() => navigate('/signup')}
                   className={`w-full py-4 rounded-lg font-semibold text-lg transition-all ${
                     tier.highlighted
                       ? 'bg-orange-600 hover:bg-orange-700 text-white'

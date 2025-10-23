@@ -1,14 +1,12 @@
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserDashboard from '../components/dashboards/UserDashboard';
 import AdminDashboard from '../components/dashboards/AdminDashboard';
 import EventDirectorDashboard from '../components/dashboards/EventDirectorDashboard';
 import RetailerDashboard from '../components/dashboards/RetailerDashboard';
 
-interface DashboardPageProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-export default function DashboardPage({ onNavigate }: DashboardPageProps) {
+export default function DashboardPage() {
+  const navigate = useNavigate();
   const { profile, loading } = useAuth();
 
   if (loading) {
@@ -25,7 +23,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <div className="text-center">
           <p className="text-gray-400 text-xl mb-4">Please sign in to view your dashboard</p>
           <button
-            onClick={() => onNavigate('login')}
+            onClick={() => navigate('/login')}
             className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Sign In
@@ -37,12 +35,12 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   switch (profile.role) {
     case 'admin':
-      return <AdminDashboard onNavigate={onNavigate} />;
+      return <AdminDashboard />;
     case 'event_director':
-      return <EventDirectorDashboard onNavigate={onNavigate} />;
+      return <EventDirectorDashboard />;
     case 'retailer':
-      return <RetailerDashboard onNavigate={onNavigate} />;
+      return <RetailerDashboard />;
     default:
-      return <UserDashboard onNavigate={onNavigate} />;
+      return <UserDashboard />;
   }
 }

@@ -8,9 +8,11 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updatePassword: (currentPassword: string, newPassword: string) => Promise<{ error: any }>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,6 +33,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error('Error fetching profile:', error);
       return null;
+    }
+
+    // Add computed full_name field for backward compatibility
+    if (data) {
+      data.full_name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
     }
 
     return data;
@@ -84,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -94,12 +101,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
+    // Generate MECA ID by calling the database function
+    const { data: mecaIdData } = await supabase.rpc('generate_meca_id');
+    const mecaId = mecaIdData || 700800;
+
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
         id: data.user.id,
         email,
-        full_name: fullName,
+        first_name: firstName,
+        last_name: lastName,
+        meca_id: mecaId,
         role: 'user',
         membership_status: 'none',
       });
@@ -118,6 +131,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   };
 
+  const updatePassword = async (currentPassword: string, newPassword: string) => {
+    if (!user?.email) {
+      return { error: { message: 'No user logged in' } };
+    }
+
+    // Verify current password by attempting to sign in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      return { error: { message: 'Current password is incorrect' } };
+    }
+
+    // Update to new password
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    return { error };
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    return { error };
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -129,6 +173,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signOut,
         refreshProfile,
+        updatePassword,
+        resetPassword,
       }}
     >
       {children}

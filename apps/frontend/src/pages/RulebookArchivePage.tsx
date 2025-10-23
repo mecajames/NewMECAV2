@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { FileText, Search, Filter, Archive } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, Rulebook, RulebookCategory } from '../lib/supabase';
 
-interface RulebookArchivePageProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-export default function RulebookArchivePage({ onNavigate }: RulebookArchivePageProps) {
+export default function RulebookArchivePage() {
+  const navigate = useNavigate();
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [filteredRulebooks, setFilteredRulebooks] = useState<Rulebook[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +154,7 @@ export default function RulebookArchivePage({ onNavigate }: RulebookArchivePageP
                   {categoryRulebooks.map((rulebook) => (
                     <button
                       key={rulebook.id}
-                      onClick={() => onNavigate('rulebook-detail', { rulebookId: rulebook.id })}
+                      onClick={() => navigate(`/rulebooks/${rulebook.id}`)}
                       className="bg-slate-700 hover:bg-slate-600 rounded-lg p-6 text-left transition-all transform hover:-translate-y-1"
                     >
                       <div className="flex items-start gap-4">
