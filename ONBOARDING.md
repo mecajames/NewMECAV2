@@ -15,30 +15,32 @@ Welcome! Follow these steps to get the project running on your machine.
 
 **Module Pattern** (Backend):
 ```
-entity.ts → service.ts → controller.ts → routes.ts → index.ts
+entity.ts → service.ts → controller.ts → routes.ts → module.ts → index.ts
 ```
 
 **Module Pattern** (Frontend - PREFERRED):
 ```
 src/
+  ├── api-client/
+  │   └── [feature].api-client.ts  # API client functions for feature
+  │
   └── [feature-name]/
-      ├── ProfileCard.tsx       # Components
+      ├── apiHooks.ts              # React hooks using the api-client
+      ├── ProfileCard.tsx          # Components
       ├── ProfileForm.tsx
-      ├── ProfilePage.tsx       # Pages
+      ├── ProfilePage.tsx          # Pages
       ├── ProfileEditPage.tsx
-      ├── useProfiles.ts        # Hooks
-      ├── useProfileMutations.ts
-      └── types.ts              # Feature-specific types (optional)
+      └── types.ts                 # Feature-specific types (optional)
 ```
 
 **Data Flow** (Frontend):
 ```
-Page Component → Hook (profiles/useProfiles.ts) → API Client → Backend API
+Page Component → Hook (profiles/apiHooks.ts) → API Client (api-client/profiles.api-client.ts) → Backend API
 ```
 
 **Reference Implementation**: 
 - Backend: `apps/backend/src/profiles/`
-- Frontend (PREFERRED): `apps/frontend/src/profiles/` (needs restructuring)
+- Frontend (PREFERRED): `apps/frontend/src/profiles/` + `apps/frontend/src/api-client/profiles.api-client.ts`
 - Frontend (OLD): `apps/frontend/src/pages/`, `hooks/`, `components/` (scattered, needs consolidation)
 
 **⚠️ Current State**: Frontend needs restructuring from scattered `pages/`, `components/`, `hooks/` directories to feature-based modules.
@@ -232,38 +234,43 @@ This project follows a **3-tier architecture**:
 
 ### Frontend Organization (Feature-Based)
 
-The frontend is organized by **features/modules**, mirroring the backend structure. Each feature is self-contained in its own directory:
+The frontend is organized by **features/modules**, mirroring the backend structure. Each feature is self-contained in its own directory, with API clients centralized in `api-client/`:
 
 ```
 src/
+├── api-client/        # ⭐ Centralized API client functions
+│   ├── profiles.api-client.ts   # Profile API calls (fetch wrappers)
+│   ├── events.api-client.ts     # Event API calls
+│   ├── memberships.api-client.ts # Membership API calls
+│   └── auth.api-client.ts       # Auth API calls
+│
 ├── profiles/          # Everything profile-related
-│   ├── ProfileCard.tsx      # Components
+│   ├── apiHooks.ts              # React hooks: useProfile, useProfiles, etc.
+│   ├── ProfileCard.tsx          # Components
 │   ├── ProfileForm.tsx
-│   ├── ProfilePage.tsx      # Pages
+│   ├── ProfilePage.tsx          # Pages
 │   ├── ProfileEditPage.tsx
-│   ├── useProfiles.ts       # Hooks
-│   ├── useProfileMutations.ts
-│   └── types.ts             # Optional: feature-specific types
+│   └── types.ts                 # Optional: feature-specific types
 │
 ├── events/            # Everything event-related
+│   ├── apiHooks.ts              # React hooks: useEvent, useEvents, etc.
 │   ├── EventCard.tsx
 │   ├── EventList.tsx
 │   ├── EventsPage.tsx
 │   ├── EventDetailPage.tsx
-│   ├── useEvents.ts
 │   └── types.ts
 │
 ├── memberships/       # Everything membership-related
+│   ├── apiHooks.ts              # React hooks
 │   ├── MembershipCard.tsx
 │   ├── MembershipsPage.tsx
-│   ├── useMemberships.ts
 │   └── types.ts
 │
 └── auth/              # Everything auth-related
+    ├── apiHooks.ts              # React hooks
     ├── LoginForm.tsx
     ├── RegisterForm.tsx
     ├── LoginPage.tsx
-    ├── useAuth.ts
     └── AuthContext.tsx
 ```
 
@@ -273,6 +280,7 @@ src/
 - 📦 Self-contained modules - all related files together
 - 🚀 Easier to refactor or extract to separate packages
 - 💡 No nested directories - flat and simple
+- 🔌 Each feature has its own API client - easy to mock/test
 
 **⚠️ Current State**: The codebase needs restructuring from the old pattern (`pages/`, `components/`, `hooks/` at root) to this feature-based structure.
 
@@ -301,26 +309,32 @@ apps/frontend/src/
 **Target (NEW) Structure** ✅:
 ```
 apps/frontend/src/
+├── api-client/         # ⭐ Centralized API client functions
+│   ├── profiles.api-client.ts
+│   ├── events.api-client.ts
+│   ├── memberships.api-client.ts
+│   └── auth.api-client.ts
+│
 ├── profiles/           # Profile feature module
-│   ├── useProfiles.ts       # Hooks
+│   ├── apiHooks.ts          # ALL profile hooks
 │   ├── ProfileCard.tsx      # Components
 │   ├── ProfileForm.tsx
 │   └── ProfilePage.tsx      # Pages
 │
 ├── events/             # Event feature module
-│   ├── useEvents.ts
+│   ├── apiHooks.ts          # ALL event hooks
 │   ├── EventCard.tsx
 │   ├── EventList.tsx
 │   ├── EventsPage.tsx
 │   └── EventDetailPage.tsx
 │
 ├── memberships/        # Membership feature module
-│   ├── useMemberships.ts
+│   ├── apiHooks.ts          # ALL membership hooks
 │   ├── MembershipCard.tsx
 │   └── MembershipsPage.tsx
 │
 ├── admin/              # Admin feature module
-│   ├── useAdminData.ts
+│   ├── apiHooks.ts          # ALL admin hooks
 │   ├── AdminDashboard.tsx
 │   └── AdminPage.tsx
 │
@@ -332,7 +346,7 @@ apps/frontend/src/
 │   └── Footer.tsx
 │
 └── lib/                # Shared utilities
-    └── apiClient.ts    # HTTP client (shared across all features)
+    └── env.ts          # Environment configuration
 ```
 
 **When working on the codebase**:
@@ -346,33 +360,39 @@ NewMECAV2/
 ├── apps/
 │   ├── frontend/                    # React + Vite frontend
 │   │   ├── src/
+│   │   │   ├── api-client/          # ⭐ Centralized API client functions
+│   │   │   │   ├── profiles.api-client.ts
+│   │   │   │   ├── events.api-client.ts
+│   │   │   │   ├── memberships.api-client.ts
+│   │   │   │   └── auth.api-client.ts
+│   │   │   │
 │   │   │   ├── profiles/            # ⭐ Profile feature module
+│   │   │   │   ├── apiHooks.ts          # ALL profile hooks
 │   │   │   │   ├── ProfileCard.tsx      # Components
 │   │   │   │   ├── ProfileForm.tsx
 │   │   │   │   ├── ProfilePage.tsx      # Pages
 │   │   │   │   ├── ProfileEditPage.tsx
-│   │   │   │   ├── useProfiles.ts       # Hooks
 │   │   │   │   └── types.ts             # Optional types
 │   │   │   │
 │   │   │   ├── events/              # ⭐ Event feature module
+│   │   │   │   ├── apiHooks.ts          # ALL event hooks
 │   │   │   │   ├── EventCard.tsx
 │   │   │   │   ├── EventList.tsx
 │   │   │   │   ├── EventsPage.tsx
 │   │   │   │   ├── EventDetailPage.tsx
-│   │   │   │   ├── useEvents.ts
 │   │   │   │   └── types.ts
 │   │   │   │
 │   │   │   ├── memberships/         # ⭐ Membership feature module
+│   │   │   │   ├── apiHooks.ts          # ALL membership hooks
 │   │   │   │   ├── MembershipCard.tsx
 │   │   │   │   ├── MembershipsPage.tsx
-│   │   │   │   ├── useMemberships.ts
 │   │   │   │   └── types.ts
 │   │   │   │
 │   │   │   ├── auth/                # ⭐ Authentication feature module
+│   │   │   │   ├── apiHooks.ts          # ALL auth hooks
 │   │   │   │   ├── LoginForm.tsx
 │   │   │   │   ├── RegisterForm.tsx
 │   │   │   │   ├── LoginPage.tsx
-│   │   │   │   ├── useAuth.ts
 │   │   │   │   └── AuthContext.tsx
 │   │   │   │
 │   │   │   ├── shared/              # ⚠️ Shared/common components only
@@ -383,7 +403,6 @@ NewMECAV2/
 │   │   │   │   └── Footer.tsx
 │   │   │   │
 │   │   │   ├── lib/
-│   │   │   │   ├── apiClient.ts     # ⭐ Central HTTP client
 │   │   │   │   └── env.ts           # Environment variable validation
 │   │   │   │
 │   │   │   └── types/               # Shared TypeScript types only
@@ -400,19 +419,22 @@ NewMECAV2/
 │       │   │   ├── entity.ts        # ⭐ MikroORM entity definition
 │       │   │   ├── service.ts       # ⭐ Business logic & database operations
 │       │   │   ├── controller.ts    # ⭐ HTTP request handlers
-│       │   │   └── routes.ts        # ⭐ Express router (GET/POST/PUT/DELETE)
+│       │   │   ├── routes.ts        # ⭐ Express router (GET/POST/PUT/DELETE)
+│       │   │   └── module.ts        # ⭐ Module setup (DI container)
 │       │   │
 │       │   ├── events/              # Event module
 │       │   │   ├── entity.ts
 │       │   │   ├── service.ts
 │       │   │   ├── controller.ts
-│       │   │   └── routes.ts
+│       │   │   ├── routes.ts
+│       │   │   └── module.ts
 │       │   │
 │       │   ├── memberships/         # Membership module
 │       │   │   ├── entity.ts
 │       │   │   ├── service.ts
 │       │   │   ├── controller.ts
-│       │   │   └── routes.ts
+│       │   │   ├── routes.ts
+│       │   │   └── module.ts
 │       │   │
 │       │   └── types/               # Shared TypeScript types & enums
 │       │       └── enums.ts         # UserRole, MembershipStatus, etc.
@@ -450,7 +472,7 @@ NewMECAV2/
        │ 3. Makes HTTP request
        ▼
 ┌─────────────────────────────────────────────┐
-│  API Client (apiClient.ts)                  │
+│  API Client (api-client/profiles.api-client)│
 │  fetch('http://localhost:3001/api/profiles')│
 └──────┬──────────────────────────────────────┘
        │
@@ -494,7 +516,7 @@ Data flows back up through the same layers
 
 ### Key Files to Understand
 
-#### Backend Files (Entity → Service → Controller → Route)
+#### Backend Files (Entity → Service → Controller → Route → Module)
 
 1. **Entity** (`entity.ts`): Defines the database table structure
    ```typescript
@@ -511,8 +533,10 @@ Data flows back up through the same layers
 2. **Service** (`service.ts`): Business logic & database operations
    ```typescript
    export class ProfileService {
+     constructor(private readonly em: EntityManager) {}
+     
      async findById(id: string): Promise<Profile | null> {
-       // Uses MikroORM to query database
+       return this.em.findOne(Profile, { id });
      }
    }
    ```
@@ -520,8 +544,10 @@ Data flows back up through the same layers
 3. **Controller** (`controller.ts`): HTTP request/response handling
    ```typescript
    export class ProfileController {
+     constructor(private readonly profileService: ProfileService) {}
+     
      async getProfile(req: Request, res: Response) {
-       const profile = await this.service.findById(req.params.id);
+       const profile = await this.profileService.findById(req.params.id);
        res.json(profile);
      }
    }
@@ -529,48 +555,120 @@ Data flows back up through the same layers
 
 4. **Routes** (`routes.ts`): Express route definitions
    ```typescript
-   router.get('/api/profiles/:id', controller.getProfile);
-   router.post('/api/profiles', controller.createProfile);
+   import { Router } from 'express';
+   import { profileModule } from './module';
+   
+   const router = Router();
+   const controller = profileModule.controller;
+   
+   router.get('/api/profiles/:id', (req, res) => controller.getProfile(req, res));
+   router.post('/api/profiles', (req, res) => controller.createProfile(req, res));
+   
+   export { router as profileRoutes };
+   ```
+
+5. **Module** (`module.ts`): Dependency injection setup
+   ```typescript
+   import { getEntityManager } from '../db/init';
+   import { ProfileService } from './service';
+   import { ProfileController } from './controller';
+   
+   // Initialize module dependencies
+   const em = getEntityManager();
+   const profileService = new ProfileService(em);
+   const profileController = new ProfileController(profileService);
+   
+   export const profileModule = {
+     service: profileService,
+     controller: profileController,
+   };
    ```
 
 #### Frontend Files (API Client → Hook → Component)
 
-Frontend code is organized by **feature** - each feature contains its own hooks, components, and pages.
+Frontend code is organized by **feature** - each feature contains its own hooks, components, and pages. API client functions are centralized in the `api-client/` directory.
 
-1. **API Client** (`lib/apiClient.ts`): Centralized HTTP client (shared across all features)
+1. **API Client** (`api-client/profiles.api-client.ts`): HTTP request functions (shared across features)
    ```typescript
-   export const apiClient = {
-     get: (url) => fetch(`${BASE_URL}${url}`).then(r => r.json()),
-     post: (url, data) => fetch(`${BASE_URL}${url}`, { 
-       method: 'POST', 
-       body: JSON.stringify(data) 
-     })
+   // Located in: api-client/profiles.api-client.ts
+   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+   
+   export const profilesApi = {
+     getProfile: async (id: string) => {
+       const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`);
+       return response.json();
+     },
+     
+     getProfiles: async () => {
+       const response = await fetch(`${API_BASE_URL}/api/profiles`);
+       return response.json();
+     },
+     
+     createProfile: async (data: ProfileData) => {
+       const response = await fetch(`${API_BASE_URL}/api/profiles`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify(data),
+       });
+       return response.json();
+     },
    };
    ```
 
-2. **API Hooks** (`profiles/useProfiles.ts`): Feature-specific hooks
+2. **API Hooks** (`profiles/apiHooks.ts`): Feature-specific hooks (ALL in one file)
    ```typescript
-   // Located in: profiles/useProfiles.ts
-   import { apiClient } from '@/lib/apiClient';
+   // Located in: profiles/apiHooks.ts
+   import { profilesApi } from '@/api-client/profiles.api-client';
    
+   // GET single profile
    export function useProfile(id: string) {
      const [profile, setProfile] = useState(null);
      const [loading, setLoading] = useState(true);
      
      useEffect(() => {
-       apiClient.get(`/api/profiles/${id}`)
+       profilesApi.getProfile(id)
          .then(setProfile)
          .finally(() => setLoading(false));
      }, [id]);
      
      return { profile, loading };
    }
+   
+   // GET all profiles
+   export function useProfiles() {
+     const [profiles, setProfiles] = useState([]);
+     const [loading, setLoading] = useState(true);
+     
+     useEffect(() => {
+       profilesApi.getProfiles()
+         .then(setProfiles)
+         .finally(() => setLoading(false));
+     }, []);
+     
+     return { profiles, loading };
+   }
+   
+   // POST - Create profile
+   export function useCreateProfile() {
+     const [loading, setLoading] = useState(false);
+     
+     const createProfile = async (data) => {
+       setLoading(true);
+       try {
+         return await profilesApi.createProfile(data);
+       } finally {
+         setLoading(false);
+       }
+     };
+     
+     return { createProfile, loading };
+   }
    ```
 
 3. **Pages** (`profiles/ProfilePage.tsx`): Feature pages
    ```typescript
    // Located in: profiles/ProfilePage.tsx
-   import { useProfile } from './useProfiles';
+   import { useProfile } from './apiHooks';
    import { ProfileCard } from './ProfileCard';
    
    function ProfilePage() {
@@ -665,7 +763,7 @@ Once everything is running:
    - **Entry point**: `apps/frontend/src/main.tsx`
    - **Feature modules** (PREFERRED):
      - `profiles/` - All profile-related code in one directory
-       - `useProfiles.ts` - Profile API hooks
+       - `apiHooks.ts` - ALL profile API hooks
        - `ProfileCard.tsx` - Profile components
        - `ProfilePage.tsx` - Profile pages
      - `events/` - All event-related code
@@ -673,9 +771,9 @@ Once everything is running:
    - **⚠️ Old structure** (needs refactoring):
      - `pages/` - Mixed pages (should be moved to feature directories)
      - `components/` - Mixed components (should be moved to feature directories)
-     - `hooks/` - Mixed hooks (should be moved to feature directories)
+     - `hooks/` - Mixed hooks (should be consolidated into `apiHooks.ts` per feature)
    - **Shared code**:
-     - `lib/apiClient.ts` - HTTP client (shared across features)
+     - `api-client/` - Feature API client functions (HTTP requests)
      - `shared/` - Generic UI and layout components only
 
 4. **Test the data flow**:
@@ -725,10 +823,34 @@ async getFeaturedEvents(req: Request, res: Response) {
 
 **Step 4**: Add route (`routes.ts`)
 ```typescript
-router.get('/api/events/featured', controller.getFeaturedEvents);
+import { Router } from 'express';
+import { eventModule } from './module';
+
+const router = Router();
+const controller = eventModule.controller;
+
+router.get('/api/events/featured', (req, res) => controller.getFeaturedEvents(req, res));
+
+export { router as eventRoutes };
 ```
 
-**Step 5**: Register route in `apps/backend/src/index.ts`
+**Step 5**: Add module setup (`module.ts`)
+```typescript
+import { getEntityManager } from '../db/init';
+import { EventService } from './service';
+import { EventController } from './controller';
+
+const em = getEntityManager();
+const eventService = new EventService(em);
+const eventController = new EventController(eventService);
+
+export const eventModule = {
+  service: eventService,
+  controller: eventController,
+};
+```
+
+**Step 6**: Register route in `apps/backend/src/index.ts`
 ```typescript
 import { eventRoutes } from './events/routes.js';
 app.use(eventRoutes);
@@ -743,29 +865,60 @@ cd apps/frontend/src
 **Step 1**: Create feature directory if needed
 ```bash
 mkdir -p src/events
+mkdir -p src/api-client
 ```
 
-**Step 2**: Add API hook (`events/useEvents.ts`)
+**Step 2**: Add API client (`api-client/events.api-client.ts`)
 ```typescript
-import { apiClient } from '@/lib/apiClient';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+export const eventsApi = {
+  getFeaturedEvents: async () => {
+    const response = await fetch(`${API_BASE_URL}/api/events/featured`);
+    return response.json();
+  },
+  
+  getEvent: async (id: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/events/${id}`);
+    return response.json();
+  },
+};
+```
+
+**Step 3**: Add API hooks (`events/apiHooks.ts`)
+```typescript
+import { eventsApi } from '@/api-client/events.api-client';
 
 export function useFeaturedEvents() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    apiClient.get('/api/events/featured')
+    eventsApi.getFeaturedEvents()
       .then(setEvents)
       .finally(() => setLoading(false));
   }, []);
   
   return { events, loading };
 }
+
+export function useEvent(id: string) {
+  const [event, setEvent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    eventsApi.getEvent(id)
+      .then(setEvent)
+      .finally(() => setLoading(false));
+  }, [id]);
+  
+  return { event, loading };
+}
 ```
 
-**Step 3**: Create component (`events/FeaturedEvents.tsx`)
+**Step 4**: Create component (`events/FeaturedEvents.tsx`)
 ```typescript
-import { useFeaturedEvents } from './useEvents';
+import { useFeaturedEvents } from './apiHooks';
 import { EventCard } from './EventCard';
 
 export function FeaturedEvents() {
@@ -781,7 +934,7 @@ export function FeaturedEvents() {
 }
 ```
 
-**Step 4**: Use in page (`events/EventsPage.tsx`)
+**Step 5**: Use in page (`events/EventsPage.tsx`)
 ```typescript
 import { FeaturedEvents } from './FeaturedEvents';
 
@@ -810,32 +963,82 @@ Create these files (in order):
 2. `service.ts` - Business logic
 3. `controller.ts` - HTTP handlers
 4. `routes.ts` - Express routes
-5. `index.ts` - Barrel export
+5. `module.ts` - Dependency injection setup
+6. `index.ts` - Barrel export
 
 Then register routes in `apps/backend/src/index.ts`
 
 #### Frontend Module Structure
 ```bash
 mkdir -p apps/frontend/src/sponsors
-cd apps/frontend/src/sponsors
+mkdir -p apps/frontend/src/api-client
 ```
 
-Create these files in the same directory:
-1. **Hooks**:
-   - `useSponsors.ts` - API hooks (useSponsors, useSponsor, etc.)
-   - `useSponsorMutations.ts` - Mutation hooks (create, update, delete)
+Create these files:
 
-2. **Components**:
+**1. API Client** (`api-client/sponsors.api-client.ts`):
+```typescript
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+export const sponsorsApi = {
+  getSponsors: async () => {
+    const response = await fetch(`${API_BASE_URL}/api/sponsors`);
+    return response.json();
+  },
+  
+  getSponsor: async (id: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/sponsors/${id}`);
+    return response.json();
+  },
+  
+  createSponsor: async (data: SponsorData) => {
+    const response = await fetch(`${API_BASE_URL}/api/sponsors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+  
+  updateSponsor: async (id: string, data: SponsorData) => {
+    const response = await fetch(`${API_BASE_URL}/api/sponsors/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+  
+  deleteSponsor: async (id: string) => {
+    await fetch(`${API_BASE_URL}/api/sponsors/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+```
+
+**2. API Hooks** (`sponsors/apiHooks.ts`):
+```typescript
+import { sponsorsApi } from '@/api-client/sponsors.api-client';
+
+export function useSponsors() { ... }
+export function useSponsor(id) { ... }
+export function useCreateSponsor() { ... }
+export function useUpdateSponsor() { ... }
+export function useDeleteSponsor() { ... }
+```
+
+**3. Components** (`sponsors/`):
    - `SponsorCard.tsx` - Individual sponsor display
    - `SponsorList.tsx` - List of sponsors
    - `SponsorForm.tsx` - Create/edit form
 
-3. **Pages**:
+**4. Pages** (`sponsors/`):
    - `SponsorsPage.tsx` - Main sponsors page
    - `SponsorDetailPage.tsx` - Individual sponsor detail
    - `SponsorEditPage.tsx` - Edit sponsor page
 
-4. **Optional**:
+**5. Optional**:
    - `types.ts` - Feature-specific types
    - `index.ts` - Barrel export for the feature
 
@@ -862,17 +1065,21 @@ src/
 **New** ✅:
 ```
 src/
+├── api-client/              # API client functions (HTTP requests)
+│   ├── profiles.api-client.ts
+│   └── events.api-client.ts
+│
 ├── profiles/
+│   ├── apiHooks.ts          # ALL profile hooks
 │   ├── ProfilePage.tsx
-│   ├── ProfileCard.tsx
-│   └── useProfiles.ts
+│   └── ProfileCard.tsx
 │
 ├── events/
+│   ├── apiHooks.ts          # ALL event hooks
 │   ├── EventsPage.tsx
-│   ├── EventCard.tsx
-│   └── useEvents.ts
+│   └── EventCard.tsx
 │
-└── shared/          # Only shared/generic components
+└── shared/                  # Only shared/generic components
     ├── Button.tsx
     ├── Input.tsx
     ├── Modal.tsx
@@ -880,11 +1087,16 @@ src/
 ```
 
 **Migration Steps**:
-1. Create feature directory: `mkdir -p src/profiles`
-2. Move related files together into the same directory
-3. Update imports in moved files (e.g., `import { useProfile } from './useProfiles'`)
-4. Update imports in files that use the moved code
-5. Test that everything still works
+1. Create `api-client/` directory: `mkdir -p src/api-client`
+2. Create feature directory: `mkdir -p src/profiles`
+3. Create API client file: `api-client/profiles.api-client.ts`
+4. Create `apiHooks.ts` in the feature directory
+5. Move and consolidate all related hooks into `apiHooks.ts`
+6. Update hooks to use API client functions
+7. Move components and pages to the same directory
+8. Update imports in moved files (e.g., `import { useProfile } from './apiHooks'`)
+9. Update imports in files that use the moved code
+10. Test that everything still works
 
 ### Database Migrations (Backend Only)
 
@@ -921,8 +1133,8 @@ npm run migration:down
    - All database access MUST go through backend API
    - Frontend only uses `lib/apiClient.ts` and hooks
 
-2. **Follow the entity → service → controller → route pattern**
-   - Backend modules MUST have all 4 files
+2. **Follow the entity → service → controller → route → module pattern**
+   - Backend modules MUST have all 5 files
    - Don't skip layers or create "shortcut" patterns
 
 3. **Frontend components use hooks, hooks use API client**
@@ -943,15 +1155,17 @@ npm run migration:down
 2. Add method to service
 3. Add method to controller
 4. Add route to router
-5. Ensure router is registered in `index.ts`
+5. Ensure module.ts wires everything together
+6. Ensure router is registered in `index.ts`
 
 **Adding Frontend Feature:**
-1. Create feature directory: `src/[feature-name]/`
-2. Create hook file: `use[Feature].ts` in the same directory
-3. Create component files: `[Feature]Card.tsx`, `[Feature]Form.tsx`, etc.
-4. Create page files: `[Feature]Page.tsx`, `[Feature]DetailPage.tsx`, etc.
-5. All files for the feature live together in the same flat directory
-6. Never bypass the hook layer - hooks are the ONLY way to fetch data
+1. Create API client: `api-client/[feature].api-client.ts` with all HTTP request functions
+2. Create feature directory: `src/[feature-name]/`
+3. Create `apiHooks.ts` with ALL hooks for this feature (using the api-client)
+4. Create component files: `[Feature]Card.tsx`, `[Feature]Form.tsx`, etc.
+5. Create page files: `[Feature]Page.tsx`, `[Feature]DetailPage.tsx`, etc.
+6. All files for the feature live together in the same flat directory
+7. Never bypass the hook layer - hooks in `apiHooks.ts` are the ONLY way to fetch data
 
 **Modifying Data Flow:**
 - Trace the full path: Component → Hook → API Client → Backend Route → Controller → Service → Entity → Database
@@ -982,24 +1196,45 @@ npm run migration:down
 ### File Template Locations
 
 When creating new modules, use these as templates:
-- **Backend Module**: `apps/backend/src/profiles/` (complete example with all 4 files)
-- **Frontend Feature** (PREFERRED): `apps/frontend/src/profiles/` (when restructured - all files in one directory)
-- **Frontend Hook** (OLD): `apps/frontend/src/hooks/useProfiles.ts` (needs to move to `profiles/`)
-- **API Client**: `apps/frontend/src/lib/apiClient.ts` (shared singleton)
+- **Backend Module**: `apps/backend/src/profiles/` (complete example with all 5 files)
+- **Frontend API Client**: `apps/frontend/src/api-client/profiles.api-client.ts` (HTTP request functions)
+- **Frontend Feature**: `apps/frontend/src/profiles/` (when restructured - all files in one directory)
+- **Frontend Hooks**: `apps/frontend/src/hooks/` (OLD - scattered, needs consolidation into `apiHooks.ts`)
+
+**Backend Module Structure**:
+```
+src/profiles/
+├── entity.ts        # MikroORM entity definition
+├── service.ts       # Business logic & database operations
+├── controller.ts    # HTTP request handlers
+├── routes.ts        # Express router
+├── module.ts        # Dependency injection setup
+└── index.ts         # Barrel export
+```
 
 **Frontend Feature Structure**:
 ```
-src/profiles/
-├── useProfiles.ts          # Hooks
-├── useProfileMutations.ts
-├── ProfileCard.tsx         # Components
-├── ProfileForm.tsx
-├── ProfilePage.tsx         # Pages
-├── ProfileEditPage.tsx
-└── types.ts                # Optional types
+src/
+├── api-client/
+│   └── profiles.api-client.ts   # getProfile(), getProfiles(), createProfile(), etc.
+│
+└── profiles/
+    ├── apiHooks.ts              # useProfile, useProfiles, useCreateProfile, etc.
+    ├── ProfileCard.tsx          # Components
+    ├── ProfileForm.tsx
+    ├── ProfilePage.tsx          # Pages
+    ├── ProfileEditPage.tsx
+    └── types.ts                 # Optional types
 ```
 
-All related files live together - no nested subdirectories!
+**Key Points**:
+- ✅ Backend: entity → service → controller → routes → module (5 files)
+- ✅ API client in `api-client/[feature].api-client.ts` - raw HTTP functions
+- ✅ One `apiHooks.ts` file per feature containing ALL hooks
+- ✅ Hooks use the API client functions
+- ✅ All related files live together - no nested subdirectories
+- ✅ Simple imports: `import { useProfile, useProfiles } from './apiHooks'`
+- ✅ API client imports: `import { profilesApi } from '@/api-client/profiles.api-client'`
 
 ### Environment Context
 
@@ -1011,6 +1246,7 @@ All related files live together - no nested subdirectories!
 
 - **All frontend API calls go to**: `http://localhost:3001/api/*`
 - **Backend connects to database via**: MikroORM → PostgreSQL (port 54322)
+- **API client files located in**: `apps/frontend/src/api-client/`
 
 ### Quick Reference: Request Flow
 
@@ -1019,15 +1255,15 @@ User Action (Browser)
     ↓
 React Component calls hook
     ↓
-Hook (useProfiles.ts) calls apiClient
+Hook from apiHooks.ts calls API client function
     ↓
-apiClient.ts makes fetch to localhost:3001
+API client ([feature].api-client.ts) makes fetch to localhost:3001
     ↓
 Express Route matches request
     ↓
-Controller handles req/res
+Controller handles req/res (from module.ts)
     ↓
-Service executes business logic
+Service executes business logic (from module.ts)
     ↓
 MikroORM Entity queries database
     ↓
