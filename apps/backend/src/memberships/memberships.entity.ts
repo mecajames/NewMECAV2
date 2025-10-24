@@ -1,11 +1,12 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
+import { randomUUID } from 'crypto';
 import { MembershipType, PaymentStatus } from '../types/enums';
-import { Profile } from '../profiles/entity';
+import { Profile } from '../profiles/profiles.entity';
 
 @Entity({ tableName: 'memberships', schema: 'public' })
 export class Membership {
   @PrimaryKey({ type: 'uuid' })
-  id!: string;
+  id: string = randomUUID();
 
   @ManyToOne(() => Profile, { fieldName: 'user_id' })
   user!: Profile;
@@ -30,9 +31,9 @@ export class Membership {
   @Property({ type: 'text', nullable: true, fieldName: 'transaction_id' })
   transactionId?: string;
 
-  @Property({ type: 'timestamptz', fieldName: 'created_at' })
+  @Property({ onCreate: () => new Date() })
   createdAt: Date = new Date();
 
-  @Property({ type: 'timestamptz', fieldName: 'updated_at', onUpdate: () => new Date() })
+  @Property({ onUpdate: () => new Date() })
   updatedAt: Date = new Date();
 }

@@ -1,3 +1,4 @@
-export { Event } from './entity';
-export { EventService } from './service';
-export { EventController } from './controller';
+export { Event } from './events.entity';
+export { EventsService } from './events.service';
+export { EventsController } from './events.controller';
+export { EventsModule } from './events.module';

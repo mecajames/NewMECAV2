@@ -4,18 +4,21 @@ Welcome! Follow these steps to get the project running on your machine.
 
 ## 🤖 Quick Start for AI Developers
 
-**Architecture**: 3-tier (Database ← Backend API ← Frontend)
+**Architecture**: 3-tier (Database ← NestJS Backend API ← Frontend)
 
 **Critical Rules**:
 - ❌ Frontend NEVER uses `lib/supabase.ts` or imports Supabase client
 - ✅ Frontend ONLY communicates via API hooks → API client → Backend (localhost:3001)
-- ✅ Backend uses MikroORM entities → services → controllers → routes
-- ✅ All database operations happen in backend services
+- ✅ Backend uses **NestJS** with decorator-based routing (`@Controller()`, `@Get()`, `@Post()`, etc.)
+- ✅ Backend uses MikroORM entities → services (DI via `@Injectable()`) → controllers → modules
+- ✅ All database operations happen in backend services with `EntityManager` injection
 - ✅ Frontend is organized by FEATURE, not by file type (no monolithic `pages/` or `components/` directories)
 
-**Module Pattern** (Backend):
+**Module Pattern** (Backend - NestJS):
 ```
-entity.ts → service.ts → controller.ts → routes.ts → module.ts → index.ts
+[feature].entity.ts → [feature].service.ts (@Injectable) → [feature].controller.ts (@Controller) → [feature].module.ts (@Module)
+Routes defined with decorators: @Controller('api/profiles'), @Get(':id'), @Post(), @Put(':id'), @Delete(':id')
+Dependency injection via constructor parameters - no manual instantiation needed
 ```
 
 **Module Pattern** (Frontend - PREFERRED):
@@ -39,7 +42,7 @@ Page Component → Hook (profiles/apiHooks.ts) → API Client (api-client/profil
 ```
 
 **Reference Implementation**: 
-- Backend: `apps/backend/src/profiles/`
+- Backend: `apps/backend/src/profiles/` (NestJS module with decorators)
 - Frontend (PREFERRED): `apps/frontend/src/profiles/` + `apps/frontend/src/api-client/profiles.api-client.ts`
 - Frontend (OLD): `apps/frontend/src/pages/`, `hooks/`, `components/` (scattered, needs consolidation)
 
@@ -122,13 +125,13 @@ CORS_ORIGIN=http://localhost:5173
 ### 3. Start Everything
 
 ```bash
-npm run dev:all
+npm run start:all
 ```
 
 This single command:
 - ✅ Starts Supabase (PostgreSQL, Auth, Storage, etc.)
-- ✅ Starts backend API server
-- ✅ Starts frontend dev server
+- ✅ Starts backend API server (NestJS in watch mode)
+- ✅ Starts frontend dev server (Vite)
 
 Wait for all services to start (takes ~30 seconds first time).
 
@@ -142,8 +145,8 @@ Wait for all services to start (takes ~30 seconds first time).
 
 ### Daily Workflow
 ```bash
-# Start development
-npm run dev:all
+# Start development (recommended - starts everything)
+npm run start:all
 
 # When done for the day
 npm run supabase:stop   # Optional: stops Supabase containers
@@ -152,9 +155,9 @@ npm run supabase:stop   # Optional: stops Supabase containers
 ### Useful Commands
 ```bash
 # Full stack development (recommended)
-npm run dev:all         # Start Supabase + Backend + Frontend
+npm run start:all       # Start Supabase + Backend + Frontend (all in one)
 
-# Individual services
+# Individual services (only if you need to run separately)
 npm run dev             # Frontend only (requires backend running)
 npm run dev:backend     # Backend only (requires Supabase running)
 
@@ -168,10 +171,10 @@ npm run supabase:restart  # Stop and start Supabase
 cd apps/backend
 npm run dev              # Start backend in watch mode
 npm run build            # Build TypeScript to JavaScript
-npm run migration:create # Create new database migration
-npm run migration:up     # Apply pending migrations
-npm run migration:down   # Rollback last migration
-npm run migration:list   # List all migrations
+npx mikro-orm migration:create # Create new database migration
+npx mikro-orm migration:up     # Apply pending migrations
+npx mikro-orm migration:down   # Rollback last migration
+npx mikro-orm migration:list   # List all migrations
 
 # Frontend-specific commands
 cd apps/frontend
@@ -192,16 +195,17 @@ npm run lint             # Lint all workspaces
 
 ### Backend
 - **Runtime**: Node.js (>= 18)
-- **Framework**: Express.js (HTTP server)
-- **ORM**: MikroORM (TypeScript-first ORM)
-- **Database**: PostgreSQL (via Supabase local)
+- **Framework**: NestJS 10+ (Progressive Node.js framework)
+- **ORM**: MikroORM 6.5+ (TypeScript-first ORM)
+- **Database**: PostgreSQL 15 (via Supabase local)
 - **Language**: TypeScript
+- **Module System**: CommonJS (required by NestJS)
 - **Key Packages**: 
+  - `@nestjs/common` - Core NestJS decorators and utilities
+  - `@nestjs/core` - NestJS application core
+  - `@nestjs/platform-express` - Express adapter for NestJS
   - `@mikro-orm/postgresql` - Database driver
   - `@mikro-orm/core` - ORM core
-  - `express` - Web framework
-  - `cors` - CORS middleware
-  - `helmet` - Security headers
 
 ### Frontend
 - **Framework**: React 18
@@ -227,7 +231,7 @@ npm run lint             # Lint all workspaces
 
 This project follows a **3-tier architecture**:
 1. **Database Layer**: PostgreSQL (via Supabase local)
-2. **Backend API Layer**: Node.js + Express + MikroORM
+2. **Backend API Layer**: Node.js + NestJS + MikroORM
 3. **Frontend Layer**: React + Vite
 
 **CRITICAL**: The frontend **NEVER** talks directly to the database. All database operations go through the backend API.
@@ -408,33 +412,34 @@ NewMECAV2/
 │   │   │   └── types/               # Shared TypeScript types only
 │   │   └── .env.development         # Frontend environment variables
 │   │
-│   └── backend/                     # Node.js + Express + MikroORM backend
+│   └── backend/                     # NestJS + MikroORM backend
 │       ├── src/
-│       │   ├── index.ts             # ⭐ Express app entry point & route registration
-│       │   ├── db/
-│       │   │   ├── init.ts          # Database initialization
-│       │   │   └── mikro-orm.config.ts # MikroORM configuration
+│       │   ├── main.ts              # ⭐ NestJS app entry point
+│       │   ├── app.module.ts        # ⭐ Root application module
+│       │   ├── app.controller.ts    # Health check endpoint
+│       │   ├── app.service.ts       # Health check service
 │       │   │
-│       │   ├── profiles/            # Profile module (entity-first design)
-│       │   │   ├── entity.ts        # ⭐ MikroORM entity definition
-│       │   │   ├── service.ts       # ⭐ Business logic & database operations
-│       │   │   ├── controller.ts    # ⭐ HTTP request handlers
-│       │   │   ├── routes.ts        # ⭐ Express router (GET/POST/PUT/DELETE)
-│       │   │   └── module.ts        # ⭐ Module setup (DI container)
+│       │   ├── db/
+│       │   │   ├── database.module.ts      # MikroORM global module
+│       │   │   └── mikro-orm.config.ts     # MikroORM configuration
+│       │   │
+│       │   ├── profiles/            # Profile module (NestJS)
+│       │   │   ├── profiles.entity.ts      # ⭐ MikroORM entity definition
+│       │   │   ├── profiles.service.ts     # ⭐ Business logic (Injectable)
+│       │   │   ├── profiles.controller.ts  # ⭐ HTTP handlers with decorators
+│       │   │   └── profiles.module.ts      # ⭐ NestJS module (DI setup)
 │       │   │
 │       │   ├── events/              # Event module
-│       │   │   ├── entity.ts
-│       │   │   ├── service.ts
-│       │   │   ├── controller.ts
-│       │   │   ├── routes.ts
-│       │   │   └── module.ts
+│       │   │   ├── events.entity.ts
+│       │   │   ├── events.service.ts
+│       │   │   ├── events.controller.ts
+│       │   │   └── events.module.ts
 │       │   │
 │       │   ├── memberships/         # Membership module
-│       │   │   ├── entity.ts
-│       │   │   ├── service.ts
-│       │   │   ├── controller.ts
-│       │   │   ├── routes.ts
-│       │   │   └── module.ts
+│       │   │   ├── memberships.entity.ts
+│       │   │   ├── memberships.service.ts
+│       │   │   ├── memberships.controller.ts
+│       │   │   └── memberships.module.ts
 │       │   │
 │       │   └── types/               # Shared TypeScript types & enums
 │       │       └── enums.ts         # UserRole, MembershipStatus, etc.
@@ -479,21 +484,22 @@ NewMECAV2/
        │ 4. HTTP Request
        ▼
 ┌─────────────────────────────────────────────┐
-│  Backend (Express Router)                   │
-│  GET /api/profiles/:id                      │
+│  Backend (NestJS Router - automatic)        │
+│  Matches @Controller + @Get decorators      │
 └──────┬──────────────────────────────────────┘
        │
-       │ 5. Route handler
+       │ 5. Route handler with DI
        ▼
 ┌─────────────────────────────────────────────┐
-│  Controller (ProfileController.ts)          │
-│  async getProfile(req, res) { ... }         │
+│  Controller (ProfilesController)            │
+│  @Get(':id') async getProfile(@Param...)    │
+│  constructor(private service: ProfilesSvc)  │
 └──────┬──────────────────────────────────────┘
        │
-       │ 6. Calls business logic
+       │ 6. Calls business logic (injected)
        ▼
 ┌─────────────────────────────────────────────┐
-│  Service (ProfileService.ts)                │
+│  Service (ProfilesService - @Injectable)    │
 │  async findById(id) { ... }                 │
 └──────┬──────────────────────────────────────┘
        │
@@ -516,73 +522,238 @@ Data flows back up through the same layers
 
 ### Key Files to Understand
 
-#### Backend Files (Entity → Service → Controller → Route → Module)
+#### Backend Files (Entity → Service → Controller → Module)
 
-1. **Entity** (`entity.ts`): Defines the database table structure
+**NestJS uses decorator-based routing and built-in dependency injection - no manual wiring needed!**
+
+1. **Entity** (`profiles.entity.ts`): Defines the database table structure
    ```typescript
+   // Located in: src/profiles/profiles.entity.ts
+   import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
+   import { randomUUID } from 'crypto';
+   
    @Entity({ tableName: 'profiles', schema: 'public' })
    export class Profile {
      @PrimaryKey({ type: 'uuid' })
-     id!: string;
+     id: string = randomUUID();
+     
+     @Property({ type: 'text', unique: true })
+     email!: string;
      
      @Property({ type: 'text' })
-     email!: string;
+     full_name!: string;
    }
    ```
 
-2. **Service** (`service.ts`): Business logic & database operations
+2. **Service** (`profiles.service.ts`): Business logic & database operations with `@Injectable()`
    ```typescript
-   export class ProfileService {
-     constructor(private readonly em: EntityManager) {}
+   // Located in: src/profiles/profiles.service.ts
+   import { Injectable, Inject } from '@nestjs/common';
+   import { EntityManager } from '@mikro-orm/core';
+   import { Profile } from './profiles.entity';
+   
+   @Injectable()
+   export class ProfilesService {
+     constructor(
+       @Inject('EntityManager')
+       private readonly em: EntityManager,
+     ) {}
+     
+     async findAll(page = 1, limit = 10): Promise<Profile[]> {
+       return this.em.find(Profile, {}, {
+         limit,
+         offset: (page - 1) * limit,
+       });
+     }
      
      async findById(id: string): Promise<Profile | null> {
        return this.em.findOne(Profile, { id });
      }
-   }
-   ```
-
-3. **Controller** (`controller.ts`): HTTP request/response handling
-   ```typescript
-   export class ProfileController {
-     constructor(private readonly profileService: ProfileService) {}
      
-     async getProfile(req: Request, res: Response) {
-       const profile = await this.profileService.findById(req.params.id);
-       res.json(profile);
+     async create(data: Partial<Profile>): Promise<Profile> {
+       const profile = this.em.create(Profile, data);
+       await this.em.persistAndFlush(profile);
+       return profile;
+     }
+     
+     async update(id: string, data: Partial<Profile>): Promise<Profile | null> {
+       const profile = await this.em.findOne(Profile, { id });
+       if (!profile) return null;
+       this.em.assign(profile, data);
+       await this.em.flush();
+       return profile;
+     }
+     
+     async delete(id: string): Promise<boolean> {
+       const profile = await this.em.findOne(Profile, { id });
+       if (!profile) return false;
+       await this.em.removeAndFlush(profile);
+       return true;
      }
    }
    ```
 
-4. **Routes** (`routes.ts`): Express route definitions
+3. **Controller** (`profiles.controller.ts`): HTTP request/response handling with decorators
    ```typescript
-   import { Router } from 'express';
-   import { profileModule } from './module';
+   // Located in: src/profiles/profiles.controller.ts
+   import { 
+     Controller, 
+     Get, 
+     Post, 
+     Put, 
+     Delete, 
+     Body, 
+     Param, 
+     Query,
+     HttpCode,
+     HttpStatus 
+   } from '@nestjs/common';
+   import { ProfilesService } from './profiles.service';
+   import { Profile } from './profiles.entity';
    
-   const router = Router();
-   const controller = profileModule.controller;
-   
-   router.get('/api/profiles/:id', (req, res) => controller.getProfile(req, res));
-   router.post('/api/profiles', (req, res) => controller.createProfile(req, res));
-   
-   export { router as profileRoutes };
+   @Controller('api/profiles')
+   export class ProfilesController {
+     constructor(private readonly profilesService: ProfilesService) {}
+     
+     @Get()
+     async listProfiles(
+       @Query('page') page: number = 1,
+       @Query('limit') limit: number = 10,
+     ) {
+       return this.profilesService.findAll(page, limit);
+     }
+     
+     @Get(':id')
+     async getProfile(@Param('id') id: string) {
+       return this.profilesService.findById(id);
+     }
+     
+     @Post()
+     @HttpCode(HttpStatus.CREATED)
+     async createProfile(@Body() data: Partial<Profile>) {
+       return this.profilesService.create(data);
+     }
+     
+     @Put(':id')
+     async updateProfile(
+       @Param('id') id: string,
+       @Body() data: Partial<Profile>,
+     ) {
+       return this.profilesService.update(id, data);
+     }
+     
+     @Delete(':id')
+     @HttpCode(HttpStatus.NO_CONTENT)
+     async deleteProfile(@Param('id') id: string) {
+       await this.profilesService.delete(id);
+     }
+   }
    ```
 
-5. **Module** (`module.ts`): Dependency injection setup
+4. **Module** (`profiles.module.ts`): NestJS module declares controllers and providers
    ```typescript
-   import { getEntityManager } from '../db/init';
-   import { ProfileService } from './service';
-   import { ProfileController } from './controller';
+   // Located in: src/profiles/profiles.module.ts
+   import { Module } from '@nestjs/common';
+   import { ProfilesController } from './profiles.controller';
+   import { ProfilesService } from './profiles.service';
    
-   // Initialize module dependencies
-   const em = getEntityManager();
-   const profileService = new ProfileService(em);
-   const profileController = new ProfileController(profileService);
-   
-   export const profileModule = {
-     service: profileService,
-     controller: profileController,
-   };
+   @Module({
+     controllers: [ProfilesController],
+     providers: [ProfilesService],
+     exports: [ProfilesService],  // Export if other modules need it
+   })
+   export class ProfilesModule {}
    ```
+
+5. **App Module** (`app.module.ts`): Root module imports all feature modules
+   ```typescript
+   // Located in: src/app.module.ts
+   import { Module } from '@nestjs/common';
+   import { DatabaseModule } from './db/database.module';
+   import { ProfilesModule } from './profiles/profiles.module';
+   import { EventsModule } from './events/events.module';
+   import { MembershipsModule } from './memberships/memberships.module';
+   import { EventRegistrationsModule } from './event-registrations/event-registrations.module';
+   import { RulebooksModule } from './rulebooks/rulebooks.module';
+   import { CompetitionResultsModule } from './competition-results/competition-results.module';
+   import { AppController } from './app.controller';
+   import { AppService } from './app.service';
+   
+   @Module({
+     imports: [
+       DatabaseModule,              // @Global() - provides MikroORM & EntityManager
+       ProfilesModule,              // Feature modules
+       EventsModule,
+       MembershipsModule,
+       EventRegistrationsModule,
+       RulebooksModule,
+       CompetitionResultsModule,
+   ],
+     controllers: [AppController],  // Health check
+     providers: [AppService],
+   })
+   export class AppModule {}
+   ```
+
+6. **Database Module** (`db/database.module.ts`): Global MikroORM configuration
+   ```typescript
+   // Located in: src/db/database.module.ts
+   import { Global, Module } from '@nestjs/common';
+   import { MikroORM } from '@mikro-orm/core';
+   import config from './mikro-orm.config';
+   
+   @Global()
+   @Module({
+     providers: [
+       {
+         provide: MikroORM,
+         useFactory: async () => {
+           const orm = await MikroORM.init(config);
+           return orm;
+         },
+       },
+       {
+         provide: 'EntityManager',
+         useFactory: (orm: MikroORM) => orm.em,
+         inject: [MikroORM],
+       },
+     ],
+     exports: [MikroORM, 'EntityManager'],
+   })
+   export class DatabaseModule {}
+   ```
+
+7. **Main Entry** (`main.ts`): Bootstrap NestJS application
+   ```typescript
+   // Located in: src/main.ts
+   import { NestFactory } from '@nestjs/core';
+   import { AppModule } from './app.module';
+   
+   async function bootstrap() {
+     const app = await NestFactory.create(AppModule);
+     
+     app.enableCors({
+       origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+       credentials: true,
+     });
+     
+     const port = process.env.PORT || 3001;
+     await app.listen(port);
+     console.log(`🚀 Backend running on http://localhost:${port}`);
+   }
+   
+   bootstrap();
+   ```
+
+**Key Points**:
+- 🎯 **Decorator-based routing**: `@Controller('api/profiles')`, `@Get(':id')`, `@Post()`, `@Put(':id')`, `@Delete(':id')`
+- 🎯 **No manual router files** - NestJS automatically maps routes from decorators
+- 🎯 **Built-in DI** - Constructor parameters automatically injected by NestJS
+- 🎯 **Services use `@Injectable()`** - Marks class as available for injection
+- 🎯 **Global modules** - `@Global()` makes providers available everywhere (DatabaseModule)
+- 🎯 **Parameter decorators** - `@Param()`, `@Body()`, `@Query()` extract request data
+- 🎯 **HTTP status codes** - `@HttpCode()` decorator sets response status
+- 🎯 **Clean architecture** - No manual wiring, NestJS handles everything
 
 #### Frontend Files (API Client → Hook → Component)
 
@@ -751,13 +922,16 @@ Once everything is running:
    - See your local data
 
 2. **Review the backend code** (Start here!):
-   - **Entry point**: `apps/backend/src/index.ts` - Express server setup
-   - **Example module**: `apps/backend/src/profiles/`
-     - `entity.ts` - Database table definition
-     - `service.ts` - Business logic methods
-     - `controller.ts` - HTTP request handlers
-     - `routes.ts` - API endpoint definitions
-   - **Database config**: `apps/backend/src/db/mikro-orm.config.ts`
+   - **Entry point**: `apps/backend/src/main.ts` - NestJS bootstrap
+   - **Root module**: `apps/backend/src/app.module.ts` - Imports all feature modules
+   - **Database setup**: `apps/backend/src/db/database.module.ts` - Global MikroORM module
+   - **Example module**: `apps/backend/src/profiles/` (Complete NestJS module)
+     - `profiles.entity.ts` - MikroORM entity (database table definition)
+     - `profiles.service.ts` - Business logic with `@Injectable()` decorator
+     - `profiles.controller.ts` - HTTP handlers with `@Controller()`, `@Get()`, `@Post()`, etc.
+     - `profiles.module.ts` - NestJS module with DI configuration
+   - **ORM config**: `apps/backend/src/db/mikro-orm.config.ts`
+   - **Key concept**: No manual route registration - NestJS automatically maps routes from decorators!
 
 3. **Review the frontend code**:
    - **Entry point**: `apps/frontend/src/main.tsx`
@@ -783,8 +957,8 @@ Once everything is running:
    - See the backend responding with data
 
 5. **Make a test change**:
-   - **Backend**: Add a new endpoint in `apps/backend/src/profiles/routes.ts`
-   - **Frontend**: Create a new hook in `apps/frontend/src/hooks/`
+   - **Backend**: Add a new route in centralized `apps/backend/src/routes.ts`
+   - **Frontend**: Create a new hook in feature's `apiHooks.ts` (e.g., `apps/frontend/src/profiles/apiHooks.ts`)
    - Save and test the integration
 
 ## Common Development Patterns
@@ -793,68 +967,88 @@ Once everything is running:
 
 Example: Add a "Featured Events" feature
 
-#### 1. Backend (Database → Service → Controller → Route)
+#### 1. Backend (Database → Service → Controller → Module)
+
+**NestJS uses decorators - no manual route registration needed!**
 
 ```bash
 cd apps/backend/src/events
 ```
 
-**Step 1**: Update entity if needed (`entity.ts`)
+**Step 1**: Update entity if needed (`events.entity.ts`)
 ```typescript
 @Property({ type: 'boolean' })
 featured: boolean = false;
 ```
 
-**Step 2**: Add service method (`service.ts`)
+**Step 2**: Add service method (`events.service.ts`)
 ```typescript
-async findFeatured(): Promise<Event[]> {
-  const em = await getEntityManager();
-  return em.find(Event, { featured: true });
+import { Injectable, Inject } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
+import { Event } from './events.entity';
+
+@Injectable()
+export class EventsService {
+  constructor(
+    @Inject('EntityManager')
+    private readonly em: EntityManager,
+  ) {}
+
+  async findFeatured(): Promise<Event[]> {
+    return this.em.find(Event, { featured: true });
+  }
 }
 ```
 
-**Step 3**: Add controller method (`controller.ts`)
+**Step 3**: Add controller method with decorator (`events.controller.ts`)
 ```typescript
-async getFeaturedEvents(req: Request, res: Response) {
-  const events = await this.eventService.findFeatured();
-  res.json(events);
+import { Controller, Get, Param } from '@nestjs/common';
+import { EventsService } from './events.service';
+
+@Controller('api/events')
+export class EventsController {
+  constructor(private readonly eventsService: EventsService) {}
+
+  // New route - automatically registered!
+  @Get('featured')
+  async getFeaturedEvents() {
+    return this.eventsService.findFeatured();
+  }
+
+  // Existing routes
+  @Get(':id')
+  async getEvent(@Param('id') id: string) {
+    return this.eventsService.findById(id);
+  }
+
+  @Get()
+  async listEvents() {
+    return this.eventsService.findAll();
+  }
 }
 ```
 
-**Step 4**: Add route (`routes.ts`)
+**Step 4**: Module is already configured - no changes needed! (`events.module.ts`)
 ```typescript
-import { Router } from 'express';
-import { eventModule } from './module';
+import { Module } from '@nestjs/common';
+import { EventsController } from './events.controller';
+import { EventsService } from './events.service';
 
-const router = Router();
-const controller = eventModule.controller;
-
-router.get('/api/events/featured', (req, res) => controller.getFeaturedEvents(req, res));
-
-export { router as eventRoutes };
+@Module({
+  controllers: [EventsController],
+  providers: [EventsService],
+  exports: [EventsService],
+})
+export class EventsModule {}
 ```
 
-**Step 5**: Add module setup (`module.ts`)
-```typescript
-import { getEntityManager } from '../db/init';
-import { EventService } from './service';
-import { EventController } from './controller';
+**That's it!** NestJS automatically:
+- ✅ Discovers the `@Get('featured')` decorator
+- ✅ Registers the route as `GET /api/events/featured`
+- ✅ Injects `EventsService` into the controller
+- ✅ Handles all HTTP request/response mapping
 
-const em = getEntityManager();
-const eventService = new EventService(em);
-const eventController = new EventController(eventService);
-
-export const eventModule = {
-  service: eventService,
-  controller: eventController,
-};
-```
-
-**Step 6**: Register route in `apps/backend/src/index.ts`
-```typescript
-import { eventRoutes } from './events/routes.js';
-app.use(eventRoutes);
-```
+**Note**: The module is already imported in `app.module.ts`, so the new route works immediately!
 
 #### 2. Frontend (API Client → Hook → Component)
 
@@ -952,21 +1146,168 @@ export function EventsPage() {
 
 When adding a completely new feature (e.g., "Sponsors"):
 
-#### Backend Module Structure
+#### Backend Module Structure (NestJS)
 ```bash
 mkdir apps/backend/src/sponsors
 cd apps/backend/src/sponsors
 ```
 
-Create these files (in order):
-1. `entity.ts` - MikroORM entity
-2. `service.ts` - Business logic
-3. `controller.ts` - HTTP handlers
-4. `routes.ts` - Express routes
-5. `module.ts` - Dependency injection setup
-6. `index.ts` - Barrel export
+Create these 4 files:
 
-Then register routes in `apps/backend/src/index.ts`
+**1. Entity** (`sponsors.entity.ts`):
+```typescript
+import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
+import { randomUUID } from 'crypto';
+
+@Entity({ tableName: 'sponsors', schema: 'public' })
+export class Sponsor {
+  @PrimaryKey({ type: 'uuid' })
+  id: string = randomUUID();
+
+  @Property({ type: 'text' })
+  name!: string;
+
+  @Property({ type: 'text', nullable: true })
+  logo_url?: string;
+}
+```
+
+**2. Service** (`sponsors.service.ts`):
+```typescript
+import { Injectable, Inject } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
+import { Sponsor } from './sponsors.entity';
+
+@Injectable()
+export class SponsorsService {
+  constructor(
+    @Inject('EntityManager')
+    private readonly em: EntityManager,
+  ) {}
+
+  async findAll(): Promise<Sponsor[]> {
+    return this.em.find(Sponsor, {});
+  }
+
+  async findById(id: string): Promise<Sponsor | null> {
+    return this.em.findOne(Sponsor, { id });
+  }
+
+  async create(data: Partial<Sponsor>): Promise<Sponsor> {
+    const sponsor = this.em.create(Sponsor, data);
+    await this.em.persistAndFlush(sponsor);
+    return sponsor;
+  }
+
+  async update(id: string, data: Partial<Sponsor>): Promise<Sponsor | null> {
+    const sponsor = await this.em.findOne(Sponsor, { id });
+    if (!sponsor) return null;
+    this.em.assign(sponsor, data);
+    await this.em.flush();
+    return sponsor;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const sponsor = await this.em.findOne(Sponsor, { id });
+    if (!sponsor) return false;
+    await this.em.removeAndFlush(sponsor);
+    return true;
+  }
+}
+```
+
+**3. Controller** (`sponsors.controller.ts`):
+```typescript
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Put, 
+  Delete, 
+  Body, 
+  Param,
+  HttpCode,
+  HttpStatus 
+} from '@nestjs/common';
+import { SponsorsService } from './sponsors.service';
+import { Sponsor } from './sponsors.entity';
+
+@Controller('api/sponsors')
+export class SponsorsController {
+  constructor(private readonly sponsorsService: SponsorsService) {}
+
+  @Get()
+  async listSponsors() {
+    return this.sponsorsService.findAll();
+  }
+
+  @Get(':id')
+  async getSponsor(@Param('id') id: string) {
+    return this.sponsorsService.findById(id);
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  async createSponsor(@Body() data: Partial<Sponsor>) {
+    return this.sponsorsService.create(data);
+  }
+
+  @Put(':id')
+  async updateSponsor(
+    @Param('id') id: string,
+    @Body() data: Partial<Sponsor>,
+  ) {
+    return this.sponsorsService.update(id, data);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSponsor(@Param('id') id: string) {
+    await this.sponsorsService.delete(id);
+  }
+}
+```
+
+**4. Module** (`sponsors.module.ts`):
+```typescript
+import { Module } from '@nestjs/common';
+import { SponsorsController } from './sponsors.controller';
+import { SponsorsService } from './sponsors.service';
+
+@Module({
+  controllers: [SponsorsController],
+  providers: [SponsorsService],
+  exports: [SponsorsService],
+})
+export class SponsorsModule {}
+```
+
+**5. Register in App Module** (`app.module.ts`):
+```typescript
+import { Module } from '@nestjs/common';
+import { SponsorsModule } from './sponsors/sponsors.module';
+// ... other imports
+
+@Module({
+  imports: [
+    DatabaseModule,
+    ProfilesModule,
+    EventsModule,
+    SponsorsModule,  // ← Add here
+    // ... other modules
+  ],
+})
+export class AppModule {}
+```
+
+**That's it!** NestJS automatically discovers all routes from the `@Controller()` and `@Get()/@Post()/@Put()/@Delete()` decorators.
+
+Routes automatically available:
+- `GET /api/sponsors` → `listSponsors()`
+- `GET /api/sponsors/:id` → `getSponsor(id)`
+- `POST /api/sponsors` → `createSponsor(data)`
+- `PUT /api/sponsors/:id` → `updateSponsor(id, data)`
+- `DELETE /api/sponsors/:id` → `deleteSponsor(id)`
 
 #### Frontend Module Structure
 ```bash
@@ -1106,13 +1447,16 @@ When you change an entity, you may need a migration:
 cd apps/backend
 
 # Create a new migration
-npm run migration:create
+npx mikro-orm migration:create
 
-# Apply migrations
-npm run migration:up
+# Apply pending migrations
+npx mikro-orm migration:up
 
 # Rollback last migration
-npm run migration:down
+npx mikro-orm migration:down
+
+# List all migrations
+npx mikro-orm migration:list
 ```
 
 **Note**: Migrations modify the database schema. The database runs in Supabase local.
@@ -1131,16 +1475,17 @@ npm run migration:down
 
 1. **NEVER import or use `lib/supabase.ts` in frontend code**
    - All database access MUST go through backend API
-   - Frontend only uses `lib/apiClient.ts` and hooks
+   - Frontend only uses `api-client/[feature].api-client.ts` files and hooks
 
-2. **Follow the entity → service → controller → route → module pattern**
-   - Backend modules MUST have all 5 files
+2. **Follow the [feature].entity → [feature].service → [feature].controller → [feature].module pattern**
+   - Backend modules MUST have all 4 files with proper naming
+   - All routes are registered in centralized `src/routes.ts`
    - Don't skip layers or create "shortcut" patterns
 
 3. **Frontend components use hooks, hooks use API client**
    - Components → Hooks → API Client → Backend
    - No direct fetch() calls in components
-   - All API calls centralized in feature-specific hooks
+   - All API calls centralized in feature-specific `apiHooks.ts`
    - Hooks live in the same directory as their related components and pages
 
 4. **Type definitions come from backend**
@@ -1150,13 +1495,13 @@ npm run migration:down
 
 ### When Making Changes
 
-**Adding Backend Endpoint:**
-1. Update/create entity if needed
-2. Add method to service
-3. Add method to controller
-4. Add route to router
-5. Ensure module.ts wires everything together
-6. Ensure router is registered in `index.ts`
+**Adding Backend Endpoint (NestJS):**
+1. Update/create entity if needed (`[feature].entity.ts`)
+2. Add method to service with `@Injectable()` (`[feature].service.ts`)
+3. Add method to controller with decorator (`[feature].controller.ts`) - e.g., `@Get('path')`
+4. Ensure module imports controller & provides service (`[feature].module.ts`)
+5. **That's it!** NestJS automatically discovers and registers routes from decorators
+6. No manual route registration needed - decorators handle everything
 
 **Adding Frontend Feature:**
 1. Create API client: `api-client/[feature].api-client.ts` with all HTTP request functions
@@ -1180,37 +1525,52 @@ npm run migration:down
 ❌ Creating controllers without services  
 ❌ Putting business logic in controllers (belongs in services)  
 ❌ Accessing the database outside of services  
+❌ Manually creating route files or registering routes  
+❌ Instantiating services manually (use DI instead)  
 ❌ Scattering hooks across root-level `hooks/` directory  
 ❌ Creating monolithic `pages/` or `components/` directories  
 ❌ Nesting subdirectories within feature modules (no `profiles/components/`, just `profiles/`)  
+❌ Using generic file names like `entity.ts`, `service.ts` (must be `[feature].entity.ts`, etc.)  
+❌ Forgetting `@Injectable()` on services  
+❌ Forgetting to import modules in `app.module.ts`  
 
-✅ Use API hooks for all data fetching  
-✅ Keep controllers thin (just req/res handling)  
-✅ Put business logic in services  
-✅ Use MikroORM entities for database operations  
-✅ Follow the established module pattern  
+✅ Use NestJS decorators: `@Controller()`, `@Get()`, `@Post()`, `@Injectable()`, etc.  
+✅ Use dependency injection via constructor parameters  
+✅ Use API hooks for all data fetching (frontend)  
+✅ Keep controllers thin (just HTTP handling with decorators)  
+✅ Put business logic in `@Injectable()` services  
+✅ Inject `EntityManager` in services for database operations  
+✅ Follow the 4-file module pattern: entity → service → controller → module  
 ✅ Organize frontend code by feature (profiles, events, etc.)  
 ✅ Keep all feature files together in a flat directory structure  
 ✅ Only put truly shared components in `shared/` directory  
+✅ Name backend files with feature prefix: `profiles.entity.ts`, `events.service.ts`, etc.  
+✅ Let NestJS handle all route registration automatically via decorators  
 
 ### File Template Locations
 
 When creating new modules, use these as templates:
-- **Backend Module**: `apps/backend/src/profiles/` (complete example with all 5 files)
+- **Backend Module**: `apps/backend/src/profiles/` (complete NestJS example with all 4 files)
+- **App Module**: `apps/backend/src/app.module.ts` (imports all feature modules)
+- **Database Module**: `apps/backend/src/db/database.module.ts` (global MikroORM setup)
+- **Main Entry**: `apps/backend/src/main.ts` (NestJS bootstrap)
 - **Frontend API Client**: `apps/frontend/src/api-client/profiles.api-client.ts` (HTTP request functions)
 - **Frontend Feature**: `apps/frontend/src/profiles/` (when restructured - all files in one directory)
 - **Frontend Hooks**: `apps/frontend/src/hooks/` (OLD - scattered, needs consolidation into `apiHooks.ts`)
 
-**Backend Module Structure**:
+**Backend Module Structure (NestJS)**:
 ```
 src/profiles/
-├── entity.ts        # MikroORM entity definition
-├── service.ts       # Business logic & database operations
-├── controller.ts    # HTTP request handlers
-├── routes.ts        # Express router
-├── module.ts        # Dependency injection setup
-└── index.ts         # Barrel export
+├── profiles.entity.ts        # MikroORM entity with decorators
+├── profiles.service.ts       # Business logic with @Injectable()
+├── profiles.controller.ts    # HTTP handlers with @Controller(), @Get(), @Post()
+└── profiles.module.ts        # NestJS module with @Module()
 ```
+
+**No Centralized Routes File** - NestJS discovers routes automatically:
+- Routes defined via decorators: `@Controller('api/profiles')`, `@Get(':id')`
+- NestJS scans all modules and registers routes automatically
+- No manual route registration needed!
 
 **Frontend Feature Structure**:
 ```
@@ -1228,13 +1588,16 @@ src/
 ```
 
 **Key Points**:
-- ✅ Backend: entity → service → controller → routes → module (5 files)
-- ✅ API client in `api-client/[feature].api-client.ts` - raw HTTP functions
-- ✅ One `apiHooks.ts` file per feature containing ALL hooks
-- ✅ Hooks use the API client functions
-- ✅ All related files live together - no nested subdirectories
-- ✅ Simple imports: `import { useProfile, useProfiles } from './apiHooks'`
-- ✅ API client imports: `import { profilesApi } from '@/api-client/profiles.api-client'`
+- ✅ **Backend**: [feature].entity → [feature].service (@Injectable) → [feature].controller (@Controller) → [feature].module (@Module)
+- ✅ **No routes file** - NestJS discovers routes from decorators automatically
+- ✅ **Dependency injection** - Services injected via constructor, no manual wiring
+- ✅ **Decorators define routes**: `@Get(':id')`, `@Post()`, `@Put(':id')`, `@Delete(':id')`
+- ✅ **API client** in `api-client/[feature].api-client.ts` - raw HTTP functions
+- ✅ **One `apiHooks.ts`** file per feature containing ALL hooks
+- ✅ **Hooks use the API client** functions
+- ✅ **All related files live together** - no nested subdirectories
+- ✅ **Simple imports**: `import { useProfile, useProfiles } from './apiHooks'`
+- ✅ **API client imports**: `import { profilesApi } from '@/api-client/profiles.api-client'`
 
 ### Environment Context
 
@@ -1259,17 +1622,17 @@ Hook from apiHooks.ts calls API client function
     ↓
 API client ([feature].api-client.ts) makes fetch to localhost:3001
     ↓
-Express Route matches request
+NestJS Router matches @Controller + @Get decorators
     ↓
-Controller handles req/res (from module.ts)
+Controller method executes (service auto-injected)
     ↓
-Service executes business logic (from module.ts)
+Service (@Injectable) executes business logic
     ↓
-MikroORM Entity queries database
+MikroORM Entity queries database (EntityManager injected)
     ↓
 PostgreSQL returns data
     ↓
-Response flows back up the chain
+Response flows back up the chain automatically
 ```
 
 ## You're Ready! 🎉

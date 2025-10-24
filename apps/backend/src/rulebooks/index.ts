@@ -1,3 +1,4 @@
-export { Rulebook } from './entity';
-export { RulebookService } from './service';
-export { RulebookController } from './controller';
+export { Rulebook } from './rulebooks.entity';
+export { RulebooksService } from './rulebooks.service';
+export { RulebooksController } from './rulebooks.controller';
+export { RulebooksModule } from './rulebooks.module';

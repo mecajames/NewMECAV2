@@ -1,10 +1,11 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
-import { Profile } from '../profiles/entity';
+import { randomUUID } from 'crypto';
+import { Profile } from '../profiles/profiles.entity';
 
 @Entity({ tableName: 'rulebooks', schema: 'public' })
 export class Rulebook {
   @PrimaryKey({ type: 'uuid' })
-  id!: string;
+  id: string = randomUUID();
 
   @Property({ type: 'text' })
   title!: string;
@@ -33,9 +34,9 @@ export class Rulebook {
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'uploaded_by' })
   uploadedBy?: Profile;
 
-  @Property({ type: 'timestamptz', fieldName: 'created_at' })
+  @Property({ onCreate: () => new Date() })
   createdAt: Date = new Date();
 
-  @Property({ type: 'timestamptz', fieldName: 'updated_at', onUpdate: () => new Date() })
+  @Property({ onUpdate: () => new Date() })
   updatedAt: Date = new Date();
 }
