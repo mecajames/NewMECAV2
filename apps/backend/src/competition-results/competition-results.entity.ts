@@ -1,11 +1,12 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
-import { Event } from '../events/entity';
-import { Profile } from '../profiles/entity';
+import { randomUUID } from 'crypto';
+import { Event } from '../events/events.entity';
+import { Profile } from '../profiles/profiles.entity';
 
 @Entity({ tableName: 'competition_results', schema: 'public' })
 export class CompetitionResult {
   @PrimaryKey({ type: 'uuid' })
-  id!: string;
+  id: string = randomUUID();
 
   @ManyToOne(() => Event, { fieldName: 'event_id' })
   event!: Event;
@@ -34,9 +35,9 @@ export class CompetitionResult {
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'created_by' })
   createdBy?: Profile;
 
-  @Property({ type: 'timestamptz', fieldName: 'created_at' })
+  @Property({ onCreate: () => new Date() })
   createdAt: Date = new Date();
 
-  @Property({ type: 'timestamptz', fieldName: 'updated_at', onUpdate: () => new Date() })
+  @Property({ onUpdate: () => new Date() })
   updatedAt: Date = new Date();
 }

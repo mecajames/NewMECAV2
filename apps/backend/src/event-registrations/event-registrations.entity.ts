@@ -1,12 +1,13 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
+import { randomUUID } from 'crypto';
 import { RegistrationStatus, PaymentStatus } from '../types/enums';
-import { Event } from '../events/entity';
-import { Profile } from '../profiles/entity';
+import { Event } from '../events/events.entity';
+import { Profile } from '../profiles/profiles.entity';
 
 @Entity({ tableName: 'event_registrations', schema: 'public' })
 export class EventRegistration {
   @PrimaryKey({ type: 'uuid' })
-  id!: string;
+  id: string = randomUUID();
 
   @ManyToOne(() => Event, { fieldName: 'event_id' })
   event!: Event;
@@ -31,9 +32,9 @@ export class EventRegistration {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'registered_at' })
   registeredAt?: Date;
 
-  @Property({ type: 'timestamptz', fieldName: 'created_at' })
+  @Property({ onCreate: () => new Date() })
   createdAt: Date = new Date();
 
-  @Property({ type: 'timestamptz', fieldName: 'updated_at', onUpdate: () => new Date() })
+  @Property({ onUpdate: () => new Date() })
   updatedAt: Date = new Date();
 }
