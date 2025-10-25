@@ -20,6 +20,10 @@ import MembersPage from './pages/admin/MembersPage';
 import MemberDetailPage from './pages/admin/MemberDetailPage';
 import SeasonManagementPage from './pages/admin/SeasonManagementPage';
 import ClassesManagementPage from './pages/admin/ClassesManagementPage';
+import MembershipsPage from './pages/admin/MembershipsPage';
+import ManagePermissionsPage from './pages/admin/ManagePermissionsPage';
+import RetailDirectoryPage from './pages/RetailDirectoryPage';
+import ManufacturerDirectoryPage from './pages/ManufacturerDirectoryPage';
 
 function App() {
   return (
@@ -41,6 +45,8 @@ function App() {
               <Route path="/rulebooks" element={<RulebooksPage />} />
               <Route path="/rulebooks/:rulebookId" element={<RulebookDetailPage />} />
               <Route path="/rulebooks/archive" element={<RulebookArchivePage />} />
+              <Route path="/directory/retail" element={<RetailDirectoryPage />} />
+              <Route path="/directory/manufacturers" element={<ManufacturerDirectoryPage />} />
 
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
@@ -52,6 +58,8 @@ function App() {
               <Route path="/admin/members/:memberId" element={<MemberDetailPage />} />
               <Route path="/admin/seasons" element={<SeasonManagementPage />} />
               <Route path="/admin/classes" element={<ClassesManagementPage />} />
+              <Route path="/admin/memberships" element={<MembershipsPage />} />
+              <Route path="/admin/permissions" element={<ManagePermissionsPage />} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />

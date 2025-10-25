@@ -1,4 +1,4 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, Building2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,6 +10,7 @@ export default function Navbar() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
+  const [directoriesMenuOpen, setDirectoriesMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
@@ -113,6 +114,7 @@ export default function Navbar() {
     if (path.startsWith('/results')) return 'results';
     if (path.startsWith('/standings')) return 'standings';
     if (path.startsWith('/leaderboard')) return 'leaderboard';
+    if (path.startsWith('/directory')) return 'directory';
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/membership')) return 'membership';
@@ -170,6 +172,48 @@ export default function Navbar() {
                 {item.label}
               </button>
             ))}
+
+            <div className="relative"
+              onMouseEnter={() => setDirectoriesMenuOpen(true)}
+              onMouseLeave={() => setDirectoriesMenuOpen(false)}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === 'directory'
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Building2 className="h-4 w-4" />
+                Directory
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {directoriesMenuOpen && (
+                <div className="absolute top-full left-0 mt-0 pt-2 w-48">
+                  <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                    <button
+                      onClick={() => {
+                        navigate('/directory/retail');
+                        setDirectoriesMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                    >
+                      Retail Directory
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/directory/manufacturers');
+                        setDirectoriesMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                    >
+                      Manufacturers
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="relative"
               onMouseEnter={() => setRulebooksMenuOpen(true)}

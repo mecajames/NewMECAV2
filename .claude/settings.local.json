@@ -79,7 +79,18 @@
       "SlashCommand(/restore)",
       "Bash(xargs:*)",
       "Bash(docker cp:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git merge:*)",
+      "Bash(awk:*)",
+      "Bash(dir:*)",
+      "Bash(for dir in complete_*/)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Bash(ls:*)",
+      "Bash(done)",
+      "Bash(node:*)",
+      "Bash(set:*)",
+      "Bash(npm run dev:frontend:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Shield, CreditCard } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import EventManagement from '../admin/EventManagement';
 import ResultsEntry from '../admin/ResultsEntry';
@@ -98,10 +98,10 @@ export default function AdminDashboard() {
     {
       icon: DollarSign,
       title: 'Memberships',
-      description: 'Manage membership purchases and renewals',
+      description: 'Manage membership types, purchases, and renewals',
       action: 'memberships' as AdminView,
       color: 'green',
-      navigateTo: undefined,
+      navigateTo: '/admin/memberships',
     },
     {
       icon: CalendarCheck,
@@ -119,6 +119,14 @@ export default function AdminDashboard() {
       color: 'cyan',
       navigateTo: '/admin/classes',
     },
+    {
+      icon: Shield,
+      title: 'Permissions',
+      description: 'Manage system permissions and roles',
+      action: 'permissions' as AdminView,
+      color: 'red',
+      navigateTo: '/admin/permissions',
+    },
   ];
 
   const getColorClasses = (color: string) => {
@@ -132,6 +140,8 @@ export default function AdminDashboard() {
       indigo: 'bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20',
       teal: 'bg-teal-500/10 text-teal-500 hover:bg-teal-500/20',
       cyan: 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20',
+      emerald: 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20',
+      red: 'bg-red-500/10 text-red-500 hover:bg-red-500/20',
     };
     return colors[color] || colors.orange;
   };

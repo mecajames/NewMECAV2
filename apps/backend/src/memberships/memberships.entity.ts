@@ -1,7 +1,11 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
-import { MembershipType, PaymentStatus } from '../types/enums';
+import { MembershipType, MembershipStatus, PaymentStatus } from '../types/enums';
 import { Profile } from '../profiles/profiles.entity';
 
+/**
+ * Membership entity matching current database schema
+ * Tracks individual membership purchases/renewals
+ */
 @Entity({ tableName: 'memberships', schema: 'public' })
 export class Membership {
   @PrimaryKey({ type: 'uuid' })
@@ -14,25 +18,33 @@ export class Membership {
   @Property({ fieldName: 'membership_type' })
   membershipType!: MembershipType;
 
-  @Property({ type: 'timestamptz', fieldName: 'start_date' })
-  startDate!: Date;
+  @Property({ type: 'timestamptz', fieldName: 'purchase_date' })
+  purchaseDate!: Date;
 
-  @Property({ type: 'timestamptz', nullable: true, fieldName: 'end_date' })
-  endDate?: Date;
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'expiry_date' })
+  expiryDate?: Date;
 
   @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'amount_paid' })
   amountPaid!: number;
 
-  @Enum(() => PaymentStatus)
-  @Property({ fieldName: 'payment_status' })
-  paymentStatus: PaymentStatus = PaymentStatus.PENDING;
+  @Property({ type: 'text', nullable: true, fieldName: 'payment_method' })
+  paymentMethod?: string;
 
-  @Property({ type: 'text', nullable: true, fieldName: 'transaction_id' })
-  transactionId?: string;
+  @Enum(() => MembershipStatus)
+  @Property({ fieldName: 'status' })
+  status: MembershipStatus = MembershipStatus.ACTIVE;
 
-  @Property({ type: 'timestamptz', fieldName: 'created_at' })
-  createdAt: Date = new Date();
+  // Helper method to check if membership is expired
+  isExpired(): boolean {
+    if (!this.expiryDate) return false;
+    return new Date() > this.expiryDate;
+  }
 
-  @Property({ type: 'timestamptz', fieldName: 'updated_at', onUpdate: () => new Date() })
-  updatedAt: Date = new Date();
+  // Helper method to get days until expiry
+  daysUntilExpiry(): number | null {
+    if (!this.expiryDate) return null;
+    const now = new Date();
+    const diff = this.expiryDate.getTime() - now.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }
 }
