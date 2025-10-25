@@ -109,10 +109,10 @@ export default function EventsPage() {
                 className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1 cursor-pointer"
                 onClick={() => navigate(`/events/${event.id}`)}
               >
-                {event.flyer_url ? (
+                {event.header_image_url ? (
                   <div className="h-48 overflow-hidden">
                     <img
-                      src={event.flyer_url}
+                      src={event.header_image_url}
                       alt={event.title}
                       className="w-full h-full object-cover"
                     />

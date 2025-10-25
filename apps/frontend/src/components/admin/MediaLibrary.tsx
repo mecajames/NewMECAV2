@@ -93,13 +93,13 @@ export default function MediaLibrary() {
       const filePath = `media/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('documents')
+        .from('media')
         .upload(filePath, uploadData.file);
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('documents')
+        .from('media')
         .getPublicUrl(filePath);
 
       // Get image dimensions if it's an image
@@ -181,7 +181,7 @@ export default function MediaLibrary() {
       // Delete from storage if not external
       if (!isExternal && fileUrl.includes('supabase')) {
         const path = fileUrl.split('/').slice(-2).join('/');
-        await supabase.storage.from('documents').remove([path]);
+        await supabase.storage.from('media').remove([path]);
       }
 
       const { error } = await supabase.from('media_files').delete().eq('id', id);

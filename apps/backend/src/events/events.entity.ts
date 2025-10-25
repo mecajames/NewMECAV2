@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { EventStatus } from '../types/enums';
-import { Profile } from '../profiles/entity';
+import { Profile } from '../profiles/profiles.entity';
 
 @Entity({ tableName: 'events', schema: 'public' })
 export class Event {

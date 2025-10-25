@@ -326,7 +326,7 @@ export default function MembersPage() {
                     <tr
                       key={member.id}
                       className="hover:bg-slate-700 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/admin/members/${member.id}`)}
+                      onClick={() => navigate(`/admin/members/${member.meca_id || member.id}`)}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -392,7 +392,7 @@ export default function MembersPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/admin/members/${member.id}`);
+                            navigate(`/admin/members/${member.meca_id || member.id}`);
                           }}
                           className="text-orange-500 hover:text-orange-400"
                         >

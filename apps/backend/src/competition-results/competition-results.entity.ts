@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
-import { Event } from '../events/entity';
-import { Profile } from '../profiles/entity';
+import { Event } from '../events/events.entity';
+import { Profile } from '../profiles/profiles.entity';
 
 @Entity({ tableName: 'competition_results', schema: 'public' })
 export class CompetitionResult {

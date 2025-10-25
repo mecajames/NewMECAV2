@@ -114,7 +114,7 @@ export default function EventDetailPage() {
         <div className="text-center">
           <p className="text-gray-400 text-xl mb-4">Event not found</p>
           <button
-            onClick={() => onNavigate('events')}
+            onClick={() => navigate('/events')}
             className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Back to Events
@@ -137,16 +137,6 @@ export default function EventDetailPage() {
         >
           ← Back to Events
         </button>
-
-        {event.flyer_url && (
-          <div className="mb-8 rounded-xl overflow-hidden shadow-2xl">
-            <img
-              src={event.flyer_url}
-              alt={event.title}
-              className="w-full max-h-96 object-cover"
-            />
-          </div>
-        )}
 
         <div className="bg-slate-800 rounded-xl shadow-2xl p-8 mb-8">
           <div className="flex items-start justify-between mb-6">
@@ -233,6 +223,40 @@ export default function EventDetailPage() {
             </button>
           )}
         </div>
+
+        {event.flyer_url && (
+          <div className="bg-slate-800 rounded-xl shadow-2xl p-8 mb-8">
+            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+              <Award className="h-6 w-6 text-orange-500" />
+              Event Flyer
+            </h2>
+            <div className="rounded-lg overflow-hidden bg-slate-900">
+              {event.flyer_url.toLowerCase().endsWith('.pdf') ? (
+                <div className="space-y-4">
+                  <iframe
+                    src={event.flyer_url}
+                    className="w-full h-[600px]"
+                    title="Event Flyer PDF"
+                  />
+                  <a
+                    href={event.flyer_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-center transition-colors"
+                  >
+                    Download PDF Flyer
+                  </a>
+                </div>
+              ) : (
+                <img
+                  src={event.flyer_url}
+                  alt={`${event.title} Flyer`}
+                  className="w-full h-auto"
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="bg-slate-800 rounded-xl shadow-2xl p-8">
           <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">

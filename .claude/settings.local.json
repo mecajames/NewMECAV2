@@ -65,7 +65,21 @@
       "Bash(node scripts/add-sql-classes.js:*)",
       "Bash(node scripts/add-rtl-classes.js:*)",
       "Bash(node scripts/add-show-and-shine-classes.js:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(gh repo view:*)",
+      "Bash(test:*)",
+      "Bash(npm run supabase:status:*)",
+      "Bash(npm run dev:nestjs:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm run build:*)",
+      "Bash(find:*)",
+      "Bash(PORT=3001 node:*)",
+      "Bash(cmd /c \"taskkill /F /IM node.exe\")",
+      "Bash(PORT=3002 node:*)",
+      "SlashCommand(/restore)",
+      "Bash(xargs:*)",
+      "Bash(docker cp:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []

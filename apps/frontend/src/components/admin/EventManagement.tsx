@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users } from 'lucide-react';
+import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users, Upload, Image as ImageIcon } from 'lucide-react';
 import { supabase, Event, Profile } from '../../lib/supabase';
 
 export default function EventManagement() {
@@ -8,6 +8,8 @@ export default function EventManagement() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [uploadingFlyer, setUploadingFlyer] = useState(false);
+  const [uploadingHeader, setUploadingHeader] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -18,6 +20,7 @@ export default function EventManagement() {
     latitude: '',
     longitude: '',
     flyer_url: '',
+    header_image_url: '',
     event_director_id: '',
     status: 'upcoming',
     max_participants: '',
@@ -62,6 +65,7 @@ export default function EventManagement() {
       latitude: formData.latitude ? parseFloat(formData.latitude) : null,
       longitude: formData.longitude ? parseFloat(formData.longitude) : null,
       flyer_url: formData.flyer_url || null,
+      header_image_url: formData.header_image_url || null,
       event_director_id: formData.event_director_id || null,
       status: formData.status,
       max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
@@ -92,6 +96,7 @@ export default function EventManagement() {
       latitude: event.latitude?.toString() || '',
       longitude: event.longitude?.toString() || '',
       flyer_url: event.flyer_url || '',
+      header_image_url: event.header_image_url || '',
       event_director_id: event.event_director_id || '',
       status: event.status,
       max_participants: event.max_participants?.toString() || '',
@@ -118,11 +123,121 @@ export default function EventManagement() {
       latitude: '',
       longitude: '',
       flyer_url: '',
+      header_image_url: '',
       event_director_id: '',
       status: 'upcoming',
       max_participants: '',
       registration_fee: '0',
     });
+  };
+
+  const handleFlyerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (10MB limit)
+    if (file.size > 10485760) {
+      alert('File size must be less than 10MB');
+      return;
+    }
+
+    setUploadingFlyer(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `flyers/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('event-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('event-images')
+        .getPublicUrl(filePath);
+
+      // Add to media library
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('media_files').insert({
+        title: file.name,
+        file_url: data.publicUrl,
+        file_type: file.type.startsWith('image/') ? 'image' : 'pdf',
+        file_size: file.size,
+        mime_type: file.type,
+        is_external: false,
+        tags: ['event-flyer'],
+        created_by: user?.id,
+      });
+
+      setFormData({ ...formData, flyer_url: data.publicUrl });
+    } catch (error) {
+      console.error('Error uploading flyer:', error);
+      alert('Failed to upload flyer');
+    } finally {
+      setUploadingFlyer(false);
+    }
+  };
+
+  const handleHeaderImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (10MB limit)
+    if (file.size > 10485760) {
+      alert('File size must be less than 10MB');
+      return;
+    }
+
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      alert('Header image must be an image file (JPEG, PNG, WebP, or GIF)');
+      return;
+    }
+
+    setUploadingHeader(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `headers/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('event-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('event-images')
+        .getPublicUrl(filePath);
+
+      // Get image dimensions if possible
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await new Promise((resolve) => { img.onload = resolve; });
+      const dimensions = `${img.width}x${img.height}`;
+
+      // Add to media library
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('media_files').insert({
+        title: file.name,
+        file_url: data.publicUrl,
+        file_type: 'image',
+        file_size: file.size,
+        mime_type: file.type,
+        dimensions,
+        is_external: false,
+        tags: ['event-header'],
+        created_by: user?.id,
+      });
+
+      setFormData({ ...formData, header_image_url: data.publicUrl });
+    } catch (error) {
+      console.error('Error uploading header image:', error);
+      alert('Failed to upload header image');
+    } finally {
+      setUploadingHeader(false);
+    }
   };
 
   return (
@@ -329,14 +444,101 @@ export default function EventManagement() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Flyer URL
+                    Event Flyer
                   </label>
-                  <input
-                    type="url"
-                    value={formData.flyer_url}
-                    onChange={(e) => setFormData({ ...formData, flyer_url: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          onChange={handleFlyerUpload}
+                          disabled={uploadingFlyer}
+                          className="hidden"
+                          id="flyer-upload"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById('flyer-upload')?.click()}
+                          disabled={uploadingFlyer}
+                          className={`w-full px-4 py-3 bg-slate-600 border border-slate-500 rounded-lg text-white text-center hover:bg-slate-500 transition-colors flex items-center justify-center gap-2 ${
+                            uploadingFlyer ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          <Upload className="h-4 w-4" />
+                          {uploadingFlyer ? 'Uploading...' : 'Upload Flyer'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-center text-sm text-gray-400">or</div>
+                    <input
+                      type="url"
+                      value={formData.flyer_url}
+                      onChange={(e) => setFormData({ ...formData, flyer_url: e.target.value })}
+                      placeholder="https://example.com/flyer.pdf or image URL"
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    {formData.flyer_url && (
+                      <div className="flex items-center gap-2 p-2 bg-slate-600 rounded-lg">
+                        <ImageIcon className="h-4 w-4 text-green-400" />
+                        <span className="text-sm text-gray-300 truncate flex-1">{formData.flyer_url}</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-400">Full PDF or image for event flyer/poster (Max 10MB)</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Header Image
+                  </label>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleHeaderImageUpload}
+                          disabled={uploadingHeader}
+                          className="hidden"
+                          id="header-upload"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById('header-upload')?.click()}
+                          disabled={uploadingHeader}
+                          className={`w-full px-4 py-3 bg-slate-600 border border-slate-500 rounded-lg text-white text-center hover:bg-slate-500 transition-colors flex items-center justify-center gap-2 ${
+                            uploadingHeader ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          <Upload className="h-4 w-4" />
+                          {uploadingHeader ? 'Uploading...' : 'Upload Header Image'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-center text-sm text-gray-400">or</div>
+                    <input
+                      type="url"
+                      value={formData.header_image_url}
+                      onChange={(e) => setFormData({ ...formData, header_image_url: e.target.value })}
+                      placeholder="https://example.com/header-image.jpg"
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    {formData.header_image_url && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 p-2 bg-slate-600 rounded-lg">
+                          <ImageIcon className="h-4 w-4 text-green-400" />
+                          <span className="text-sm text-gray-300 truncate flex-1">{formData.header_image_url}</span>
+                        </div>
+                        <img
+                          src={formData.header_image_url}
+                          alt="Header preview"
+                          className="w-full h-32 object-cover rounded-lg"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-400">Banner image for event card (Recommended: 1200x400px, Max 10MB)</p>
                 </div>
 
                 <div>

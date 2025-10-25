@@ -85,6 +85,7 @@ export interface Event {
   latitude?: number;
   longitude?: number;
   flyer_url?: string;
+  header_image_url?: string;
   event_director_id?: string;
   status: EventStatus;
   max_participants?: number;

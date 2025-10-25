@@ -1,5 +1,5 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
-import { Profile } from '../profiles/entity';
+import { Profile } from '../profiles/profiles.entity';
 
 @Entity({ tableName: 'rulebooks', schema: 'public' })
 export class Rulebook {

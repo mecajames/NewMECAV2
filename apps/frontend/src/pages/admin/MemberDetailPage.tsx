@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Send,
   ChevronDown,
+  Key,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -44,20 +45,35 @@ export default function MemberDetailPage() {
   const [messageTitle, setMessageTitle] = useState('');
   const [messageBody, setMessageBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   useEffect(() => {
-    if (memberId && !permLoading) {
+    if (memberId && memberId !== 'new' && !permLoading) {
       fetchMember();
+    } else if (memberId === 'new') {
+      setLoading(false);
     }
   }, [memberId, permLoading]);
 
   const fetchMember = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', memberId)
-        .single();
+      // Check if memberId is a number (MECA ID) or UUID
+      const isNumeric = /^\d+$/.test(memberId!);
+
+      let query = supabase.from('profiles').select('*');
+
+      if (isNumeric) {
+        // Fetch by MECA ID
+        query = query.eq('meca_id', parseInt(memberId!));
+      } else {
+        // Fetch by UUID
+        query = query.eq('id', memberId);
+      }
+
+      const { data, error } = await query.single();
 
       if (error) throw error;
 
@@ -93,7 +109,7 @@ export default function MemberDetailPage() {
       const { error } = await supabase
         .from('notifications')
         .insert({
-          user_id: memberId,
+          user_id: member!.id,
           from_user_id: user?.id,
           title: messageTitle,
           message: messageBody,
@@ -112,6 +128,62 @@ export default function MemberDetailPage() {
       alert('Failed to send message');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!newPassword.trim()) {
+      alert('Please enter a new password');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      alert('Password must be at least 6 characters long');
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      const { error } = await supabase.auth.admin.updateUserById(
+        member!.id,
+        { password: newPassword }
+      );
+
+      if (error) throw error;
+
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordResetModal(false);
+      alert('Password reset successfully!');
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      alert('Failed to reset password. This feature requires admin privileges.');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  const handleSendPasswordResetEmail = async () => {
+    setResettingPassword(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(member!.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      setShowPasswordResetModal(false);
+      alert(`Password reset email sent to ${member!.email}`);
+    } catch (error) {
+      console.error('Error sending password reset email:', error);
+      alert('Failed to send password reset email');
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -278,6 +350,15 @@ export default function MemberDetailPage() {
 
             {/* Quick Actions */}
             <div className="flex gap-2">
+              {hasPermission('edit_user') && (
+                <button
+                  onClick={() => setShowPasswordResetModal(true)}
+                  className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2"
+                >
+                  <Key className="h-4 w-4" />
+                  Reset Password
+                </button>
+              )}
               {hasPermission('send_emails') && (
                 <button
                   onClick={() => setShowMessageModal(true)}
@@ -435,6 +516,85 @@ export default function MemberDetailPage() {
                   >
                     <Send className="h-4 w-4" />
                     {sending ? 'Sending...' : 'Send Message'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reset Password Modal */}
+        {showPasswordResetModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4">
+              <h2 className="text-2xl font-bold text-white mb-4">
+                Reset Password for {member.first_name} {member.last_name}
+              </h2>
+
+              <div className="space-y-4">
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-blue-300">
+                    You can either set a new password directly or send a password reset email to the user.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password (min. 6 characters)"
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div className="border-t border-slate-700 pt-4">
+                  <p className="text-sm text-gray-400 mb-3">Or send a password reset email:</p>
+                  <button
+                    onClick={handleSendPasswordResetEmail}
+                    disabled={resettingPassword}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Send Password Reset Email to {member.email}
+                  </button>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-4">
+                  <button
+                    onClick={() => {
+                      setShowPasswordResetModal(false);
+                      setNewPassword('');
+                      setConfirmPassword('');
+                    }}
+                    className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
+                    disabled={resettingPassword}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleResetPassword}
+                    disabled={resettingPassword || !newPassword || !confirmPassword}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  >
+                    <Key className="h-4 w-4" />
+                    {resettingPassword ? 'Resetting...' : 'Reset Password'}
                   </button>
                 </div>
               </div>

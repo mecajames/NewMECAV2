@@ -6,9 +6,10 @@ import { SeedManager } from '@mikro-orm/seeder';
 export default defineConfig({
   driver: PostgreSqlDriver,
   clientUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
-  entities: ['./dist/**/entity.js'],
-  entitiesTs: ['./src/**/entity.ts'],
+  entities: ['./dist/**/*.entity.js'],
+  entitiesTs: ['./src/**/*.entity.ts'],
   debug: process.env.NODE_ENV === 'development',
+  allowGlobalContext: true, // Allow using global EntityManager in NestJS
   extensions: [Migrator, SeedManager],
   migrations: {
     tableName: 'mikro_orm_migrations',

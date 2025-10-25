@@ -94,7 +94,7 @@ export default function Navbar() {
 
   const markAllNotificationsRead = async () => {
     if (!user) return;
-    await supabase.rpc('mark_all_notifications_read');
+    await supabase.rpc('mark_all_notifications_read', { p_user_id: user.id });
     fetchNotifications();
   };
 
