@@ -35,3 +35,17 @@ export enum RegistrationStatus {
   CONFIRMED = 'confirmed',
   CANCELLED = 'cancelled'
 }
+
+export enum NotificationType {
+  INFO = 'info',
+  SUCCESS = 'success',
+  WARNING = 'warning',
+  ERROR = 'error'
+}
+
+export enum CompetitionFormat {
+  SPL = 'SPL',
+  SQL = 'SQL',
+  SHOW_AND_SHINE = 'Show and Shine',
+  RIDE_THE_LIGHT = 'Ride the Light',
+}

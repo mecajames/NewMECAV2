@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { Season, CompetitionClass, CompetitionFormat } from '../../types/database';
+import { seasonsApi, SeasonData } from '../../api-client/seasons.api-client';
+import { classesApi, CompetitionClassData, CompetitionFormat } from '../../api-client/classes.api-client';
+import { Season, CompetitionClass } from '../../types/database';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function ClassesManagementPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [seasons, setSeasons] = useState<Season[]>([]);
-  const [classes, setClasses] = useState<CompetitionClass[]>([]);
-  const [filteredClasses, setFilteredClasses] = useState<CompetitionClass[]>([]);
+  const [seasons, setSeasons] = useState<SeasonData[]>([]);
+  const [classes, setClasses] = useState<CompetitionClassData[]>([]);
+  const [filteredClasses, setFilteredClasses] = useState<CompetitionClassData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingClass, setEditingClass] = useState<CompetitionClass | null>(null);
+  const [editingClass, setEditingClass] = useState<CompetitionClassData | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   // Filters
@@ -48,12 +49,8 @@ export default function ClassesManagementPage() {
   }, [classes, searchQuery, activeFilter, sortBy]);
 
   const fetchSeasons = async () => {
-    const { data, error } = await supabase
-      .from('seasons')
-      .select('*')
-      .order('year', { ascending: false });
-
-    if (!error && data) {
+    try {
+      const data = await seasonsApi.getAll();
       setSeasons(data);
       // Default to current season
       const current = data.find(s => s.is_current);
@@ -61,25 +58,21 @@ export default function ClassesManagementPage() {
         setSelectedSeasonId(current.id);
         setFormData(prev => ({ ...prev, season_id: current.id }));
       }
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+      alert('Error fetching seasons. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fetchClasses = async () => {
-    let query = supabase
-      .from('competition_classes')
-      .select('*, season:seasons(*)')
-      .eq('season_id', selectedSeasonId)
-      .order('display_order');
-
-    if (selectedFormat) {
-      query = query.eq('format', selectedFormat);
-    }
-
-    const { data, error } = await query;
-
-    if (!error && data) {
+    try {
+      const data = await classesApi.getAll(selectedSeasonId, selectedFormat);
       setClasses(data);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+      alert('Error fetching classes. Please try again.');
     }
   };
 
@@ -128,31 +121,20 @@ export default function ClassesManagementPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingClass) {
-      // Update existing class
-      const { error } = await supabase
-        .from('competition_classes')
-        .update({
+    try {
+      if (editingClass) {
+        // Update existing class
+        await classesApi.update(editingClass.id, {
           name: formData.name,
           abbreviation: formData.abbreviation,
           format: formData.format,
           is_active: formData.is_active,
           display_order: formData.display_order,
-        })
-        .eq('id', editingClass.id);
-
-      if (error) {
-        alert('Error updating class: ' + error.message);
-      } else {
+        });
         alert('Class updated successfully!');
-        resetForm();
-        fetchClasses();
-      }
-    } else {
-      // Create new class
-      const { error } = await supabase
-        .from('competition_classes')
-        .insert({
+      } else {
+        // Create new class
+        await classesApi.create({
           name: formData.name,
           abbreviation: formData.abbreviation,
           format: formData.format,
@@ -160,18 +142,16 @@ export default function ClassesManagementPage() {
           is_active: formData.is_active,
           display_order: formData.display_order,
         });
-
-      if (error) {
-        alert('Error creating class: ' + error.message);
-      } else {
         alert('Class created successfully!');
-        resetForm();
-        fetchClasses();
       }
+      resetForm();
+      fetchClasses();
+    } catch (error: any) {
+      alert(`Error ${editingClass ? 'updating' : 'creating'} class: ${error.message || 'Unknown error'}`);
     }
   };
 
-  const handleEdit = (classItem: CompetitionClass) => {
+  const handleEdit = (classItem: CompetitionClassData) => {
     setEditingClass(classItem);
     setFormData({
       name: classItem.name,
@@ -189,16 +169,12 @@ export default function ClassesManagementPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from('competition_classes')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      alert('Error deleting class: ' + error.message);
-    } else {
+    try {
+      await classesApi.delete(id);
       alert('Class deleted successfully!');
       fetchClasses();
+    } catch (error: any) {
+      alert('Error deleting class: ' + (error.message || 'Unknown error'));
     }
   };
 

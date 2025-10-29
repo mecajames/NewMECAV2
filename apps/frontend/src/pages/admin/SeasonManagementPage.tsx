@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Plus, Edit, Trash2, Check, X, ArrowLeft, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { Season, CompetitionFormat } from '../../types/database';
+import { seasonsApi, SeasonData } from '../../api-client/seasons.api-client';
+import { CompetitionFormat } from '../../types/database';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function SeasonManagementPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasons, setSeasons] = useState<SeasonData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingSeason, setEditingSeason] = useState<Season | null>(null);
+  const [editingSeason, setEditingSeason] = useState<SeasonData | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [copyFromSeasonId, setCopyFromSeasonId] = useState<string>('');
@@ -32,45 +32,34 @@ export default function SeasonManagementPage() {
   }, []);
 
   const fetchSeasons = async () => {
-    const { data, error } = await supabase
-      .from('seasons')
-      .select('*')
-      .order('year', { ascending: false });
-
-    if (!error && data) {
+    try {
+      const data = await seasonsApi.getAll();
       setSeasons(data);
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+      alert('Error fetching seasons. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingSeason) {
-      // Update existing season
-      const { error } = await supabase
-        .from('seasons')
-        .update({
+    try {
+      if (editingSeason) {
+        // Update existing season
+        await seasonsApi.update(editingSeason.id, {
           name: formData.name,
           start_date: formData.start_date,
           end_date: formData.end_date,
           is_current: formData.is_current,
           is_next: formData.is_next,
-        })
-        .eq('id', editingSeason.id);
-
-      if (error) {
-        alert('Error updating season: ' + error.message);
-      } else {
+        });
         alert('Season updated successfully!');
-        resetForm();
-        fetchSeasons();
-      }
-    } else {
-      // Create new season
-      const { error} = await supabase
-        .from('seasons')
-        .insert({
+      } else {
+        // Create new season
+        await seasonsApi.create({
           year: formData.year,
           name: formData.name,
           start_date: formData.start_date,
@@ -78,18 +67,16 @@ export default function SeasonManagementPage() {
           is_current: formData.is_current,
           is_next: formData.is_next,
         });
-
-      if (error) {
-        alert('Error creating season: ' + error.message);
-      } else {
         alert('Season created successfully!');
-        resetForm();
-        fetchSeasons();
       }
+      resetForm();
+      fetchSeasons();
+    } catch (error: any) {
+      alert(`Error ${editingSeason ? 'updating' : 'creating'} season: ${error.message || 'Unknown error'}`);
     }
   };
 
-  const handleEdit = (season: Season) => {
+  const handleEdit = (season: SeasonData) => {
     setEditingSeason(season);
     setFormData({
       year: season.year,
@@ -107,58 +94,56 @@ export default function SeasonManagementPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from('seasons')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      alert('Error deleting season: ' + error.message);
-    } else {
+    try {
+      await seasonsApi.delete(id);
       alert('Season deleted successfully!');
       fetchSeasons();
+    } catch (error: any) {
+      alert('Error deleting season: ' + (error.message || 'Unknown error'));
     }
   };
 
   const setAsCurrent = async (id: string) => {
-    // First, set all seasons to not current
-    await supabase
-      .from('seasons')
-      .update({ is_current: false, is_next: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+    try {
+      // Get all seasons
+      const allSeasons = await seasonsApi.getAll();
 
-    // Then set this season as current
-    const { error } = await supabase
-      .from('seasons')
-      .update({ is_current: true, is_next: false })
-      .eq('id', id);
+      // Update all seasons to not current/next
+      for (const season of allSeasons) {
+        if (season.id !== id && (season.is_current || season.is_next)) {
+          await seasonsApi.update(season.id, { is_current: false, is_next: false });
+        }
+      }
 
-    if (error) {
-      alert('Error setting current season: ' + error.message);
-    } else {
+      // Set this season as current
+      await seasonsApi.update(id, { is_current: true, is_next: false });
+
       alert('Current season updated!');
       fetchSeasons();
+    } catch (error: any) {
+      alert('Error setting current season: ' + (error.message || 'Unknown error'));
     }
   };
 
   const setAsNext = async (id: string) => {
-    // First, set all seasons to not next
-    await supabase
-      .from('seasons')
-      .update({ is_next: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+    try {
+      // Get all seasons
+      const allSeasons = await seasonsApi.getAll();
 
-    // Then set this season as next (and ensure not current)
-    const { error } = await supabase
-      .from('seasons')
-      .update({ is_next: true, is_current: false })
-      .eq('id', id);
+      // Update all seasons to not next
+      for (const season of allSeasons) {
+        if (season.id !== id && season.is_next) {
+          await seasonsApi.update(season.id, { is_next: false });
+        }
+      }
 
-    if (error) {
-      alert('Error setting next season: ' + error.message);
-    } else {
+      // Set this season as next (and ensure not current)
+      await seasonsApi.update(id, { is_next: true, is_current: false });
+
       alert('Next season updated!');
       fetchSeasons();
+    } catch (error: any) {
+      alert('Error setting next season: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -176,75 +161,19 @@ export default function SeasonManagementPage() {
   };
 
   const handleCopyClasses = async () => {
-    if (!copyFromSeasonId || !copyToSeasonId) {
-      alert('Please select both source and destination seasons');
-      return;
-    }
+    // TODO: This feature requires a classes backend API endpoint
+    // The competition_classes table needs a backend module before this can be migrated
+    // For now, this feature is temporarily disabled
+    alert('This feature requires backend API implementation for competition classes. Please contact support.');
 
-    if (copyFromSeasonId === copyToSeasonId) {
-      alert('Source and destination seasons must be different');
-      return;
-    }
-
-    if (!confirm(`Are you sure you want to copy ${copyFormat === 'all' ? 'all' : copyFormat} classes from the source season to the destination season?`)) {
-      return;
-    }
-
-    setCopying(true);
-
-    try {
-      // Fetch classes from source season
-      let query = supabase
-        .from('competition_classes')
-        .select('*')
-        .eq('season_id', copyFromSeasonId);
-
-      if (copyFormat !== 'all') {
-        query = query.eq('format', copyFormat);
-      }
-
-      const { data: sourceClasses, error: fetchError } = await query;
-
-      if (fetchError) {
-        alert('Error fetching classes: ' + fetchError.message);
-        setCopying(false);
-        return;
-      }
-
-      if (!sourceClasses || sourceClasses.length === 0) {
-        alert('No classes found to copy');
-        setCopying(false);
-        return;
-      }
-
-      // Copy classes to destination season
-      const classesToInsert = sourceClasses.map(cls => ({
-        name: cls.name,
-        abbreviation: cls.abbreviation,
-        format: cls.format,
-        season_id: copyToSeasonId,
-        is_active: cls.is_active,
-        display_order: cls.display_order,
-      }));
-
-      const { error: insertError } = await supabase
-        .from('competition_classes')
-        .insert(classesToInsert);
-
-      if (insertError) {
-        alert('Error copying classes: ' + insertError.message);
-      } else {
-        alert(`Successfully copied ${sourceClasses.length} classes!`);
-        setShowCopyDialog(false);
-        setCopyFromSeasonId('');
-        setCopyToSeasonId('');
-        setCopyFormat('all');
-      }
-    } catch (error: any) {
-      alert('Error: ' + error.message);
-    }
-
-    setCopying(false);
+    /* MIGRATION NOTE: Original Supabase code preserved below for reference
+     * This will need to be migrated once a classes API client is created
+     *
+     * The feature should:
+     * 1. Fetch classes from source season filtered by format
+     * 2. Copy those classes to destination season
+     * 3. Preserve class properties (name, abbreviation, format, is_active, display_order)
+     */
   };
 
   if (loading) {

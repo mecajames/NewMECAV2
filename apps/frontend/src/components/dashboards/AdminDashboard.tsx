@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Shield, CreditCard } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { statisticsApi } from '../../api-client/statistics.api-client';
 import EventManagement from '../admin/EventManagement';
 import ResultsEntry from '../admin/ResultsEntry';
 import RulebookManagement from '../admin/RulebookManagement';
@@ -26,24 +26,20 @@ export default function AdminDashboard() {
   }, []);
 
   const fetchStats = async () => {
-    const [users, events, registrations, members] = await Promise.all([
-      supabase.from('profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('events').select('id', { count: 'exact', head: true }),
-      supabase.from('event_registrations').select('id', { count: 'exact', head: true }),
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('membership_status', 'active'),
-    ]);
-
-    setStats({
-      totalUsers: users.count || 0,
-      totalEvents: events.count || 0,
-      totalRegistrations: registrations.count || 0,
-      totalMembers: members.count || 0,
-    });
-
-    setLoading(false);
+    try {
+      const statistics = await statisticsApi.getStatistics();
+      setStats(statistics);
+    } catch (error) {
+      console.error('Failed to fetch statistics:', error);
+      setStats({
+        totalUsers: 0,
+        totalEvents: 0,
+        totalRegistrations: 0,
+        totalMembers: 0,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const adminActions = [

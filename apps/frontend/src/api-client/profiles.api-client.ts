@@ -5,6 +5,8 @@
  * These functions are used by hooks in profiles/apiHooks.ts
  */
 
+import { authenticatedFetch, getAuthHeaders } from './api-helpers';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface ProfileData {
@@ -23,7 +25,7 @@ export const profilesApi = {
    * Get all profiles with pagination
    */
   getProfiles: async (page: number = 1, limit: number = 10): Promise<ProfileData[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles?page=${page}&limit=${limit}`);
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/profiles?page=${page}&limit=${limit}`);
     if (!response.ok) throw new Error('Failed to fetch profiles');
     return response.json();
   },
@@ -32,7 +34,7 @@ export const profilesApi = {
    * Get a single profile by ID
    */
   getProfile: async (id: string): Promise<ProfileData> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`);
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/profiles/${id}`);
     if (!response.ok) throw new Error('Failed to fetch profile');
     return response.json();
   },
@@ -41,9 +43,8 @@ export const profilesApi = {
    * Create a new profile
    */
   createProfile: async (data: Partial<ProfileData>): Promise<ProfileData> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/profiles`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     if (!response.ok) throw new Error('Failed to create profile');
@@ -54,9 +55,8 @@ export const profilesApi = {
    * Update an existing profile
    */
   updateProfile: async (id: string, data: Partial<ProfileData>): Promise<ProfileData> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/profiles/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     if (!response.ok) throw new Error('Failed to update profile');
@@ -67,7 +67,7 @@ export const profilesApi = {
    * Delete a profile
    */
   deleteProfile: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/profiles/${id}`, {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete profile');

@@ -10,7 +10,9 @@ import {
   HttpCode,
   HttpStatus,
   NotFoundException,
+  UnauthorizedException,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ProfilesService } from './profiles.service';
 import { Profile } from './profiles.entity';
@@ -52,15 +54,31 @@ export class ProfilesController {
   /**
    * GET /api/profiles/:id
    * Get single profile by ID
-   * Requires: view_users permission
+   * Requires: view_users permission (unless viewing own profile)
+   *
+   * Note: Users can always view their own profile without special permissions
    */
   @Get(':id')
-  @RequirePermissions('view_users')
-  async getProfile(@Param('id') id: string) {
+  async getProfile(@Param('id') id: string, @Req() request: any) {
     const profile = await this.profilesService.findById(id);
 
     if (!profile) {
       throw new NotFoundException(`Profile with ID ${id} not found`);
+    }
+
+    // Check if user is viewing their own profile
+    const isOwnProfile = request.user && request.user.id === id;
+
+    // If viewing own profile, grant access immediately
+    if (isOwnProfile) {
+      return profile;
+    }
+
+    // Otherwise, check if user is admin or has view_users permission
+    const isAdmin = request.user?.role === 'admin';
+
+    if (!isAdmin) {
+      throw new UnauthorizedException('You do not have permission to view other users profiles');
     }
 
     return profile;

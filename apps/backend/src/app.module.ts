@@ -14,6 +14,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { BannersModule } from './banners/banners.module';
 import { DirectoriesModule } from './directories/directories.module';
 import { TeamsModule } from './teams/teams.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 /**
  * Root Application Module
@@ -57,8 +58,10 @@ import { TeamsModule } from './teams/teams.module';
     BannersModule, // NEW - Banner & ad management
     DirectoriesModule, // NEW - Directory listings
     TeamsModule, // NEW - Team management with ownership
+    NotificationsModule, // NEW - Notifications system
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
+

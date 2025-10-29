@@ -42,3 +42,5 @@ backups/*.sql
 .env.development
 .env.development
 .env.docker.example
+/backups
+/scripts

@@ -18,9 +18,11 @@ import {
   Key,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { profilesApi } from '../../api-client/profiles.api-client';
+import { notificationsApi } from '../../api-client/notifications.api-client';
 import { Profile } from '../../types';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useAuth } from '../../contexts/AuthContext';
 
 type TabType =
   | 'overview'
@@ -38,6 +40,7 @@ export default function MemberDetailPage() {
   const { memberId } = useParams<{ memberId: string }>();
   const navigate = useNavigate();
   const { hasPermission, loading: permLoading } = usePermissions();
+  const { user } = useAuth();
   const [member, setMember] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -63,19 +66,21 @@ export default function MemberDetailPage() {
       // Check if memberId is a number (MECA ID) or UUID
       const isNumeric = /^\d+$/.test(memberId!);
 
-      let query = supabase.from('profiles').select('*');
+      let data: any = null;
 
       if (isNumeric) {
-        // Fetch by MECA ID
-        query = query.eq('meca_id', parseInt(memberId!));
+        // MECA ID lookup - TODO: Backend should support getProfileByMecaId endpoint
+        // For now, fetch all profiles and filter (inefficient - needs backend support)
+        const allProfiles = await profilesApi.getProfiles(1, 1000); // Fetch large batch
+        data = allProfiles.find((p: any) => p.meca_id === parseInt(memberId!));
+
+        if (!data) {
+          throw new Error('Member not found');
+        }
       } else {
-        // Fetch by UUID
-        query = query.eq('id', memberId);
+        // UUID lookup
+        data = await profilesApi.getProfile(memberId!);
       }
-
-      const { data, error } = await query.single();
-
-      if (error) throw error;
 
       // Add computed full_name
       if (data) {
@@ -83,9 +88,10 @@ export default function MemberDetailPage() {
       }
 
       setMember(data);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching member:', error);
+      alert('Error fetching member. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -102,22 +108,21 @@ export default function MemberDetailPage() {
       return;
     }
 
+    if (!user) {
+      alert('You must be logged in to send messages');
+      return;
+    }
+
     setSending(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: member!.id,
-          from_user_id: user?.id,
-          title: messageTitle,
-          message: messageBody,
-          type: 'message',
-          link: 'dashboard', // Could link to messages page when implemented
-        });
-
-      if (error) throw error;
+      await notificationsApi.create({
+        user_id: member!.id,
+        from_user_id: user.id,
+        title: messageTitle,
+        message: messageBody,
+        type: 'message',
+        link: 'dashboard', // Could link to messages page when implemented
+      });
 
       setMessageTitle('');
       setMessageBody('');
@@ -132,6 +137,17 @@ export default function MemberDetailPage() {
   };
 
   const handleResetPassword = async () => {
+    /* MIGRATION TODO: Requires backend auth admin API
+     * This feature needs a backend endpoint for admins to reset user passwords
+     * Original Supabase code used: supabase.auth.admin.updateUserById(userId, { password })
+     *
+     * Suggested backend endpoint: POST /api/auth/admin/reset-password/:userId
+     * Requires admin authentication and permissions check
+     */
+    alert('Password reset feature requires backend implementation. Please use "Send Password Reset Email" instead.');
+    return;
+
+    /* Original implementation preserved for reference:
     if (!newPassword.trim()) {
       alert('Please enter a new password');
       return;
@@ -149,12 +165,7 @@ export default function MemberDetailPage() {
 
     setResettingPassword(true);
     try {
-      const { error } = await supabase.auth.admin.updateUserById(
-        member!.id,
-        { password: newPassword }
-      );
-
-      if (error) throw error;
+      // TODO: Replace with authApi.adminResetPassword(member.id, newPassword)
 
       setNewPassword('');
       setConfirmPassword('');
@@ -166,9 +177,30 @@ export default function MemberDetailPage() {
     } finally {
       setResettingPassword(false);
     }
+    */
   };
 
   const handleSendPasswordResetEmail = async () => {
+    /* MIGRATION TODO: Requires backend auth admin API
+     * This feature needs a backend endpoint for admins to send password reset emails
+     * Original Supabase code used: supabase.auth.resetPasswordForEmail(email, options)
+     *
+     * Suggested backend endpoint: POST /api/auth/admin/send-reset-email/:userId
+     * Should trigger password reset email to the user
+     */
+    setResettingPassword(true);
+    try {
+      // TODO: Replace with authApi.adminSendResetEmail(member.email)
+      alert('Password reset email feature requires backend implementation. Please contact support.');
+      setShowPasswordResetModal(false);
+    } catch (error) {
+      console.error('Error sending password reset email:', error);
+      alert('Failed to send password reset email');
+    } finally {
+      setResettingPassword(false);
+    }
+
+    /* Original implementation preserved for reference:
     setResettingPassword(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(member!.email, {
@@ -185,6 +217,7 @@ export default function MemberDetailPage() {
     } finally {
       setResettingPassword(false);
     }
+    */
   };
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -624,13 +657,30 @@ function OverviewTab({ member }: { member: Profile }) {
   }, [member.id]);
 
   const fetchOverviewData = async () => {
-    // Fetch stats
+    /* MIGRATION TODO: Requires multiple backend APIs
+     * This overview tab needs the following backend API endpoints:
+     * 1. Orders API - GET /api/orders/by-member/:memberId (with total_amount)
+     * 2. Events API - GET /api/event-registrations/by-user/:userId
+     * 3. Results API - GET /api/competition-results/by-competitor/:competitorId
+     * 4. Teams API - GET /api/teams/by-member/:memberId
+     *
+     * For now, the stats will show zeros and placeholders
+     */
+
+    // TODO: Replace with actual API calls once endpoints are created
+    const orders = { count: 0, data: [] };
+    const events = { count: 0, data: [] };
+    const results = { count: 0, data: [] };
+    const team = { data: [] };
+
+    /* Original Supabase queries preserved for reference:
     const [orders, events, results, team] = await Promise.all([
       supabase.from('orders').select('id, total_amount', { count: 'exact' }).eq('member_id', member.id),
       supabase.from('event_registrations').select('id', { count: 'exact' }).eq('user_id', member.id),
       supabase.from('competition_results').select('id', { count: 'exact' }).eq('competitor_id', member.id).eq('placement', 1),
       supabase.from('team_members').select('team:teams(name)').eq('member_id', member.id).limit(1),
     ]);
+    */
 
     const totalSpent = orders.data?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
 
@@ -645,6 +695,9 @@ function OverviewTab({ member }: { member: Profile }) {
 
     // Fetch recent activity (last 5 items)
     const activity: any[] = [];
+
+    // TODO: Implement when backend APIs are available
+    /* Original Supabase queries for recent activity:
 
     // Recent orders
     const { data: recentOrders } = await supabase
@@ -696,12 +749,17 @@ function OverviewTab({ member }: { member: Profile }) {
         icon: result.placement === 1 ? '🏆' : '🎯',
       });
     });
+    */
 
     // Sort by date and take top 5
     activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setRecentActivity(activity.slice(0, 5));
 
     // Fetch upcoming events
+    // TODO: Implement when backend event registration API is available
+    const upcoming: any[] = [];
+
+    /* Original Supabase query for upcoming events:
     const { data: allRegistrations } = await supabase
       .from('event_registrations')
       .select('*, events!event_registrations_event_id_fkey(title, event_date)')
@@ -721,6 +779,7 @@ function OverviewTab({ member }: { member: Profile }) {
         return dateA.getTime() - dateB.getTime();
       })
       .slice(0, 3);
+    */
 
     setUpcomingEvents(upcoming);
   };
@@ -904,15 +963,11 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(formData)
-        .eq('id', member.id);
-
-      if (error) throw error;
+      await profilesApi.updateProfile(member.id, formData);
 
       setIsEditing(false);
       onUpdate();
+      alert('Member information updated successfully!');
     } catch (error) {
       console.error('Error updating member:', error);
       alert('Failed to update member information');

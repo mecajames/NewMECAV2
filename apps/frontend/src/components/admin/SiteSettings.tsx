@@ -246,7 +246,7 @@ export default function SiteSettings() {
                     alt={`Hero preview ${index + 1}`}
                     className="w-full h-32 object-cover rounded-lg"
                     onError={(e) => {
-                      e.currentTarget.src = 'https://via.placeholder.com/1920x1080?text=Image+Not+Found';
+                      e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="%23334155"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%23cbd5e1" font-family="sans-serif" font-size="14">Image Not Found</text></svg>';
                     }}
                   />
                 ))}

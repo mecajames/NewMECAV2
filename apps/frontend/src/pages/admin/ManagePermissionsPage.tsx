@@ -12,6 +12,7 @@ export default function ManagePermissionsPage() {
   const [editing, setEditing] = useState<any>(null);
   const [creating, setCreating] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
 
   const [formData, setFormData] = useState({
     name: '',
@@ -37,10 +38,29 @@ export default function ManagePermissionsPage() {
     try {
       const response = await permissionsApi.getAll();
       setPermissions(response.data);
+
+      // Load role-permission mappings
+      await loadRolePermissions();
     } catch (error) {
       console.error('Failed to load permissions:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRolePermissions = async () => {
+    try {
+      const roles = ['user', 'event_director', 'retailer', 'admin', 'system_admin'];
+      const rolePermsData: Record<string, string[]> = {};
+
+      for (const role of roles) {
+        const response = await permissionsApi.getRolePermissions(role);
+        rolePermsData[role] = response.data.map((p: any) => p.name);
+      }
+
+      setRolePermissions(rolePermsData);
+    } catch (error) {
+      console.error('Failed to load role permissions:', error);
     }
   };
 
@@ -236,26 +256,41 @@ export default function ManagePermissionsPage() {
               </h2>
               <div className="space-y-3">
                 {perms.map((perm: any) => (
-                  <div key={perm.id} className="flex justify-between items-center p-4 bg-slate-700 hover:bg-slate-650 rounded-lg transition-colors">
-                    <div className="flex-1">
-                      <span className="font-mono text-sm bg-slate-600 text-orange-400 px-3 py-1 rounded">{perm.name}</span>
-                      <p className="text-sm text-gray-400 mt-2">{perm.description}</p>
-                    </div>
-                    <div className="flex gap-2 ml-4">
-                      <button
-                        onClick={() => handleEdit(perm)}
-                        className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        <Edit className="h-4 w-4" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(perm.id)}
-                        className="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </button>
+                  <div key={perm.id} className="p-4 bg-slate-700 hover:bg-slate-650 rounded-lg transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <span className="font-mono text-sm bg-slate-600 text-orange-400 px-3 py-1 rounded">{perm.name}</span>
+                        <p className="text-sm text-gray-400 mt-2">{perm.description}</p>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {Object.entries(rolePermissions).map(([role, perms]: [string, any]) => (
+                            perms.includes(perm.name) && (
+                              <span
+                                key={role}
+                                className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded text-xs font-medium capitalize"
+                              >
+                                {role.replace('_', ' ')}
+                              </span>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() => handleEdit(perm)}
+                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          <Edit className="h-4 w-4" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(perm.id)}
+                          className="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

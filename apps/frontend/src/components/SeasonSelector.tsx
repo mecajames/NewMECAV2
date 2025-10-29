@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Calendar } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { Season } from '../types/database';
+import { seasonsApi, SeasonData } from '../api-client/seasons.api-client';
 
 interface SeasonSelectorProps {
   selectedSeasonId: string;
@@ -18,7 +17,7 @@ export default function SeasonSelector({
   label = 'Filter by Season',
   className = '',
 }: SeasonSelectorProps) {
-  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasons, setSeasons] = useState<SeasonData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,12 +25,8 @@ export default function SeasonSelector({
   }, []);
 
   const fetchSeasons = async () => {
-    const { data, error } = await supabase
-      .from('seasons')
-      .select('*')
-      .order('year', { ascending: false });
-
-    if (!error && data) {
+    try {
+      const data = await seasonsApi.getAll();
       setSeasons(data);
       // If no season is selected and we have seasons, select the current one by default
       if (!selectedSeasonId && data.length > 0) {
@@ -40,8 +35,11 @@ export default function SeasonSelector({
           onSeasonChange(currentSeason.id);
         }
       }
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

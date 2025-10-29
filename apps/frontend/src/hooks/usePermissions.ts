@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { permissionsApi } from '../api-client/permissions.api-client';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
@@ -38,39 +38,17 @@ export function usePermissions() {
         return;
       }
 
-      // Get role permissions
-      const { data: rolePerms } = await supabase
-        .from('role_permissions')
-        .select('permission:permissions(name)')
-        .eq('role', profile?.role);
-
-      // Get user-specific overrides
-      const { data: userOverrides } = await supabase
-        .from('user_permission_overrides')
-        .select('granted, permission:permissions(name)')
-        .eq('user_id', user.id);
+      // Get effective permissions for user
+      const response = await permissionsApi.getEffective(user.id, profile?.role || 'user');
+      const effectivePerms = response.data;
 
       // Build permission set
       const permSet = new Set<string>();
 
-      // Add role permissions
-      if (rolePerms) {
-        rolePerms.forEach((rp: any) => {
-          if (rp.permission?.name) {
-            permSet.add(rp.permission.name);
-          }
-        });
-      }
-
-      // Apply user overrides
-      if (userOverrides) {
-        userOverrides.forEach((override: any) => {
-          if (override.permission?.name) {
-            if (override.granted) {
-              permSet.add(override.permission.name);
-            } else {
-              permSet.delete(override.permission.name);
-            }
+      if (Array.isArray(effectivePerms)) {
+        effectivePerms.forEach((perm: any) => {
+          if (perm.name) {
+            permSet.add(perm.name);
           }
         });
       }
@@ -90,10 +68,12 @@ export function usePermissions() {
   };
 
   const hasAnyPermission = (permissionNames: string[]): boolean => {
+    if (permissions.has('*')) return true;
     return permissionNames.some(name => permissions.has(name));
   };
 
   const hasAllPermissions = (permissionNames: string[]): boolean => {
+    if (permissions.has('*')) return true;
     return permissionNames.every(name => permissions.has(name));
   };
 
@@ -120,14 +100,8 @@ export function useAllPermissions() {
 
   const fetchAllPermissions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('permissions')
-        .select('*')
-        .order('category, name');
-
-      if (error) throw error;
-
-      setPermissions(data || []);
+      const response = await permissionsApi.getAll();
+      setPermissions(response.data || []);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching all permissions:', error);
@@ -139,22 +113,20 @@ export function useAllPermissions() {
 }
 
 /**
- * Hook to check permission via database function (server-side check)
+ * Hook to check permission via API (server-side check)
  * Use this for critical operations where you need server validation
  */
-export async function checkPermissionServerSide(permissionName: string): Promise<boolean> {
+export async function checkPermissionServerSide(
+  userId: string,
+  permissionName: string
+): Promise<boolean> {
   try {
-    const { data, error } = await supabase.rpc('check_user_permission', {
-      p_user_id: (await supabase.auth.getUser()).data.user?.id,
-      p_permission_name: permissionName,
-    });
+    // This would need a specific endpoint on the backend
+    // For now, use the effective permissions endpoint
+    const response = await permissionsApi.getUserOverrides(userId);
+    const userPerms = response.data;
 
-    if (error) {
-      console.error('Error checking permission:', error);
-      return false;
-    }
-
-    return data === true;
+    return Array.isArray(userPerms) && userPerms.some((p: any) => p.name === permissionName);
   } catch (error) {
     console.error('Error checking permission:', error);
     return false;

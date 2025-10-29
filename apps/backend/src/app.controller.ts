@@ -3,7 +3,7 @@ import { AppService } from './app.service';
 
 /**
  * Root Application Controller
- * Provides health check endpoint
+ * Provides health check endpoint and dashboard statistics
  */
 @Controller()
 export class AppController {
@@ -15,7 +15,21 @@ export class AppController {
    */
   @Get('health')
   getHealth() {
-    return this.appService.getHealth();
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      architecture: 'NestJS',
+      database: 'PostgreSQL (MikroORM)',
+    };
+  }
+
+  /**
+   * Dashboard statistics endpoint
+   * GET /api/statistics
+   */
+  @Get('api/statistics')
+  async getStatistics() {
+    return this.appService.getStatistics();
   }
 
   /**
@@ -32,6 +46,7 @@ export class AppController {
       endpoints: {
         health: '/health',
         api: '/api/*',
+        statistics: '/api/statistics',
       },
     };
   }

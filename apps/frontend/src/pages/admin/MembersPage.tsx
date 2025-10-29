@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, Search, Filter, UserPlus, Mail, Phone, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { profilesApi } from '../../api-client/profiles.api-client';
 import { Profile } from '../../types';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -28,12 +28,7 @@ export default function MembersPage() {
 
   const fetchMembers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await profilesApi.getProfiles();
 
       // Add computed full_name
       const membersWithFullName = (data || []).map(member => ({
@@ -42,9 +37,10 @@ export default function MembersPage() {
       }));
 
       setMembers(membersWithFullName);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching members:', error);
+      alert('Error fetching members. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
