@@ -1,0 +1,116 @@
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          NewMECA V2 - Docker Architecture                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                                  USERS
+                                    ↓
+                        ┌─────────────────────┐
+                        │   Browser/Client    │
+                        └─────────────────────┘
+                                    ↓
+        ┌───────────────────────────┼───────────────────────────┐
+        ↓                           ↓                           ↓
+┌──────────────┐         ┌──────────────┐           ┌──────────────┐
+│   Frontend   │         │   pgAdmin    │           │  Supabase    │
+│  (React/Vite)│         │  Database    │           │  (External)  │
+│  Port: 5173  │         │   Manager    │           │              │
+└──────────────┘         │  Port: 5050  │           └──────────────┘
+        ↓                └──────────────┘                   ↑
+        │                       ↓                           │
+        │                       │                           │
+        ↓                       ↓                           │
+┌──────────────┐         ┌──────────────┐                  │
+│   Backend    │←────────│  PostgreSQL  │                  │
+│ (Node/Express)│        │   Database   │                  │
+│  Port: 3001  │         │  Port: 5432  │                  │
+└──────────────┘         └──────────────┘                  │
+        ↓                       ↑                           │
+        │                       │                           │
+        ↓                       │                           │
+┌──────────────┐                │                           │
+│    Redis     │                │                           │
+│    Cache     │                │                           │
+│  Port: 6379  │                │                           │
+└──────────────┘                │                           │
+                                │                           │
+                       ┌────────┴──────────┐                │
+                       │                   │                │
+                       ↓                   ↓                ↓
+              ┌──────────────┐    ┌──────────────┐
+              │  DB Analyzer │    │ Init Scripts │
+              │    (Tool)    │    │  & Migrations│
+              └──────────────┘    └──────────────┘
+                       ↓
+              ┌──────────────────────────┐
+              │   Analysis Output        │
+              │   - Schema dumps         │
+              │   - Comparison reports   │
+              │   - Statistics           │
+              └──────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DEVELOPMENT WORKFLOW
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Start Services:
+   ./docker-start.sh  OR  make up
+
+2. Development Loop:
+   - Edit code (hot-reload enabled)
+   - View logs: make logs
+   - Check status: make status
+
+3. Database Operations:
+   - Shell: make db-shell
+   - Backup: make db-backup
+   - Analyze: make analyze
+
+4. Stop Services:
+   make down
+
+═══════════════════════════════════════════════════════════════════════════════
+
+VOLUME MOUNTS (Development)
+═══════════════════════════════════════════════════════════════════════════════
+
+Frontend Container:
+  ./apps/frontend → /app/apps/frontend (source code with hot-reload)
+  
+Backend Container:
+  ./apps/backend → /app/apps/backend (source code with hot-reload)
+  
+PostgreSQL Container:
+  postgres_data → /var/lib/postgresql/data (persistent database)
+  ./supabase/migrations → /docker-entrypoint-initdb.d (auto-loaded on init)
+  
+pgAdmin Container:
+  pgadmin_data → /var/lib/pgadmin (persistent settings)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NETWORK CONFIGURATION
+═══════════════════════════════════════════════════════════════════════════════
+
+All services run on the 'newmeca-network' bridge network:
+  - Services communicate using container names
+  - Example: Backend connects to 'postgres:5432' not 'localhost:5432'
+  - Ports are exposed to host for development access
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PRODUCTION DIFFERENCES (docker-compose.prod.yml)
+═══════════════════════════════════════════════════════════════════════════════
+
+  - No volume mounts (uses built images)
+  - Frontend served by Nginx
+  - Enhanced security (passwords required)
+  - Optimized builds (smaller images)
+  - Health checks enabled
+  - Restart policies: always
+  - Logging configured (10MB max, 3 files)
+
+═══════════════════════════════════════════════════════════════════════════════
+```

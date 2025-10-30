@@ -1,0 +1,14 @@
+# MikroORM migrations directory
+
+This directory stores MikroORM migration files that track changes to your database schema over time.
+
+## Note
+
+Your schema is primarily managed by **Supabase migrations** in the `/supabase/migrations` directory. 
+
+MikroORM migrations here are used to:
+- Track entity-level changes for TypeScript/ORM purposes
+- Keep your TypeScript entities in sync with the database
+- Handle migrations when Supabase is not available
+
+**Recommendation:** Use Supabase migrations as the source of truth for schema changes.
