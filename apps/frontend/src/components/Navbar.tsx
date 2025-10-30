@@ -1,0 +1,520 @@
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase, Rulebook } from '../lib/supabase';
+import { Notification } from '../types';
+
+export default function Navbar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [hasTeam, setHasTeam] = useState(false);
+  const { user, profile, signOut } = useAuth();
+
+  useEffect(() => {
+    fetchActiveRulebooks();
+    if (user) {
+      fetchNotifications();
+      checkUserTeam();
+
+      // Note: Real-time subscriptions are disabled as the realtime server is not running
+      // Notifications will refresh when the user hovers over the bell icon or navigates pages
+      // To enable real-time notifications, uncomment the code below and ensure the realtime server is running
+
+      // const subscription = supabase
+      //   .channel('notifications')
+      //   .on('postgres_changes', {
+      //     event: 'INSERT',
+      //     schema: 'public',
+      //     table: 'notifications',
+      //     filter: `user_id=eq.${user.id}`
+      //   }, () => {
+      //     fetchNotifications();
+      //   })
+      //   .subscribe();
+
+      // return () => {
+      //   subscription.unsubscribe();
+      // };
+    }
+  }, [user]);
+
+  const fetchActiveRulebooks = async () => {
+    const { data } = await supabase
+      .from('rulebooks')
+      .select('*')
+      .eq('status', 'active')
+      .order('category')
+      .order('season', { ascending: false });
+
+    if (data) {
+      setActiveRulebooks(data);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('notifications')
+      .select('*, from_user:profiles!from_user_id(first_name, last_name)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (data) {
+      setNotifications(data as any);
+      setUnreadCount(data.filter(n => !n.read).length);
+    }
+  };
+
+  const checkUserTeam = async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('team_members')
+      .select('team_id')
+      .eq('member_id', user.id)
+      .limit(1);
+
+    setHasTeam(!!data && data.length > 0);
+  };
+
+  const markNotificationRead = async (notificationId: string) => {
+    await supabase.rpc('mark_notification_read', { p_notification_id: notificationId });
+    fetchNotifications();
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!user) return;
+    await supabase.rpc('mark_all_notifications_read');
+    fetchNotifications();
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+    setMobileMenuOpen(false);
+    setUserMenuOpen(false);
+  };
+
+  // Helper function to get the current page from the URL
+  const getCurrentPage = () => {
+    const path = location.pathname;
+    if (path === '/') return 'home';
+    if (path.startsWith('/events')) return 'events';
+    if (path.startsWith('/results')) return 'results';
+    if (path.startsWith('/standings')) return 'standings';
+    if (path.startsWith('/leaderboard')) return 'leaderboard';
+    if (path.startsWith('/rulebooks')) return 'rulebooks';
+    if (path.startsWith('/dashboard')) return 'dashboard';
+    if (path.startsWith('/membership')) return 'membership';
+    if (path.startsWith('/login')) return 'login';
+    if (path.startsWith('/signup')) return 'signup';
+    if (path.startsWith('/admin')) return 'admin';
+    return 'home';
+  };
+
+  const currentPage = getCurrentPage();
+
+  const navItems = [
+    { id: 'home', label: 'Home', icon: null, path: '/' },
+    { id: 'events', label: 'Events', icon: Calendar, path: '/events' },
+    { id: 'results', label: 'Results', icon: Trophy, path: '/results' },
+    { id: 'standings', label: 'Standings', icon: Award, path: '/standings' },
+    { id: 'leaderboard', label: 'Top 10', icon: Trophy, path: '/leaderboard' },
+  ];
+
+  const groupedRulebooks = activeRulebooks.reduce((acc, rulebook) => {
+    if (!acc[rulebook.category]) {
+      acc[rulebook.category] = [];
+    }
+    acc[rulebook.category].push(rulebook);
+    return acc;
+  }, {} as Record<string, Rulebook[]>);
+
+  return (
+    <nav className="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          <div
+            className="flex items-center cursor-pointer"
+            onClick={() => navigate('/')}
+          >
+            <img
+              src="/meca-logo-transparent.png"
+              alt="MECA - Mobile Electronics Competition Association"
+              className="h-12 w-auto"
+            />
+          </div>
+
+          <div className="hidden md:flex items-center space-x-4">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => navigate(item.path)}
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === item.id
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                {item.icon && <item.icon className="h-4 w-4" />}
+                {item.label}
+              </button>
+            ))}
+
+            <div className="relative"
+              onMouseEnter={() => setRulebooksMenuOpen(true)}
+              onMouseLeave={() => setRulebooksMenuOpen(false)}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === 'rulebooks' || currentPage.startsWith('rulebook-')
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <BookOpen className="h-4 w-4" />
+                Rulebooks
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {rulebooksMenuOpen && (
+                <div className="absolute top-full left-0 mt-0 pt-2 w-64">
+                  <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                  <button
+                    onClick={() => {
+                      navigate('/rulebooks');
+                      setRulebooksMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  >
+                    All Rulebooks
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigate('/rulebooks/archive');
+                      setRulebooksMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700 pb-2 mb-2"
+                  >
+                    Archive
+                  </button>
+
+                  {Object.entries(groupedRulebooks).map(([category, rulebooks]) => (
+                    <div key={category} className="px-2">
+                      <div className="text-xs font-semibold text-orange-500 px-2 py-1 uppercase tracking-wide">
+                        {category}
+                      </div>
+                      {rulebooks.map((rulebook) => (
+                        <button
+                          key={rulebook.id}
+                          onClick={() => {
+                            navigate(`/rulebooks/${rulebook.id}`);
+                            setRulebooksMenuOpen(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                        >
+                          {rulebook.season}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+
+                  {activeRulebooks.length === 0 && (
+                    <div className="px-4 py-2 text-sm text-gray-500">
+                      No active rulebooks
+                    </div>
+                  )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {user ? (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                    currentPage === 'dashboard'
+                      ? 'bg-orange-600 text-white'
+                      : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </button>
+
+                {/* Notifications Bell */}
+                <div className="relative">
+                  <button
+                    className="relative p-2 text-gray-300 hover:text-white transition-colors"
+                    onMouseEnter={() => {
+                      setNotificationsOpen(true);
+                      fetchNotifications(); // Refresh notifications when opening dropdown
+                    }}
+                    onClick={() => {
+                      setNotificationsOpen(!notificationsOpen);
+                      if (!notificationsOpen) {
+                        fetchNotifications();
+                      }
+                    }}
+                  >
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-0 right-0 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {notificationsOpen && (
+                    <>
+                      {/* Invisible bridge to prevent dropdown from closing */}
+                      <div className="absolute top-full right-0 h-2 w-full" />
+                      <div
+                        className="absolute top-full right-0 mt-2 w-80"
+                        onMouseLeave={() => setNotificationsOpen(false)}
+                      >
+                      <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2 max-h-96 overflow-y-auto">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
+                          <h3 className="font-semibold text-white">Notifications</h3>
+                          {unreadCount > 0 && (
+                            <button
+                              onClick={markAllNotificationsRead}
+                              className="text-xs text-orange-500 hover:text-orange-400"
+                            >
+                              Mark all read
+                            </button>
+                          )}
+                        </div>
+
+                        {notifications.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-gray-500">
+                            No notifications
+                          </div>
+                        ) : (
+                          notifications.map((notification) => (
+                            <button
+                              key={notification.id}
+                              onClick={() => {
+                                markNotificationRead(notification.id);
+                                if (notification.link) {
+                                  navigate(`/${notification.link}`);
+                                  setNotificationsOpen(false);
+                                }
+                              }}
+                              className={`block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0 ${
+                                !notification.read ? 'bg-slate-750' : ''
+                              }`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-medium text-white">
+                                      {notification.title}
+                                    </h4>
+                                    {!notification.read && (
+                                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {notification.message}
+                                  </p>
+                                  {notification.from_user && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      From: {notification.from_user.first_name} {notification.from_user.last_name}
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {new Date(notification.created_at).toLocaleDateString()} {new Date(notification.created_at).toLocaleTimeString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* User Menu */}
+                <div className="relative"
+                  onMouseEnter={() => setUserMenuOpen(true)}
+                  onMouseLeave={() => setUserMenuOpen(false)}
+                >
+                  <button className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition-colors">
+                    <User className="h-4 w-4" />
+                    {profile?.first_name || profile?.email || 'Account'}
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+
+                  {userMenuOpen && (
+                    <div className="absolute top-full right-0 mt-0 pt-2 w-48">
+                      <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                        <button
+                          onClick={() => {
+                            navigate('/profile');
+                            setUserMenuOpen(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            My MECA
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => {
+                            navigate('/profile'); // TODO: Navigate to public profile
+                            setUserMenuOpen(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            Public Profile
+                          </div>
+                        </button>
+                        {hasTeam && (
+                          <button
+                            onClick={() => {
+                              navigate('/dashboard'); // TODO: Navigate to team page
+                              setUserMenuOpen(false);
+                            }}
+                            className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              My Team
+                            </div>
+                          </button>
+                        )}
+                        <div className="border-t border-slate-700 mt-2 pt-2">
+                          <button
+                            onClick={handleSignOut}
+                            className="block w-full text-left px-4 py-2 text-red-400 hover:bg-slate-700 hover:text-red-300 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <LogOut className="h-4 w-4" />
+                              Sign Out
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => navigate('/login')}
+                  className="px-4 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => navigate('/signup')}
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-orange-600 hover:bg-orange-700 transition-colors"
+                >
+                  Sign Up
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="md:hidden">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-md text-gray-300 hover:text-white hover:bg-slate-800"
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-slate-800">
+          <div className="px-2 pt-2 pb-3 space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  navigate(item.path);
+                  setMobileMenuOpen(false);
+                }}
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                  currentPage === item.id
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                {item.icon && <item.icon className="h-5 w-5" />}
+                {item.label}
+              </button>
+            ))}
+
+            {user ? (
+              <>
+                <button
+                  onClick={() => {
+                    navigate('/dashboard');
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                    currentPage === 'dashboard'
+                      ? 'bg-orange-600 text-white'
+                      : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  <LayoutDashboard className="h-5 w-5" />
+                  Dashboard
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+                >
+                  <LogOut className="h-5 w-5" />
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    navigate('/login');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/signup');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-2 rounded-md text-base font-medium bg-orange-600 hover:bg-orange-700"
+                >
+                  Sign Up
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </nav>
+  );
+}

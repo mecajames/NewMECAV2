@@ -1,296 +1,256 @@
-# MECACARAUDIO.COM - Car Audio Competition Platform
+# MECA V2 - Car Audio Competition Management Platform
 
-A modern, full-featured car audio competition management system built with React, TypeScript, and Supabase.
-
-## Features
-
-- 🏠 **Public Homepage** with featured events
-- 📅 **Event Calendar** with filtering and detailed event pages
-- 🏆 **Competition Results** tracking and display
-- 📊 **Standings** by competition class
-- 🥇 **Top 10 Leaderboard** for overall rankings
-- 📖 **Rulebooks Section** with PDF viewing
-- 👤 **User Dashboards** (User, Admin, Event Director, Retailer)
-- ✍️ **Event Pre-Registration** for members and guests
-- 🔐 **Role-Based Access Control**
-- 📱 **Responsive Design** for all devices
-
-## Quick Start
-
-### 1. Install Dependencies
-```bash
-npm install
-```
-
-### 2. Set Up Environment Variables
-Make sure your `.env` file contains your Supabase credentials:
-```
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### 3. Start Development Server
-```bash
-npm run dev
-```
-
-The application will be available at `http://localhost:5173`
-
-## Creating Test Accounts
-
-### Step-by-Step Guide
-
-#### 1. Create User Accounts via Sign Up
-
-You need to create accounts through the application's Sign Up page first:
-
-1. **Regular User Account**
-   - Navigate to Sign Up
-   - Email: `user@mecacaraudio.com`
-   - Password: `user123456`
-   - Full Name: `Test User`
-   - Click "Create Account"
-
-2. **Admin Account**
-   - Sign out
-   - Navigate to Sign Up
-   - Email: `admin@mecacaraudio.com`
-   - Password: `admin123456`
-   - Full Name: `Admin User`
-   - Click "Create Account"
-
-3. **Event Director Account**
-   - Sign out
-   - Navigate to Sign Up
-   - Email: `director@mecacaraudio.com`
-   - Password: `director123`
-   - Full Name: `Event Director`
-   - Click "Create Account"
-
-#### 2. Update User Roles in Supabase
-
-After creating the accounts, you need to update their roles:
-
-**Option A: Using Supabase Dashboard**
-1. Open your Supabase project dashboard
-2. Go to **Table Editor** → **profiles**
-3. Find the user and click to edit
-4. Change the `role` field:
-   - For admin: change to `admin`
-   - For event director: change to `event_director`
-5. Save changes
-
-**Option B: Using SQL Editor**
-1. Open your Supabase project dashboard
-2. Go to **SQL Editor**
-3. Copy and paste from `TEST_ACCOUNTS.sql`:
-```sql
-UPDATE profiles SET role = 'admin' WHERE email = 'admin@mecacaraudio.com';
-UPDATE profiles SET role = 'event_director' WHERE email = 'director@mecacaraudio.com';
-```
-4. Click "Run"
-
-#### 3. Sign In and Test
-
-Now you can sign in with different accounts to see different dashboards:
-
-- **Regular User** (`user@mecacaraudio.com`) - See user dashboard with registrations and results
-- **Admin** (`admin@mecacaraudio.com`) - Full access to event management, results entry, and system overview
-- **Event Director** (`director@mecacaraudio.com`) - Manage own events and enter results
-
-## Testing Different Features
-
-### As Admin User
-
-1. **Create an Event**
-   - Sign in as admin
-   - Go to Dashboard
-   - Click "Manage Events"
-   - Click "Create Event"
-   - Fill in all required fields
-   - Save
-
-2. **Enter Competition Results**
-   - Go to Dashboard
-   - Click "Enter Results"
-   - Select an event
-   - Click "Add Result"
-   - Fill in competitor details
-   - Click "Save All Results"
-
-### As Regular User
-
-1. **Pre-Register for Event**
-   - Sign in as regular user
-   - Go to "Events"
-   - Click on an event
-   - Click "Pre-Register for This Event"
-   - Fill in the form
-   - Submit
-
-2. **View Personal Dashboard**
-   - Go to Dashboard
-   - See your event registrations
-   - View your competition results
-   - Check your statistics
-
-### As Guest (Not Logged In)
-
-1. **Browse Events**
-   - Navigate to "Events"
-   - View event details
-   - Pre-register as guest (without account)
-
-2. **View Results and Standings**
-   - Go to "Results" to see event results
-   - Go to "Standings" to see class rankings
-   - Go to "Top 10" to see overall leaderboard
-
-## Database Structure
-
-The application uses the following main tables:
-
-- **profiles** - User accounts with role-based access
-- **events** - Competition events
-- **event_registrations** - Pre-registrations for events
-- **competition_results** - Competition results and scores
-- **memberships** - Membership purchase records
-- **rulebooks** - Rulebook documents and PDFs
-
-## User Roles
-
-1. **user** (default) - Can register for events, view results, see personal dashboard
-2. **event_director** - Can create/manage own events, enter results for own events
-3. **admin** - Full system access, can manage all events and results
-4. **retailer** - Special access for retailers/manufacturers (framework in place)
-
-## Key Pages
-
-- `/` - Homepage with featured events
-- `/events` - Events calendar
-- `/events/:id` - Event detail page
-- `/results` - Competition results by event
-- `/standings` - Point standings by class
-- `/leaderboard` - Top 10 overall competitors
-- `/rulebooks` - Rulebook documents
-- `/dashboard` - Role-based dashboard
-- `/login` - Sign in
-- `/signup` - Create account
-
-## Admin Dashboard Features
-
-When signed in as admin, the dashboard provides:
-
-1. **Event Management**
-   - Create new events
-   - Edit existing events
-   - Delete events
-   - Set event directors
-   - Manage event status
-
-2. **Results Entry**
-   - Select event
-   - Add multiple results at once
-   - Search for registered competitors
-   - Enter scores, placements, and points
-
-3. **System Overview**
-   - Total users count
-   - Total events count
-   - Registration statistics
-   - Active members count
-
-## Development Commands
-
-```bash
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-
-# Type check
-npm run typecheck
-
-# Lint code
-npm run lint
-```
+A full-stack application for managing car audio competitions, built with React, Node.js, Express, MikroORM, and Supabase PostgreSQL.
 
 ## Project Structure
 
 ```
-src/
-├── components/
-│   ├── admin/              # Admin-specific components
-│   │   ├── EventManagement.tsx
-│   │   └── ResultsEntry.tsx
-│   ├── dashboards/         # Dashboard components by role
-│   │   ├── AdminDashboard.tsx
-│   │   ├── UserDashboard.tsx
-│   │   ├── EventDirectorDashboard.tsx
-│   │   └── RetailerDashboard.tsx
-│   └── Navbar.tsx          # Main navigation
-├── contexts/
-│   └── AuthContext.tsx     # Authentication state
-├── lib/
-│   └── supabase.ts         # Supabase client and types
-├── pages/
-│   ├── HomePage.tsx
-│   ├── EventsPage.tsx
-│   ├── EventDetailPage.tsx
-│   ├── ResultsPage.tsx
-│   ├── StandingsPage.tsx
-│   ├── LeaderboardPage.tsx
-│   ├── RulebooksPage.tsx
-│   ├── DashboardPage.tsx
-│   ├── LoginPage.tsx
-│   └── SignUpPage.tsx
-├── App.tsx                 # Main app component
-└── main.tsx               # Entry point
+NewMECAV2/
+├── apps/
+│   ├── frontend/          # React + Vite + TypeScript frontend
+│   └── backend/           # Node.js + Express + MikroORM backend
+├── packages/
+│   └── shared/            # Shared types and utilities
+└── supabase/              # Supabase migrations and config
 ```
 
-## Security
+## Tech Stack
 
-- Row Level Security (RLS) enabled on all tables
-- Role-based access control
-- Secure authentication with Supabase Auth
-- Protected admin and event director routes
+### Frontend
+- **React 18** with TypeScript
+- **Vite** for build tooling
+- **Tailwind CSS** for styling
+- **Supabase Client** for authentication
 
-## Support Files
+### Backend
+- **Node.js** with TypeScript
+- **Express** web framework
+- **MikroORM** for database ORM
+- **Supabase PostgreSQL** as database
+- **Stripe** for payments
+- **Twilio** for SMS notifications
+- **SendGrid/Resend** for email
 
-- **SETUP_GUIDE.md** - Detailed setup instructions
-- **TEST_ACCOUNTS.sql** - SQL scripts for creating test data
+### Database
+- **PostgreSQL** via Supabase
+- Local development with Supabase CLI
+- Cloud hosting on Supabase
+
+## Prerequisites
+
+- Node.js >= 18.0.0
+- npm >= 9.0.0
+- Docker Desktop (for local Supabase)
+- Supabase CLI (`brew install supabase/tap/supabase`)
+
+## Quick Start
+
+### 1. Install Dependencies
+
+```bash
+npm run install:all
+```
+
+### 2. Set Up Environment Variables
+
+#### Frontend (`apps/frontend/.env.development`)
+```bash
+cp apps/frontend/.env.example apps/frontend/.env.development
+```
+
+Edit `apps/frontend/.env.development`:
+```env
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+VITE_ENV=development
+```
+
+#### Backend (`apps/backend/.env`)
+```bash
+cp apps/backend/.env.example apps/backend/.env
+```
+
+Edit `apps/backend/.env`:
+```env
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz
+PORT=3001
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:5173
+```
+
+### 3. Start Development
+
+**Easy Mode - Start Everything:**
+```bash
+npm run dev:all
+```
+
+This will:
+- ✅ Start Supabase locally
+- ✅ Start backend API server (http://localhost:3001)
+- ✅ Start frontend dev server (http://localhost:5173)
+
+**Or start services individually:**
+```bash
+npm run supabase:start        # Start Supabase only
+npm run dev:backend           # Backend only
+npm run dev                   # Frontend only
+```
+
+### 4. Access Local Services
+
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:3001
+- **Supabase Studio**: http://localhost:54323 (Database UI)
+- **Database**: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
+## Development Workflow
+
+### Frontend Development
+```bash
+cd apps/frontend
+npm run dev              # Start dev server
+npm run build            # Build for production
+npm run typecheck        # Type checking
+npm run lint             # Lint code
+```
+
+### Backend Development
+```bash
+cd apps/backend
+npm run dev              # Start dev server with hot reload
+npm run build            # Build TypeScript
+npm run typecheck        # Type checking
+npm run mikro-orm        # MikroORM CLI
+```
+
+### Shared Types
+The `packages/shared` package contains TypeScript types used by both frontend and backend. Changes to shared types will be automatically picked up by both apps.
+
+## Database Management
+
+### Local Development
+```bash
+supabase start           # Start local Supabase
+supabase stop            # Stop local Supabase
+supabase status          # Check service status
+supabase db reset        # Reset database to migrations
+```
+
+### Migrations
+```bash
+cd supabase
+supabase migration new <name>    # Create new migration
+supabase db push                 # Push to remote database
+```
+
+## API Endpoints
+
+The backend exposes RESTful API endpoints:
+
+- `GET /health` - Health check
+- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - User registration
+- `GET /api/events` - List events
+- `POST /api/events` - Create event
+- `GET /api/events/:id` - Get event details
+- `POST /api/registrations` - Register for event
+- `POST /api/payments` - Process payment (Stripe)
+- More endpoints to be documented...
+
+## Environment Variables
+
+### Frontend (.env)
+- `VITE_SUPABASE_URL` - Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key
+- `VITE_API_URL` - Backend API URL (default: http://localhost:3000)
+
+### Backend (.env)
+- `DATABASE_URL` - PostgreSQL connection string
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_KEY` - Supabase service role key (server-side only)
+- `PORT` - Server port (default: 3000)
+- `NODE_ENV` - Environment (development/production)
+- `STRIPE_SECRET_KEY` - Stripe API key
+- `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret
+- `TWILIO_ACCOUNT_SID` - Twilio account SID
+- `TWILIO_AUTH_TOKEN` - Twilio auth token
+- `TWILIO_PHONE_NUMBER` - Twilio phone number
+- `EMAIL_PROVIDER` - Email service (sendgrid/resend)
+- `SENDGRID_API_KEY` - SendGrid API key
+- `CORS_ORIGIN` - Allowed CORS origins
+
+## Building for Production
+
+```bash
+# Build all packages
+npm run build
+
+# Build specific apps
+npm run build:frontend
+npm run build:backend
+```
+
+## Deployment
+
+### Frontend
+The frontend can be deployed to:
+- Vercel
+- Netlify
+- Cloudflare Pages
+- Static hosting
+
+### Backend
+The backend can be deployed to:
+- Railway
+- Render
+- Fly.io
+- DigitalOcean App Platform
+
+### Database
+Production database is hosted on Supabase Cloud:
+- Project: garsyqgdjpryqleufrev
+- URL: https://garsyqgdjpryqleufrev.supabase.co
+
+## Testing
+
+```bash
+# Run tests (to be implemented)
+npm test
+```
 
 ## Troubleshooting
 
-### Can't see admin features
-- Verify your role is set to `admin` in the profiles table
-- Sign out and sign back in after changing roles
+### Frontend shows white screen
+- Check that `.env` has correct `VITE_SUPABASE_URL` (should be URL, not email)
+- Verify Supabase project is accessible
+- Check browser console for errors
 
-### Events not showing
-- Make sure events exist in the database
-- Check event status filters
+### Backend can't connect to database
+- Verify `DATABASE_URL` is correct
+- Check that Supabase is running (`supabase status`)
+- Ensure PostgreSQL port 54322 is not blocked
 
-### Results not displaying
-- Ensure results are entered for completed events
-- Verify event has results in the database
+### MikroORM errors
+- Run `npm run build` in backend to compile TypeScript
+- Check that entities are properly defined with decorators
+- Verify database schema matches entity definitions
 
-## Technologies Used
+## Contributing
 
-- **React 18** - UI framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool and dev server
-- **Tailwind CSS** - Styling
-- **Supabase** - Backend (Database, Auth, Storage)
-- **Lucide React** - Icons
+1. Create a feature branch
+2. Make changes
+3. Run `npm run typecheck` and `npm run lint`
+4. Test locally
+5. Submit pull request
 
 ## License
 
-Proprietary - MECACARAUDIO.COM
+ISC
 
 ## Support
 
-For support, please contact the MECA administrator.
+For issues and questions, please open an issue on GitHub.
