@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, Rulebook } from '../lib/supabase';
-import { Notification } from '../types';
+import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '../hooks/useNotifications';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -13,36 +13,19 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [hasTeam, setHasTeam] = useState(false);
   const { user, profile, signOut } = useAuth();
+
+  // Use API hooks instead of direct Supabase calls
+  const { notifications, refetch: refetchNotifications } = useNotifications(user?.id);
+  const { markAsRead } = useMarkAsRead();
+  const { markAllAsRead } = useMarkAllAsRead();
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
     fetchActiveRulebooks();
     if (user) {
-      fetchNotifications();
       checkUserTeam();
-
-      // Note: Real-time subscriptions are disabled as the realtime server is not running
-      // Notifications will refresh when the user hovers over the bell icon or navigates pages
-      // To enable real-time notifications, uncomment the code below and ensure the realtime server is running
-
-      // const subscription = supabase
-      //   .channel('notifications')
-      //   .on('postgres_changes', {
-      //     event: 'INSERT',
-      //     schema: 'public',
-      //     table: 'notifications',
-      //     filter: `user_id=eq.${user.id}`
-      //   }, () => {
-      //     fetchNotifications();
-      //   })
-      //   .subscribe();
-
-      // return () => {
-      //   subscription.unsubscribe();
-      // };
     }
   }, [user]);
 
@@ -59,22 +42,6 @@ export default function Navbar() {
     }
   };
 
-  const fetchNotifications = async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('notifications')
-      .select('*, from_user:profiles!from_user_id(first_name, last_name)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (data) {
-      setNotifications(data as any);
-      setUnreadCount(data.filter(n => !n.read).length);
-    }
-  };
-
   const checkUserTeam = async () => {
     if (!user) return;
 
@@ -87,15 +54,16 @@ export default function Navbar() {
     setHasTeam(!!data && data.length > 0);
   };
 
-  const markNotificationRead = async (notificationId: string) => {
-    await supabase.rpc('mark_notification_read', { p_notification_id: notificationId });
-    fetchNotifications();
+  const handleMarkNotificationRead = async (notificationId: string) => {
+    if (!user) return;
+    await markAsRead(notificationId, user.id);
+    refetchNotifications();
   };
 
-  const markAllNotificationsRead = async () => {
+  const handleMarkAllNotificationsRead = async () => {
     if (!user) return;
-    await supabase.rpc('mark_all_notifications_read');
-    fetchNotifications();
+    await markAllAsRead(user.id);
+    refetchNotifications();
   };
 
   const handleSignOut = async () => {
@@ -259,12 +227,12 @@ export default function Navbar() {
                     className="relative p-2 text-gray-300 hover:text-white transition-colors"
                     onMouseEnter={() => {
                       setNotificationsOpen(true);
-                      fetchNotifications(); // Refresh notifications when opening dropdown
+                      refetchNotifications(); // Refresh notifications when opening dropdown
                     }}
                     onClick={() => {
                       setNotificationsOpen(!notificationsOpen);
                       if (!notificationsOpen) {
-                        fetchNotifications();
+                        refetchNotifications();
                       }
                     }}
                   >
@@ -289,7 +257,7 @@ export default function Navbar() {
                           <h3 className="font-semibold text-white">Notifications</h3>
                           {unreadCount > 0 && (
                             <button
-                              onClick={markAllNotificationsRead}
+                              onClick={handleMarkAllNotificationsRead}
                               className="text-xs text-orange-500 hover:text-orange-400"
                             >
                               Mark all read
@@ -306,7 +274,7 @@ export default function Navbar() {
                             <button
                               key={notification.id}
                               onClick={() => {
-                                markNotificationRead(notification.id);
+                                handleMarkNotificationRead(notification.id);
                                 if (notification.link) {
                                   navigate(`/${notification.link}`);
                                   setNotificationsOpen(false);
@@ -329,13 +297,13 @@ export default function Navbar() {
                                   <p className="text-xs text-gray-400 mt-1">
                                     {notification.message}
                                   </p>
-                                  {notification.from_user && (
+                                  {notification.fromUser && (
                                     <p className="text-xs text-gray-500 mt-1">
-                                      From: {notification.from_user.first_name} {notification.from_user.last_name}
+                                      From: {notification.fromUser.first_name} {notification.fromUser.last_name}
                                     </p>
                                   )}
                                   <p className="text-xs text-gray-500 mt-1">
-                                    {new Date(notification.created_at).toLocaleDateString()} {new Date(notification.created_at).toLocaleTimeString()}
+                                    {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString()}
                                   </p>
                                 </div>
                               </div>

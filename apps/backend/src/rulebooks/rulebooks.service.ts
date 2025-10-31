@@ -10,8 +10,8 @@ export class RulebooksService {
   ) {}
 
   async findAll(): Promise<Rulebook[]> {
-    return this.em.find(Rulebook, { isActive: true }, {
-      orderBy: { displayOrder: 'ASC', year: 'DESC' }
+    return this.em.find(Rulebook, { status: 'active' }, {
+      orderBy: { displayOrder: 'ASC', season: 'DESC' }
     });
   }
 
@@ -23,8 +23,8 @@ export class RulebooksService {
     return rulebook;
   }
 
-  async findByYear(year: number): Promise<Rulebook[]> {
-    return this.em.find(Rulebook, { year, isActive: true });
+  async findBySeason(season: string): Promise<Rulebook[]> {
+    return this.em.find(Rulebook, { season, status: 'active' });
   }
 
   async create(data: Partial<Rulebook>): Promise<Rulebook> {
