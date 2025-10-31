@@ -65,7 +65,19 @@
       "Bash(node scripts/add-sql-classes.js:*)",
       "Bash(node scripts/add-rtl-classes.js:*)",
       "Bash(node scripts/add-show-and-shine-classes.js:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(npx mikro-orm migration:create:*)",
+      "Bash(npm run migration:create:*)",
+      "Bash(npm run build:*)",
+      "Bash(set DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres)",
+      "Bash(npm run schema:update:*)",
+      "Bash(timeout /t 5)",
+      "Bash(nul)",
+      "Bash(taskkill:*)",
+      "Bash(timeout /t 3)",
+      "Bash(node scripts/sync-rulebooks-media.js:*)",
+      "Bash(node scripts/sync-auth-users.js:*)",
+      "Bash(node scripts/create-admin-users.js:*)"
     ],
     "deny": [],
     "ask": []
