@@ -20,6 +20,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { usePermissions } from '../../hooks/usePermissions';
+import { profilesApi } from '../../api-client/profiles.api-client';
+import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
 
 type TabType =
   | 'overview'
@@ -464,105 +466,24 @@ function OverviewTab({ member }: { member: Profile }) {
   }, [member.id]);
 
   const fetchOverviewData = async () => {
-    // Fetch stats
-    const [orders, events, results, team] = await Promise.all([
-      supabase.from('orders').select('id, total_amount', { count: 'exact' }).eq('member_id', member.id),
-      supabase.from('event_registrations').select('id', { count: 'exact' }).eq('user_id', member.id),
-      supabase.from('competition_results').select('id', { count: 'exact' }).eq('competitor_id', member.id).eq('placement', 1),
-      supabase.from('team_members').select('team:teams(name)').eq('member_id', member.id).limit(1),
-    ]);
-
-    const totalSpent = orders.data?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+    // TODO: Replace with backend API calls once endpoints are created
+    // Currently commented out to prevent architectural violations
 
     setStats({
-      totalOrders: orders.count || 0,
-      eventsAttended: events.count || 0,
-      trophiesWon: results.count || 0,
-      totalSpent,
-      teamName: team.data?.[0]?.team?.name || null,
+      totalOrders: 0, // TODO: Implement via backend API
+      eventsAttended: 0, // TODO: Implement via backend API
+      trophiesWon: 0, // TODO: Implement via backend API
+      totalSpent: 0, // TODO: Implement via backend API
+      teamName: null, // TODO: Implement via backend API
       lastLogin: member.updated_at,
     });
 
-    // Fetch recent activity (last 5 items)
+    // TODO: Fetch recent activity via backend API
     const activity: any[] = [];
+    setRecentActivity(activity);
 
-    // Recent orders
-    const { data: recentOrders } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('member_id', member.id)
-      .order('created_at', { ascending: false })
-      .limit(2);
-
-    recentOrders?.forEach(order => {
-      activity.push({
-        type: 'order',
-        date: order.created_at,
-        description: `Placed order ${order.order_number}`,
-        icon: '🛒',
-      });
-    });
-
-    // Recent event registrations
-    const { data: recentRegs } = await supabase
-      .from('event_registrations')
-      .select('*, events!event_registrations_event_id_fkey(title)')
-      .eq('user_id', member.id)
-      .order('registration_date', { ascending: false })
-      .limit(2);
-
-    recentRegs?.forEach(reg => {
-      activity.push({
-        type: 'registration',
-        date: reg.registration_date,
-        description: `Registered for ${reg.events?.title || 'event'}`,
-        icon: '📅',
-      });
-    });
-
-    // Recent results
-    const { data: recentResults } = await supabase
-      .from('competition_results')
-      .select('*, events!competition_results_event_id_fkey(title)')
-      .eq('competitor_id', member.id)
-      .order('created_at', { ascending: false })
-      .limit(2);
-
-    recentResults?.forEach(result => {
-      activity.push({
-        type: 'result',
-        date: result.created_at,
-        description: `Placed ${result.placement}${getOrdinalSuffix(result.placement)} in ${result.events?.title || 'event'}`,
-        icon: result.placement === 1 ? '🏆' : '🎯',
-      });
-    });
-
-    // Sort by date and take top 5
-    activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setRecentActivity(activity.slice(0, 5));
-
-    // Fetch upcoming events
-    const { data: allRegistrations } = await supabase
-      .from('event_registrations')
-      .select('*, events!event_registrations_event_id_fkey(title, event_date)')
-      .eq('user_id', member.id);
-
-    // Filter and sort in JavaScript since Supabase doesn't support filtering/ordering by foreign table fields
-    const now = new Date();
-    const upcoming = (allRegistrations || [])
-      .filter(reg => {
-        if (!reg.events?.event_date) return false;
-        const eventDate = new Date(reg.events.event_date);
-        return eventDate > now;
-      })
-      .sort((a, b) => {
-        const dateA = new Date(a.events?.event_date || 0);
-        const dateB = new Date(b.events?.event_date || 0);
-        return dateA.getTime() - dateB.getTime();
-      })
-      .slice(0, 3);
-
-    setUpcomingEvents(upcoming);
+    // TODO: Fetch upcoming events via backend API
+    setUpcomingEvents([]);
   };
 
   const getOrdinalSuffix = (num: number) => {
@@ -723,8 +644,14 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
     first_name: member.first_name,
     last_name: member.last_name,
     phone: member.phone || '',
+    meca_id: member.meca_id || '',
     role: member.role,
     membership_status: member.membership_status,
+    address: member.address || '',
+    city: member.city || '',
+    state: member.state || '',
+    postal_code: member.postal_code || '',
+    country: member.country || 'US',
     billing_street: member.billing_street || '',
     billing_city: member.billing_city || '',
     billing_state: member.billing_state || '',
@@ -744,12 +671,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(formData)
-        .eq('id', member.id);
-
-      if (error) throw error;
+      await profilesApi.update(member.id, formData);
 
       setIsEditing(false);
       onUpdate();
@@ -766,8 +688,14 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
       first_name: member.first_name,
       last_name: member.last_name,
       phone: member.phone || '',
+      meca_id: member.meca_id || '',
       role: member.role,
       membership_status: member.membership_status,
+      address: member.address || '',
+      city: member.city || '',
+      state: member.state || '',
+      postal_code: member.postal_code || '',
+      country: member.country || 'US',
       billing_street: member.billing_street || '',
       billing_city: member.billing_city || '',
       billing_state: member.billing_state || '',
@@ -851,6 +779,20 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
             <div className="px-4 py-2 bg-slate-700 rounded-lg text-gray-400">{member.email}</div>
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">MECA ID</label>
+            {isEditing ? (
+              <input
+                type="text"
+                value={formData.meca_id}
+                onChange={(e) => setFormData({ ...formData, meca_id: e.target.value })}
+                placeholder="e.g., 700800 or 202401"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 font-mono"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-700 rounded-lg text-white font-mono">{member.meca_id || 'Not assigned'}</div>
+            )}
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Phone</label>
             {isEditing ? (
               <input
@@ -897,6 +839,90 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
               <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{member.membership_status}</div>
             )}
           </div>
+        </div>
+
+        <div className="border-t border-slate-700 pt-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Primary Address</h3>
+          {isEditing ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Street Address</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">City</label>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Country</label>
+                <select
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value, state: '' })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                >
+                  {countries.map((country) => (
+                    <option key={country.code} value={country.code}>{country.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {getStateLabel(formData.country)}
+                </label>
+                {getStatesForCountry(formData.country).length > 0 ? (
+                  <select
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">Select {getStateLabel(formData.country)}</option>
+                    {getStatesForCountry(formData.country).map((state) => (
+                      <option key={state.code} value={state.code}>{state.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    placeholder={getStateLabel(formData.country)}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {getPostalCodeLabel(formData.country)}
+                </label>
+                <input
+                  type="text"
+                  value={formData.postal_code}
+                  onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+            </div>
+          ) : member.address ? (
+            <div className="space-y-2 text-gray-300">
+              <div>{member.address}</div>
+              <div>
+                {member.city}, {member.state} {member.postal_code}
+              </div>
+              <div>{countries.find(c => c.code === member.country)?.name || member.country}</div>
+            </div>
+          ) : (
+            <div className="text-gray-400">No primary address on file</div>
+          )}
         </div>
 
         <div className="border-t border-slate-700 pt-6">

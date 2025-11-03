@@ -21,6 +21,11 @@ export class RulebooksController {
     return this.rulebooksService.findAll();
   }
 
+  @Get('admin/all')
+  async getAllRulebooksForAdmin(): Promise<Rulebook[]> {
+    return this.rulebooksService.findAllIncludingInactive();
+  }
+
   @Get(':id')
   async getRulebook(@Param('id') id: string): Promise<Rulebook> {
     return this.rulebooksService.findById(id);

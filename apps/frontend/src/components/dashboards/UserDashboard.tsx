@@ -67,6 +67,12 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">My MECA</h1>
           <p className="text-gray-400">Welcome back, {profile?.full_name}</p>
+          {profile?.meca_id && (
+            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-orange-500/10 rounded-lg">
+              <span className="text-gray-400 text-sm">MECA ID:</span>
+              <span className="text-orange-500 font-mono font-semibold">{profile.meca_id}</span>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

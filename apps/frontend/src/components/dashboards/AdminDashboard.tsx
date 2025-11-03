@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags } from 'lucide-react';
 import EventManagement from '../admin/EventManagement';
 import ResultsEntry from '../admin/ResultsEntry';
 import RulebookManagement from '../admin/RulebookManagement';
 import MediaLibrary from '../admin/MediaLibrary';
 import SiteSettings from '../admin/SiteSettings';
+
+// TODO: Create API clients and backend endpoints for admin stats
+// Backend needs to implement stats endpoints:
+// - GET /api/profiles/stats (totalUsers, totalMembers)
+// - GET /api/events/stats (totalEvents)
+// - GET /api/event-registrations/stats (totalRegistrations)
 
 type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings';
 
@@ -26,21 +31,16 @@ export default function AdminDashboard() {
   }, []);
 
   const fetchStats = async () => {
-    const [users, events, registrations, members] = await Promise.all([
-      supabase.from('profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('events').select('id', { count: 'exact', head: true }),
-      supabase.from('event_registrations').select('id', { count: 'exact', head: true }),
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('membership_status', 'active'),
-    ]);
+    // TODO: Replace with API client calls once backend stats endpoints are implemented
+    // await profilesApi.getStats() -> { totalUsers, totalMembers }
+    // await eventsApi.getStats() -> { totalEvents }
+    // await eventRegistrationsApi.getStats() -> { totalRegistrations }
 
     setStats({
-      totalUsers: users.count || 0,
-      totalEvents: events.count || 0,
-      totalRegistrations: registrations.count || 0,
-      totalMembers: members.count || 0,
+      totalUsers: 0,
+      totalEvents: 0,
+      totalRegistrations: 0,
+      totalMembers: 0,
     });
 
     setLoading(false);
@@ -119,6 +119,14 @@ export default function AdminDashboard() {
       color: 'cyan',
       navigateTo: '/admin/classes',
     },
+    {
+      icon: Tags,
+      title: 'Format Management',
+      description: 'Manage competition format types',
+      action: 'formats' as AdminView,
+      color: 'violet',
+      navigateTo: '/admin/formats',
+    },
   ];
 
   const getColorClasses = (color: string) => {
@@ -132,6 +140,7 @@ export default function AdminDashboard() {
       indigo: 'bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20',
       teal: 'bg-teal-500/10 text-teal-500 hover:bg-teal-500/20',
       cyan: 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20',
+      violet: 'bg-violet-500/10 text-violet-500 hover:bg-violet-500/20',
     };
     return colors[color] || colors.orange;
   };

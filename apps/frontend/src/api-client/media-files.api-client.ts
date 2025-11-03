@@ -28,6 +28,11 @@ export const mediaFilesApi = {
     return response.json();
   },
 
+  // Alias for getAllMediaFiles for convenience
+  getByType: async (fileType: MediaType): Promise<MediaFile[]> => {
+    return mediaFilesApi.getAllMediaFiles(fileType);
+  },
+
   searchMediaFiles: async (searchTerm: string, fileType?: MediaType): Promise<MediaFile[]> => {
     const params = new URLSearchParams({ q: searchTerm });
     if (fileType) params.append('fileType', fileType);

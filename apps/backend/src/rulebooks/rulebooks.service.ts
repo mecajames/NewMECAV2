@@ -10,13 +10,22 @@ export class RulebooksService {
   ) {}
 
   async findAll(): Promise<Rulebook[]> {
-    return this.em.find(Rulebook, { status: 'active' }, {
-      orderBy: { displayOrder: 'ASC', season: 'DESC' }
+    const em = this.em.fork();
+    return em.find(Rulebook, { status: true }, {
+      orderBy: { category: 'ASC', season: 'DESC' }
+    });
+  }
+
+  async findAllIncludingInactive(): Promise<Rulebook[]> {
+    const em = this.em.fork();
+    return em.find(Rulebook, {}, {
+      orderBy: { category: 'ASC', season: 'DESC' }
     });
   }
 
   async findById(id: string): Promise<Rulebook> {
-    const rulebook = await this.em.findOne(Rulebook, { id });
+    const em = this.em.fork();
+    const rulebook = await em.findOne(Rulebook, { id });
     if (!rulebook) {
       throw new NotFoundException(`Rulebook with ID ${id} not found`);
     }
@@ -24,24 +33,34 @@ export class RulebooksService {
   }
 
   async findBySeason(season: string): Promise<Rulebook[]> {
-    return this.em.find(Rulebook, { season, status: 'active' });
+    const em = this.em.fork();
+    return em.find(Rulebook, { season, status: true });
   }
 
   async create(data: Partial<Rulebook>): Promise<Rulebook> {
-    const rulebook = this.em.create(Rulebook, data as any);
-    await this.em.persistAndFlush(rulebook);
+    const em = this.em.fork();
+    const rulebook = em.create(Rulebook, data as any);
+    await em.persistAndFlush(rulebook);
     return rulebook;
   }
 
   async update(id: string, data: Partial<Rulebook>): Promise<Rulebook> {
-    const rulebook = await this.findById(id);
-    this.em.assign(rulebook, data);
-    await this.em.flush();
+    const em = this.em.fork();
+    const rulebook = await em.findOne(Rulebook, { id });
+    if (!rulebook) {
+      throw new NotFoundException(`Rulebook with ID ${id} not found`);
+    }
+    em.assign(rulebook, data);
+    await em.flush();
     return rulebook;
   }
 
   async delete(id: string): Promise<void> {
-    const rulebook = await this.findById(id);
-    await this.em.removeAndFlush(rulebook);
+    const em = this.em.fork();
+    const rulebook = await em.findOne(Rulebook, { id });
+    if (!rulebook) {
+      throw new NotFoundException(`Rulebook with ID ${id} not found`);
+    }
+    await em.removeAndFlush(rulebook);
   }
 }

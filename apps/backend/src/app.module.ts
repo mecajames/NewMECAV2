@@ -9,6 +9,10 @@ import { RulebooksModule } from './rulebooks/rulebooks.module';
 import { CompetitionResultsModule } from './competition-results/competition-results.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MediaFilesModule } from './media-files/media-files.module';
+import { SiteSettingsModule } from './site-settings/site-settings.module';
+import { SeasonsModule } from './seasons/seasons.module';
+import { CompetitionClassesModule } from './competition-classes/competition-classes.module';
+import { CompetitionFormatsModule } from './competition-formats/competition-formats.module';
 import { DatabaseModule } from './db/database.module';
 
 @Module({
@@ -22,6 +26,10 @@ import { DatabaseModule } from './db/database.module';
     CompetitionResultsModule,
     NotificationsModule,
     MediaFilesModule,
+    SiteSettingsModule,
+    SeasonsModule,
+    CompetitionClassesModule,
+    CompetitionFormatsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

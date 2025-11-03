@@ -8,36 +8,51 @@ export class CompetitionResult {
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
 
-  @ManyToOne(() => Event, { fieldName: 'event_id' })
+  @Property({ type: 'uuid', fieldName: 'event_id', persist: false })
+  eventId!: string;
+
+  @ManyToOne(() => Event, { fieldName: 'event_id', hidden: true })
   event!: Event;
 
-  @ManyToOne(() => Profile, { fieldName: 'competitor_id' })
-  competitor!: Profile;
+  @Property({ type: 'uuid', fieldName: 'competitor_id', nullable: true, persist: false })
+  competitorId?: string;
 
-  @Property({ type: 'text', nullable: true })
-  category?: string;
+  @ManyToOne(() => Profile, { fieldName: 'competitor_id', nullable: true, hidden: true })
+  competitor?: Profile;
 
-  @Property({ type: 'integer', nullable: true })
-  placement?: number;
+  @Property({ type: 'text', fieldName: 'competitor_name' })
+  competitorName!: string;
 
-  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'score_sound' })
-  scoreSound?: number;
+  @Property({ type: 'text', fieldName: 'competition_class' })
+  competitionClass!: string;
 
-  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'score_install' })
-  scoreInstall?: number;
+  @Property({ type: 'decimal', precision: 10, scale: 2 })
+  score!: number;
 
-  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'score_overall' })
-  scoreOverall?: number;
+  @Property({ type: 'integer' })
+  placement!: number;
+
+  @Property({ type: 'integer', fieldName: 'points_earned' })
+  pointsEarned!: number;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'vehicle_info' })
+  vehicleInfo?: string;
 
   @Property({ type: 'text', nullable: true })
   notes?: string;
 
-  @ManyToOne(() => Profile, { nullable: true, fieldName: 'created_by' })
-  createdBy?: Profile;
+  @Property({ type: 'uuid', nullable: true, fieldName: 'season_id' })
+  seasonId?: string;
 
-  @Property({ onCreate: () => new Date() })
+  @Property({ type: 'uuid', nullable: true, fieldName: 'class_id' })
+  classId?: string;
+
+  @Property({ type: 'uuid', fieldName: 'created_by' })
+  createdBy!: string;
+
+  @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   createdAt: Date = new Date();
 
-  @Property({ onUpdate: () => new Date() })
+  @Property({ onUpdate: () => new Date(), fieldName: 'updated_at' })
   updatedAt: Date = new Date();
 }

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
 import { Season, CompetitionClass, CompetitionFormat } from '../../types/database';
 import { useAuth } from '../../contexts/AuthContext';
+import { seasonsApi } from '../../api-client/seasons.api-client';
+import { competitionClassesApi } from '../../api-client/competition-classes.api-client';
+import { competitionFormatsApi, CompetitionFormat as ApiCompetitionFormat } from '../../api-client/competition-formats.api-client';
 
 export default function ClassesManagementPage() {
   const { user } = useAuth();
@@ -11,6 +13,7 @@ export default function ClassesManagementPage() {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<CompetitionClass[]>([]);
+  const [formats, setFormats] = useState<ApiCompetitionFormat[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClass, setEditingClass] = useState<CompetitionClass | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -31,11 +34,23 @@ export default function ClassesManagementPage() {
     display_order: 0,
   });
 
-  const formats: CompetitionFormat[] = ['SPL', 'SQL', 'Show and Shine', 'Ride the Light'];
-
   useEffect(() => {
     fetchSeasons();
+    fetchFormats();
   }, []);
+
+  // Auto-select current season when seasons are loaded
+  useEffect(() => {
+    if (seasons.length > 0 && !selectedSeasonId) {
+      const currentSeason = seasons.find(s => s.is_current);
+      if (currentSeason) {
+        setSelectedSeasonId(currentSeason.id);
+      } else {
+        // If no current season, select the first one
+        setSelectedSeasonId(seasons[0].id);
+      }
+    }
+  }, [seasons]);
 
   useEffect(() => {
     if (selectedSeasonId) {
@@ -48,38 +63,43 @@ export default function ClassesManagementPage() {
   }, [classes, searchQuery, activeFilter, sortBy]);
 
   const fetchSeasons = async () => {
-    const { data, error } = await supabase
-      .from('seasons')
-      .select('*')
-      .order('year', { ascending: false });
-
-    if (!error && data) {
+    try {
+      const data = await seasonsApi.getAll();
       setSeasons(data);
-      // Default to current season
-      const current = data.find(s => s.is_current);
-      if (current) {
-        setSelectedSeasonId(current.id);
-        setFormData(prev => ({ ...prev, season_id: current.id }));
-      }
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+      alert('Failed to load seasons');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const fetchFormats = async () => {
+    try {
+      const data = await competitionFormatsApi.getActive();
+      setFormats(data);
+    } catch (error) {
+      console.error('Error fetching formats:', error);
+      // Don't show alert for formats as it's not critical
+    }
   };
 
   const fetchClasses = async () => {
-    let query = supabase
-      .from('competition_classes')
-      .select('*, season:seasons(*)')
-      .eq('season_id', selectedSeasonId)
-      .order('display_order');
-
-    if (selectedFormat) {
-      query = query.eq('format', selectedFormat);
-    }
-
-    const { data, error } = await query;
-
-    if (!error && data) {
+    try {
+      let data;
+      if (selectedFormat) {
+        // Get classes by format first
+        const formatClasses = await competitionClassesApi.getByFormat(selectedFormat);
+        // Filter by season
+        data = formatClasses.filter(cls => cls.season_id === selectedSeasonId);
+      } else {
+        // Get classes by season
+        data = await competitionClassesApi.getBySeason(selectedSeasonId);
+      }
       setClasses(data);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+      alert('Failed to load classes');
     }
   };
 
@@ -128,31 +148,18 @@ export default function ClassesManagementPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingClass) {
-      // Update existing class
-      const { error } = await supabase
-        .from('competition_classes')
-        .update({
+    try {
+      if (editingClass) {
+        await competitionClassesApi.update(editingClass.id, {
           name: formData.name,
           abbreviation: formData.abbreviation,
           format: formData.format,
           is_active: formData.is_active,
           display_order: formData.display_order,
-        })
-        .eq('id', editingClass.id);
-
-      if (error) {
-        alert('Error updating class: ' + error.message);
-      } else {
+        });
         alert('Class updated successfully!');
-        resetForm();
-        fetchClasses();
-      }
-    } else {
-      // Create new class
-      const { error } = await supabase
-        .from('competition_classes')
-        .insert({
+      } else {
+        await competitionClassesApi.create({
           name: formData.name,
           abbreviation: formData.abbreviation,
           format: formData.format,
@@ -160,14 +167,13 @@ export default function ClassesManagementPage() {
           is_active: formData.is_active,
           display_order: formData.display_order,
         });
-
-      if (error) {
-        alert('Error creating class: ' + error.message);
-      } else {
         alert('Class created successfully!');
-        resetForm();
-        fetchClasses();
       }
+      resetForm();
+      fetchClasses();
+    } catch (error) {
+      console.error('Error saving class:', error);
+      alert('Failed to save class. Please try again.');
     }
   };
 
@@ -189,16 +195,13 @@ export default function ClassesManagementPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from('competition_classes')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      alert('Error deleting class: ' + error.message);
-    } else {
+    try {
+      await competitionClassesApi.delete(id);
       alert('Class deleted successfully!');
       fetchClasses();
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      alert('Failed to delete class. Please try again.');
     }
   };
 
@@ -287,7 +290,7 @@ export default function ClassesManagementPage() {
               >
                 <option value="">All Formats</option>
                 {formats.map((format) => (
-                  <option key={format} value={format}>{format}</option>
+                  <option key={format.id} value={format.name}>{format.name}</option>
                 ))}
               </select>
             </div>
@@ -403,7 +406,7 @@ export default function ClassesManagementPage() {
                         className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                       >
                         {formats.map((format) => (
-                          <option key={format} value={format}>{format}</option>
+                          <option key={format.id} value={format.name}>{format.name}</option>
                         ))}
                       </select>
                     </div>

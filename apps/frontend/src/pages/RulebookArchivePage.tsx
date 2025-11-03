@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { FileText, Search, Filter, Archive } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, Rulebook, RulebookCategory } from '../lib/supabase';
+import { rulebooksApi, Rulebook } from '../api-client/rulebooks.api-client';
+
+type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
 
 export default function RulebookArchivePage() {
   const navigate = useNavigate();
@@ -30,15 +32,24 @@ export default function RulebookArchivePage() {
   }, [rulebooks, searchTerm, selectedCategory, selectedSeason]);
 
   const fetchArchivedRulebooks = async () => {
-    const { data, error } = await supabase
-      .from('rulebooks')
-      .select('*')
-      .eq('status', 'archive')
-      .order('season', { ascending: false })
-      .order('category');
+    try {
+      const data = await rulebooksApi.getAllRulebooks();
 
-    if (!error && data) {
-      setRulebooks(data);
+      // Filter for archived rulebooks and sort
+      const archived = data
+        .filter(rb => rb.status === 'archived' || rb.status === 'archive')
+        .sort((a, b) => {
+          // First sort by season descending
+          if (a.season !== b.season) {
+            return b.season.localeCompare(a.season);
+          }
+          // Then by category
+          return a.category.localeCompare(b.category);
+        });
+
+      setRulebooks(archived as any);
+    } catch (error) {
+      console.error('Error fetching archived rulebooks:', error);
     }
     setLoading(false);
   };

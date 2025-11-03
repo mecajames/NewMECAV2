@@ -1,0 +1,76 @@
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+export interface CompetitionResult {
+  id: string;
+  event_id: string;
+  competitor_id?: string;
+  competitor_name: string;
+  competition_class: string;
+  score: number;
+  placement: number;
+  points_earned: number;
+  vehicle_info?: string;
+  notes?: string;
+  created_by: string;
+  season_id?: string;
+  class_id?: string;
+  created_at: string;
+  event?: any;
+  competitor?: any;
+}
+
+export const competitionResultsApi = {
+  getAll: async (page: number = 1, limit: number = 100): Promise<CompetitionResult[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results?page=${page}&limit=${limit}`);
+    if (!response.ok) throw new Error('Failed to fetch competition results');
+    return response.json();
+  },
+
+  getById: async (id: string): Promise<CompetitionResult> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch competition result');
+    return response.json();
+  },
+
+  getByEvent: async (eventId: string): Promise<CompetitionResult[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/by-event/${eventId}`);
+    if (!response.ok) throw new Error('Failed to fetch results for event');
+    return response.json();
+  },
+
+  getLeaderboard: async (seasonId?: string): Promise<any[]> => {
+    const url = seasonId
+      ? `${API_BASE_URL}/api/competition-results/leaderboard?seasonId=${seasonId}`
+      : `${API_BASE_URL}/api/competition-results/leaderboard`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch leaderboard');
+    return response.json();
+  },
+
+  create: async (data: Partial<CompetitionResult>): Promise<CompetitionResult> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create competition result');
+    return response.json();
+  },
+
+  update: async (id: string, data: Partial<CompetitionResult>): Promise<CompetitionResult> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update competition result');
+    return response.json();
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete competition result');
+  },
+};

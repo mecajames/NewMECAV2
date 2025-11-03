@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users } from 'lucide-react';
-import { supabase, Event, Profile } from '../../lib/supabase';
+import { eventsApi, Event } from '../../api-client/events.api-client';
+import { profilesApi, Profile } from '../../api-client/profiles.api-client';
+import { seasonsApi, Season } from '../../api-client/seasons.api-client';
+import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
+
 
 export default function EventManagement() {
   const [events, setEvents] = useState<Event[]>([]);
   const [eventDirectors, setEventDirectors] = useState<Profile[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -15,10 +20,15 @@ export default function EventManagement() {
     registration_deadline: '',
     venue_name: '',
     venue_address: '',
+    venue_city: '',
+    venue_state: '',
+    venue_postal_code: '',
+    venue_country: 'US',
     latitude: '',
     longitude: '',
     flyer_url: '',
     event_director_id: '',
+    season_id: '',
     status: 'upcoming',
     max_participants: '',
     registration_fee: '0',
@@ -27,72 +37,124 @@ export default function EventManagement() {
   useEffect(() => {
     fetchEvents();
     fetchEventDirectors();
+    fetchSeasons();
   }, []);
 
   const fetchEvents = async () => {
-    const { data } = await supabase
-      .from('events')
-      .select('*, event_director:profiles!events_event_director_id_fkey(*)')
-      .order('event_date', { ascending: false });
-
-    if (data) setEvents(data);
+    try {
+      const data = await eventsApi.getAll(1, 1000);
+      setEvents(data);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
     setLoading(false);
   };
 
-  const fetchEventDirectors = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('role', ['event_director', 'admin'])
-      .order('full_name');
+  const fetchSeasons = async () => {
+    try {
+      const data = await seasonsApi.getAll();
+      setSeasons(data);
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+    }
+  };
 
-    if (data) setEventDirectors(data);
+  const fetchEventDirectors = async () => {
+    try {
+      const data = await profilesApi.getAll(1, 1000);
+      const directors = data.filter(p => p.role === 'event_director' || p.role === 'admin');
+      setEventDirectors(directors);
+    } catch (error) {
+      console.error('Error fetching event directors:', error);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Convert datetime-local string to ISO 8601 format
+    const convertToISO = (datetimeLocal: string) => {
+      if (!datetimeLocal) return null;
+      // datetime-local format: "2025-11-02T15:30"
+      // We need to convert it to ISO: "2025-11-02T15:30:00.000Z"
+      const date = new Date(datetimeLocal);
+      return date.toISOString();
+    };
+
     const eventData: any = {
       title: formData.title,
       description: formData.description || null,
-      event_date: formData.event_date,
-      registration_deadline: formData.registration_deadline || null,
+      event_date: convertToISO(formData.event_date),
+      registration_deadline: formData.registration_deadline ? convertToISO(formData.registration_deadline) : null,
       venue_name: formData.venue_name,
       venue_address: formData.venue_address,
+      venue_city: formData.venue_city || null,
+      venue_state: formData.venue_state || null,
+      venue_postal_code: formData.venue_postal_code || null,
+      venue_country: formData.venue_country || 'US',
       latitude: formData.latitude ? parseFloat(formData.latitude) : null,
       longitude: formData.longitude ? parseFloat(formData.longitude) : null,
       flyer_url: formData.flyer_url || null,
       event_director_id: formData.event_director_id || null,
+      season_id: formData.season_id || null,
       status: formData.status,
       max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
       registration_fee: parseFloat(formData.registration_fee),
     };
 
-    if (editingEvent) {
-      await supabase.from('events').update(eventData).eq('id', editingEvent.id);
-    } else {
-      await supabase.from('events').insert(eventData);
-    }
+    console.log('📤 FRONTEND - Form data event_date:', formData.event_date);
+    console.log('📤 FRONTEND - Converted event_date:', eventData.event_date);
+    console.log('📤 FRONTEND - Full event data:', eventData);
 
-    setShowModal(false);
-    setEditingEvent(null);
-    resetForm();
-    fetchEvents();
+    try {
+      if (editingEvent) {
+        console.log('📤 FRONTEND - Updating event ID:', editingEvent.id);
+        await eventsApi.update(editingEvent.id, eventData);
+      } else {
+        console.log('📤 FRONTEND - Creating new event');
+        await eventsApi.create(eventData);
+      }
+
+      setShowModal(false);
+      setEditingEvent(null);
+      resetForm();
+      fetchEvents();
+    } catch (error) {
+      console.error('Error saving event:', error);
+      alert('Error saving event. Please try again.');
+    }
   };
 
   const handleEdit = (event: Event) => {
+    // Convert UTC ISO string to local datetime-local format
+    const convertToLocalDatetime = (isoString: string) => {
+      const date = new Date(isoString);
+      // Get local date/time components
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
     setEditingEvent(event);
     setFormData({
       title: event.title,
       description: event.description || '',
-      event_date: event.event_date.substring(0, 16),
-      registration_deadline: event.registration_deadline?.substring(0, 16) || '',
+      event_date: convertToLocalDatetime(event.event_date),
+      registration_deadline: event.registration_deadline ? convertToLocalDatetime(event.registration_deadline) : '',
       venue_name: event.venue_name,
       venue_address: event.venue_address,
+      venue_city: (event as any).venue_city || '',
+      venue_state: (event as any).venue_state || '',
+      venue_postal_code: (event as any).venue_postal_code || '',
+      venue_country: (event as any).venue_country || 'US',
       latitude: event.latitude?.toString() || '',
       longitude: event.longitude?.toString() || '',
       flyer_url: event.flyer_url || '',
       event_director_id: event.event_director_id || '',
+      season_id: event.season_id || '',
       status: event.status,
       max_participants: event.max_participants?.toString() || '',
       registration_fee: event.registration_fee.toString(),
@@ -102,8 +164,13 @@ export default function EventManagement() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this event?')) {
-      await supabase.from('events').delete().eq('id', id);
-      fetchEvents();
+      try {
+        await eventsApi.delete(id);
+        fetchEvents();
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        alert('Error deleting event. Please try again.');
+      }
     }
   };
 
@@ -115,10 +182,15 @@ export default function EventManagement() {
       registration_deadline: '',
       venue_name: '',
       venue_address: '',
+      venue_city: '',
+      venue_state: '',
+      venue_postal_code: '',
+      venue_country: 'US',
       latitude: '',
       longitude: '',
       flyer_url: '',
       event_director_id: '',
+      season_id: '',
       status: 'upcoming',
       max_participants: '',
       registration_fee: '0',
@@ -286,7 +358,7 @@ export default function EventManagement() {
                   />
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Venue Address *
                   </label>
@@ -299,6 +371,76 @@ export default function EventManagement() {
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.venue_city}
+                    onChange={(e) => setFormData({ ...formData, venue_city: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {getStateLabel(formData.venue_country)}
+                  </label>
+                  {getStatesForCountry(formData.venue_country).length > 0 ? (
+                    <select
+                      value={formData.venue_state}
+                      onChange={(e) => setFormData({ ...formData, venue_state: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Select {getStateLabel(formData.venue_country)}</option>
+                      {getStatesForCountry(formData.venue_country).map((state) => (
+                        <option key={state.code} value={state.code}>
+                          {state.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData.venue_state}
+                      onChange={(e) => setFormData({ ...formData, venue_state: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder={getStateLabel(formData.venue_country)}
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {getPostalCodeLabel(formData.venue_country)}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.venue_postal_code}
+                    onChange={(e) => setFormData({ ...formData, venue_postal_code: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Country *
+                  </label>
+                  <select
+                    value={formData.venue_country}
+                    onChange={(e) => setFormData({ ...formData, venue_country: e.target.value, venue_state: '' })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    required
+                  >
+                    {countries.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -361,6 +503,24 @@ export default function EventManagement() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Season
+                  </label>
+                  <select
+                    value={formData.season_id}
+                    onChange={(e) => setFormData({ ...formData, season_id: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">Select Season</option>
+                    {seasons.map((season) => (
+                      <option key={season.id} value={season.id}>
+                        {season.name || season.year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Status *
                   </label>
                   <select
@@ -373,6 +533,7 @@ export default function EventManagement() {
                     <option value="ongoing">Ongoing</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
+                    <option value="not_public">Not Public</option>
                   </select>
                 </div>
 

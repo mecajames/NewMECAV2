@@ -1,13 +1,14 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Put, 
-  Delete, 
-  Body, 
-  Param, 
-  HttpCode, 
-  HttpStatus 
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus
 } from '@nestjs/common';
 import { CompetitionResultsService } from './competition-results.service';
 import { CompetitionResult } from './competition-results.entity';
@@ -19,6 +20,16 @@ export class CompetitionResultsController {
   @Get()
   async getAllResults(): Promise<CompetitionResult[]> {
     return this.competitionResultsService.findAll();
+  }
+
+  @Get('leaderboard')
+  async getLeaderboard(@Query('seasonId') seasonId?: string): Promise<any[]> {
+    return this.competitionResultsService.getLeaderboard(seasonId);
+  }
+
+  @Get('by-event/:eventId')
+  async getResultsByEvent(@Param('eventId') eventId: string): Promise<CompetitionResult[]> {
+    return this.competitionResultsService.findByEvent(eventId);
   }
 
   @Get(':id')

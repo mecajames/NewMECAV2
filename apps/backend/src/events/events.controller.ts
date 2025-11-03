@@ -21,7 +21,11 @@ export class EventsController {
   async listEvents(
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
+    @Query('season_id') seasonId?: string,
   ): Promise<Event[]> {
+    if (seasonId) {
+      return this.eventsService.findBySeason(seasonId, page, limit);
+    }
     return this.eventsService.findAll(page, limit);
   }
 

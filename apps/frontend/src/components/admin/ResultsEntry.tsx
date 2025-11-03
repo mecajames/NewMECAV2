@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Plus, X, Save, Search } from 'lucide-react';
-import { supabase, Event, Profile } from '../../lib/supabase';
+import { eventsApi, Event } from '../../api-client/events.api-client';
+import { profilesApi, Profile } from '../../api-client/profiles.api-client';
+import { competitionResultsApi } from '../../api-client/competition-results.api-client';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface ResultEntry {
@@ -37,36 +39,31 @@ export default function ResultsEntry() {
   }, [selectedEventId]);
 
   const fetchEvents = async () => {
-    const { data } = await supabase
-      .from('events')
-      .select('*')
-      .in('status', ['upcoming', 'ongoing', 'completed'])
-      .order('event_date', { ascending: false });
-
-    if (data) {
-      setEvents(data);
-      if (data.length > 0) setSelectedEventId(data[0].id);
+    try {
+      const data = await eventsApi.getAll(1, 1000);
+      const filtered = data.filter(e =>
+        ['upcoming', 'ongoing', 'completed'].includes(e.status)
+      );
+      setEvents(filtered);
+      if (filtered.length > 0) setSelectedEventId(filtered[0].id);
+    } catch (error) {
+      console.error('Error fetching events:', error);
     }
     setLoading(false);
   };
 
   const fetchCompetitors = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('full_name');
-
-    if (data) setCompetitors(data);
+    try {
+      const data = await profilesApi.getAll(1, 1000);
+      setCompetitors(data);
+    } catch (error) {
+      console.error('Error fetching competitors:', error);
+    }
   };
 
   const fetchExistingResults = async () => {
-    const { data } = await supabase
-      .from('competition_results')
-      .select('*')
-      .eq('event_id', selectedEventId)
-      .order('placement');
-
-    if (data) {
+    try {
+      const data = await competitionResultsApi.getByEvent(selectedEventId);
       const formattedResults: ResultEntry[] = data.map((r) => ({
         id: r.id,
         competitor_id: r.competitor_id || '',
@@ -79,7 +76,8 @@ export default function ResultsEntry() {
         notes: r.notes || '',
       }));
       setResults(formattedResults);
-    } else {
+    } catch (error) {
+      console.error('Error fetching existing results:', error);
       setResults([]);
     }
   };
@@ -132,27 +130,33 @@ export default function ResultsEntry() {
         r.points_earned
     );
 
-    const resultsToInsert = validResults.map((r) => ({
-      event_id: selectedEventId,
-      competitor_id: r.competitor_id || null,
-      competitor_name: r.competitor_name,
-      competition_class: r.competition_class,
-      score: parseFloat(r.score),
-      placement: parseInt(r.placement),
-      points_earned: parseInt(r.points_earned),
-      vehicle_info: r.vehicle_info || null,
-      notes: r.notes || null,
-      created_by: profile!.id,
-    }));
+    try {
+      // TODO: Backend should support bulk delete/replace for event results
+      // For now, we'll create/update individual results
+      for (const r of validResults) {
+        const resultData = {
+          event_id: selectedEventId,
+          competitor_id: r.competitor_id || null,
+          competitor_name: r.competitor_name,
+          competition_class: r.competition_class,
+          score: parseFloat(r.score),
+          placement: parseInt(r.placement),
+          points_earned: parseInt(r.points_earned),
+          vehicle_info: r.vehicle_info || null,
+          notes: r.notes || null,
+          created_by: profile!.id,
+        };
 
-    await supabase.from('competition_results').delete().eq('event_id', selectedEventId);
+        if (r.id) {
+          await competitionResultsApi.update(r.id, resultData as any);
+        } else {
+          await competitionResultsApi.create(resultData as any);
+        }
+      }
 
-    const { error } = await supabase.from('competition_results').insert(resultsToInsert);
-
-    if (!error) {
       alert('Results saved successfully!');
       fetchExistingResults();
-    } else {
+    } catch (error: any) {
       alert('Error saving results: ' + error.message);
     }
 

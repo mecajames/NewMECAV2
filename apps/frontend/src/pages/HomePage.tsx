@@ -1,7 +1,8 @@
 import { Calendar, Trophy, Users, Award } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, Event, SiteSettings } from '../lib/supabase';
+import { eventsApi, Event } from '../api-client/events.api-client';
+import { siteSettingsApi, SiteSetting } from '../api-client/site-settings.api-client';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -33,51 +34,59 @@ export default function HomePage() {
   }, [heroSettings.image_urls.length, heroSettings.carousel_speed]);
 
   const fetchHeroSettings = async () => {
-    const { data } = await supabase
-      .from('site_settings')
-      .select('*')
-      .in('setting_key', ['hero_image_urls', 'hero_title', 'hero_subtitle', 'hero_button_text', 'hero_carousel_speed', 'hero_carousel_direction']);
+    try {
+      const data = await siteSettingsApi.getAll();
 
-    if (data) {
-      const settings: any = {};
-      data.forEach((setting: SiteSettings) => {
-        settings[setting.setting_key] = setting.setting_value;
-      });
+      // Filter for hero settings
+      const heroKeys = ['hero_image_urls', 'hero_title', 'hero_subtitle', 'hero_button_text', 'hero_carousel_speed', 'hero_carousel_direction'];
+      const heroData = data.filter((setting: SiteSetting) => heroKeys.includes(setting.setting_key));
 
-      // Parse hero_image_urls as JSON array
-      let imageUrls: string[] = heroSettings.image_urls;
-      try {
-        const urlsValue = settings['hero_image_urls'] || '[]';
-        imageUrls = JSON.parse(urlsValue);
-        if (!Array.isArray(imageUrls)) {
-          imageUrls = [urlsValue];
+      if (heroData && heroData.length > 0) {
+        const settings: any = {};
+        heroData.forEach((setting: SiteSetting) => {
+          settings[setting.setting_key] = setting.setting_value;
+        });
+
+        // Parse hero_image_urls as JSON array
+        let imageUrls: string[] = heroSettings.image_urls;
+        try {
+          const urlsValue = settings['hero_image_urls'] || '[]';
+          imageUrls = JSON.parse(urlsValue);
+          if (!Array.isArray(imageUrls)) {
+            imageUrls = [urlsValue];
+          }
+        } catch {
+          imageUrls = settings['hero_image_urls'] ? [settings['hero_image_urls']] : heroSettings.image_urls;
         }
-      } catch {
-        imageUrls = settings['hero_image_urls'] ? [settings['hero_image_urls']] : heroSettings.image_urls;
-      }
 
-      setHeroSettings({
-        image_urls: imageUrls.length > 0 ? imageUrls : heroSettings.image_urls,
-        title: settings['hero_title'] || heroSettings.title,
-        subtitle: settings['hero_subtitle'] || heroSettings.subtitle,
-        button_text: settings['hero_button_text'] || heroSettings.button_text,
-        carousel_speed: parseInt(settings['hero_carousel_speed'] || '5000'),
-        carousel_direction: settings['hero_carousel_direction'] || 'left',
-      });
+        setHeroSettings({
+          image_urls: imageUrls.length > 0 ? imageUrls : heroSettings.image_urls,
+          title: settings['hero_title'] || heroSettings.title,
+          subtitle: settings['hero_subtitle'] || heroSettings.subtitle,
+          button_text: settings['hero_button_text'] || heroSettings.button_text,
+          carousel_speed: parseInt(settings['hero_carousel_speed'] || '5000'),
+          carousel_direction: settings['hero_carousel_direction'] || 'left',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching hero settings:', error);
     }
   };
 
   const fetchUpcomingEvents = async () => {
-    const { data, error } = await supabase
-      .from('events')
-      .select('*, event_director:profiles!events_event_director_id_fkey(*)')
-      .eq('status', 'upcoming')
-      .gte('event_date', new Date().toISOString())
-      .order('event_date', { ascending: true })
-      .limit(3);
+    try {
+      const data = await eventsApi.getAll(1, 1000);
 
-    if (!error && data) {
-      setUpcomingEvents(data);
+      // Filter for upcoming events
+      const now = new Date().toISOString();
+      const upcoming = data
+        .filter(e => e.status === 'upcoming' && e.event_date >= now)
+        .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())
+        .slice(0, 3);
+
+      setUpcomingEvents(upcoming);
+    } catch (error) {
+      console.error('Error fetching upcoming events:', error);
     }
     setLoading(false);
   };
