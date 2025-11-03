@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Calendar, Award, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, Event, CompetitionResult } from '../lib/supabase';
+import { eventsApi, Event } from '../api-client/events.api-client';
+import { competitionResultsApi, CompetitionResult } from '../api-client/competition-results.api-client';
 import SeasonSelector from '../components/SeasonSelector';
 
 export default function ResultsPage() {
@@ -25,40 +26,43 @@ export default function ResultsPage() {
 
   const fetchEvents = async () => {
     setLoading(true);
-    let query = supabase
-      .from('events')
-      .select('*, season:seasons(*)')
-      .eq('status', 'completed')
-      .order('event_date', { ascending: false });
+    try {
+      const data = await eventsApi.getAll(1, 1000);
 
-    if (selectedSeasonId) {
-      query = query.eq('season_id', selectedSeasonId);
-    }
+      // Filter for completed events
+      let filtered = data.filter(e => e.status === 'completed');
 
-    const { data, error } = await query;
+      if (selectedSeasonId) {
+        filtered = filtered.filter(e => e.season_id === selectedSeasonId);
+      }
 
-    if (!error && data) {
-      setEvents(data);
-      if (data.length > 0) {
-        setSelectedEventId(data[0].id);
+      // Sort by event_date descending
+      filtered.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+
+      setEvents(filtered);
+      if (filtered.length > 0) {
+        setSelectedEventId(filtered[0].id);
       } else {
         setSelectedEventId('');
         setResults([]);
       }
+    } catch (error) {
+      console.error('Error fetching events:', error);
     }
     setLoading(false);
   };
 
   const fetchResults = async () => {
     setResultsLoading(true);
-    const { data, error } = await supabase
-      .from('competition_results')
-      .select('*, competitor:profiles(*)')
-      .eq('event_id', selectedEventId)
-      .order('placement', { ascending: true });
+    try {
+      const data = await competitionResultsApi.getByEvent(selectedEventId);
 
-    if (!error && data) {
+      // Sort by placement ascending
+      data.sort((a, b) => a.placement - b.placement);
+
       setResults(data);
+    } catch (error) {
+      console.error('Error fetching results:', error);
     }
     setResultsLoading(false);
   };

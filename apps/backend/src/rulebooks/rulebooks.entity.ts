@@ -1,9 +1,7 @@
-import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { Profile } from '../profiles/profiles.entity';
 
 export type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
-export type RulebookStatus = 'active' | 'inactive' | 'archive';
 
 @Entity({ tableName: 'rulebooks', schema: 'public' })
 export class Rulebook {
@@ -16,14 +14,14 @@ export class Rulebook {
   @Property({ type: 'text' })
   category!: RulebookCategory;
 
-  @Property({ type: 'text' })
+@Property({ type: 'integer', fieldName: 'year' })
   season!: string;
 
   @Property({ type: 'text', fieldName: 'pdf_url' })
   pdfUrl!: string;
 
-  @Property({ type: 'text' })
-  status: RulebookStatus = 'active';
+@Property({ type: 'boolean', fieldName: 'is_active' })
+  status: boolean = true;
 
   @Property({ type: 'text', nullable: true })
   description?: string;
@@ -33,9 +31,6 @@ export class Rulebook {
 
   @Property({ type: 'jsonb', nullable: true, fieldName: 'summary_points' })
   summaryPoints?: any;
-
-  @ManyToOne(() => Profile, { nullable: true, fieldName: 'created_by' })
-  createdBy?: Profile;
 
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   createdAt: Date = new Date();

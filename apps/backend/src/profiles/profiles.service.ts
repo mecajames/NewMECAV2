@@ -10,15 +10,17 @@ export class ProfilesService {
   ) {}
 
   async findAll(page: number = 1, limit: number = 10): Promise<Profile[]> {
+    const em = this.em.fork();
     const offset = (page - 1) * limit;
-    return this.em.find(Profile, {}, { 
-      limit, 
-      offset 
+    return em.find(Profile, {}, {
+      limit,
+      offset
     });
   }
 
   async findById(id: string): Promise<Profile> {
-    const profile = await this.em.findOne(Profile, { id });
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id });
     if (!profile) {
       throw new NotFoundException(`Profile with ID ${id} not found`);
     }
@@ -26,24 +28,65 @@ export class ProfilesService {
   }
 
   async findByEmail(email: string): Promise<Profile | null> {
-    return this.em.findOne(Profile, { email });
+    const em = this.em.fork();
+    return em.findOne(Profile, { email });
+  }
+
+  /**
+   * Generates the next MECA ID. New users start from 700800.
+   * Existing users from old system may have different ID ranges.
+   */
+  async generateNextMecaId(): Promise<string> {
+    const em = this.em.fork();
+
+    // Get all profiles with MECA IDs
+    const profiles = await em.find(Profile, {
+      meca_id: { $ne: null }
+    }, {
+      fields: ['meca_id']
+    });
+
+    // Extract numeric MECA IDs
+    const numericIds = profiles
+      .map(p => parseInt(p.meca_id || '0', 10))
+      .filter(id => !isNaN(id) && id >= 700800); // Only consider IDs in the new range
+
+    // Find the highest ID in the new range
+    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 700799;
+
+    // Return next ID
+    return String(maxId + 1);
   }
 
   async create(data: Partial<Profile>): Promise<Profile> {
-    const profile = this.em.create(Profile, data as any);
-    await this.em.persistAndFlush(profile);
+    // Auto-generate MECA ID if not provided
+    if (!data.meca_id) {
+      data.meca_id = await this.generateNextMecaId();
+    }
+
+    const em = this.em.fork();
+    const profile = em.create(Profile, data as any);
+    await em.persistAndFlush(profile);
     return profile;
   }
 
   async update(id: string, data: Partial<Profile>): Promise<Profile> {
-    const profile = await this.findById(id);
-    this.em.assign(profile, data);
-    await this.em.flush();
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id });
+    if (!profile) {
+      throw new NotFoundException(`Profile with ID ${id} not found`);
+    }
+    em.assign(profile, data);
+    await em.flush();
     return profile;
   }
 
   async delete(id: string): Promise<void> {
-    const profile = await this.findById(id);
-    await this.em.removeAndFlush(profile);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id });
+    if (!profile) {
+      throw new NotFoundException(`Profile with ID ${id} not found`);
+    }
+    await em.removeAndFlush(profile);
   }
 }

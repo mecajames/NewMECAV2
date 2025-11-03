@@ -21,7 +21,8 @@ export enum EventStatus {
   UPCOMING = 'upcoming',
   ONGOING = 'ongoing',
   COMPLETED = 'completed',
-  CANCELLED = 'cancelled'
+  CANCELLED = 'cancelled',
+  NOT_PUBLIC = 'not_public'
 }
 
 export enum PaymentStatus {

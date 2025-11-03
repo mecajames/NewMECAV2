@@ -2,7 +2,7 @@ import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Awa
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, Rulebook } from '../lib/supabase';
+import { rulebooksApi, Rulebook } from '../api-client/rulebooks.api-client';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '../hooks/useNotifications';
 
 export default function Navbar() {
@@ -13,7 +13,6 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
-  const [hasTeam, setHasTeam] = useState(false);
   const { user, profile, signOut } = useAuth();
 
   // Use API hooks instead of direct Supabase calls
@@ -24,34 +23,16 @@ export default function Navbar() {
 
   useEffect(() => {
     fetchActiveRulebooks();
-    if (user) {
-      checkUserTeam();
-    }
   }, [user]);
 
   const fetchActiveRulebooks = async () => {
-    const { data } = await supabase
-      .from('rulebooks')
-      .select('*')
-      .eq('status', 'active')
-      .order('category')
-      .order('season', { ascending: false });
-
-    if (data) {
+    try {
+      const data = await rulebooksApi.getActiveRulebooks();
       setActiveRulebooks(data);
+    } catch (error) {
+      console.error('Failed to fetch rulebooks:', error);
+      setActiveRulebooks([]);
     }
-  };
-
-  const checkUserTeam = async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('team_members')
-      .select('team_id')
-      .eq('member_id', user.id)
-      .limit(1);
-
-    setHasTeam(!!data && data.length > 0);
   };
 
   const handleMarkNotificationRead = async (notificationId: string) => {
@@ -299,7 +280,7 @@ export default function Navbar() {
                                   </p>
                                   {notification.fromUser && (
                                     <p className="text-xs text-gray-500 mt-1">
-                                      From: {notification.fromUser.first_name} {notification.fromUser.last_name}
+                                      From: {notification.fromUser.full_name || notification.fromUser.email}
                                     </p>
                                   )}
                                   <p className="text-xs text-gray-500 mt-1">
@@ -354,20 +335,6 @@ export default function Navbar() {
                             Public Profile
                           </div>
                         </button>
-                        {hasTeam && (
-                          <button
-                            onClick={() => {
-                              navigate('/dashboard'); // TODO: Navigate to team page
-                              setUserMenuOpen(false);
-                            }}
-                            className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              My Team
-                            </div>
-                          </button>
-                        )}
                         <div className="border-t border-slate-700 mt-2 pt-2">
                           <button
                             onClick={handleSignOut}

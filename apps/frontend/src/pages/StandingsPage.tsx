@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Medal, TrendingUp, Filter } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { competitionResultsApi } from '../api-client/competition-results.api-client';
 import SeasonSelector from '../components/SeasonSelector';
 
 interface StandingsEntry {
@@ -29,18 +29,14 @@ export default function StandingsPage() {
   const fetchStandings = async () => {
     setLoading(true);
 
-    let query = supabase
-      .from('competition_results')
-      .select('*')
-      .order('points_earned', { ascending: false });
+    try {
+      let results = await competitionResultsApi.getAll(1, 1000);
 
-    if (selectedSeasonId) {
-      query = query.eq('season_id', selectedSeasonId);
-    }
+      // Filter by season if selected
+      if (selectedSeasonId) {
+        results = results.filter(r => r.season_id === selectedSeasonId);
+      }
 
-    const { data: results } = await query;
-
-    if (results) {
       const classSet = new Set<string>();
       const aggregated: { [key: string]: StandingsEntry } = {};
 
@@ -87,6 +83,8 @@ export default function StandingsPage() {
         });
 
       setStandings(sorted);
+    } catch (error) {
+      console.error('Error fetching standings:', error);
     }
 
     setLoading(false);

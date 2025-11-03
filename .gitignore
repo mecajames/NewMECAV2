@@ -39,6 +39,9 @@ apps/frontend/.env
 docker/analysis-output/*
 !docker/analysis-output/.gitkeep
 backups/*.sql
+backups/backup-*/
+backups/latest-backup.txt
+temp-production-sync.sql
 .env.development
 .env.development
 .env.docker.example

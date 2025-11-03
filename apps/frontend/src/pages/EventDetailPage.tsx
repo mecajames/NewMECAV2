@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X } from 'lucide-react';
-import { supabase, Event, EventRegistration } from '../lib/supabase';
+import { eventsApi, Event } from '../api-client/events.api-client';
+import { eventRegistrationsApi, EventRegistration } from '../api-client/event-registrations.api-client';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function EventDetailPage() {
@@ -44,14 +45,11 @@ export default function EventDetailPage() {
 
   const fetchEvent = async () => {
     if (!eventId) return;
-    const { data, error } = await supabase
-      .from('events')
-      .select('*, event_director:profiles!events_event_director_id_fkey(*)')
-      .eq('id', eventId)
-      .maybeSingle();
-
-    if (!error && data) {
+    try {
+      const data = await eventsApi.getById(eventId);
       setEvent(data);
+    } catch (error) {
+      console.error('Error fetching event:', error);
     }
     setLoading(false);
   };
@@ -76,14 +74,8 @@ export default function EventDetailPage() {
       registrationPayload.user_id = user.id;
     }
 
-    const { error } = await supabase
-      .from('event_registrations')
-      .insert(registrationPayload);
-
-    if (error) {
-      setError(error.message);
-      setSubmitting(false);
-    } else {
+    try {
+      await eventRegistrationsApi.create(registrationPayload);
       setSuccess(true);
       setSubmitting(false);
       setTimeout(() => {
@@ -97,6 +89,9 @@ export default function EventDetailPage() {
           competitionClass: '',
         });
       }, 2000);
+    } catch (err: any) {
+      setError(err.message);
+      setSubmitting(false);
     }
   };
 
@@ -114,7 +109,7 @@ export default function EventDetailPage() {
         <div className="text-center">
           <p className="text-gray-400 text-xl mb-4">Event not found</p>
           <button
-            onClick={() => onNavigate('events')}
+            onClick={() => navigate('/events')}
             className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Back to Events
@@ -132,7 +127,7 @@ export default function EventDetailPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
-          onClick={() => onNavigate('events')}
+          onClick={() => navigate('/events')}
           className="mb-6 text-gray-400 hover:text-white transition-colors"
         >
           ← Back to Events

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Medal, Award, TrendingUp } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { competitionResultsApi, CompetitionResult } from '../api-client/competition-results.api-client';
 import SeasonSelector from '../components/SeasonSelector';
 
 interface LeaderboardEntry {
@@ -51,35 +51,21 @@ export default function LeaderboardPage() {
   };
 
   const fetchLeaderboard = async () => {
-    const { data, error } = await supabase.rpc('get_leaderboard');
-
-    if (!error && data) {
-      // If RPC function doesn't support season filtering, we'll need to filter manually
-      let filteredData = data;
-      if (selectedSeasonId) {
-        // Fallback to manual filtering if RPC doesn't support it
-        const { data: results } = await supabase
-          .from('competition_results')
-          .select('*')
-          .eq('season_id', selectedSeasonId);
-
-        if (results) {
-          filteredData = processResults(results);
-        }
-      }
-      setLeaderboard(filteredData.slice(0, 10));
-    } else {
-      let query = supabase.from('competition_results').select('*');
-
-      if (selectedSeasonId) {
-        query = query.eq('season_id', selectedSeasonId);
-      }
-
-      const { data: results } = await query;
-
-      if (results) {
-        const processed = processResults(results).slice(0, 10);
+    try {
+      const data = await competitionResultsApi.getLeaderboard(selectedSeasonId || undefined);
+      setLeaderboard(data.slice(0, 10));
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+      // Fallback: fetch all results and process manually
+      try {
+        const results = await competitionResultsApi.getAll(1, 1000);
+        const filtered = selectedSeasonId
+          ? results.filter((r: CompetitionResult) => r.season_id === selectedSeasonId)
+          : results;
+        const processed = processResults(filtered).slice(0, 10);
         setLeaderboard(processed);
+      } catch (fallbackError) {
+        console.error('Error in fallback leaderboard fetch:', fallbackError);
       }
     }
 

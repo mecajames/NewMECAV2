@@ -1,7 +1,7 @@
 // Database Types
 export type UserRole = 'user' | 'event_director' | 'retailer' | 'admin';
 export type MembershipStatus = 'none' | 'active' | 'expired' | 'pending' | 'inactive';
-export type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+export type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled' | 'not_public';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'unpaid' | 'partially_paid';
 export type RegistrationStatus = 'pending' | 'confirmed' | 'cancelled';
 export type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
@@ -25,13 +25,21 @@ export interface Profile {
   role: UserRole;
   membership_status: MembershipStatus;
   membership_expiry?: string;
-  meca_id?: number;
+  meca_id?: string;
   profile_picture_url?: string;
+  // Primary address fields
+  address?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+  // Billing address fields
   billing_street?: string;
   billing_city?: string;
   billing_state?: string;
   billing_zip?: string;
   billing_country?: string;
+  // Shipping address fields
   shipping_street?: string;
   shipping_city?: string;
   shipping_state?: string;
@@ -82,6 +90,10 @@ export interface Event {
   registration_deadline?: string;
   venue_name: string;
   venue_address: string;
+  venue_city?: string;
+  venue_state?: string;
+  venue_postal_code?: string;
+  venue_country?: string;
   latitude?: number;
   longitude?: number;
   flyer_url?: string;
@@ -141,11 +153,11 @@ export interface Rulebook {
   title: string;
   category: RulebookCategory;
   season: string;
-  pdf_url: string;
+  pdfUrl: string;
   status: RulebookStatus;
-  created_at: string;
-  updated_at: string;
-  created_by: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
 }
 
 // Media File Interface

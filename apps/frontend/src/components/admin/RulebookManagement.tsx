@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Upload, Trash2, Edit2, FileText, Archive, Eye, EyeOff } from 'lucide-react';
-import { supabase, Rulebook, RulebookCategory, RulebookStatus } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase'; // TODO: Remove Supabase storage - implement backend file upload endpoint
+import { rulebooksApi, Rulebook } from '../../api-client/rulebooks.api-client';
 import { useAuth } from '../../contexts/AuthContext';
+import { YearSelect } from '../../shared/fields';
 
+// Types from old supabase lib
+type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
 export default function RulebookManagement() {
   const { user } = useAuth();
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
@@ -32,14 +36,11 @@ export default function RulebookManagement() {
   }, []);
 
   const fetchRulebooks = async () => {
-    const { data, error } = await supabase
-      .from('rulebooks')
-      .select('*')
-      .order('season', { ascending: false })
-      .order('category');
-
-    if (!error && data) {
-      setRulebooks(data);
+    try {
+      const data = await rulebooksApi.getAllRulebooks();
+      setRulebooks(data as any);
+    } catch (error) {
+      console.error('Error fetching rulebooks:', error);
     }
     setLoading(false);
   };
@@ -96,33 +97,24 @@ export default function RulebookManagement() {
       title: formData.title,
       category: formData.category,
       season: formData.season,
-      pdf_url: pdfUrl,
+      pdfUrl: pdfUrl,
       status: formData.status,
-      created_by: user.id,
+      createdBy: user.id,
     };
 
-    if (editingId) {
-      const { error } = await supabase
-        .from('rulebooks')
-        .update(rulebookData)
-        .eq('id', editingId);
-
-      if (error) {
-        alert('Error updating rulebook: ' + error.message);
-      } else {
+    try {
+      if (editingId) {
+        await rulebooksApi.updateRulebook(editingId, rulebookData as any);
         setEditingId(null);
         resetForm();
         fetchRulebooks();
-      }
-    } else {
-      const { error } = await supabase.from('rulebooks').insert(rulebookData);
-
-      if (error) {
-        alert('Error creating rulebook: ' + error.message);
       } else {
+        await rulebooksApi.createRulebook(rulebookData as any);
         resetForm();
         fetchRulebooks();
       }
+    } catch (error: any) {
+      alert('Error saving rulebook: ' + error.message);
     }
 
     setUploading(false);
@@ -141,26 +133,21 @@ export default function RulebookManagement() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this rulebook?')) {
-      const { error } = await supabase.from('rulebooks').delete().eq('id', id);
-
-      if (error) {
-        alert('Error deleting rulebook: ' + error.message);
-      } else {
+      try {
+        await rulebooksApi.deleteRulebook(id);
         fetchRulebooks();
+      } catch (error: any) {
+        alert('Error deleting rulebook: ' + error.message);
       }
     }
   };
 
   const handleStatusChange = async (id: string, newStatus: RulebookStatus) => {
-    const { error } = await supabase
-      .from('rulebooks')
-      .update({ status: newStatus })
-      .eq('id', id);
-
-    if (error) {
-      alert('Error updating status: ' + error.message);
-    } else {
+    try {
+      await rulebooksApi.updateRulebook(id, { status: newStatus as any });
       fetchRulebooks();
+    } catch (error: any) {
+      alert('Error updating status: ' + error.message);
     }
   };
 
@@ -174,19 +161,20 @@ export default function RulebookManagement() {
     });
   };
 
-  const getStatusBadge = (status: RulebookStatus) => {
-    const styles = {
-      active: 'bg-green-500/20 text-green-400 border-green-500/50',
-      inactive: 'bg-gray-500/20 text-gray-400 border-gray-500/50',
-      archive: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
-    };
+  const getStatusBadge = (status: boolean) => {
+    const isActive = status === true;
+    const statusText = isActive ? 'Active' : 'Inactive';
+    const styleClass = isActive
+      ? 'bg-green-500/20 text-green-400 border-green-500/50'
+      : 'bg-gray-500/20 text-gray-400 border-gray-500/50';
 
     return (
-      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${styles[status]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${styleClass}`}>
+        {statusText}
       </span>
     );
   };
+
 
   if (loading) {
     return (
@@ -238,16 +226,13 @@ export default function RulebookManagement() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Season/Year
-              </label>
-              <input
-                type="text"
+              <YearSelect
                 value={formData.season}
-                onChange={(e) => setFormData({ ...formData, season: e.target.value })}
-                placeholder="e.g., 2025 or 2025-2026"
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                onChange={(year) => setFormData({ ...formData, season: year })}
+                label="Season/Year"
+                yearRange={{ start: 2010, end: new Date().getFullYear() + 5 }}
                 required
+                showIcon={true}
               />
             </div>
 
@@ -339,7 +324,7 @@ export default function RulebookManagement() {
                   <td className="py-3 px-4">
                     <div className="flex gap-2">
                       <button
-                        onClick={() => window.open(rulebook.pdf_url, '_blank')}
+                        onClick={() => window.open(rulebook.pdfUrl, '_blank')}
                         className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                         title="View PDF"
                       >

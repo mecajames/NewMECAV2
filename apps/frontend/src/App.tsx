@@ -20,6 +20,7 @@ import MembersPage from './pages/admin/MembersPage';
 import MemberDetailPage from './pages/admin/MemberDetailPage';
 import SeasonManagementPage from './pages/admin/SeasonManagementPage';
 import ClassesManagementPage from './pages/admin/ClassesManagementPage';
+import FormatManagementPage from './pages/admin/FormatManagementPage';
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
               <Route path="/admin/members/:memberId" element={<MemberDetailPage />} />
               <Route path="/admin/seasons" element={<SeasonManagementPage />} />
               <Route path="/admin/classes" element={<ClassesManagementPage />} />
+              <Route path="/admin/formats" element={<FormatManagementPage />} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />

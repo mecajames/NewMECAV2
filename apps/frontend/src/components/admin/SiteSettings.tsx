@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Save, Image as ImageIcon, Plus, X } from 'lucide-react';
-import { supabase, SiteSettings as Settings, MediaFile } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { siteSettingsApi, SiteSetting } from '../../api-client/site-settings.api-client';
+import { mediaFilesApi, MediaFile } from '../../api-client/media-files.api-client';
 
 export default function SiteSettings() {
   const { user } = useAuth();
-  const [settings, setSettings] = useState<Settings[]>([]);
+  const [settings, setSettings] = useState<SiteSetting[]>([]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,11 +30,8 @@ export default function SiteSettings() {
   }, []);
 
   const fetchSettings = async () => {
-    const { data, error } = await supabase
-      .from('site_settings')
-      .select('*');
-
-    if (!error && data) {
+    try {
+      const data = await siteSettingsApi.getAll();
       setSettings(data);
 
       // Map settings to form data
@@ -64,46 +62,24 @@ export default function SiteSettings() {
         pdf_viewer_height: settingsMap['pdf_viewer_height'] || '800',
         pdf_viewer_width: settingsMap['pdf_viewer_width'] || '100%',
       });
+    } catch (error) {
+      console.error('Error fetching settings:', error);
     }
     setLoading(false);
   };
 
   const fetchMediaImages = async () => {
-    const { data } = await supabase
-      .from('media_files')
-      .select('*')
-      .eq('file_type', 'image')
-      .order('created_at', { ascending: false });
-
-    if (data) {
+    try {
+      const data = await mediaFilesApi.getByType('image');
       setMediaFiles(data);
+    } catch (error) {
+      console.error('Error fetching media files:', error);
     }
   };
 
   const saveSetting = async (key: string, value: string, type: string = 'text', description?: string) => {
     if (!user) return;
-
-    const existingSetting = settings.find((s) => s.setting_key === key);
-
-    if (existingSetting) {
-      await supabase
-        .from('site_settings')
-        .update({
-          setting_value: value,
-          updated_by: user.id,
-        })
-        .eq('id', existingSetting.id);
-    } else {
-      await supabase
-        .from('site_settings')
-        .insert({
-          setting_key: key,
-          setting_value: value,
-          setting_type: type,
-          description,
-          updated_by: user.id,
-        });
-    }
+    await siteSettingsApi.upsert(key, value, type, description, user.id);
   };
 
   const handleSave = async () => {
@@ -392,11 +368,11 @@ export default function SiteSettings() {
               {mediaFiles.map((file) => (
                 <button
                   key={file.id}
-                  onClick={() => selectMedia(file.file_url)}
+                  onClick={() => selectMedia(file.fileUrl)}
                   className="relative aspect-video bg-slate-700 rounded-lg overflow-hidden hover:ring-2 hover:ring-orange-500 transition-all"
                 >
                   <img
-                    src={file.file_url}
+                    src={file.fileUrl}
                     alt={file.title}
                     className="w-full h-full object-cover"
                   />

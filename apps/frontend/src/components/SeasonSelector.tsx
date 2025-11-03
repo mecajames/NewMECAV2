@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Calendar } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { Season } from '../types/database';
+import { seasonsApi } from '../api-client/seasons.api-client';
 
 interface SeasonSelectorProps {
   selectedSeasonId: string;
@@ -19,30 +19,24 @@ export default function SeasonSelector({
   className = '',
 }: SeasonSelectorProps) {
   const [seasons, setSeasons] = useState<Season[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const fetchSeasons = async () => {
+      setLoading(true);
+      try {
+        const data = await seasonsApi.getAll();
+        setSeasons(data as any);
+      } catch (error) {
+        console.error('Error fetching seasons:', error);
+        setSeasons([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchSeasons();
   }, []);
-
-  const fetchSeasons = async () => {
-    const { data, error } = await supabase
-      .from('seasons')
-      .select('*')
-      .order('year', { ascending: false });
-
-    if (!error && data) {
-      setSeasons(data);
-      // If no season is selected and we have seasons, select the current one by default
-      if (!selectedSeasonId && data.length > 0) {
-        const currentSeason = data.find((s) => s.is_current);
-        if (currentSeason) {
-          onSeasonChange(currentSeason.id);
-        }
-      }
-    }
-    setLoading(false);
-  };
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
