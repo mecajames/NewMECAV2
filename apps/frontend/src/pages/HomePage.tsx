@@ -222,22 +222,6 @@ export default function HomePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              onClick={() => navigate(`/${feature.page}`)}
-              className="bg-slate-800 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2 cursor-pointer"
-            >
-              <feature.icon className="h-12 w-12 text-orange-500 mb-4" />
-              <h3 className="text-xl font-semibold text-white mb-2">
-                {feature.title}
-              </h3>
-              <p className="text-gray-400">{feature.description}</p>
-            </div>
-          ))}
-        </div>
-
         <div className="mb-16">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-3xl font-bold text-white">Upcoming Events</h2>
@@ -376,6 +360,127 @@ export default function HomePage() {
               <p className="text-gray-400 text-lg">No upcoming events at this time.</p>
             </div>
           )}
+        </div>
+
+        {/* MECA Information Section */}
+        <div className="mb-16 bg-slate-800 rounded-2xl p-8 md:p-12">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-4xl font-bold text-white mb-8 text-center">
+              MECA Car Audio Competitions
+            </h2>
+
+            <div className="prose prose-invert max-w-none">
+              <div className="text-gray-300 space-y-6 leading-relaxed">
+                <p>
+                  <strong className="text-white">Car Audio Competitions.</strong><br />
+                  MECA is the abbreviation for Mobile Electronics Competition Association, which is a club and contest organization that has been promoting car audio competitions for over 25+ years. MECA leads the industry to promote car shows and events with music, fair and fun contests for people who love loud and clear audio in their cars and trucks.
+                </p>
+
+                <h3 className="text-2xl font-bold text-white mt-8 mb-4">
+                  Sound Pressure League Competitions
+                </h3>
+                <p>
+                  Contests are designed for all levels of competition, from the beginner to advanced professionals.
+                </p>
+                <p>
+                  Sound Pressure League contests are not solely dependent on how much money you've spent and what brand equipment you run in your vehicle. The classifications are based on design complexity, vehicle type, and potential to make "bass" that is fair and fun for our members.
+                </p>
+                <p>
+                  Sound Pressure format uses the clamp meter to measure true power output, combined with woofer cone surface area, the "Pressure Class Formula", is how the classes are bracketed in each Division. If you're still asking yourself, "Should I compete?" the answer should be a resounding YES! our rules afford everyone a fair chance.
+                </p>
+                <p>
+                  The{' '}
+                  <button
+                    onClick={() => navigate('/rulebooks')}
+                    className="text-orange-400 hover:text-orange-300 underline font-semibold"
+                  >
+                    MECA SPL Rule Book
+                  </button>
+                  {' '}includes a Quick-Reference guide, as well as{' '}
+                  <button
+                    onClick={() => navigate('/class-calculator')}
+                    className="text-orange-400 hover:text-orange-300 underline font-semibold"
+                  >
+                    Class Calculators
+                  </button>
+                  {' '}which can help you to determine your class.
+                </p>
+                <p>
+                  We offer MECA Kids, which is our bass music contest using power wheels toys with our MECA Kids operating their audio systems.
+                </p>
+                <p>
+                  We also offer 2 additional formats which is our Park and Pound and Dueling Demos competitions and as of the start of the 2022 season we had overhauled the Dueling Demos format and have now added a new score sheet which makes this a more competitive format.
+                </p>
+
+                <h3 className="text-2xl font-bold text-white mt-8 mb-4">
+                  Sound Quality League Competitions
+                </h3>
+                <p>
+                  Competing in MECA's Sound Quality League is all about sound quality and excellence of installation. It's not about product, personalities, or politics. It's about performance. Live, rich, full-balanced sound is what we listen for. Safety and outstanding appearance are what we look for, displaying the talents and skills of our Members, and our Retail Members who provide professional installation services.
+                </p>
+                <p>
+                  The SQ League offers several formats including, Install, RTA, Sound Quality, Ride the Light and Show and Shine.
+                </p>
+                <p>
+                  All the above formats for both SPL and SQL are offered for Cars, Trucks and Motorcycles.
+                </p>
+                <p>
+                  Thanks to our Competitors, Judges, Retail Members, Manufacturer Members and Fans for all the support and participation that brings us together.
+                </p>
+                <p>
+                  Everyone is invited to participate in our club and contest activities. MECA State Champion credentials earn bragging rights, and our World Champions are recognized among the most accomplished competitors in organized car audio sports around the world.
+                </p>
+
+                <h3 className="text-2xl font-bold text-white mt-8 mb-4">
+                  Car Audio Competitions Near Me?
+                </h3>
+                <p>
+                  This is probably the number one question we get asked, "when will there be a MECA car audio event near me" The simple answer is we will have them anywhere, anytime, we just need the locations to have the competition events and this is where you come in, if you are a shop looking to host a show, you can submit the online submission form,{' '}
+                  <button
+                    onClick={() => navigate('/host-event')}
+                    className="text-orange-400 hover:text-orange-300 underline font-semibold"
+                  >
+                    "Wanna Host a MECA Event"
+                  </button>
+                  {' '}or if you are a competitor and know of a shop or a location to host an event let us know, provide their contact information and we can do the rest, just fill out the{' '}
+                  <button
+                    onClick={() => navigate('/contact')}
+                    className="text-orange-400 hover:text-orange-300 underline font-semibold"
+                  >
+                    Contact us
+                  </button>
+                  {' '}form with their details. Keep in mind that SPL competitions need a location that can accommodate high volumes of bass and sound pressure.
+                </p>
+                <p>
+                  We also suggest keeping an eye on the{' '}
+                  <button
+                    onClick={() => navigate('/events')}
+                    className="text-orange-400 hover:text-orange-300 underline font-semibold"
+                  >
+                    MECA events calendar
+                  </button>
+                  {' '}as we update the calendar often and typically hold 100 to 150+ events per season and we are still growing!
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Feature Cards Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
+          {features.map((feature, index) => (
+            <div
+              key={index}
+              onClick={() => navigate(`/${feature.page}`)}
+              className="bg-slate-800 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2 cursor-pointer"
+            >
+              <feature.icon className="h-12 w-12 text-orange-500 mb-4" />
+              <h3 className="text-xl font-semibold text-white mb-2">
+                {feature.title}
+              </h3>
+              <p className="text-gray-400">{feature.description}</p>
+            </div>
+          ))}
         </div>
 
         <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-12 text-center text-white">
