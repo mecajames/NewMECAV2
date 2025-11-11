@@ -28,15 +28,28 @@ export class SeasonsService {
   async create(data: Partial<Season>): Promise<Season> {
     const em = this.em.fork();
 
+    // Transform snake_case API fields to camelCase entity properties
+    const transformedData: any = {};
+
+    // Map snake_case to camelCase
+    if ((data as any).start_date !== undefined) transformedData.startDate = (data as any).start_date;
+    if ((data as any).end_date !== undefined) transformedData.endDate = (data as any).end_date;
+    if ((data as any).is_current !== undefined) transformedData.isCurrent = (data as any).is_current;
+    if ((data as any).is_next !== undefined) transformedData.isNext = (data as any).is_next;
+
+    // Copy fields that don't need transformation
+    if (data.year !== undefined) transformedData.year = data.year;
+    if (data.name !== undefined) transformedData.name = data.name;
+
     // If this season is marked as current or next, unmark others
-    if (data.isCurrent) {
+    if (transformedData.isCurrent) {
       await this.unmarkAllCurrent(em);
     }
-    if (data.isNext) {
+    if (transformedData.isNext) {
       await this.unmarkAllNext(em);
     }
 
-    const season = em.create(Season, data as any);
+    const season = em.create(Season, transformedData);
     await em.persistAndFlush(season);
     return season;
   }
@@ -48,15 +61,28 @@ export class SeasonsService {
       throw new NotFoundException(`Season with ID ${id} not found`);
     }
 
+    // Transform snake_case API fields to camelCase entity properties
+    const transformedData: any = {};
+
+    // Map snake_case to camelCase
+    if ((data as any).start_date !== undefined) transformedData.startDate = (data as any).start_date;
+    if ((data as any).end_date !== undefined) transformedData.endDate = (data as any).end_date;
+    if ((data as any).is_current !== undefined) transformedData.isCurrent = (data as any).is_current;
+    if ((data as any).is_next !== undefined) transformedData.isNext = (data as any).is_next;
+
+    // Copy fields that don't need transformation
+    if (data.year !== undefined) transformedData.year = data.year;
+    if (data.name !== undefined) transformedData.name = data.name;
+
     // If updating to current or next, unmark others
-    if (data.isCurrent) {
+    if (transformedData.isCurrent) {
       await this.unmarkAllCurrent(em);
     }
-    if (data.isNext) {
+    if (transformedData.isNext) {
       await this.unmarkAllNext(em);
     }
 
-    em.assign(season, data);
+    em.assign(season, transformedData);
     await em.flush();
     return season;
   }

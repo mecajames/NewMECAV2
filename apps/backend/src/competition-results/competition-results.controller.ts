@@ -56,4 +56,11 @@ export class CompetitionResultsController {
   async deleteResult(@Param('id') id: string): Promise<void> {
     return this.competitionResultsService.delete(id);
   }
+
+  @Post('recalculate-points/:eventId')
+  @HttpCode(HttpStatus.OK)
+  async recalculateEventPoints(@Param('eventId') eventId: string): Promise<{ message: string }> {
+    await this.competitionResultsService.updateEventPoints(eventId);
+    return { message: 'Points recalculated successfully' };
+  }
 }

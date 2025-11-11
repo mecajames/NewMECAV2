@@ -5,7 +5,8 @@ export interface Notification {
   user: { id: string };
   fromUser?: {
     id: string;
-    full_name?: string;
+    first_name?: string;
+    last_name?: string;
     email?: string;
   };
   title: string;

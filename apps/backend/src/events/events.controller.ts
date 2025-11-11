@@ -29,6 +29,11 @@ export class EventsController {
     return this.eventsService.findAll(page, limit);
   }
 
+  @Get('stats')
+  async getStats(): Promise<{ totalEvents: number }> {
+    return this.eventsService.getStats();
+  }
+
   @Get('upcoming')
   async getUpcomingEvents(): Promise<Event[]> {
     return this.eventsService.findUpcoming();

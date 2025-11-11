@@ -930,42 +930,72 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
           {isEditing ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Street Address</label>
                 <input
                   type="text"
-                  placeholder="Street Address"
                   value={formData.billing_street}
                   onChange={(e) => setFormData({ ...formData, billing_street: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
                 />
               </div>
-              <input
-                type="text"
-                placeholder="City"
-                value={formData.billing_city}
-                onChange={(e) => setFormData({ ...formData, billing_city: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
-              <input
-                type="text"
-                placeholder="State"
-                value={formData.billing_state}
-                onChange={(e) => setFormData({ ...formData, billing_state: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
-              <input
-                type="text"
-                placeholder="ZIP Code"
-                value={formData.billing_zip}
-                onChange={(e) => setFormData({ ...formData, billing_zip: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
-              <input
-                type="text"
-                placeholder="Country"
-                value={formData.billing_country}
-                onChange={(e) => setFormData({ ...formData, billing_country: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">City</label>
+                <input
+                  type="text"
+                  value={formData.billing_city}
+                  onChange={(e) => setFormData({ ...formData, billing_city: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Country</label>
+                <select
+                  value={formData.billing_country}
+                  onChange={(e) => setFormData({ ...formData, billing_country: e.target.value, billing_state: '' })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Select Country</option>
+                  {countries.map((country) => (
+                    <option key={country.code} value={country.code}>{country.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {formData.billing_country ? getStateLabel(formData.billing_country) : 'State'}
+                </label>
+                {formData.billing_country && getStatesForCountry(formData.billing_country).length > 0 ? (
+                  <select
+                    value={formData.billing_state}
+                    onChange={(e) => setFormData({ ...formData, billing_state: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">Select {getStateLabel(formData.billing_country)}</option>
+                    {getStatesForCountry(formData.billing_country).map((state) => (
+                      <option key={state.code} value={state.code}>{state.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={formData.billing_state}
+                    onChange={(e) => setFormData({ ...formData, billing_state: e.target.value })}
+                    placeholder={formData.billing_country ? getStateLabel(formData.billing_country) : 'State'}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {formData.billing_country ? getPostalCodeLabel(formData.billing_country) : 'ZIP Code'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.billing_zip}
+                  onChange={(e) => setFormData({ ...formData, billing_zip: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
             </div>
           ) : member.billing_street ? (
             <div className="space-y-2 text-gray-300">
@@ -973,7 +1003,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
               <div>
                 {member.billing_city}, {member.billing_state} {member.billing_zip}
               </div>
-              <div>{member.billing_country}</div>
+              <div>{countries.find(c => c.code === member.billing_country)?.name || member.billing_country}</div>
             </div>
           ) : (
             <div className="text-gray-400">No billing address on file</div>
@@ -996,42 +1026,72 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
           {isEditing && !formData.use_billing_for_shipping ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Street Address</label>
                 <input
                   type="text"
-                  placeholder="Street Address"
                   value={formData.shipping_street}
                   onChange={(e) => setFormData({ ...formData, shipping_street: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
                 />
               </div>
-              <input
-                type="text"
-                placeholder="City"
-                value={formData.shipping_city}
-                onChange={(e) => setFormData({ ...formData, shipping_city: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
-              <input
-                type="text"
-                placeholder="State"
-                value={formData.shipping_state}
-                onChange={(e) => setFormData({ ...formData, shipping_state: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
-              <input
-                type="text"
-                placeholder="ZIP Code"
-                value={formData.shipping_zip}
-                onChange={(e) => setFormData({ ...formData, shipping_zip: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
-              <input
-                type="text"
-                placeholder="Country"
-                value={formData.shipping_country}
-                onChange={(e) => setFormData({ ...formData, shipping_country: e.target.value })}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">City</label>
+                <input
+                  type="text"
+                  value={formData.shipping_city}
+                  onChange={(e) => setFormData({ ...formData, shipping_city: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Country</label>
+                <select
+                  value={formData.shipping_country}
+                  onChange={(e) => setFormData({ ...formData, shipping_country: e.target.value, shipping_state: '' })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Select Country</option>
+                  {countries.map((country) => (
+                    <option key={country.code} value={country.code}>{country.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {formData.shipping_country ? getStateLabel(formData.shipping_country) : 'State'}
+                </label>
+                {formData.shipping_country && getStatesForCountry(formData.shipping_country).length > 0 ? (
+                  <select
+                    value={formData.shipping_state}
+                    onChange={(e) => setFormData({ ...formData, shipping_state: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">Select {getStateLabel(formData.shipping_country)}</option>
+                    {getStatesForCountry(formData.shipping_country).map((state) => (
+                      <option key={state.code} value={state.code}>{state.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={formData.shipping_state}
+                    onChange={(e) => setFormData({ ...formData, shipping_state: e.target.value })}
+                    placeholder={formData.shipping_country ? getStateLabel(formData.shipping_country) : 'State'}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {formData.shipping_country ? getPostalCodeLabel(formData.shipping_country) : 'ZIP Code'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.shipping_zip}
+                  onChange={(e) => setFormData({ ...formData, shipping_zip: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
             </div>
           ) : !isEditing && member.use_billing_for_shipping ? (
             <div className="text-gray-400">Same as billing address</div>
@@ -1041,7 +1101,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
               <div>
                 {member.shipping_city}, {member.shipping_state} {member.shipping_zip}
               </div>
-              <div>{member.shipping_country}</div>
+              <div>{countries.find(c => c.code === member.shipping_country)?.name || member.shipping_country}</div>
             </div>
           ) : !isEditing ? (
             <div className="text-gray-400">No shipping address on file</div>

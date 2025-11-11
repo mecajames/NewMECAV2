@@ -11,6 +11,8 @@ interface LeaderboardEntry {
   first_place: number;
   second_place: number;
   third_place: number;
+  meca_id?: string;
+  membership_expiry?: string;
 }
 
 export default function LeaderboardPage() {
@@ -27,6 +29,9 @@ export default function LeaderboardPage() {
 
     results.forEach((result) => {
       const key = result.competitor_id || result.competitor_name;
+      const mecaId = result.mecaId || result.meca_id;
+      const membershipExpiry = result.competitor?.membership_expiry;
+
       if (!aggregated[key]) {
         aggregated[key] = {
           competitor_id: result.competitor_id || '',
@@ -36,6 +41,8 @@ export default function LeaderboardPage() {
           first_place: 0,
           second_place: 0,
           third_place: 0,
+          meca_id: mecaId,
+          membership_expiry: membershipExpiry,
         };
       }
 
@@ -84,6 +91,25 @@ export default function LeaderboardPage() {
     return <span className="text-2xl font-bold text-white">{rank}</span>;
   };
 
+  const getMecaIdDisplay = (mecaId?: string, membershipExpiry?: string) => {
+    // Non-member
+    if (!mecaId || mecaId === '999999') {
+      return { text: 'Non Member', color: 'text-gray-500' };
+    }
+
+    // Check if membership is expired
+    if (membershipExpiry) {
+      const expiryDate = new Date(membershipExpiry);
+      const now = new Date();
+      if (expiryDate < now) {
+        return { text: mecaId, color: 'text-red-500' };
+      }
+    }
+
+    // Valid membership
+    return { text: mecaId, color: 'text-green-500' };
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -115,6 +141,7 @@ export default function LeaderboardPage() {
             {leaderboard.map((entry, index) => {
               const rank = index + 1;
               const isTopThree = rank <= 3;
+              const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
 
               return (
                 <div
@@ -136,8 +163,12 @@ export default function LeaderboardPage() {
                       <h3 className="text-2xl font-bold text-white mb-1">
                         {entry.competitor_name}
                       </h3>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400">
-                        <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-center gap-4 text-sm">
+                        <div className={`flex items-center gap-1 font-semibold ${mecaDisplay.color}`}>
+                          <Award className="h-4 w-4" />
+                          <span>{mecaDisplay.text}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-400">
                           <TrendingUp className="h-4 w-4" />
                           <span>{entry.events_participated} Events</span>
                         </div>

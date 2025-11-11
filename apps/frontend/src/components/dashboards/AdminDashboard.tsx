@@ -6,18 +6,16 @@ import ResultsEntry from '../admin/ResultsEntry';
 import RulebookManagement from '../admin/RulebookManagement';
 import MediaLibrary from '../admin/MediaLibrary';
 import SiteSettings from '../admin/SiteSettings';
-
-// TODO: Create API clients and backend endpoints for admin stats
-// Backend needs to implement stats endpoints:
-// - GET /api/profiles/stats (totalUsers, totalMembers)
-// - GET /api/events/stats (totalEvents)
-// - GET /api/event-registrations/stats (totalRegistrations)
+import { profilesApi } from '../../api-client/profiles.api-client';
+import { eventsApi } from '../../api-client/events.api-client';
+import { eventRegistrationsApi } from '../../api-client/event-registrations.api-client';
 
 type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<AdminView>('overview');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
@@ -31,19 +29,30 @@ export default function AdminDashboard() {
   }, []);
 
   const fetchStats = async () => {
-    // TODO: Replace with API client calls once backend stats endpoints are implemented
-    // await profilesApi.getStats() -> { totalUsers, totalMembers }
-    // await eventsApi.getStats() -> { totalEvents }
-    // await eventRegistrationsApi.getStats() -> { totalRegistrations }
+    try {
+      const [profileStats, eventStats, registrationStats] = await Promise.all([
+        profilesApi.getStats(),
+        eventsApi.getStats(),
+        eventRegistrationsApi.getStats(),
+      ]);
 
-    setStats({
-      totalUsers: 0,
-      totalEvents: 0,
-      totalRegistrations: 0,
-      totalMembers: 0,
-    });
-
-    setLoading(false);
+      setStats({
+        totalUsers: profileStats.totalUsers,
+        totalEvents: eventStats.totalEvents,
+        totalRegistrations: registrationStats.totalRegistrations,
+        totalMembers: profileStats.totalMembers,
+      });
+    } catch (error) {
+      console.error('Failed to fetch admin stats:', error);
+      setStats({
+        totalUsers: 0,
+        totalEvents: 0,
+        totalRegistrations: 0,
+        totalMembers: 0,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const adminActions = [
@@ -148,9 +157,14 @@ export default function AdminDashboard() {
   const renderView = () => {
     switch (currentView) {
       case 'events':
-        return <EventManagement />;
+        return <EventManagement
+          onViewResults={(eventId: string) => {
+            setSelectedEventId(eventId);
+            setCurrentView('results');
+          }}
+        />;
       case 'results':
-        return <ResultsEntry />;
+        return <ResultsEntry preSelectedEventId={selectedEventId} />;
       case 'rulebooks':
         return <RulebookManagement />;
       case 'media':

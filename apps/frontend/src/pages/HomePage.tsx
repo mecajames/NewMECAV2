@@ -1,4 +1,4 @@
-import { Calendar, Trophy, Users, Award } from 'lucide-react';
+import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '../api-client/events.api-client';
@@ -9,6 +9,7 @@ export default function HomePage() {
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [currentEventSlide, setCurrentEventSlide] = useState(0);
   const [heroSettings, setHeroSettings] = useState({
     image_urls: ['https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920'],
     title: 'MECACARAUDIO.COM',
@@ -32,6 +33,17 @@ export default function HomePage() {
 
     return () => clearInterval(interval);
   }, [heroSettings.image_urls.length, heroSettings.carousel_speed]);
+
+  // Auto-slide events carousel every 5 seconds
+  useEffect(() => {
+    if (upcomingEvents.length <= 3) return;
+
+    const interval = setInterval(() => {
+      setCurrentEventSlide((prev) => (prev + 1) % Math.ceil(upcomingEvents.length / 3));
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [upcomingEvents.length]);
 
   const fetchHeroSettings = async () => {
     try {
@@ -77,12 +89,12 @@ export default function HomePage() {
     try {
       const data = await eventsApi.getAll(1, 1000);
 
-      // Filter for upcoming events
+      // Filter for upcoming events (not completed)
       const now = new Date().toISOString();
       const upcoming = data
-        .filter(e => e.status === 'upcoming' && e.event_date >= now)
+        .filter(e => e.status !== 'completed' && e.event_date >= now)
         .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())
-        .slice(0, 3);
+        .slice(0, 12); // Get up to 12 events for carousel rotation
 
       setUpcomingEvents(upcoming);
     } catch (error) {
@@ -132,6 +144,23 @@ export default function HomePage() {
         return 'animate-slide-left';
     }
   };
+
+  const nextEventSlide = () => {
+    setCurrentEventSlide((prev) => (prev + 1) % Math.ceil(upcomingEvents.length / 3));
+  };
+
+  const prevEventSlide = () => {
+    setCurrentEventSlide((prev) =>
+      prev === 0 ? Math.ceil(upcomingEvents.length / 3) - 1 : prev - 1
+    );
+  };
+
+  const getCurrentEvents = () => {
+    const startIndex = currentEventSlide * 3;
+    return upcomingEvents.slice(startIndex, startIndex + 3);
+  };
+
+  const totalSlides = Math.ceil(upcomingEvents.length / 3);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
@@ -225,43 +254,121 @@ export default function HomePage() {
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
             </div>
           ) : upcomingEvents.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {upcomingEvents.map((event) => (
+            <div className="relative">
+              {/* Carousel Container */}
+              <div className="overflow-hidden">
                 <div
-                  key={event.id}
-                  className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1 cursor-pointer"
-                  onClick={() => navigate(`/events/${event.id}`)}
+                  className="transition-transform duration-500 ease-in-out"
+                  style={{
+                    transform: `translateX(-${currentEventSlide * 100}%)`,
+                    display: 'flex',
+                  }}
                 >
-                  {event.flyer_url ? (
-                    <img
-                      src={event.flyer_url}
-                      alt={event.title}
-                      className="w-full h-48 object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-48 bg-gradient-to-r from-orange-600 to-red-600 flex items-center justify-center">
-                      <Calendar className="h-16 w-16 text-white opacity-50" />
+                  {Array.from({ length: totalSlides }).map((_, slideIndex) => (
+                    <div
+                      key={slideIndex}
+                      className="flex-shrink-0 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                    >
+                      {upcomingEvents.slice(slideIndex * 3, slideIndex * 3 + 3).map((event) => (
+                        <div
+                          key={event.id}
+                          className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1 cursor-pointer"
+                          onClick={() => navigate(`/events/${event.id}`)}
+                        >
+                          {event.flyer_url ? (
+                            <img
+                              src={event.flyer_url}
+                              alt={event.title}
+                              className="w-full h-48 object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-48 bg-gradient-to-r from-orange-600 to-red-600 flex items-center justify-center">
+                              <Calendar className="h-16 w-16 text-white opacity-50" />
+                            </div>
+                          )}
+                          <div className="p-6">
+                            <h3 className="text-xl font-semibold text-white mb-2">
+                              {event.title}
+                            </h3>
+                            <p className="text-gray-400 text-sm mb-2">
+                              {new Date(event.event_date).toLocaleDateString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                              })}
+                            </p>
+                            <p className="text-gray-300 mb-3">{event.venue_name}</p>
+
+                            {/* Multiplier Badge - First Line */}
+                            {event.points_multiplier !== undefined && event.points_multiplier !== null && (
+                              <div className="flex flex-wrap gap-2 mb-2">
+                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-500/10 text-orange-400 border border-orange-500">
+                                  {event.points_multiplier}X Points Event
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Format Badges - Second Line */}
+                            {event.formats && event.formats.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mb-4">
+                                {event.formats.map((format) => (
+                                  <span
+                                    key={format}
+                                    className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500"
+                                  >
+                                    {format}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            <button className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors">
+                              View Details
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold text-white mb-2">
-                      {event.title}
-                    </h3>
-                    <p className="text-gray-400 text-sm mb-4">
-                      {new Date(event.event_date).toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </p>
-                    <p className="text-gray-300 mb-4">{event.venue_name}</p>
-                    <button className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors">
-                      View Details
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              {/* Navigation Arrows - Only show if more than 3 events */}
+              {upcomingEvents.length > 3 && (
+                <>
+                  <button
+                    onClick={prevEventSlide}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-full shadow-lg transition-all transform hover:scale-110 z-10"
+                    aria-label="Previous events"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </button>
+                  <button
+                    onClick={nextEventSlide}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-full shadow-lg transition-all transform hover:scale-110 z-10"
+                    aria-label="Next events"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </button>
+
+                  {/* Carousel Indicators */}
+                  <div className="flex justify-center gap-2 mt-6">
+                    {Array.from({ length: totalSlides }).map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentEventSlide(index)}
+                        className={`h-2 rounded-full transition-all ${
+                          index === currentEventSlide
+                            ? 'bg-orange-600 w-8'
+                            : 'bg-gray-600 w-2 hover:bg-gray-500'
+                        }`}
+                        aria-label={`Go to slide ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="text-center py-12 bg-slate-800 rounded-xl">

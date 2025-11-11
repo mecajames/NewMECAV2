@@ -127,6 +127,8 @@ export class EventsService {
     if (data.latitude !== undefined) transformedData.latitude = data.latitude;
     if (data.longitude !== undefined) transformedData.longitude = data.longitude;
     if (data.status !== undefined) transformedData.status = data.status;
+    if (data.formats !== undefined) transformedData.formats = data.formats;
+    if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
 
     // Auto-assign season based on event date (if not manually set)
     if (transformedData.eventDate && !transformedData.season) {
@@ -182,6 +184,8 @@ export class EventsService {
     if (data.latitude !== undefined) transformedData.latitude = data.latitude;
     if (data.longitude !== undefined) transformedData.longitude = data.longitude;
     if (data.status !== undefined) transformedData.status = data.status;
+    if (data.formats !== undefined) transformedData.formats = data.formats;
+    if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
 
     console.log('🔍 UPDATE EVENT - Transformed eventDate:', transformedData.eventDate);
 
@@ -215,5 +219,11 @@ export class EventsService {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
     await em.removeAndFlush(event);
+  }
+
+  async getStats(): Promise<{ totalEvents: number }> {
+    const em = this.em.fork();
+    const totalEvents = await em.count(Event, {});
+    return { totalEvents };
   }
 }

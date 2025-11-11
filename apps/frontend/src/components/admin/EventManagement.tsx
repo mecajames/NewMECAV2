@@ -1,18 +1,33 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users } from 'lucide-react';
+import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users, Search, Filter, TrendingUp } from 'lucide-react';
 import { eventsApi, Event } from '../../api-client/events.api-client';
 import { profilesApi, Profile } from '../../api-client/profiles.api-client';
 import { seasonsApi, Season } from '../../api-client/seasons.api-client';
+import { competitionResultsApi } from '../../api-client/competition-results.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
+import { useNavigate } from 'react-router-dom';
 
 
-export default function EventManagement() {
+interface EventManagementProps {
+  onViewResults?: (eventId: string) => void;
+}
+
+export default function EventManagement({ onViewResults }: EventManagementProps = {}) {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [eventDirectors, setEventDirectors] = useState<Profile[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [seasonFilter, setSeasonFilter] = useState<string>('all');
+  const [countryFilter, setCountryFilter] = useState<string>('all');
+  const [stateFilter, setStateFilter] = useState<string>('all');
+  const [quickFilter, setQuickFilter] = useState<string>('all');
+  const [eventResults, setEventResults] = useState<{[key: string]: number}>({});
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -32,6 +47,8 @@ export default function EventManagement() {
     status: 'upcoming',
     max_participants: '',
     registration_fee: '0',
+    formats: [] as string[],
+    points_multiplier: '1',
   });
 
   useEffect(() => {
@@ -39,6 +56,16 @@ export default function EventManagement() {
     fetchEventDirectors();
     fetchSeasons();
   }, []);
+
+  useEffect(() => {
+    filterEvents();
+  }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter]);
+
+  useEffect(() => {
+    if (events.length > 0) {
+      fetchResultCounts();
+    }
+  }, [events]);
 
   const fetchEvents = async () => {
     try {
@@ -56,6 +83,84 @@ export default function EventManagement() {
       setSeasons(data);
     } catch (error) {
       console.error('Error fetching seasons:', error);
+    }
+  };
+
+  const fetchResultCounts = async () => {
+    const counts: {[key: string]: number} = {};
+    for (const event of events) {
+      try {
+        const results = await competitionResultsApi.getByEvent(event.id);
+        counts[event.id] = results.length;
+      } catch (error) {
+        counts[event.id] = 0;
+      }
+    }
+    setEventResults(counts);
+  };
+
+  const filterEvents = () => {
+    let filtered = [...events];
+
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(event =>
+        event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.venue_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (event as any).venue_city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (event as any).venue_state?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(event => event.status === statusFilter);
+    }
+
+    // Filter by season
+    if (seasonFilter !== 'all') {
+      filtered = filtered.filter(event => event.season_id === seasonFilter);
+    }
+
+    // Filter by country
+    if (countryFilter !== 'all') {
+      filtered = filtered.filter(event => (event as any).venue_country === countryFilter);
+    }
+
+    // Filter by state
+    if (stateFilter !== 'all') {
+      filtered = filtered.filter(event => (event as any).venue_state === stateFilter);
+    }
+
+    // Apply quick filters
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    if (quickFilter === 'recent-upcoming') {
+      filtered = filtered.filter(event => {
+        const eventDate = new Date(event.event_date);
+        return eventDate >= thirtyDaysAgo && event.status !== 'completed';
+      });
+    }
+
+    // Sort by event date descending (most recent first)
+    filtered.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+
+    setFilteredEvents(filtered);
+  };
+
+  const getFormatColor = (format: string) => {
+    switch (format) {
+      case 'SPL':
+        return 'bg-purple-500/10 text-purple-400 border-purple-500';
+      case 'SQL':
+        return 'bg-cyan-500/10 text-cyan-400 border-cyan-500';
+      case 'Show and Shine':
+        return 'bg-pink-500/10 text-pink-400 border-pink-500';
+      case 'Ride the Light':
+        return 'bg-yellow-500/10 text-yellow-400 border-yellow-500';
+      default:
+        return 'bg-gray-500/10 text-gray-400 border-gray-500';
     }
   };
 
@@ -100,6 +205,8 @@ export default function EventManagement() {
       status: formData.status,
       max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
       registration_fee: parseFloat(formData.registration_fee),
+      formats: formData.formats.length > 0 ? formData.formats : null,
+      points_multiplier: parseInt(formData.points_multiplier),
     };
 
     console.log('📤 FRONTEND - Form data event_date:', formData.event_date);
@@ -158,6 +265,8 @@ export default function EventManagement() {
       status: event.status,
       max_participants: event.max_participants?.toString() || '',
       registration_fee: event.registration_fee.toString(),
+      formats: event.formats || [],
+      points_multiplier: (event as any).points_multiplier?.toString() || '1',
     });
     setShowModal(true);
   };
@@ -194,6 +303,8 @@ export default function EventManagement() {
       status: 'upcoming',
       max_participants: '',
       registration_fee: '0',
+      points_multiplier: '1',
+      formats: [],
     });
   };
 
@@ -214,62 +325,239 @@ export default function EventManagement() {
         </button>
       </div>
 
+      {/* Search and Filter Section */}
+      <div className="bg-slate-700 rounded-lg p-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          {/* Season Filter */}
+          <div>
+            <label className="block text-xs font-medium text-gray-300 mb-1">Season</label>
+            <select
+              value={seasonFilter}
+              onChange={(e) => setSeasonFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="all">All Seasons</option>
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Country Filter */}
+          <div>
+            <label className="block text-xs font-medium text-gray-300 mb-1">Country</label>
+            <select
+              value={countryFilter}
+              onChange={(e) => {
+                setCountryFilter(e.target.value);
+                setStateFilter('all'); // Reset state when country changes
+              }}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="all">All Countries</option>
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* State Filter */}
+          <div>
+            <label className="block text-xs font-medium text-gray-300 mb-1">
+              {getStateLabel(countryFilter !== 'all' ? countryFilter : 'US')}
+            </label>
+            <select
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="all">All States</option>
+              {getStatesForCountry(countryFilter !== 'all' ? countryFilter : 'US').map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Box */}
+          <div>
+            <label className="block text-xs font-medium text-gray-300 mb-1">Filter Text</label>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Searches for city, site, name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-8 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Filter Buttons */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setQuickFilter('all')}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              quickFilter === 'all'
+                ? 'bg-orange-600 text-white'
+                : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+            }`}
+          >
+            All Events
+          </button>
+          <button
+            onClick={() => setQuickFilter('recent-upcoming')}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              quickFilter === 'recent-upcoming'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+            }`}
+          >
+            Recent & Upcoming
+          </button>
+        </div>
+
+        <div className="mt-3 text-xs text-gray-400">
+          Showing {filteredEvents.length} of {events.length} events
+        </div>
+      </div>
+
       {loading ? (
         <div className="text-center py-12">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {events.map((event) => (
-            <div key={event.id} className="bg-slate-700 rounded-lg p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="text-xl font-semibold text-white mb-2">{event.title}</h3>
-                  <div className="space-y-2 text-sm text-gray-300">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-orange-500" />
-                      {new Date(event.event_date).toLocaleString()}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-orange-500" />
-                      {event.venue_name}
-                    </div>
-                    {event.event_director && (
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-orange-500" />
-                        Director: {event.event_director.full_name}
+      ) : filteredEvents.length > 0 ? (
+        <div className="overflow-x-auto bg-slate-700 rounded-lg">
+          <table className="w-full">
+            <thead className="bg-slate-900 text-white">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Dates</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase">State</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Event Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Location</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Events Offered</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Results</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEvents.map((event, index) => (
+                <tr
+                  key={event.id}
+                  className={`border-b border-slate-600 ${index % 2 === 0 ? 'bg-slate-800' : 'bg-slate-700'} hover:bg-slate-600 transition-colors`}
+                >
+                  {/* Dates */}
+                  <td className="px-4 py-3 text-sm text-white align-top">
+                    {new Date(event.event_date).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </td>
+
+                  {/* State */}
+                  <td className="px-4 py-3 text-sm text-white align-top">
+                    {(event as any).venue_state || '-'}
+                  </td>
+
+                  {/* Event Name */}
+                  <td className="px-4 py-3 align-top">
+                    <div className="text-sm">
+                      <div className="text-blue-400 font-medium">
+                        {event.title}
                       </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        hosted at {event.venue_name}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Location */}
+                  <td className="px-4 py-3 text-sm text-white align-top">
+                    {(event as any).venue_city && `${(event as any).venue_city}, `}
+                    {(event as any).venue_state || ''}
+                  </td>
+
+                  {/* Events Offered (Formats) */}
+                  <td className="px-4 py-3 align-top">
+                    <div className="flex flex-wrap gap-1">
+                      {event.formats && event.formats.length > 0 ? (
+                        event.formats.map((format) => (
+                          <span
+                            key={format}
+                            className={`px-2 py-1 rounded text-xs font-semibold ${getFormatColor(format)}`}
+                          >
+                            {format}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                      {event.points_multiplier !== undefined && event.points_multiplier !== null && (
+                        <span className="px-2 py-1 rounded text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500">
+                          {event.points_multiplier}X
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Results */}
+                  <td className="px-4 py-3 align-top">
+                    {eventResults[event.id] > 0 ? (
+                      <button
+                        onClick={() => onViewResults?.(event.id)}
+                        className="flex items-center gap-1 px-3 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-xs font-semibold transition-colors"
+                      >
+                        <TrendingUp className="h-3 w-3" />
+                        Results
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-500">No results</span>
                     )}
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                        event.status === 'upcoming'
-                          ? 'bg-blue-500/10 text-blue-400'
-                          : event.status === 'ongoing'
-                          ? 'bg-green-500/10 text-green-400'
-                          : 'bg-gray-500/10 text-gray-400'
-                      }`}
-                    >
-                      {event.status}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(event)}
-                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(event.id)}
-                    className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="px-4 py-3 align-top">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(event)}
+                        className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs transition-colors"
+                        title="Edit Event"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(event.id)}
+                        className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-xs transition-colors"
+                        title="Delete Event"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="text-center py-12 bg-slate-700 rounded-lg">
+          <Calendar className="h-16 w-16 text-gray-500 mx-auto mb-4" />
+          <p className="text-gray-400 text-lg">No events found matching your filters.</p>
         </div>
       )}
 
@@ -495,7 +783,7 @@ export default function EventManagement() {
                     <option value="">Select Director</option>
                     {eventDirectors.map((director) => (
                       <option key={director.id} value={director.id}>
-                        {director.full_name}
+                        {`${director.first_name || ''} ${director.last_name || ''}`.trim()}
                       </option>
                     ))}
                   </select>
@@ -535,6 +823,58 @@ export default function EventManagement() {
                     <option value="cancelled">Cancelled</option>
                     <option value="not_public">Not Public</option>
                   </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Competition Formats Available *
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {['SPL', 'SQL', 'SSI', 'MK', 'Show and Shine', 'Ride the Light', 'Dueling Demo'].map((format) => (
+                      <label
+                        key={format}
+                        className="flex items-center gap-2 px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg cursor-pointer hover:bg-slate-600 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.formats.includes(format)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, formats: [...formData.formats, format] });
+                            } else {
+                              setFormData({
+                                ...formData,
+                                formats: formData.formats.filter((f) => f !== format),
+                              });
+                            }
+                          }}
+                          className="w-4 h-4 text-orange-600 bg-slate-600 border-slate-500 rounded focus:ring-orange-500 focus:ring-2"
+                        />
+                        <span className="text-white text-sm">{format}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Points Multiplier *
+                  </label>
+                  <select
+                    required
+                    value={formData.points_multiplier}
+                    onChange={(e) => setFormData({ ...formData, points_multiplier: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="0">0X - Non-competitive (exhibitions, judging events)</option>
+                    <option value="1">1X - Local events (single-day local shows)</option>
+                    <option value="2">2X - Regional events (standard competitive events)</option>
+                    <option value="3">3X - State/Major events (state championships)</option>
+                    <option value="4">4X - Championship events (national finals, world finals)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Determines points awarded: 1st=5pts, 2nd=4pts, 3rd=3pts, 4th=2pts, 5th=1pt × multiplier
+                  </p>
                 </div>
 
                 <div>
