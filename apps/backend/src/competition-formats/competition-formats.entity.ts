@@ -9,6 +9,9 @@ export class CompetitionFormat {
   @Property({ type: 'text', unique: true })
   name!: string;
 
+  @Property({ type: 'text', nullable: true, unique: true })
+  abbreviation?: string;
+
   @Property({ type: 'text', nullable: true })
   description?: string;
 

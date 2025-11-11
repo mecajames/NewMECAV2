@@ -89,4 +89,16 @@ export class ProfilesService {
     }
     await em.removeAndFlush(profile);
   }
+
+  async getStats(): Promise<{ totalUsers: number; totalMembers: number }> {
+    const em = this.em.fork();
+
+    // Total users count
+    const totalUsers = await em.count(Profile, {});
+
+    // Total active members (membership_status = 'active')
+    const totalMembers = await em.count(Profile, { membership_status: 'active' });
+
+    return { totalUsers, totalMembers };
+  }
 }

@@ -2,21 +2,34 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface CompetitionResult {
   id: string;
-  event_id: string;
-  competitor_id?: string;
-  competitor_name: string;
-  competition_class: string;
+  eventId: string;
+  competitorId?: string;
+  competitorName: string;
+  competitionClass: string;
   score: number;
   placement: number;
-  points_earned: number;
-  vehicle_info?: string;
+  pointsEarned: number;
+  vehicleInfo?: string;
   notes?: string;
-  created_by: string;
-  season_id?: string;
-  class_id?: string;
-  created_at: string;
+  createdBy: string;
+  seasonId?: string;
+  classId?: string;
+  createdAt: string;
+  mecaId?: string;
   event?: any;
   competitor?: any;
+  // Legacy snake_case aliases for backwards compatibility
+  event_id?: string;
+  competitor_id?: string;
+  competitor_name?: string;
+  competition_class?: string;
+  points_earned?: number;
+  vehicle_info?: string;
+  created_by?: string;
+  season_id?: string;
+  class_id?: string;
+  created_at?: string;
+  meca_id?: string;
 }
 
 export const competitionResultsApi = {
@@ -72,5 +85,14 @@ export const competitionResultsApi = {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete competition result');
+  },
+
+  recalculatePoints: async (eventId: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/recalculate-points/${eventId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) throw new Error('Failed to recalculate points');
+    return response.json();
   },
 };

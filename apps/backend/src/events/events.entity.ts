@@ -63,6 +63,12 @@ export class Event {
   @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'registration_fee', serializedName: 'registration_fee' })
   registrationFee?: number;
 
+  @Property({ type: 'integer', nullable: true, default: 2, fieldName: 'points_multiplier', serializedName: 'points_multiplier' })
+  pointsMultiplier?: number;
+
+  @Property({ type: 'json', nullable: true, serializedName: 'formats' })
+  formats?: string[];
+
   @Property({ onCreate: () => new Date(), serializedName: 'created_at' })
   createdAt: Date = new Date();
 

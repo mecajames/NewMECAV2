@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calendar, MapPin, Users, DollarSign, Filter } from 'lucide-react';
+import { Calendar, MapPin, Users, DollarSign, Filter, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '../api-client/events.api-client';
 import { seasonsApi, Season } from '../api-client/seasons.api-client';
@@ -156,8 +156,7 @@ export default function EventsPage() {
             {events.map((event) => (
               <div
                 key={event.id}
-                className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1 cursor-pointer"
-                onClick={() => navigate(`/events/${event.id}`)}
+                className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1"
               >
                 {event.flyer_url ? (
                   <div className="h-48 overflow-hidden">
@@ -187,23 +186,45 @@ export default function EventsPage() {
                     </span>
                   </div>
 
-                  {/* Season and Format Badges */}
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  {/* Season and Multiplier Badges - First Line */}
+                  <div className="flex flex-wrap gap-2 mb-2">
                     {event.season && (
                       <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-teal-500/10 text-teal-400 border-teal-500">
                         {event.season.year} Season
                       </span>
                     )}
-                    {event.format && (
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(
-                          event.format
-                        )}`}
-                      >
-                        {event.format}
+                    {event.points_multiplier !== undefined && event.points_multiplier !== null && (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-orange-500/10 text-orange-400 border-orange-500">
+                        {event.points_multiplier}X Points Event
                       </span>
                     )}
                   </div>
+
+                  {/* Format Badges - Second Line */}
+                  {(event.formats && event.formats.length > 0) || event.format ? (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {event.formats && event.formats.length > 0 ? (
+                        event.formats.map((format) => (
+                          <span
+                            key={format}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(
+                              format
+                            )}`}
+                          >
+                            {format}
+                          </span>
+                        ))
+                      ) : event.format ? (
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(
+                            event.format
+                          )}`}
+                        >
+                          {event.format}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="space-y-3 mb-4">
                     <div className="flex items-center gap-2 text-gray-300">
@@ -246,9 +267,41 @@ export default function EventsPage() {
                     </p>
                   )}
 
-                  <button className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors">
-                    View Event Details
-                  </button>
+                  {/* Buttons - Two buttons for completed events, one for others */}
+                  {event.status === 'completed' ? (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/events/${event.id}`);
+                        }}
+                        className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Calendar className="h-5 w-5" />
+                        View Event Details
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/results', { state: { eventId: event.id } });
+                        }}
+                        className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <TrendingUp className="h-5 w-5" />
+                        View Event Results
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/events/${event.id}`);
+                      }}
+                      className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      View Event Details
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

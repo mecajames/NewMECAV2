@@ -3,7 +3,6 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 export interface Profile {
   id: string;
   email: string;
-  full_name?: string;
   first_name?: string;
   last_name?: string;
   phone?: string;
@@ -72,5 +71,11 @@ export const profilesApi = {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete profile');
+  },
+
+  getStats: async (): Promise<{ totalUsers: number; totalMembers: number }> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/stats`);
+    if (!response.ok) throw new Error('Failed to fetch profile stats');
+    return response.json();
   },
 };

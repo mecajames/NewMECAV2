@@ -8,6 +8,10 @@ export interface Event {
   registration_deadline?: string;
   venue_name: string;
   venue_address: string;
+  venue_city?: string;
+  venue_state?: string;
+  venue_postal_code?: string;
+  venue_country?: string;
   latitude?: number;
   longitude?: number;
   flyer_url?: string;
@@ -16,7 +20,9 @@ export interface Event {
   max_participants?: number;
   registration_fee: number;
   season_id?: string;
+  points_multiplier?: number;
   format?: string;
+  formats?: string[];
   created_at: string;
   updated_at: string;
   event_director?: any;

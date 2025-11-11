@@ -50,8 +50,6 @@ export interface Profile {
   bio?: string;
   created_at: string;
   updated_at: string;
-  // Computed field
-  full_name?: string;
 }
 
 // Season Interface
@@ -114,7 +112,8 @@ export interface EventRegistration {
   id: string;
   event_id: string;
   user_id?: string;
-  full_name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone?: string;
   vehicle_info?: string;

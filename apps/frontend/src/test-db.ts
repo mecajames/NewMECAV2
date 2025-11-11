@@ -23,7 +23,7 @@ async function testDatabase() {
       // Check if there are any users
       const { data: users, error: usersError } = await supabase
         .from('profiles')
-        .select('id, email, full_name')
+        .select('id, email, first_name, last_name')
         .limit(5);
         
       if (!usersError) {

@@ -21,11 +21,13 @@ export default function FormatManagementPage() {
   // Form state
   const [formData, setFormData] = useState<{
     name: string;
+    abbreviation: string;
     description: string;
     is_active: boolean;
     display_order: number;
   }>({
     name: '',
+    abbreviation: '',
     description: '',
     is_active: true,
     display_order: 0,
@@ -97,6 +99,7 @@ export default function FormatManagementPage() {
     setEditingFormat(format);
     setFormData({
       name: format.name,
+      abbreviation: format.abbreviation || '',
       description: format.description || '',
       is_active: format.is_active,
       display_order: format.display_order,
@@ -122,6 +125,7 @@ export default function FormatManagementPage() {
   const resetForm = () => {
     setFormData({
       name: '',
+      abbreviation: '',
       description: '',
       is_active: true,
       display_order: 0,
@@ -242,6 +246,11 @@ export default function FormatManagementPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-xl font-semibold text-white">{format.name}</h3>
+                      {format.abbreviation && (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500">
+                          {format.abbreviation}
+                        </span>
+                      )}
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-medium ${
                           format.is_active
@@ -309,9 +318,41 @@ export default function FormatManagementPage() {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    disabled={!!editingFormat}
+                    className={`w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                      editingFormat ? 'opacity-60 cursor-not-allowed' : ''
+                    }`}
                     placeholder="e.g., SPL, SQL, Show and Shine"
                   />
+                  {editingFormat && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Name cannot be changed after creation
+                    </p>
+                  )}
+                </div>
+
+                {/* Abbreviation */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Abbreviation *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.abbreviation}
+                    onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value.toUpperCase() })}
+                    disabled={!!editingFormat}
+                    className={`w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                      editingFormat ? 'opacity-60 cursor-not-allowed' : ''
+                    }`}
+                    placeholder="e.g., SPL, SQL, SNS"
+                    maxLength={10}
+                  />
+                  {editingFormat && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Abbreviation cannot be changed after creation
+                    </p>
+                  )}
                 </div>
 
                 {/* Description */}

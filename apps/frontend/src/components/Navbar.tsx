@@ -280,7 +280,7 @@ export default function Navbar() {
                                   </p>
                                   {notification.fromUser && (
                                     <p className="text-xs text-gray-500 mt-1">
-                                      From: {notification.fromUser.full_name || notification.fromUser.email}
+                                      From: {`${notification.fromUser.first_name || ''} ${notification.fromUser.last_name || ''}`.trim() || notification.fromUser.email}
                                     </p>
                                   )}
                                   <p className="text-xs text-gray-500 mt-1">

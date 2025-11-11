@@ -72,4 +72,10 @@ export class EventRegistrationsService {
     await this.em.flush();
     return registration;
   }
+
+  async getStats(): Promise<{ totalRegistrations: number }> {
+    const em = this.em.fork();
+    const totalRegistrations = await em.count(EventRegistration, {});
+    return { totalRegistrations };
+  }
 }

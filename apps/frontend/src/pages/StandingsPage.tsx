@@ -9,10 +9,13 @@ interface StandingsEntry {
   competition_class: string;
   total_points: number;
   events_participated: number;
+  best_placement: number;
   first_place: number;
   second_place: number;
   third_place: number;
   best_score: number;
+  meca_id?: string;
+  membership_expiry?: string;
 }
 
 export default function StandingsPage() {
@@ -41,31 +44,42 @@ export default function StandingsPage() {
       const aggregated: { [key: string]: StandingsEntry } = {};
 
       results.forEach((result) => {
-        classSet.add(result.competition_class);
+        const compClass = result.competitionClass || result.competition_class || '';
+        const compId = result.competitorId || result.competitor_id || '';
+        const compName = result.competitorName || result.competitor_name || '';
+        const points = result.pointsEarned ?? result.points_earned ?? 0;
+        const mecaId = result.mecaId || result.meca_id;
+        const membershipExpiry = result.competitor?.membership_expiry;
 
-        if (selectedClass !== 'all' && result.competition_class !== selectedClass) {
+        classSet.add(compClass);
+
+        if (selectedClass !== 'all' && compClass !== selectedClass) {
           return;
         }
 
-        const key = `${result.competitor_id || result.competitor_name}_${result.competition_class}`;
+        const key = `${compId || compName}_${compClass}`;
 
         if (!aggregated[key]) {
           aggregated[key] = {
-            competitor_id: result.competitor_id || '',
-            competitor_name: result.competitor_name,
-            competition_class: result.competition_class,
+            competitor_id: compId,
+            competitor_name: compName,
+            competition_class: compClass,
             total_points: 0,
             events_participated: 0,
+            best_placement: result.placement || 999,
             first_place: 0,
             second_place: 0,
             third_place: 0,
-            best_score: result.score,
+            best_score: result.score || 0,
+            meca_id: mecaId,
+            membership_expiry: membershipExpiry,
           };
         }
 
-        aggregated[key].total_points += result.points_earned;
+        aggregated[key].total_points += points;
         aggregated[key].events_participated += 1;
-        aggregated[key].best_score = Math.max(aggregated[key].best_score, result.score);
+        aggregated[key].best_score = Math.max(aggregated[key].best_score, result.score || 0);
+        aggregated[key].best_placement = Math.min(aggregated[key].best_placement, result.placement || 999);
 
         if (result.placement === 1) aggregated[key].first_place += 1;
         if (result.placement === 2) aggregated[key].second_place += 1;
@@ -102,6 +116,25 @@ export default function StandingsPage() {
     return <span className="text-xl font-bold text-white">{rank}</span>;
   };
 
+  const getMecaIdDisplay = (mecaId?: string, membershipExpiry?: string) => {
+    // Non-member
+    if (!mecaId || mecaId === '999999') {
+      return { text: 'Non Member', color: 'text-gray-500' };
+    }
+
+    // Check if membership is expired
+    if (membershipExpiry) {
+      const expiryDate = new Date(membershipExpiry);
+      const now = new Date();
+      if (expiryDate < now) {
+        return { text: mecaId, color: 'text-red-500' };
+      }
+    }
+
+    // Valid membership
+    return { text: mecaId, color: 'text-green-500' };
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -121,36 +154,23 @@ export default function StandingsPage() {
           />
         </div>
 
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4 text-gray-300">
+        <div className="mb-8 bg-slate-800 rounded-xl p-6">
+          <div className="flex items-center gap-2 mb-3 text-gray-300">
             <Filter className="h-5 w-5" />
-            <span className="font-medium">Filter by Class:</span>
+            <label className="block text-sm font-medium">Filter by Class:</label>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setSelectedClass('all')}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                selectedClass === 'all'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-              }`}
-            >
-              All Classes
-            </button>
+          <select
+            value={selectedClass}
+            onChange={(e) => setSelectedClass(e.target.value)}
+            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="all">All Classes</option>
             {classes.map((cls) => (
-              <button
-                key={cls}
-                onClick={() => setSelectedClass(cls)}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                  selectedClass === cls
-                    ? 'bg-orange-600 text-white'
-                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                }`}
-              >
+              <option key={cls} value={cls}>
                 {cls}
-              </button>
+              </option>
             ))}
-          </div>
+          </select>
         </div>
 
         {loading ? (
@@ -171,19 +191,13 @@ export default function StandingsPage() {
                         Competitor
                       </th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
+                        MECA ID
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
                         Class
                       </th>
                       <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">
-                        Events
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">
-                        1st
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">
-                        2nd
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">
-                        3rd
+                        Place
                       </th>
                       <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">
                         Best Score
@@ -197,6 +211,7 @@ export default function StandingsPage() {
                     {standings.map((entry, index) => {
                       const rank = index + 1;
                       const isTopThree = rank <= 3;
+                      const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
 
                       return (
                         <tr
@@ -220,39 +235,19 @@ export default function StandingsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
+                            <div className={`font-semibold ${mecaDisplay.color}`}>
+                              {mecaDisplay.text}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-500/10 text-orange-400">
                               {entry.competition_class}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <span className="text-gray-300">{entry.events_participated}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {entry.first_place > 0 ? (
-                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-500/10 text-yellow-400 font-semibold">
-                                {entry.first_place}
-                              </span>
-                            ) : (
-                              <span className="text-gray-600">-</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {entry.second_place > 0 ? (
-                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-500/10 text-gray-400 font-semibold">
-                                {entry.second_place}
-                              </span>
-                            ) : (
-                              <span className="text-gray-600">-</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {entry.third_place > 0 ? (
-                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/10 text-orange-400 font-semibold">
-                                {entry.third_place}
-                              </span>
-                            ) : (
-                              <span className="text-gray-600">-</span>
-                            )}
+                            <span className="inline-flex items-center justify-center w-10 h-10 rounded-full font-bold bg-slate-700 text-white">
+                              {entry.best_placement}
+                            </span>
                           </td>
                           <td className="px-6 py-4 text-center">
                             <span className="text-lg font-semibold text-white">

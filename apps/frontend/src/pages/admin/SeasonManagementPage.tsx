@@ -13,6 +13,12 @@ import { useAuth } from '../../contexts/AuthContext';
 // 3. Create API clients in frontend (seasons.api-client.ts, competition-classes.api-client.ts)
 // 4. Replace all direct Supabase calls with API client calls
 
+// Format date string (YYYY-MM-DD) to MM/DD/YYYY without timezone conversion
+const formatDateString = (dateString: string): string => {
+  const [year, month, day] = dateString.split('T')[0].split('-');
+  return `${month}/${day}/${year}`;
+};
+
 export default function SeasonManagementPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -410,7 +416,7 @@ export default function SeasonManagementPage() {
                     <td className="px-6 py-4 text-white font-semibold">{season.year}</td>
                     <td className="px-6 py-4 text-gray-300">{season.name}</td>
                     <td className="px-6 py-4 text-gray-300 text-sm">
-                      {new Date(season.start_date).toLocaleDateString()} - {new Date(season.end_date).toLocaleDateString()}
+                      {formatDateString(season.start_date)} - {formatDateString(season.end_date)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
