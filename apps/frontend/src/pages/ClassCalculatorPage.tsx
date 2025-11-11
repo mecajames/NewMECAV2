@@ -47,15 +47,48 @@ export default function ClassCalculatorPage() {
   const getQualifyingClasses = () => {
     if (!pressureClass) return null;
 
-    // These are example classifications based on MECA rules
-    // In a real implementation, these would be determined by specific pressure class ranges
+    // Calculate classes based on pressure class number ranges
+    const getClassNumber = (ranges: number[]): number => {
+      for (let i = 0; i < ranges.length; i++) {
+        if (pressureClass < ranges[i]) {
+          return i + 1;
+        }
+      }
+      return ranges.length + 1;
+    };
+
+    // Trunk classes
+    const trunkClass = getClassNumber([10000, 20000, 30000]);
+
+    // Street classes - at very high pressure, they compete in MS classes
+    let streetClass: string;
+    if (pressureClass >= 15000) {
+      const msNum = getClassNumber([5000, 10000, 15000, 20000, 30000]);
+      streetClass = `MS${msNum}`;
+    } else {
+      const sNum = getClassNumber([3000, 6000, 9000, 12000]);
+      streetClass = `S${sNum}`;
+    }
+
+    // Modified Street classes
+    const msNum = getClassNumber([5000, 10000, 15000, 20000, 30000]);
+
+    // Modified classes
+    const modNum = getClassNumber([3000, 6000, 10000, 15000, 20000]);
+
+    // Extreme Exhibition - changes to Radical X at higher pressures
+    const extremeClass = pressureClass >= 15000 ? 'Radical X' : 'XTC';
+
+    // DB (Park & Pound) classes
+    const dbNum = getClassNumber([3000, 6000, 10000, 15000, 20000]);
+
     const classes = [
-      { category: 'T - Trunk', class: 'T1' },
-      { category: 'S - Street', class: 'S3' },
-      { category: 'MS - Modified Street', class: 'MS2' },
-      { category: 'M - Modified', class: 'M3' },
-      { category: 'X - Extreme Exhibition', class: 'XTC' },
-      { category: 'DB - Park & Pound', class: 'DB3' },
+      { category: 'T - Trunk', class: `T${trunkClass}` },
+      { category: 'S - Street', class: streetClass },
+      { category: 'MS - Modified Street', class: `MS${msNum}` },
+      { category: 'M - Modified', class: `M${modNum}` },
+      { category: 'X - Extreme Exhibition', class: extremeClass },
+      { category: 'DB - Park & Pound', class: `DB${dbNum}` },
     ];
 
     return classes;
