@@ -16,6 +16,9 @@ import RulebookArchivePage from './pages/RulebookArchivePage';
 import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import MembershipPage from './pages/MembershipPage';
+import ContactPage from './pages/ContactPage';
+import HostEventPage from './pages/HostEventPage';
+import ClassCalculatorPage from './pages/ClassCalculatorPage';
 import MembersPage from './pages/admin/MembersPage';
 import MemberDetailPage from './pages/admin/MemberDetailPage';
 import SeasonManagementPage from './pages/admin/SeasonManagementPage';
@@ -42,6 +45,9 @@ function App() {
               <Route path="/rulebooks" element={<RulebooksPage />} />
               <Route path="/rulebooks/:rulebookId" element={<RulebookDetailPage />} />
               <Route path="/rulebooks/archive" element={<RulebookArchivePage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/host-event" element={<HostEventPage />} />
+              <Route path="/class-calculator" element={<ClassCalculatorPage />} />
 
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
