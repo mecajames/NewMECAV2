@@ -1,4 +1,4 @@
-import { Check, Star, Users, Trophy, Calendar, DollarSign } from 'lucide-react';
+import { Check, Star, Users, Trophy, Calendar, DollarSign, Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function MembershipPage() {
@@ -12,29 +12,34 @@ export default function MembershipPage() {
     {
       icon: Trophy,
       title: 'Points & Rankings',
-      description: 'Compete for points and appear on official leaderboards',
+      description: 'Compete for points and appear on official leaderboards and top 10',
     },
     {
       icon: Calendar,
       title: 'Early Event Access',
-      description: 'Get priority registration for upcoming competitions',
+      description: 'Get priority registration for upcoming competitions when available',
     },
     {
       icon: Star,
       title: 'Exclusive Content',
-      description: 'Access member-only resources, rulebooks, and guides',
+      description: 'Access member-only resources and guides',
     },
     {
       icon: Users,
       title: 'Community Network',
       description: 'Connect with fellow car audio enthusiasts nationwide',
     },
+    {
+      icon: Globe,
+      title: 'World Championship',
+      description: 'Qualify and compete in the annual MECA World Championship events',
+    },
   ];
 
   const membershipTiers = [
     {
       name: 'Annual Membership',
-      price: '$50',
+      price: '$40',
       period: 'per year',
       features: [
         'All membership benefits',
