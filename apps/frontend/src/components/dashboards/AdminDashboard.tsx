@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail } from 'lucide-react';
 import EventManagement from '../admin/EventManagement';
 import ResultsEntry from '../admin/ResultsEntry';
 import RulebookManagement from '../admin/RulebookManagement';
 import MediaLibrary from '../admin/MediaLibrary';
 import SiteSettings from '../admin/SiteSettings';
+import EventHostingRequestsManagement from '../admin/EventHostingRequestsManagement';
 import { profilesApi } from '../../api-client/profiles.api-client';
 import { eventsApi } from '../../api-client/events.api-client';
 import { eventRegistrationsApi } from '../../api-client/event-registrations.api-client';
 
-type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings';
+type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -136,6 +137,14 @@ export default function AdminDashboard() {
       color: 'violet',
       navigateTo: '/admin/formats',
     },
+    {
+      icon: Mail,
+      title: 'Hosting Requests',
+      description: 'Manage event hosting requests and inquiries',
+      action: 'hosting-requests' as AdminView,
+      color: 'rose',
+      navigateTo: undefined,
+    },
   ];
 
   const getColorClasses = (color: string) => {
@@ -150,6 +159,7 @@ export default function AdminDashboard() {
       teal: 'bg-teal-500/10 text-teal-500 hover:bg-teal-500/20',
       cyan: 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20',
       violet: 'bg-violet-500/10 text-violet-500 hover:bg-violet-500/20',
+      rose: 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20',
     };
     return colors[color] || colors.orange;
   };
@@ -171,6 +181,8 @@ export default function AdminDashboard() {
         return <MediaLibrary />;
       case 'settings':
         return <SiteSettings />;
+      case 'hosting-requests':
+        return <EventHostingRequestsManagement />;
       case 'memberships':
         return (
           <div className="bg-slate-800 rounded-xl p-8 text-center">

@@ -1,7 +1,21 @@
 import { useEffect, useState } from 'react';
-import { User, Calendar, Trophy, Award, CreditCard } from 'lucide-react';
+import { User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle, Eye, MessageSquare } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, EventRegistration, CompetitionResult } from '../../lib/supabase';
+import axios from 'axios';
+
+interface EventHostingRequest {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  eventName: string;
+  eventType: string;
+  status: string;
+  adminResponse?: string;
+  adminResponseDate?: string;
+  createdAt: string;
+}
 
 interface UserDashboardProps {
   onNavigate: (page: string, data?: any) => void;
@@ -11,6 +25,9 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
   const { profile } = useAuth();
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [results, setResults] = useState<CompetitionResult[]>([]);
+  const [hostingRequests, setHostingRequests] = useState<EventHostingRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<EventHostingRequest | null>(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
   const [stats, setStats] = useState({
     totalEvents: 0,
     totalPoints: 0,
@@ -58,7 +75,52 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
       });
     }
 
+    // Fetch event hosting requests
+    try {
+      const response = await axios.get(`/api/event-hosting-requests/user/${profile!.id}`);
+      if (response.data && Array.isArray(response.data)) {
+        setHostingRequests(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching hosting requests:', error);
+      setHostingRequests([]);
+    }
+
     setLoading(false);
+  };
+
+  const getStatusBadge = (status: string) => {
+    const badges: { [key: string]: { color: string; icon: any; label: string } } = {
+      pending: { color: 'bg-yellow-500/10 text-yellow-500', icon: Clock, label: 'Pending' },
+      under_review: { color: 'bg-blue-500/10 text-blue-500', icon: Eye, label: 'Under Review' },
+      approved: { color: 'bg-green-500/10 text-green-500', icon: CheckCircle, label: 'Approved' },
+      rejected: { color: 'bg-red-500/10 text-red-500', icon: XCircle, label: 'Rejected' },
+      cancelled: { color: 'bg-gray-500/10 text-gray-500', icon: XCircle, label: 'Cancelled' },
+    };
+
+    const badge = badges[status] || badges.pending;
+    const Icon = badge.icon;
+
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
+        <Icon className="h-3 w-3 mr-1" />
+        {badge.label}
+      </span>
+    );
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const handleViewRequest = (request: EventHostingRequest) => {
+    setSelectedRequest(request);
+    setShowRequestModal(true);
   };
 
   return (
@@ -144,6 +206,44 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
                 <CreditCard className="h-5 w-5" />
                 Purchase Membership
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Event Hosting Requests - Only show if user has submitted requests */}
+        {hostingRequests.length > 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg mb-8">
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+              <Mail className="h-6 w-6 text-orange-500" />
+              My Event Hosting Requests
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {hostingRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
+                  onClick={() => handleViewRequest(request)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <h4 className="font-semibold text-white text-sm flex-1 pr-2">
+                      {request.eventName}
+                    </h4>
+                    {getStatusBadge(request.status)}
+                  </div>
+                  <div className="space-y-1 text-xs text-gray-400">
+                    <p className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      Submitted {formatDate(request.createdAt)}
+                    </p>
+                    {request.adminResponse && (
+                      <p className="flex items-center gap-1 text-blue-400">
+                        <MessageSquare className="h-3 w-3" />
+                        Admin responded
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -249,6 +349,94 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
             )}
           </div>
         </div>
+
+        {/* Request Details Modal */}
+        {showRequestModal && selectedRequest && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-white mb-2">{selectedRequest.eventName}</h3>
+                  {getStatusBadge(selectedRequest.status)}
+                </div>
+                <button
+                  onClick={() => {
+                    setShowRequestModal(false);
+                    setSelectedRequest(null);
+                  }}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <XCircle className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-slate-700/50 rounded-lg p-4">
+                  <h4 className="text-white font-semibold mb-3">Request Details</h4>
+                  <div className="space-y-2 text-sm">
+                    <p className="text-gray-300">
+                      <span className="text-gray-400">Event Type:</span> {selectedRequest.eventType}
+                    </p>
+                    <p className="text-gray-300">
+                      <span className="text-gray-400">Submitted:</span> {formatDate(selectedRequest.createdAt)}
+                    </p>
+                    <p className="text-gray-300">
+                      <span className="text-gray-400">Status:</span>{' '}
+                      <span className="capitalize">{selectedRequest.status.replace('_', ' ')}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {selectedRequest.adminResponse && (
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5 text-blue-500" />
+                      Admin Response
+                    </h4>
+                    <p className="text-gray-300 text-sm whitespace-pre-wrap mb-2">
+                      {selectedRequest.adminResponse}
+                    </p>
+                    {selectedRequest.adminResponseDate && (
+                      <p className="text-gray-400 text-xs">
+                        Responded on {formatDate(selectedRequest.adminResponseDate)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {!selectedRequest.adminResponse && selectedRequest.status === 'pending' && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                    <p className="text-yellow-400 text-sm flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Your request is pending review. We'll contact you soon!
+                    </p>
+                  </div>
+                )}
+
+                {!selectedRequest.adminResponse && selectedRequest.status === 'under_review' && (
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                    <p className="text-blue-400 text-sm flex items-center gap-2">
+                      <Eye className="h-4 w-4" />
+                      Your request is currently under review by our team.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setShowRequestModal(false);
+                      setSelectedRequest(null);
+                    }}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

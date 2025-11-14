@@ -36,3 +36,21 @@ export enum RegistrationStatus {
   CONFIRMED = 'confirmed',
   CANCELLED = 'cancelled'
 }
+
+export enum EventHostingRequestStatus {
+  PENDING = 'pending',
+  UNDER_REVIEW = 'under_review',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  CANCELLED = 'cancelled'
+}
+
+export enum EventTypeOption {
+  ONE_X = '1x Event',
+  TWO_X = '2x Event',
+  THREE_X = '3x Event',
+  FOUR_X = '4x Event',
+  BRANDED = 'Branded Event',
+  SPONSORED = 'Sponsored Event',
+  OTHER = 'Other'
+}
