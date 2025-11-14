@@ -13,6 +13,7 @@ import { SiteSettingsModule } from './site-settings/site-settings.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { CompetitionClassesModule } from './competition-classes/competition-classes.module';
 import { CompetitionFormatsModule } from './competition-formats/competition-formats.module';
+import { EventHostingRequestsModule } from './event-hosting-requests/event-hosting-requests.module';
 import { DatabaseModule } from './db/database.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { DatabaseModule } from './db/database.module';
     SeasonsModule,
     CompetitionClassesModule,
     CompetitionFormatsModule,
+    EventHostingRequestsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
