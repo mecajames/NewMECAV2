@@ -4,13 +4,61 @@ import { CompetitionResult } from './competition-results.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CompetitionClass } from '../competition-classes/competition-classes.entity';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class CompetitionResultsService {
+  private currentSessionId: string | null = null;
+  private manualEntryResults: any[] = [];
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
+    private readonly auditService: AuditService,
   ) {}
+
+  /**
+   * Start a manual entry session
+   */
+  async startManualSession(eventId: string, userId: string, format?: string): Promise<string> {
+    const session = await this.auditService.createSession({
+      eventId,
+      userId,
+      entryMethod: 'manual',
+      format,
+    });
+    this.currentSessionId = session.id;
+    this.manualEntryResults = [];
+    return session.id;
+  }
+
+  /**
+   * End a manual entry session and generate Excel file
+   */
+  async endManualSession(): Promise<void> {
+    if (!this.currentSessionId) {
+      return;
+    }
+
+    // Generate Excel file for manual entries if there are any results
+    if (this.manualEntryResults.length > 0) {
+      const sessionData = await this.auditService.getEventSessions('');
+      const session = sessionData.find(s => s.id === this.currentSessionId);
+
+      if (session) {
+        await this.auditService.generateManualEntriesExcel(
+          session.eventId,
+          this.currentSessionId,
+          this.manualEntryResults
+        );
+      }
+    }
+
+    // End the session with final result count
+    await this.auditService.endSession(this.currentSessionId, this.manualEntryResults.length);
+    this.currentSessionId = null;
+    this.manualEntryResults = [];
+  }
 
   async findAll(): Promise<CompetitionResult[]> {
     const em = this.em.fork();
@@ -41,7 +89,7 @@ export class CompetitionResultsService {
     return em.find(CompetitionResult, { competitorId });
   }
 
-  async create(data: Partial<CompetitionResult>): Promise<CompetitionResult> {
+  async create(data: Partial<CompetitionResult>, userId?: string): Promise<CompetitionResult> {
     const em = this.em.fork();
 
     // Transform snake_case API fields to camelCase entity properties
@@ -56,9 +104,13 @@ export class CompetitionResultsService {
       delete transformedData.event_id;
     }
 
-    // Handle competitor_id by creating a Reference
-    if ((data as any).competitor_id !== undefined) {
+    // Handle competitor_id by creating a Reference (only if not null)
+    if ((data as any).competitor_id !== undefined && (data as any).competitor_id !== null) {
       transformedData.competitor = Reference.createFromPK(Profile, (data as any).competitor_id);
+      delete transformedData.competitor_id;
+    } else if ((data as any).competitor_id === null) {
+      // Explicitly set to undefined to avoid Reference creation
+      transformedData.competitor = undefined;
       delete transformedData.competitor_id;
     }
     if ((data as any).competitor_name !== undefined) {
@@ -72,6 +124,9 @@ export class CompetitionResultsService {
     if ((data as any).competition_class !== undefined) {
       transformedData.competitionClass = (data as any).competition_class;
       delete transformedData.competition_class;
+    }
+    if ((data as any).format !== undefined) {
+      transformedData.format = (data as any).format;
     }
     if ((data as any).class_id !== undefined) {
       transformedData.classId = (data as any).class_id;
@@ -105,15 +160,32 @@ export class CompetitionResultsService {
       await em.refresh(result);
     }
 
+    // Log to audit if there's an active session or userId provided
+    if (this.currentSessionId && userId) {
+      await this.auditService.logAction({
+        sessionId: this.currentSessionId,
+        resultId: result.id,
+        action: 'create',
+        newData: JSON.parse(JSON.stringify(result)),
+        userId,
+      });
+
+      // Track manual entries for Excel generation
+      this.manualEntryResults.push(result);
+    }
+
     return result;
   }
 
-  async update(id: string, data: Partial<CompetitionResult>): Promise<CompetitionResult> {
+  async update(id: string, data: Partial<CompetitionResult>, userId?: string): Promise<CompetitionResult> {
     const em = this.em.fork();
     const result = await em.findOne(CompetitionResult, { id }, { populate: ['event'] });
     if (!result) {
       throw new NotFoundException(`Competition result with ID ${id} not found`);
     }
+
+    // Capture old data for audit log
+    const oldData = { ...result };
 
     // Capture event_id for points recalculation
     const eventId = (data as any).event_id || result.eventId;
@@ -127,9 +199,13 @@ export class CompetitionResultsService {
       delete transformedData.event_id;
     }
 
-    // Handle competitor_id by creating a Reference
-    if ((data as any).competitor_id !== undefined) {
+    // Handle competitor_id by creating a Reference (only if not null)
+    if ((data as any).competitor_id !== undefined && (data as any).competitor_id !== null) {
       transformedData.competitor = Reference.createFromPK(Profile, (data as any).competitor_id);
+      delete transformedData.competitor_id;
+    } else if ((data as any).competitor_id === null) {
+      // Explicitly set to undefined to avoid Reference creation
+      transformedData.competitor = undefined;
       delete transformedData.competitor_id;
     }
     if ((data as any).competitor_name !== undefined) {
@@ -143,6 +219,9 @@ export class CompetitionResultsService {
     if ((data as any).competition_class !== undefined) {
       transformedData.competitionClass = (data as any).competition_class;
       delete transformedData.competition_class;
+    }
+    if ((data as any).format !== undefined) {
+      transformedData.format = (data as any).format;
     }
     if ((data as any).class_id !== undefined) {
       transformedData.classId = (data as any).class_id;
@@ -161,6 +240,22 @@ export class CompetitionResultsService {
       delete transformedData.season_id;
     }
 
+    // Track audit trail for updates
+    if ((data as any).updated_by !== undefined) {
+      transformedData.updatedBy = (data as any).updated_by;
+      delete transformedData.updated_by;
+    }
+
+    if ((data as any).modification_reason !== undefined) {
+      transformedData.modificationReason = (data as any).modification_reason;
+      delete transformedData.modification_reason;
+    }
+
+    // Increment revision count on every update
+    transformedData.revisionCount = (result.revisionCount || 0) + 1;
+
+    // updatedAt will be automatically set by MikroORM's onUpdate decorator
+
     em.assign(result, transformedData);
     await em.flush();
 
@@ -172,16 +267,45 @@ export class CompetitionResultsService {
       await em.refresh(result);
     }
 
+    // Log to audit if userId is provided
+    if (userId) {
+      await this.auditService.logAction({
+        sessionId: this.currentSessionId ?? undefined,
+        resultId: result.id,
+        action: 'update',
+        oldData: oldData ? JSON.parse(JSON.stringify(oldData)) : null,
+        newData: JSON.parse(JSON.stringify(result)),
+        userId,
+      });
+    }
+
     return result;
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, userId?: string): Promise<void> {
     const em = this.em.fork();
     const result = await em.findOne(CompetitionResult, { id });
     if (!result) {
       throw new NotFoundException(`Competition result with ID ${id} not found`);
     }
+
+    // Capture old data for audit log before deletion
+    const oldData = { ...result };
+
     await em.removeAndFlush(result);
+
+    // Log to audit if userId is provided
+    if (userId) {
+      // TODO: Fix audit logging - temporarily disabled
+      // await this.auditService.logAction({
+      //   sessionId: this.currentSessionId ?? undefined,
+      //   resultId: id,
+      //   action: 'delete',
+      //   oldData: oldData ? JSON.parse(JSON.stringify(oldData)) : null,
+      //   newData: null,
+      //   userId,
+      // });
+    }
   }
 
   async getLeaderboard(seasonId?: string): Promise<any[]> {
@@ -265,7 +389,11 @@ export class CompetitionResultsService {
   /**
    * Check if a member is eligible for points
    */
-  private isMemberEligible(mecaId: string | undefined, membershipExpiry: Date | undefined): boolean {
+  private isMemberEligible(
+    mecaId: string | undefined,
+    membershipExpiry: Date | undefined,
+    membershipStatus?: string
+  ): boolean {
     // Guest competitors (999999) are not eligible
     if (mecaId === '999999') {
       return false;
@@ -281,7 +409,12 @@ export class CompetitionResultsService {
       return false;
     }
 
-    // Check if membership is expired
+    // Check membership status if provided
+    if (membershipStatus && membershipStatus !== 'active') {
+      return false;
+    }
+
+    // Check if membership is expired (if expiry date exists)
     if (membershipExpiry && new Date(membershipExpiry) < new Date()) {
       return false;
     }
@@ -331,18 +464,26 @@ export class CompetitionResultsService {
     const groupedResults = new Map<string, CompetitionResult[]>();
 
     for (const result of results) {
+      // Get format from class if available, otherwise from result.format field
+      let format = result.format;
       const competitionClass = classMap.get(result.classId || '');
-      if (!competitionClass) {
-        continue;
+      if (competitionClass) {
+        format = competitionClass.format;
       }
 
-      // Only include eligible formats
-      if (!this.isFormatEligible(competitionClass.format)) {
+      // Skip if no format found
+      if (!format) {
         result.pointsEarned = 0;
         continue;
       }
 
-      const key = `${competitionClass.format}-${result.competitionClass}`;
+      // Only include eligible formats
+      if (!this.isFormatEligible(format)) {
+        result.pointsEarned = 0;
+        continue;
+      }
+
+      const key = `${format}-${result.competitionClass}`;
       if (!groupedResults.has(key)) {
         groupedResults.set(key, []);
       }
@@ -362,21 +503,29 @@ export class CompetitionResultsService {
         // Get competitor's membership info if available
         let mecaId = result.mecaId;
         let membershipExpiry: Date | undefined;
+        let membershipStatus: string | undefined;
 
         if (result.competitor) {
           await em.populate(result, ['competitor']);
           mecaId = result.competitor.meca_id || mecaId;
           membershipExpiry = result.competitor.membership_expiry;
+          membershipStatus = result.competitor.membership_status;
         }
 
         // Check eligibility and calculate points
-        if (this.isMemberEligible(mecaId, membershipExpiry)) {
+        if (this.isMemberEligible(mecaId, membershipExpiry, membershipStatus)) {
+          // Get format from class or result
+          let format = result.format;
           const competitionClass = classMap.get(result.classId || '');
           if (competitionClass) {
+            format = competitionClass.format;
+          }
+
+          if (format) {
             result.pointsEarned = this.calculatePoints(
               currentPlacement,
               multiplier,
-              competitionClass.format
+              format
             );
           } else {
             result.pointsEarned = 0;
@@ -391,5 +540,177 @@ export class CompetitionResultsService {
 
     // Persist all changes
     await em.flush();
+  }
+
+  /**
+   * Import multiple results from a file
+   * Looks up competitors by MECA ID and handles null competitor_id properly
+   */
+  async importResults(
+    eventId: string,
+    parsedResults: any[],
+    createdBy: string,
+    fileExtension: string,
+    file?: Express.Multer.File
+  ): Promise<{ message: string; imported: number; errors: string[] }> {
+    const em = this.em.fork();
+    const errors: string[] = [];
+    let imported = 0;
+
+    // Determine entry method based on file extension
+    const entryMethod = fileExtension === 'xlsx' || fileExtension === 'xls' ? 'excel' : 'termlab';
+
+    // Get format from first result if available
+    const format = parsedResults.length > 0 ? parsedResults[0].format : null;
+
+    // Create audit session
+    const session = await this.auditService.createSession({
+      eventId,
+      userId: createdBy,
+      entryMethod,
+      format,
+      filePath: file ? 'pending' : undefined,
+      originalFilename: file?.originalname,
+    });
+    this.currentSessionId = session.id;
+
+    // Save uploaded file if provided and update session with file path
+    if (file) {
+      const filePath = await this.auditService.saveUploadedFile(file, eventId, session.id);
+      await this.auditService.updateSessionFilePath(session.id, filePath);
+    }
+
+    // Fetch all profiles
+    const profiles = await em.find(Profile, {});
+    const today = new Date();
+
+    // Fetch all competition classes to match class names
+    const competitionClasses = await em.find(CompetitionClass, {});
+
+    for (const result of parsedResults) {
+      try {
+        let finalMecaId: string | null = null;
+        let finalName: string = result.name || '';
+        let competitorId: string | null = null;
+        let hasValidActiveMembership = false; // Track if they have active membership
+
+        // Helper function to check if membership is active
+        const hasActiveMembership = (profile: Profile): boolean => {
+          if (profile.membership_status !== 'active') {
+            return false;
+          }
+
+          // If no expiry date, treat as active (no expiration)
+          if (!profile.membership_expiry) {
+            return true;
+          }
+
+          // If expiry exists, check if it's in the future
+          return new Date(profile.membership_expiry) > today;
+        };
+
+        // SCENARIO 1: MECA ID provided in file
+        if (result.memberID && result.memberID !== '999999') {
+          const profile = profiles.find(p => p.meca_id === result.memberID);
+
+          if (profile && hasActiveMembership(profile)) {
+            // Valid active member - use system data
+            finalMecaId = profile.meca_id || null;
+            finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || result.name;
+            competitorId = profile.id;
+            hasValidActiveMembership = true; // ✅ Active membership confirmed
+          } else {
+            // Member not in system or expired - KEEP the file MECA ID but don't assign points
+            finalMecaId = result.memberID; // Keep the MECA ID from file
+            finalName = result.name; // Use name from file
+            competitorId = null;
+            hasValidActiveMembership = false; // ❌ No active membership (no points)
+          }
+        }
+        // SCENARIO 2: No MECA ID, but name provided - try to match by name
+        else if (!result.memberID || result.memberID === '999999') {
+          if (result.name) {
+            // Try to find active member by name
+            const nameParts = result.name.trim().split(/\s+/);
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ');
+
+            const profile = profiles.find(p => {
+              const matchesName =
+                (p.first_name?.toLowerCase() === firstName?.toLowerCase() &&
+                 p.last_name?.toLowerCase() === lastName?.toLowerCase()) ||
+                `${p.first_name} ${p.last_name}`.toLowerCase() === result.name.toLowerCase();
+              return matchesName && hasActiveMembership(p);
+            });
+
+            if (profile) {
+              // Found active member by name - use system data
+              finalMecaId = profile.meca_id || '999999';
+              finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+              competitorId = profile.id;
+              hasValidActiveMembership = true; // ✅ Active membership confirmed
+            } else {
+              // No match found - use 999999
+              finalMecaId = '999999';
+              finalName = result.name;
+              competitorId = null;
+              hasValidActiveMembership = false; // ❌ No active membership
+            }
+          } else {
+            // No name and no MECA ID - skip or error
+            finalMecaId = '999999';
+            finalName = 'Unknown Competitor';
+            competitorId = null;
+            hasValidActiveMembership = false; // ❌ No active membership
+          }
+        }
+
+        // Try to find class_id by matching class name and format
+        let classId: string | null = null;
+        if (result.class && result.format) {
+          const foundClass = competitionClasses.find(
+            c => c.name === result.class && c.format === result.format
+          );
+          if (foundClass) {
+            classId = foundClass.id;
+          }
+        }
+
+        // Only assign points if they have VALID ACTIVE membership
+        // This means: MECA ID is not 999999 AND membership_status is 'active' AND not expired
+        const pointsEarned = hasValidActiveMembership ? (result.points || 0) : 0;
+
+        await this.create({
+          event_id: eventId,
+          competitor_id: competitorId,
+          competitor_name: finalName,
+          meca_id: finalMecaId,
+          competition_class: result.class,
+          class_id: classId,
+          format: result.format || null,
+          score: result.score,
+          placement: result.placement || 0,
+          points_earned: pointsEarned,
+          vehicle_info: result.vehicleInfo || null,
+          wattage: result.wattage || null,
+          frequency: result.frequency || null,
+          notes: `Imported from ${fileExtension} file`,
+          created_by: createdBy,
+        } as any, createdBy);
+        imported++;
+      } catch (error: any) {
+        errors.push(`Failed to import ${result.name} in ${result.class}: ${error.message}`);
+      }
+    }
+
+    // End the audit session with final result count
+    await this.auditService.endSession(session.id, imported);
+    this.currentSessionId = null;
+
+    return {
+      message: `Successfully imported ${imported} of ${parsedResults.length} results`,
+      imported,
+      errors,
+    };
   }
 }

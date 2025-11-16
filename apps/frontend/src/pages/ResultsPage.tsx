@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Calendar, Award } from 'lucide-react';
+import { Trophy, Calendar, Award, Search } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { eventsApi, Event } from '../api-client/events.api-client';
 import { competitionResultsApi, CompetitionResult } from '../api-client/competition-results.api-client';
@@ -24,6 +24,7 @@ export default function ResultsPage() {
   const [availableFormats, setAvailableFormats] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   useEffect(() => {
     fetchEvents();
@@ -139,7 +140,7 @@ export default function ResultsPage() {
     return { text: mecaId, color: 'text-green-500' };
   };
 
-  // Group results by format and class
+  // Group results by format and class with search filtering
   const groupedResults: GroupedResults = {};
   results.forEach(result => {
     const classData = classes.find(c => c.id === (result.classId || result.class_id));
@@ -148,6 +149,17 @@ export default function ResultsPage() {
 
     if (selectedFormat !== 'all' && format !== selectedFormat) {
       return;
+    }
+
+    // Apply search filter
+    if (searchTerm) {
+      const competitorName = (result.competitorName || result.competitor_name || '').toLowerCase();
+      const mecaId = (result.mecaId || result.meca_id || '').toLowerCase();
+      const search = searchTerm.toLowerCase();
+
+      if (!competitorName.includes(search) && !mecaId.includes(search)) {
+        return;
+      }
     }
 
     if (!groupedResults[format]) {
@@ -275,6 +287,23 @@ export default function ResultsPage() {
                   </div>
                 </div>
 
+                {/* Search Filter */}
+                <div className="mb-6 bg-slate-800 rounded-xl p-6">
+                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                    Search by Name or MECA ID
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Enter competitor name or MECA ID..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+
                 {/* Results grouped by format and class */}
                 <div className="space-y-8">
                   {Object.entries(groupedResults).map(([format, classesByName]) => (
@@ -295,8 +324,14 @@ export default function ResultsPage() {
                                   <tr>
                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Place</th>
                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Competitor</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">State</th>
                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">MECA ID</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Vehicle</th>
+                                    {format === 'SPL' && (
+                                      <>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Wattage</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Frequency</th>
+                                      </>
+                                    )}
                                     <th className="px-4 py-3 text-right text-sm font-semibold text-gray-300">Score</th>
                                     <th className="px-4 py-3 text-right text-sm font-semibold text-gray-300">Points</th>
                                   </tr>
@@ -306,6 +341,7 @@ export default function ResultsPage() {
                                     const mecaId = result.mecaId || result.meca_id;
                                     const membershipExpiry = result.competitor?.membership_expiry;
                                     const mecaDisplay = getMecaIdDisplay(mecaId, membershipExpiry);
+                                    const state = result.competitor?.state || 'N/E';
 
                                     return (
                                       <tr
@@ -327,13 +363,25 @@ export default function ResultsPage() {
                                           </div>
                                         </td>
                                         <td className="px-4 py-3">
+                                          <div className="text-gray-300">
+                                            {state}
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-3">
                                           <div className={`font-semibold ${mecaDisplay.color}`}>
                                             {mecaDisplay.text}
                                           </div>
                                         </td>
-                                        <td className="px-4 py-3 text-gray-300">
-                                          {result.vehicleInfo || result.vehicle_info || 'N/A'}
-                                        </td>
+                                        {format === 'SPL' && (
+                                          <>
+                                            <td className="px-4 py-3 text-gray-300">
+                                              {result.wattage || '-'}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-300">
+                                              {result.frequency || '-'}
+                                            </td>
+                                          </>
+                                        )}
                                         <td className="px-4 py-3 text-right">
                                           <span className="text-lg font-bold text-white">
                                             {result.score}

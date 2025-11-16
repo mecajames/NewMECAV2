@@ -15,6 +15,8 @@ import { CompetitionClassesModule } from './competition-classes/competition-clas
 import { CompetitionFormatsModule } from './competition-formats/competition-formats.module';
 import { EventHostingRequestsModule } from './event-hosting-requests/event-hosting-requests.module';
 import { DatabaseModule } from './db/database.module';
+import { AuditModule } from './audit/audit.module';
+
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { DatabaseModule } from './db/database.module';
     CompetitionClassesModule,
     CompetitionFormatsModule,
     EventHostingRequestsModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

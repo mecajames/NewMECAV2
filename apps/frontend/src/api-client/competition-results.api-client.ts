@@ -6,10 +6,13 @@ export interface CompetitionResult {
   competitorId?: string;
   competitorName: string;
   competitionClass: string;
+  format?: string;
   score: number;
   placement: number;
   pointsEarned: number;
   vehicleInfo?: string;
+  wattage?: number;
+  frequency?: number;
   notes?: string;
   createdBy: string;
   seasonId?: string;
@@ -18,6 +21,10 @@ export interface CompetitionResult {
   mecaId?: string;
   event?: any;
   competitor?: any;
+  updatedBy?: string;
+  updatedAt?: string;
+  revisionCount?: number;
+  modificationReason?: string;
   // Legacy snake_case aliases for backwards compatibility
   event_id?: string;
   competitor_id?: string;
@@ -30,6 +37,10 @@ export interface CompetitionResult {
   class_id?: string;
   created_at?: string;
   meca_id?: string;
+  updated_by?: string;
+  updated_at?: string;
+  revision_count?: number;
+  modification_reason?: string;
 }
 
 export const competitionResultsApi = {
@@ -93,6 +104,28 @@ export const competitionResultsApi = {
       headers: { 'Content-Type': 'application/json' },
     });
     if (!response.ok) throw new Error('Failed to recalculate points');
+    return response.json();
+  },
+
+  importResults: async (
+    eventId: string,
+    file: File,
+    createdBy: string
+  ): Promise<{ message: string; imported: number; errors: string[] }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('createdBy', createdBy);
+
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/import/${eventId}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to import results');
+    }
+
     return response.json();
   },
 };
