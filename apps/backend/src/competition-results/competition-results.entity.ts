@@ -29,6 +29,9 @@ export class CompetitionResult {
   @Property({ type: 'text', fieldName: 'competition_class', serializedName: 'competition_class' })
   competitionClass!: string;
 
+  @Property({ type: 'text', nullable: true, serializedName: 'format' })
+  format?: string;
+
   @Property({ type: 'decimal', precision: 10, scale: 2 })
   score!: number;
 
@@ -40,6 +43,12 @@ export class CompetitionResult {
 
   @Property({ type: 'text', nullable: true, fieldName: 'vehicle_info', serializedName: 'vehicle_info' })
   vehicleInfo?: string;
+
+  @Property({ type: 'integer', nullable: true })
+  wattage?: number;
+
+  @Property({ type: 'integer', nullable: true })
+  frequency?: number;
 
   @Property({ type: 'text', nullable: true })
   notes?: string;
@@ -55,4 +64,16 @@ export class CompetitionResult {
 
   @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
+
+  @Property({ type: 'uuid', nullable: true, fieldName: 'updated_by', serializedName: 'updated_by' })
+  updatedBy?: string;
+
+  @Property({ onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
+  updatedAt?: Date;
+
+  @Property({ type: 'integer', default: 0, fieldName: 'revision_count', serializedName: 'revision_count' })
+  revisionCount: number = 0;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'modification_reason', serializedName: 'modification_reason' })
+  modificationReason?: string;
 }

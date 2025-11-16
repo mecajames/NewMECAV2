@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail } from 'lucide-react';
 import EventManagement from '../admin/EventManagement';
-import ResultsEntry from '../admin/ResultsEntry';
+import ResultsEntry from '../admin/ResultsEntryNew';
 import RulebookManagement from '../admin/RulebookManagement';
 import MediaLibrary from '../admin/MediaLibrary';
 import SiteSettings from '../admin/SiteSettings';
@@ -174,7 +174,7 @@ export default function AdminDashboard() {
           }}
         />;
       case 'results':
-        return <ResultsEntry preSelectedEventId={selectedEventId} />;
+        return <ResultsEntry />;
       case 'rulebooks':
         return <RulebookManagement />;
       case 'media':

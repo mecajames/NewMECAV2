@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Trophy, Plus, X, Save, Search, Calculator } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Trophy, Plus, X, Save, Search, Calculator, Upload, Download, FileSpreadsheet, File } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { eventsApi, Event } from '../../api-client/events.api-client';
 import { profilesApi, Profile } from '../../api-client/profiles.api-client';
@@ -52,6 +52,9 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
   const [searchTerm, setSearchTerm] = useState('');
   const [editingResult, setEditingResult] = useState<ResultEntry | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Available formats (hardcoded for now, can be fetched from API later)
   const availableFormats = ['SPL', 'SQL', 'Show and Shine', 'Ride the Light'];
@@ -340,6 +343,75 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
     `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.tlab')) {
+        alert('Please select a valid file (.xlsx, .xls, or .tlab)');
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const handleImportFile = async () => {
+    if (!selectedFile) {
+      alert('Please select a file first');
+      return;
+    }
+
+    if (!selectedEventId) {
+      alert('Please select an event first');
+      return;
+    }
+
+    if (!profile?.id) {
+      alert('User profile not found');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const result = await competitionResultsApi.importResults(
+        selectedEventId,
+        selectedFile,
+        profile.id
+      );
+
+      let message = result.message;
+      if (result.errors && result.errors.length > 0) {
+        message += '\n\nErrors:\n' + result.errors.join('\n');
+      }
+
+      alert(message);
+
+      // Clear the file selection and refresh results
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      fetchExistingResults();
+    } catch (error: any) {
+      console.error('Error importing file:', error);
+      alert('Failed to import file: ' + (error.message || 'Unknown error'));
+    }
+
+    setUploading(false);
+  };
+
+  const handleDownloadTemplate = () => {
+    // Download the Excel template
+    const link = document.createElement('a');
+    link.href = '/templates/MecaEventResults_Template.xlsx';
+    link.download = 'MecaEventResults_Template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -387,9 +459,96 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
             })()}
           </div>
 
+          {/* Import Section */}
+          <div className="bg-slate-700 rounded-lg p-6 mb-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Import Results from File</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Excel Import */}
+              <div className="bg-slate-800 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileSpreadsheet className="h-5 w-5 text-green-400" />
+                  <h4 className="text-lg font-semibold text-white">Excel Import (.xlsx)</h4>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Download the template, fill it out with your results, and upload it back.
+                </p>
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Excel Template
+                </button>
+              </div>
+
+              {/* TermLab Import */}
+              <div className="bg-slate-800 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <File className="h-5 w-5 text-blue-400" />
+                  <h4 className="text-lg font-semibold text-white">TermLab Import (.tlab)</h4>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Upload a TermLab export file to import results directly.
+                </p>
+                <div className="h-10"></div>
+              </div>
+            </div>
+
+            {/* File Upload Area */}
+            <div className="mt-6 bg-slate-800 rounded-lg p-6 border-2 border-dashed border-slate-600">
+              <div className="flex flex-col items-center">
+                <Upload className="h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-white font-semibold mb-2">Upload Results File</p>
+                <p className="text-sm text-gray-400 mb-4">
+                  Supports: Excel (.xlsx, .xls) or TermLab (.tlab) files
+                </p>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.tlab"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="file-upload"
+                />
+
+                <label
+                  htmlFor="file-upload"
+                  className="cursor-pointer px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Choose File
+                </label>
+
+                {selectedFile && (
+                  <div className="mt-4 flex items-center gap-4">
+                    <div className="text-sm text-gray-300">
+                      Selected: <span className="text-white font-semibold">{selectedFile.name}</span>
+                    </div>
+                    <button
+                      onClick={handleImportFile}
+                      disabled={uploading}
+                      className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {uploading ? 'Importing...' : 'Import Results'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="bg-slate-700 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-white">Add New Result</h3>
+              <h3 className="text-xl font-semibold text-white">Add New Result (Manual Entry)</h3>
               <div className="flex gap-2">
                 <button
                   onClick={handleSave}
@@ -521,13 +680,13 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
 
               <div className="md:col-span-7">
                 <label className="block text-xs text-gray-400 mb-1">
-                  Vehicle Info
+                  Power Wattage
                 </label>
                 <input
                   type="text"
                   value={currentEntry.vehicle_info}
                   onChange={(e) => updateField('vehicle_info', e.target.value)}
-                  placeholder="Year, Make, Model"
+                  placeholder="e.g., Power: 6000W"
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
@@ -661,13 +820,13 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
 
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Vehicle Info
+                        Power Wattage
                       </label>
                       <input
                         type="text"
                         value={editingResult.vehicle_info}
                         onChange={(e) => setEditingResult({...editingResult, vehicle_info: e.target.value})}
-                        placeholder="Year, Make, Model"
+                        placeholder="e.g., Power: 6000W"
                         className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -707,7 +866,7 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Competitor</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Format</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Class</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Vehicle</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Power Wattage</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Score</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Place</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Points</th>
