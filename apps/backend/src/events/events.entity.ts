@@ -39,10 +39,10 @@ export class Event {
   @Property({ type: 'text', nullable: true, default: 'US', fieldName: 'venue_country', serializedName: 'venue_country' })
   venueCountry?: string;
 
-  @Property({ type: 'decimal', precision: 10, scale: 8, nullable: true })
+  @Property({ type: 'decimal', precision: 15, scale: 10, nullable: true })
   latitude?: number;
 
-  @Property({ type: 'decimal', precision: 11, scale: 8, nullable: true })
+  @Property({ type: 'decimal', precision: 15, scale: 10, nullable: true })
   longitude?: number;
 
   @Property({ type: 'text', nullable: true, fieldName: 'flyer_url', serializedName: 'flyer_url' })

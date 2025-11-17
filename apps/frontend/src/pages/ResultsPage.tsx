@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Calendar, Award, Search } from 'lucide-react';
+import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { eventsApi, Event } from '../api-client/events.api-client';
 import { competitionResultsApi, CompetitionResult } from '../api-client/competition-results.api-client';
@@ -11,6 +11,9 @@ interface GroupedResults {
     [className: string]: CompetitionResult[];
   };
 }
+
+type SortColumn = 'placement' | 'competitor' | 'state' | 'mecaId' | 'wattage' | 'frequency' | 'score' | 'points';
+type SortDirection = 'asc' | 'desc';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -25,6 +28,8 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [sortColumn, setSortColumn] = useState<SortColumn>('placement');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   useEffect(() => {
     fetchEvents();
@@ -36,6 +41,20 @@ export default function ResultsPage() {
       fetchResults();
     }
   }, [selectedEventId]);
+
+  // Extract formats when results or classes change
+  useEffect(() => {
+    if (results.length > 0 && classes.length > 0) {
+      const formats = new Set<string>();
+      results.forEach(result => {
+        const classData = classes.find(c => c.id === (result.classId || result.class_id));
+        if (classData?.format) {
+          formats.add(classData.format);
+        }
+      });
+      setAvailableFormats(Array.from(formats).sort());
+    }
+  }, [results, classes]);
 
   // Handle event pre-selection from navigation state
   useEffect(() => {
@@ -92,16 +111,6 @@ export default function ResultsPage() {
       data.sort((a, b) => a.placement - b.placement);
 
       setResults(data);
-
-      // Extract unique formats from results
-      const formats = new Set<string>();
-      data.forEach(result => {
-        const classData = classes.find(c => c.id === (result.classId || result.class_id));
-        if (classData?.format) {
-          formats.add(classData.format);
-        }
-      });
-      setAvailableFormats(Array.from(formats).sort());
     } catch (error) {
       console.error('Error fetching results:', error);
     }
@@ -138,6 +147,61 @@ export default function ResultsPage() {
 
     // Valid membership
     return { text: mecaId, color: 'text-green-500' };
+  };
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 inline ml-1 opacity-50" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-4 w-4 inline ml-1" />
+      : <ArrowDown className="h-4 w-4 inline ml-1" />;
+  };
+
+  const sortResults = (resultsArray: CompetitionResult[]) => {
+    return [...resultsArray].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case 'placement':
+          comparison = (a.placement || 0) - (b.placement || 0);
+          break;
+        case 'competitor':
+          comparison = (a.competitorName || a.competitor_name || '').localeCompare(
+            b.competitorName || b.competitor_name || ''
+          );
+          break;
+        case 'state':
+          comparison = (a.competitor?.state || '').localeCompare(b.competitor?.state || '');
+          break;
+        case 'mecaId':
+          comparison = (a.mecaId || a.meca_id || '').localeCompare(b.mecaId || b.meca_id || '');
+          break;
+        case 'wattage':
+          comparison = (parseFloat(a.wattage || '0')) - (parseFloat(b.wattage || '0'));
+          break;
+        case 'frequency':
+          comparison = (parseFloat(a.frequency || '0')) - (parseFloat(b.frequency || '0'));
+          break;
+        case 'score':
+          comparison = (a.score || 0) - (b.score || 0);
+          break;
+        case 'points':
+          comparison = (a.pointsEarned ?? a.points_earned ?? 0) - (b.pointsEarned ?? b.points_earned ?? 0);
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
   };
 
   // Group results by format and class with search filtering
@@ -183,15 +247,6 @@ export default function ResultsPage() {
           </p>
         </div>
 
-        {/* Season Filter */}
-        <div className="mb-6 bg-slate-800 rounded-xl p-6">
-          <SeasonSelector
-            selectedSeasonId={selectedSeasonId}
-            onSeasonChange={setSelectedSeasonId}
-            showAllOption={true}
-          />
-        </div>
-
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
@@ -199,6 +254,16 @@ export default function ResultsPage() {
         ) : events.length > 0 ? (
           <>
             <div className="mb-8 bg-slate-800 rounded-xl p-6">
+              {/* Season Filter */}
+              <div className="mb-6">
+                <SeasonSelector
+                  selectedSeasonId={selectedSeasonId}
+                  onSeasonChange={setSelectedSeasonId}
+                  showAllOption={true}
+                />
+              </div>
+
+              {/* Event Selector */}
               <label className="block text-sm font-medium text-gray-300 mb-3">
                 Select Event
               </label>
@@ -255,12 +320,12 @@ export default function ResultsPage() {
               </div>
             ) : results.length > 0 ? (
               <>
-                {/* Format Filter Tabs */}
+                {/* Format Filter and Search */}
                 <div className="mb-6 bg-slate-800 rounded-xl p-6">
                   <label className="block text-sm font-medium text-gray-300 mb-3">
                     Filter by Format/Division:
                   </label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 mb-6">
                     <button
                       onClick={() => setSelectedFormat('all')}
                       className={`px-6 py-2 rounded-lg font-medium transition-colors ${
@@ -285,10 +350,7 @@ export default function ResultsPage() {
                       </button>
                     ))}
                   </div>
-                </div>
 
-                {/* Search Filter */}
-                <div className="mb-6 bg-slate-800 rounded-xl p-6">
                   <label className="block text-sm font-medium text-gray-300 mb-3">
                     Search by Name or MECA ID
                   </label>
@@ -322,22 +384,62 @@ export default function ResultsPage() {
                               <table className="w-full">
                                 <thead className="bg-slate-700">
                                   <tr>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Place</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Competitor</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">State</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">MECA ID</th>
+                                    <th
+                                      className="px-4 py-3 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                      onClick={() => handleSort('placement')}
+                                    >
+                                      Place{getSortIcon('placement')}
+                                    </th>
+                                    <th
+                                      className="px-4 py-3 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                      onClick={() => handleSort('competitor')}
+                                    >
+                                      Competitor{getSortIcon('competitor')}
+                                    </th>
+                                    <th
+                                      className="px-4 py-3 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                      onClick={() => handleSort('state')}
+                                    >
+                                      State{getSortIcon('state')}
+                                    </th>
+                                    <th
+                                      className="px-4 py-3 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                      onClick={() => handleSort('mecaId')}
+                                    >
+                                      MECA ID{getSortIcon('mecaId')}
+                                    </th>
                                     {format === 'SPL' && (
                                       <>
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Wattage</th>
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Frequency</th>
+                                        <th
+                                          className="px-4 py-3 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                          onClick={() => handleSort('wattage')}
+                                        >
+                                          Wattage{getSortIcon('wattage')}
+                                        </th>
+                                        <th
+                                          className="px-4 py-3 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                          onClick={() => handleSort('frequency')}
+                                        >
+                                          Frequency{getSortIcon('frequency')}
+                                        </th>
                                       </>
                                     )}
-                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-300">Score</th>
-                                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-300">Points</th>
+                                    <th
+                                      className="px-4 py-3 text-right text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                      onClick={() => handleSort('score')}
+                                    >
+                                      Score{getSortIcon('score')}
+                                    </th>
+                                    <th
+                                      className="px-4 py-3 text-right text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                                      onClick={() => handleSort('points')}
+                                    >
+                                      Points{getSortIcon('points')}
+                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-700">
-                                  {classResults.map((result) => {
+                                  {sortResults(classResults).map((result) => {
                                     const mecaId = result.mecaId || result.meca_id;
                                     const membershipExpiry = result.competitor?.membership_expiry;
                                     const mecaDisplay = getMecaIdDisplay(mecaId, membershipExpiry);

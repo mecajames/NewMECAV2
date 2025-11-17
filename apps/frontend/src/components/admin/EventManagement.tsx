@@ -736,10 +736,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     Latitude
                   </label>
                   <input
-                    type="number"
-                    step="any"
+                    type="text"
                     value={formData.latitude}
                     onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                    placeholder="e.g., 33.2208391333072"
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
@@ -749,10 +749,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     Longitude
                   </label>
                   <input
-                    type="number"
-                    step="any"
+                    type="text"
                     value={formData.longitude}
                     onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                    placeholder="e.g., -87.1675749917274"
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
