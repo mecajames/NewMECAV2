@@ -19,9 +19,20 @@ export default function HomePage() {
     carousel_direction: 'left' as 'left' | 'right' | 'top' | 'bottom',
   });
 
+  const [youtubeVideos, setYoutubeVideos] = useState({
+    active: false,
+    videos: [
+      { url: '', title: '' },
+      { url: '', title: '' },
+      { url: '', title: '' },
+      { url: '', title: '' },
+    ],
+  });
+
   useEffect(() => {
     fetchUpcomingEvents();
     fetchHeroSettings();
+    fetchYoutubeSettings();
   }, []);
 
   useEffect(() => {
@@ -82,6 +93,53 @@ export default function HomePage() {
       }
     } catch (error) {
       console.error('Error fetching hero settings:', error);
+    }
+  };
+
+  const fetchYoutubeSettings = async () => {
+    try {
+      const data = await siteSettingsApi.getAll();
+
+      // Filter for YouTube settings
+      const youtubeKeys = [
+        'youtube_section_active',
+        'youtube_video_1_url', 'youtube_video_1_title',
+        'youtube_video_2_url', 'youtube_video_2_title',
+        'youtube_video_3_url', 'youtube_video_3_title',
+        'youtube_video_4_url', 'youtube_video_4_title'
+      ];
+      const youtubeData = data.filter((setting: SiteSetting) => youtubeKeys.includes(setting.setting_key));
+
+      if (youtubeData && youtubeData.length > 0) {
+        const settings: any = {};
+        youtubeData.forEach((setting: SiteSetting) => {
+          settings[setting.setting_key] = setting.setting_value;
+        });
+
+        setYoutubeVideos({
+          active: settings['youtube_section_active'] === 'true',
+          videos: [
+            {
+              url: settings['youtube_video_1_url'] || '',
+              title: settings['youtube_video_1_title'] || '',
+            },
+            {
+              url: settings['youtube_video_2_url'] || '',
+              title: settings['youtube_video_2_title'] || '',
+            },
+            {
+              url: settings['youtube_video_3_url'] || '',
+              title: settings['youtube_video_3_title'] || '',
+            },
+            {
+              url: settings['youtube_video_4_url'] || '',
+              title: settings['youtube_video_4_title'] || '',
+            },
+          ].filter(video => video.url), // Only include videos with URLs
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching YouTube settings:', error);
     }
   };
 
@@ -482,6 +540,40 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+
+        {/* YouTube Videos Section */}
+        {youtubeVideos.active && youtubeVideos.videos.length > 0 && (
+          <div className="mb-20">
+            <div className="text-center mb-10">
+              <h2 className="text-4xl font-bold text-white mb-4">Latest from MECA</h2>
+              <p className="text-gray-300 text-lg">
+                Check out our latest videos and event highlights
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {youtubeVideos.videos.map((video, index) => (
+                <div key={index} className="bg-slate-800 rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-2">
+                  <div className="relative aspect-video">
+                    <iframe
+                      src={video.url}
+                      title={video.title || `MECA Video ${index + 1}`}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full"
+                    />
+                  </div>
+                  {video.title && (
+                    <div className="p-4">
+                      <h3 className="text-white font-semibold text-sm line-clamp-2">
+                        {video.title}
+                      </h3>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-12 text-center text-white">
           <h2 className="text-4xl font-bold mb-4">Ready to Compete?</h2>

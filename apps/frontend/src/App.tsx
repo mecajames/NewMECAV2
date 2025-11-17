@@ -19,6 +19,12 @@ import MembershipPage from './pages/MembershipPage';
 import ContactPage from './pages/ContactPage';
 import HostEventPage from './pages/HostEventPage';
 import ClassCalculatorPage from './pages/ClassCalculatorPage';
+import HallOfFamePage from './pages/HallOfFamePage';
+import ChampionshipArchivesPage from './pages/ChampionshipArchivesPage';
+import MemberSupportPage from './pages/MemberSupportPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsAndConditionsPage from './pages/TermsAndConditionsPage';
+import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import MembersPage from './pages/admin/MembersPage';
 import MemberDetailPage from './pages/admin/MemberDetailPage';
 import SeasonManagementPage from './pages/admin/SeasonManagementPage';
@@ -48,6 +54,12 @@ function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/host-event" element={<HostEventPage />} />
               <Route path="/class-calculator" element={<ClassCalculatorPage />} />
+              <Route path="/hall-of-fame" element={<HallOfFamePage />} />
+              <Route path="/championship-archives" element={<ChampionshipArchivesPage />} />
+              <Route path="/member-support" element={<MemberSupportPage />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
+              <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
 
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
