@@ -54,3 +54,10 @@ export enum EventTypeOption {
   SPONSORED = 'Sponsored Event',
   OTHER = 'Other'
 }
+
+export enum EventType {
+  STANDARD = 'standard',
+  STATE_FINALS = 'state_finals',
+  WORLD_FINALS = 'world_finals',
+  JUDGES_POINT = 'judges_point'
+}

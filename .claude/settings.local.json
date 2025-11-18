@@ -171,7 +171,17 @@
       "Bash(del \"E:\\MECA Oct 2025\\NewMECAV2\\apps\\backend\\src\\migrations\\Migration20251116224406.ts\")",
       "Bash(if not exist November_16_2025_Backup mkdir November_16_2025_Backup)",
       "Bash(node scripts/seed-social-settings.js:*)",
-      "Bash(node scripts/seed-youtube-settings.js:*)"
+      "Bash(node scripts/seed-youtube-settings.js:*)",
+      "Bash(ipconfig:*)",
+      "Bash(if not exist November_17_2025_Backup mkdir November_17_2025_Backup)",
+      "Bash(node scripts/scrape-championship-archives.js:*)",
+      "Bash(cmd //c \"taskkill //F //IM node.exe\")",
+      "Bash(cmd /c \"taskkill /F /PID 41668\")",
+      "Bash(if not exist November_18_2025_Backup mkdir November_18_2025_Backup)",
+      "Bash(November_18_2025_Backupdatabasefull_backup_20251118.sql)",
+      "Bash(November_18_2025_Backupdatabaseschema_only_20251118.sql)",
+      "Bash(docker volume:*)",
+      "Bash(docker run:*)"
     ],
     "deny": [],
     "ask": []
