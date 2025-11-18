@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { EventStatus } from '../types/enums';
+import { EventStatus, EventType } from '../types/enums';
 import { Profile } from '../profiles/profiles.entity';
 import { Season } from '../seasons/seasons.entity';
 
@@ -65,6 +65,10 @@ export class Event {
 
   @Property({ type: 'integer', nullable: true, default: 2, fieldName: 'points_multiplier', serializedName: 'points_multiplier' })
   pointsMultiplier?: number;
+
+  @Enum(() => EventType)
+  @Property({ fieldName: 'event_type', serializedName: 'event_type' })
+  eventType: EventType = EventType.STANDARD;
 
   @Property({ type: 'json', nullable: true, serializedName: 'formats' })
   formats?: string[];

@@ -42,6 +42,10 @@ export default function SiteSettings() {
     youtube_api_key: '',
     youtube_channel_id: 'UCMmKGkg6d_1WEgvVahLvC_Q',
     youtube_auto_fetch_live: false,
+    youtube_auto_fetch_enabled: false,
+    youtube_auto_fetch_frequency: 'daily',
+    youtube_auto_fetch_time: '03:00',
+    youtube_last_fetch: '',
   });
 
   useEffect(() => {
@@ -101,6 +105,10 @@ export default function SiteSettings() {
         youtube_api_key: settingsMap['youtube_api_key'] || '',
         youtube_channel_id: settingsMap['youtube_channel_id'] || 'UCMmKGkg6d_1WEgvVahLvC_Q',
         youtube_auto_fetch_live: settingsMap['youtube_auto_fetch_live'] === 'true',
+        youtube_auto_fetch_enabled: settingsMap['youtube_auto_fetch_enabled'] === 'true',
+        youtube_auto_fetch_frequency: settingsMap['youtube_auto_fetch_frequency'] || 'daily',
+        youtube_auto_fetch_time: settingsMap['youtube_auto_fetch_time'] || '03:00',
+        youtube_last_fetch: settingsMap['youtube_last_fetch'] || '',
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -157,6 +165,9 @@ export default function SiteSettings() {
         saveSetting('youtube_api_key', formData.youtube_api_key, 'text', 'YouTube Data API v3 Key'),
         saveSetting('youtube_channel_id', formData.youtube_channel_id, 'text', 'YouTube Channel ID'),
         saveSetting('youtube_auto_fetch_live', formData.youtube_auto_fetch_live.toString(), 'boolean', 'Auto-fetch latest live video'),
+        saveSetting('youtube_auto_fetch_enabled', formData.youtube_auto_fetch_enabled.toString(), 'boolean', 'Enable automatic video fetching'),
+        saveSetting('youtube_auto_fetch_frequency', formData.youtube_auto_fetch_frequency, 'text', 'Auto-fetch frequency'),
+        saveSetting('youtube_auto_fetch_time', formData.youtube_auto_fetch_time, 'text', 'Auto-fetch time'),
       ]);
 
       alert('Settings saved successfully!');
@@ -636,16 +647,77 @@ export default function SiteSettings() {
             <p className="text-xs text-gray-400 mt-1">MECA Official Channel ID: UCMmKGkg6d_1WEgvVahLvC_Q</p>
           </div>
 
-          <button
-            onClick={fetchLatestLiveVideo}
-            type="button"
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Fetch Latest Video to Slot 1
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={fetchLatestLiveVideo}
+              type="button"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Fetch Latest Video Now
+            </button>
+          </div>
+
+          <div className="border-t border-slate-600 pt-4 mt-4">
+            <div className="flex items-center gap-3 mb-4">
+              <input
+                type="checkbox"
+                id="youtube_auto_fetch_enabled"
+                checked={formData.youtube_auto_fetch_enabled}
+                onChange={(e) => setFormData({ ...formData, youtube_auto_fetch_enabled: e.target.checked })}
+                className="w-5 h-5 rounded bg-slate-600 border-slate-500 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="youtube_auto_fetch_enabled" className="text-sm font-medium text-white">
+                Enable Automatic Scheduled Updates
+              </label>
+            </div>
+
+            {formData.youtube_auto_fetch_enabled && (
+              <div className="space-y-4 ml-8">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Update Frequency
+                  </label>
+                  <select
+                    value={formData.youtube_auto_fetch_frequency}
+                    onChange={(e) => setFormData({ ...formData, youtube_auto_fetch_frequency: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="hourly">Every Hour</option>
+                    <option value="every6hours">Every 6 Hours</option>
+                    <option value="daily">Once Per Day</option>
+                  </select>
+                </div>
+
+                {formData.youtube_auto_fetch_frequency === 'daily' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Daily Update Time (24-hour format)
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.youtube_auto_fetch_time}
+                      onChange={(e) => setFormData({ ...formData, youtube_auto_fetch_time: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Current setting: Updates at {formData.youtube_auto_fetch_time} every day
+                    </p>
+                  </div>
+                )}
+
+                {formData.youtube_last_fetch && (
+                  <div className="bg-slate-600 rounded p-3">
+                    <p className="text-xs text-gray-300">
+                      Last auto-update: {new Date(formData.youtube_last_fetch).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Video 1 */}

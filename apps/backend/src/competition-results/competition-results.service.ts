@@ -558,11 +558,11 @@ export class CompetitionResultsService {
     let imported = 0;
 
     // Fetch the event to get its season_id
-    const event = await em.findOne(Event, { id: eventId });
+    const event = await em.findOne(Event, { id: eventId }, { populate: ['season'] });
     if (!event) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
-    const eventSeasonId = event.seasonId || null;
+    const eventSeasonId = event.season?.id || null;
 
     // Determine entry method based on file extension
     const entryMethod = fileExtension === 'xlsx' || fileExtension === 'xls' ? 'excel' : 'termlab';

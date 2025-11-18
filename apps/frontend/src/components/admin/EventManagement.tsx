@@ -49,6 +49,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     registration_fee: '0',
     formats: [] as string[],
     points_multiplier: '1',
+    event_type: 'standard',
   });
 
   useEffect(() => {
@@ -207,6 +208,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: parseFloat(formData.registration_fee),
       formats: formData.formats.length > 0 ? formData.formats : null,
       points_multiplier: parseInt(formData.points_multiplier),
+      event_type: formData.event_type,
     };
 
     console.log('📤 FRONTEND - Form data event_date:', formData.event_date);
@@ -267,6 +269,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: event.registration_fee.toString(),
       formats: event.formats || [],
       points_multiplier: (event as any).points_multiplier?.toString() || '1',
+      event_type: (event as any).event_type || 'standard',
     });
     setShowModal(true);
   };
@@ -304,6 +307,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       max_participants: '',
       registration_fee: '0',
       points_multiplier: '1',
+      event_type: 'standard',
       formats: [],
     });
   };
@@ -874,6 +878,26 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
                     Determines points awarded: 1st=5pts, 2nd=4pts, 3rd=3pts, 4th=2pts, 5th=1pt × multiplier
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Event Type *
+                  </label>
+                  <select
+                    required
+                    value={formData.event_type}
+                    onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="standard">Standard Event</option>
+                    <option value="state_finals">State Finals Event</option>
+                    <option value="world_finals">World Finals Event</option>
+                    <option value="judges_point">Judges Point Event</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    World Finals events are used for Championship Archives
                   </p>
                 </div>
 

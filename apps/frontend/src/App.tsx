@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import ScrollToTop from './components/ScrollToTop';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
@@ -21,6 +22,7 @@ import HostEventPage from './pages/HostEventPage';
 import ClassCalculatorPage from './pages/ClassCalculatorPage';
 import HallOfFamePage from './pages/HallOfFamePage';
 import ChampionshipArchivesPage from './pages/ChampionshipArchivesPage';
+import ChampionshipArchiveYearPage from './pages/ChampionshipArchiveYearPage';
 import MemberSupportPage from './pages/MemberSupportPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsAndConditionsPage from './pages/TermsAndConditionsPage';
@@ -35,6 +37,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <div className="min-h-screen bg-slate-900 flex flex-col">
           <Navbar />
           <div className="flex-1">
@@ -56,6 +59,7 @@ function App() {
               <Route path="/class-calculator" element={<ClassCalculatorPage />} />
               <Route path="/hall-of-fame" element={<HallOfFamePage />} />
               <Route path="/championship-archives" element={<ChampionshipArchivesPage />} />
+              <Route path="/championship-archives/:year" element={<ChampionshipArchiveYearPage />} />
               <Route path="/member-support" element={<MemberSupportPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
               <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
