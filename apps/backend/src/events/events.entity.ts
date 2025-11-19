@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { EventStatus } from '../types/enums';
+import { EventStatus, EventType } from '../types/enums';
 import { Profile } from '../profiles/profiles.entity';
 import { Season } from '../seasons/seasons.entity';
 
@@ -39,10 +39,10 @@ export class Event {
   @Property({ type: 'text', nullable: true, default: 'US', fieldName: 'venue_country', serializedName: 'venue_country' })
   venueCountry?: string;
 
-  @Property({ type: 'decimal', precision: 10, scale: 8, nullable: true })
+  @Property({ type: 'decimal', precision: 15, scale: 10, nullable: true })
   latitude?: number;
 
-  @Property({ type: 'decimal', precision: 11, scale: 8, nullable: true })
+  @Property({ type: 'decimal', precision: 15, scale: 10, nullable: true })
   longitude?: number;
 
   @Property({ type: 'text', nullable: true, fieldName: 'flyer_url', serializedName: 'flyer_url' })
@@ -65,6 +65,10 @@ export class Event {
 
   @Property({ type: 'integer', nullable: true, default: 2, fieldName: 'points_multiplier', serializedName: 'points_multiplier' })
   pointsMultiplier?: number;
+
+  @Enum(() => EventType)
+  @Property({ fieldName: 'event_type', serializedName: 'event_type' })
+  eventType: EventType = EventType.STANDARD;
 
   @Property({ type: 'text[]', nullable: true, serializedName: 'formats' })
   formats?: string[];

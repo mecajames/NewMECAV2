@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Medal, TrendingUp, Filter } from 'lucide-react';
+import { Trophy, Medal, TrendingUp, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { competitionResultsApi } from '../api-client/competition-results.api-client';
 import SeasonSelector from '../components/SeasonSelector';
 
@@ -18,11 +18,17 @@ interface StandingsEntry {
   membership_expiry?: string;
 }
 
+type SortColumn = 'competitor' | 'mecaId' | 'class' | 'placement' | 'score' | 'points';
+type SortDirection = 'asc' | 'desc';
+
 export default function StandingsPage() {
   const [standings, setStandings] = useState<StandingsEntry[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [sortColumn, setSortColumn] = useState<SortColumn>('points');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -116,6 +122,24 @@ export default function StandingsPage() {
     return <span className="text-xl font-bold text-white">{rank}</span>;
   };
 
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 inline ml-1 opacity-50" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-4 w-4 inline ml-1" />
+      : <ArrowDown className="h-4 w-4 inline ml-1" />;
+  };
+
   const getMecaIdDisplay = (mecaId?: string, membershipExpiry?: string) => {
     // Non-member
     if (!mecaId || mecaId === '999999') {
@@ -145,39 +169,95 @@ export default function StandingsPage() {
           </p>
         </div>
 
-        {/* Season Filter */}
-        <div className="mb-6 bg-slate-800 rounded-xl p-6">
-          <SeasonSelector
-            selectedSeasonId={selectedSeasonId}
-            onSeasonChange={setSelectedSeasonId}
-            showAllOption={true}
-          />
-        </div>
-
+        {/* Season and Class Filters */}
         <div className="mb-8 bg-slate-800 rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-3 text-gray-300">
-            <Filter className="h-5 w-5" />
-            <label className="block text-sm font-medium">Filter by Class:</label>
+          <div className="flex items-center gap-6 mb-6">
+            <SeasonSelector
+              selectedSeasonId={selectedSeasonId}
+              onSeasonChange={setSelectedSeasonId}
+              showAllOption={true}
+            />
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-gray-300">
+                <Filter className="h-5 w-5 text-orange-500" />
+                <span className="font-medium">Filter by Class:</span>
+              </div>
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 hover:bg-slate-600 transition-colors"
+              >
+                <option value="all">All Classes</option>
+                {classes.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <select
-            value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
-            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-          >
-            <option value="all">All Classes</option>
-            {classes.map((cls) => (
-              <option key={cls} value={cls}>
-                {cls}
-              </option>
-            ))}
-          </select>
+
+          <label className="block text-sm font-medium text-gray-300 mb-3">
+            Search by Name or MECA ID
+          </label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Enter competitor name or MECA ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
         </div>
 
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
           </div>
-        ) : standings.length > 0 ? (
+        ) : (() => {
+          // Apply search filter
+          let filteredStandings = standings.filter(entry => {
+            if (!searchTerm) return true;
+
+            const competitorName = (entry.competitor_name || '').toLowerCase();
+            const mecaId = (entry.meca_id || '').toLowerCase();
+            const search = searchTerm.toLowerCase();
+
+            return competitorName.includes(search) || mecaId.includes(search);
+          });
+
+          // Apply sorting
+          filteredStandings = [...filteredStandings].sort((a, b) => {
+            let comparison = 0;
+
+            switch (sortColumn) {
+              case 'competitor':
+                comparison = (a.competitor_name || '').localeCompare(b.competitor_name || '');
+                break;
+              case 'mecaId':
+                comparison = (a.meca_id || '').localeCompare(b.meca_id || '');
+                break;
+              case 'class':
+                comparison = (a.competition_class || '').localeCompare(b.competition_class || '');
+                break;
+              case 'placement':
+                comparison = (a.best_placement || 0) - (b.best_placement || 0);
+                break;
+              case 'score':
+                comparison = (a.best_score || 0) - (b.best_score || 0);
+                break;
+              case 'points':
+                comparison = (a.total_points || 0) - (b.total_points || 0);
+                break;
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+          });
+
+          return filteredStandings.length > 0 ? (
           <>
             <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden mb-8">
               <div className="overflow-x-auto">
@@ -187,35 +267,53 @@ export default function StandingsPage() {
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
                         Rank
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
-                        Competitor
+                      <th
+                        className="px-6 py-4 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                        onClick={() => handleSort('competitor')}
+                      >
+                        Competitor{getSortIcon('competitor')}
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
-                        MECA ID
+                      <th
+                        className="px-6 py-4 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                        onClick={() => handleSort('mecaId')}
+                      >
+                        MECA ID{getSortIcon('mecaId')}
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
-                        Class
+                      <th
+                        className="px-6 py-4 text-left text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                        onClick={() => handleSort('class')}
+                      >
+                        Class{getSortIcon('class')}
                       </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">
-                        Place
+                      <th
+                        className="px-6 py-4 text-center text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                        onClick={() => handleSort('placement')}
+                      >
+                        Place{getSortIcon('placement')}
                       </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">
-                        Best Score
+                      <th
+                        className="px-6 py-4 text-center text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                        onClick={() => handleSort('score')}
+                      >
+                        Best Score{getSortIcon('score')}
                       </th>
-                      <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">
-                        Total Points
+                      <th
+                        className="px-6 py-4 text-right text-sm font-semibold text-gray-300 cursor-pointer hover:bg-slate-600 transition-colors"
+                        onClick={() => handleSort('points')}
+                      >
+                        Total Points{getSortIcon('points')}
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
-                    {standings.map((entry, index) => {
+                    {filteredStandings.map((entry, index) => {
                       const rank = index + 1;
                       const isTopThree = rank <= 3;
                       const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
 
                       return (
                         <tr
-                          key={`${entry.competitor_id}_${entry.competition_class}`}
+                          key={`${entry.competitor_id || entry.competitor_name}_${entry.competition_class}_${index}`}
                           className={`hover:bg-slate-700/50 transition-colors ${
                             isTopThree ? 'bg-slate-700/30' : ''
                           }`}
@@ -289,10 +387,11 @@ export default function StandingsPage() {
           <div className="text-center py-20 bg-slate-800 rounded-xl">
             <Trophy className="h-20 w-20 text-gray-500 mx-auto mb-4" />
             <p className="text-gray-400 text-xl">
-              No standings available for the selected class.
+              No standings available for the selected filters.
             </p>
           </div>
-        )}
+        );
+        })()}
       </div>
     </div>
   );

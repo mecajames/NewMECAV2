@@ -16,6 +16,8 @@ import { CompetitionFormatsModule } from './competition-formats/competition-form
 import { EventHostingRequestsModule } from './event-hosting-requests/event-hosting-requests.module';
 import { DatabaseModule } from './db/database.module';
 import { AuditModule } from './audit/audit.module';
+import { ChampionshipArchivesModule } from './championship-archives/championship-archives.module';
+
 import { RecaptchaModule } from './recaptcha/recaptcha.module';
 
 @Module({
@@ -35,6 +37,7 @@ import { RecaptchaModule } from './recaptcha/recaptcha.module';
     CompetitionFormatsModule,
     EventHostingRequestsModule,
     AuditModule,
+    ChampionshipArchivesModule,
     RecaptchaModule,
   ],
   controllers: [AppController],

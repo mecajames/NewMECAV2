@@ -22,6 +22,30 @@ export default function SiteSettings() {
     hero_carousel_direction: 'left' as 'left' | 'right' | 'top' | 'bottom',
     pdf_viewer_height: '800',
     pdf_viewer_width: '100%',
+    social_facebook_url: '',
+    social_facebook_active: false,
+    social_instagram_url: '',
+    social_instagram_active: false,
+    social_youtube_url: '',
+    social_youtube_active: false,
+    social_x_url: '',
+    social_x_active: false,
+    youtube_video_1_url: '',
+    youtube_video_1_title: '',
+    youtube_video_2_url: '',
+    youtube_video_2_title: '',
+    youtube_video_3_url: '',
+    youtube_video_3_title: '',
+    youtube_video_4_url: '',
+    youtube_video_4_title: '',
+    youtube_section_active: true,
+    youtube_api_key: '',
+    youtube_channel_id: 'UCMmKGkg6d_1WEgvVahLvC_Q',
+    youtube_auto_fetch_live: false,
+    youtube_auto_fetch_enabled: false,
+    youtube_auto_fetch_frequency: 'daily',
+    youtube_auto_fetch_time: '03:00',
+    youtube_last_fetch: '',
   });
 
   useEffect(() => {
@@ -61,6 +85,30 @@ export default function SiteSettings() {
         hero_carousel_direction: settingsMap['hero_carousel_direction'] || 'left',
         pdf_viewer_height: settingsMap['pdf_viewer_height'] || '800',
         pdf_viewer_width: settingsMap['pdf_viewer_width'] || '100%',
+        social_facebook_url: settingsMap['social_facebook_url'] || '',
+        social_facebook_active: settingsMap['social_facebook_active'] === 'true',
+        social_instagram_url: settingsMap['social_instagram_url'] || '',
+        social_instagram_active: settingsMap['social_instagram_active'] === 'true',
+        social_youtube_url: settingsMap['social_youtube_url'] || '',
+        social_youtube_active: settingsMap['social_youtube_active'] === 'true',
+        social_x_url: settingsMap['social_x_url'] || '',
+        social_x_active: settingsMap['social_x_active'] === 'true',
+        youtube_video_1_url: settingsMap['youtube_video_1_url'] || '',
+        youtube_video_1_title: settingsMap['youtube_video_1_title'] || '',
+        youtube_video_2_url: settingsMap['youtube_video_2_url'] || '',
+        youtube_video_2_title: settingsMap['youtube_video_2_title'] || '',
+        youtube_video_3_url: settingsMap['youtube_video_3_url'] || '',
+        youtube_video_3_title: settingsMap['youtube_video_3_title'] || '',
+        youtube_video_4_url: settingsMap['youtube_video_4_url'] || '',
+        youtube_video_4_title: settingsMap['youtube_video_4_title'] || '',
+        youtube_section_active: settingsMap['youtube_section_active'] === 'true' || settingsMap['youtube_section_active'] === undefined,
+        youtube_api_key: settingsMap['youtube_api_key'] || '',
+        youtube_channel_id: settingsMap['youtube_channel_id'] || 'UCMmKGkg6d_1WEgvVahLvC_Q',
+        youtube_auto_fetch_live: settingsMap['youtube_auto_fetch_live'] === 'true',
+        youtube_auto_fetch_enabled: settingsMap['youtube_auto_fetch_enabled'] === 'true',
+        youtube_auto_fetch_frequency: settingsMap['youtube_auto_fetch_frequency'] || 'daily',
+        youtube_auto_fetch_time: settingsMap['youtube_auto_fetch_time'] || '03:00',
+        youtube_last_fetch: settingsMap['youtube_last_fetch'] || '',
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -97,6 +145,29 @@ export default function SiteSettings() {
         saveSetting('hero_carousel_direction', formData.hero_carousel_direction, 'text', 'Carousel slide direction: left, right, top, bottom'),
         saveSetting('pdf_viewer_height', formData.pdf_viewer_height, 'text', 'PDF viewer height in pixels'),
         saveSetting('pdf_viewer_width', formData.pdf_viewer_width, 'text', 'PDF viewer width (percentage or pixels)'),
+        saveSetting('social_facebook_url', formData.social_facebook_url, 'text', 'Facebook page URL'),
+        saveSetting('social_facebook_active', formData.social_facebook_active.toString(), 'boolean', 'Show Facebook link in footer'),
+        saveSetting('social_instagram_url', formData.social_instagram_url, 'text', 'Instagram profile URL'),
+        saveSetting('social_instagram_active', formData.social_instagram_active.toString(), 'boolean', 'Show Instagram link in footer'),
+        saveSetting('social_youtube_url', formData.social_youtube_url, 'text', 'YouTube channel URL'),
+        saveSetting('social_youtube_active', formData.social_youtube_active.toString(), 'boolean', 'Show YouTube link in footer'),
+        saveSetting('social_x_url', formData.social_x_url, 'text', 'X (Twitter) profile URL'),
+        saveSetting('social_x_active', formData.social_x_active.toString(), 'boolean', 'Show X link in footer'),
+        saveSetting('youtube_video_1_url', formData.youtube_video_1_url, 'text', 'YouTube Video 1 Embed URL'),
+        saveSetting('youtube_video_1_title', formData.youtube_video_1_title, 'text', 'YouTube Video 1 Title'),
+        saveSetting('youtube_video_2_url', formData.youtube_video_2_url, 'text', 'YouTube Video 2 Embed URL'),
+        saveSetting('youtube_video_2_title', formData.youtube_video_2_title, 'text', 'YouTube Video 2 Title'),
+        saveSetting('youtube_video_3_url', formData.youtube_video_3_url, 'text', 'YouTube Video 3 Embed URL'),
+        saveSetting('youtube_video_3_title', formData.youtube_video_3_title, 'text', 'YouTube Video 3 Title'),
+        saveSetting('youtube_video_4_url', formData.youtube_video_4_url, 'text', 'YouTube Video 4 Embed URL'),
+        saveSetting('youtube_video_4_title', formData.youtube_video_4_title, 'text', 'YouTube Video 4 Title'),
+        saveSetting('youtube_section_active', formData.youtube_section_active.toString(), 'boolean', 'Show YouTube section on homepage'),
+        saveSetting('youtube_api_key', formData.youtube_api_key, 'text', 'YouTube Data API v3 Key'),
+        saveSetting('youtube_channel_id', formData.youtube_channel_id, 'text', 'YouTube Channel ID'),
+        saveSetting('youtube_auto_fetch_live', formData.youtube_auto_fetch_live.toString(), 'boolean', 'Auto-fetch latest live video'),
+        saveSetting('youtube_auto_fetch_enabled', formData.youtube_auto_fetch_enabled.toString(), 'boolean', 'Enable automatic video fetching'),
+        saveSetting('youtube_auto_fetch_frequency', formData.youtube_auto_fetch_frequency, 'text', 'Auto-fetch frequency'),
+        saveSetting('youtube_auto_fetch_time', formData.youtube_auto_fetch_time, 'text', 'Auto-fetch time'),
       ]);
 
       alert('Settings saved successfully!');
@@ -137,6 +208,84 @@ export default function SiteSettings() {
     }
     setShowMediaPicker(false);
     setCurrentImageIndex(null);
+  };
+
+  // Convert YouTube URL to embed URL
+  const convertToEmbedUrl = (url: string): string => {
+    if (!url) return '';
+
+    // Already an embed URL
+    if (url.includes('/embed/')) return url;
+
+    // Regular watch URL: https://www.youtube.com/watch?v=VIDEO_ID
+    const watchMatch = url.match(/[?&]v=([^&]+)/);
+    if (watchMatch) {
+      return `https://www.youtube.com/embed/${watchMatch[1]}`;
+    }
+
+    // Short URL: https://youtu.be/VIDEO_ID
+    const shortMatch = url.match(/youtu\.be\/([^?&]+)/);
+    if (shortMatch) {
+      return `https://www.youtube.com/embed/${shortMatch[1]}`;
+    }
+
+    // Live URL: https://www.youtube.com/live/VIDEO_ID
+    const liveMatch = url.match(/\/live\/([^?&]+)/);
+    if (liveMatch) {
+      return `https://www.youtube.com/embed/${liveMatch[1]}`;
+    }
+
+    return url;
+  };
+
+  const handleYoutubeUrlChange = (field: string, value: string) => {
+    const embedUrl = convertToEmbedUrl(value);
+    setFormData({ ...formData, [field]: embedUrl });
+  };
+
+  const fetchLatestLiveVideo = async () => {
+    if (!formData.youtube_api_key) {
+      alert('Please enter a YouTube API Key first');
+      return;
+    }
+
+    if (!formData.youtube_channel_id) {
+      alert('Please enter a YouTube Channel ID first');
+      return;
+    }
+
+    try {
+      // Fetch latest live stream from YouTube Data API
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${formData.youtube_channel_id}&eventType=completed&type=video&order=date&maxResults=1&key=${formData.youtube_api_key}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch from YouTube API');
+      }
+
+      const data = await response.json();
+
+      if (data.items && data.items.length > 0) {
+        const video = data.items[0];
+        const videoId = video.id.videoId;
+        const videoTitle = video.snippet.title;
+        const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+
+        setFormData({
+          ...formData,
+          youtube_video_1_url: embedUrl,
+          youtube_video_1_title: videoTitle,
+        });
+
+        alert(`Latest video fetched: ${videoTitle}`);
+      } else {
+        alert('No videos found for this channel');
+      }
+    } catch (error: any) {
+      console.error('Error fetching latest video:', error);
+      alert('Error fetching latest video. Please check your API key and try again.');
+    }
   };
 
   const openMediaPicker = (index?: number) => {
@@ -337,6 +486,373 @@ export default function SiteSettings() {
               className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
             <p className="text-xs text-gray-400 mt-1">Use percentage (100%) or pixels (1200px)</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          Social Media Links
+        </h3>
+        <p className="text-sm text-gray-400">
+          Configure social media links and visibility in the footer
+        </p>
+
+        {/* Facebook */}
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <input
+              type="checkbox"
+              id="facebook_active"
+              checked={formData.social_facebook_active}
+              onChange={(e) => setFormData({ ...formData, social_facebook_active: e.target.checked })}
+              className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-orange-600 focus:ring-orange-500"
+            />
+            <label htmlFor="facebook_active" className="text-sm font-medium text-gray-300">
+              Show Facebook in Footer
+            </label>
+          </div>
+          <input
+            type="url"
+            value={formData.social_facebook_url}
+            onChange={(e) => setFormData({ ...formData, social_facebook_url: e.target.value })}
+            placeholder="https://facebook.com/yourusername"
+            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+
+        {/* Instagram */}
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <input
+              type="checkbox"
+              id="instagram_active"
+              checked={formData.social_instagram_active}
+              onChange={(e) => setFormData({ ...formData, social_instagram_active: e.target.checked })}
+              className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-orange-600 focus:ring-orange-500"
+            />
+            <label htmlFor="instagram_active" className="text-sm font-medium text-gray-300">
+              Show Instagram in Footer
+            </label>
+          </div>
+          <input
+            type="url"
+            value={formData.social_instagram_url}
+            onChange={(e) => setFormData({ ...formData, social_instagram_url: e.target.value })}
+            placeholder="https://instagram.com/yourusername"
+            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+
+        {/* YouTube */}
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <input
+              type="checkbox"
+              id="youtube_active"
+              checked={formData.social_youtube_active}
+              onChange={(e) => setFormData({ ...formData, social_youtube_active: e.target.checked })}
+              className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-orange-600 focus:ring-orange-500"
+            />
+            <label htmlFor="youtube_active" className="text-sm font-medium text-gray-300">
+              Show YouTube in Footer
+            </label>
+          </div>
+          <input
+            type="url"
+            value={formData.social_youtube_url}
+            onChange={(e) => setFormData({ ...formData, social_youtube_url: e.target.value })}
+            placeholder="https://youtube.com/c/yourchannel"
+            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+
+        {/* X (Twitter) */}
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <input
+              type="checkbox"
+              id="x_active"
+              checked={formData.social_x_active}
+              onChange={(e) => setFormData({ ...formData, social_x_active: e.target.checked })}
+              className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-orange-600 focus:ring-orange-500"
+            />
+            <label htmlFor="x_active" className="text-sm font-medium text-gray-300">
+              Show X (Twitter) in Footer
+            </label>
+          </div>
+          <input
+            type="url"
+            value={formData.social_x_url}
+            onChange={(e) => setFormData({ ...formData, social_x_url: e.target.value })}
+            placeholder="https://x.com/yourusername"
+            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          YouTube Videos
+        </h3>
+        <p className="text-sm text-gray-400">
+          Configure YouTube videos to display on the homepage. Use YouTube embed URLs (e.g., https://www.youtube.com/embed/VIDEO_ID)
+        </p>
+
+        <div className="flex items-center gap-3 mb-4">
+          <input
+            type="checkbox"
+            id="youtube_section_active"
+            checked={formData.youtube_section_active}
+            onChange={(e) => setFormData({ ...formData, youtube_section_active: e.target.checked })}
+            className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-orange-600 focus:ring-orange-500"
+          />
+          <label htmlFor="youtube_section_active" className="text-sm font-medium text-gray-300">
+            Show YouTube Section on Homepage
+          </label>
+        </div>
+
+        {/* YouTube API Settings */}
+        <div className="bg-slate-700 rounded-lg p-4 space-y-4">
+          <h4 className="text-lg font-semibold text-white">Auto-Fetch Latest Video (Optional)</h4>
+          <p className="text-xs text-gray-400">
+            Get a YouTube Data API key from <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:text-orange-400">Google Cloud Console</a> to automatically fetch your latest videos.
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              YouTube API Key
+            </label>
+            <input
+              type="text"
+              value={formData.youtube_api_key}
+              onChange={(e) => setFormData({ ...formData, youtube_api_key: e.target.value })}
+              placeholder="Enter your YouTube Data API v3 key"
+              className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              YouTube Channel ID
+            </label>
+            <input
+              type="text"
+              value={formData.youtube_channel_id}
+              onChange={(e) => setFormData({ ...formData, youtube_channel_id: e.target.value })}
+              placeholder="UCMmKGkg6d_1WEgvVahLvC_Q"
+              className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">MECA Official Channel ID: UCMmKGkg6d_1WEgvVahLvC_Q</p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={fetchLatestLiveVideo}
+              type="button"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Fetch Latest Video Now
+            </button>
+          </div>
+
+          <div className="border-t border-slate-600 pt-4 mt-4">
+            <div className="flex items-center gap-3 mb-4">
+              <input
+                type="checkbox"
+                id="youtube_auto_fetch_enabled"
+                checked={formData.youtube_auto_fetch_enabled}
+                onChange={(e) => setFormData({ ...formData, youtube_auto_fetch_enabled: e.target.checked })}
+                className="w-5 h-5 rounded bg-slate-600 border-slate-500 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="youtube_auto_fetch_enabled" className="text-sm font-medium text-white">
+                Enable Automatic Scheduled Updates
+              </label>
+            </div>
+
+            {formData.youtube_auto_fetch_enabled && (
+              <div className="space-y-4 ml-8">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Update Frequency
+                  </label>
+                  <select
+                    value={formData.youtube_auto_fetch_frequency}
+                    onChange={(e) => setFormData({ ...formData, youtube_auto_fetch_frequency: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="hourly">Every Hour</option>
+                    <option value="every6hours">Every 6 Hours</option>
+                    <option value="daily">Once Per Day</option>
+                  </select>
+                </div>
+
+                {formData.youtube_auto_fetch_frequency === 'daily' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Daily Update Time (24-hour format)
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.youtube_auto_fetch_time}
+                      onChange={(e) => setFormData({ ...formData, youtube_auto_fetch_time: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Current setting: Updates at {formData.youtube_auto_fetch_time} every day
+                    </p>
+                  </div>
+                )}
+
+                {formData.youtube_last_fetch && (
+                  <div className="bg-slate-600 rounded p-3">
+                    <p className="text-xs text-gray-300">
+                      Last auto-update: {new Date(formData.youtube_last_fetch).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Video 1 */}
+        <div className="border-t border-slate-700 pt-4">
+          <h4 className="text-lg font-semibold text-white mb-3">Video 1</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Video Title
+              </label>
+              <input
+                type="text"
+                value={formData.youtube_video_1_title}
+                onChange={(e) => setFormData({ ...formData, youtube_video_1_title: e.target.value })}
+                placeholder="e.g., What does MECA offer"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                YouTube URL
+              </label>
+              <input
+                type="url"
+                value={formData.youtube_video_1_url}
+                onChange={(e) => handleYoutubeUrlChange('youtube_video_1_url', e.target.value)}
+                placeholder="Paste any YouTube URL (watch, live, or embed)"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Paste any YouTube URL - it will automatically convert to embed format
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Video 2 */}
+        <div className="border-t border-slate-700 pt-4">
+          <h4 className="text-lg font-semibold text-white mb-3">Video 2</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Video Title
+              </label>
+              <input
+                type="text"
+                value={formData.youtube_video_2_title}
+                onChange={(e) => setFormData({ ...formData, youtube_video_2_title: e.target.value })}
+                placeholder="e.g., Dueling Demos Summers end Charles Simone"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                YouTube URL
+              </label>
+              <input
+                type="url"
+                value={formData.youtube_video_2_url}
+                onChange={(e) => handleYoutubeUrlChange('youtube_video_2_url', e.target.value)}
+                placeholder="Paste any YouTube URL (watch, live, or embed)"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Paste any YouTube URL - it will automatically convert to embed format
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Video 3 */}
+        <div className="border-t border-slate-700 pt-4">
+          <h4 className="text-lg font-semibold text-white mb-3">Video 3</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Video Title
+              </label>
+              <input
+                type="text"
+                value={formData.youtube_video_3_title}
+                onChange={(e) => setFormData({ ...formData, youtube_video_3_title: e.target.value })}
+                placeholder="e.g., Dueling Demos Summers end Dueling Demos"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                YouTube URL
+              </label>
+              <input
+                type="url"
+                value={formData.youtube_video_3_url}
+                onChange={(e) => handleYoutubeUrlChange('youtube_video_3_url', e.target.value)}
+                placeholder="Paste any YouTube URL (watch, live, or embed)"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Paste any YouTube URL - it will automatically convert to embed format
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Video 4 */}
+        <div className="border-t border-slate-700 pt-4">
+          <h4 className="text-lg font-semibold text-white mb-3">Video 4</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Video Title
+              </label>
+              <input
+                type="text"
+                value={formData.youtube_video_4_title}
+                onChange={(e) => setFormData({ ...formData, youtube_video_4_title: e.target.value })}
+                placeholder="e.g., Dueling Demos Summers end Mark Stage"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                YouTube URL
+              </label>
+              <input
+                type="url"
+                value={formData.youtube_video_4_url}
+                onChange={(e) => handleYoutubeUrlChange('youtube_video_4_url', e.target.value)}
+                placeholder="Paste any YouTube URL (watch, live, or embed)"
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Paste any YouTube URL - it will automatically convert to embed format
+              </p>
+            </div>
           </div>
         </div>
 

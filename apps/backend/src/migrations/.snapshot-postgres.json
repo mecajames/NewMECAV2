@@ -1587,24 +1587,24 @@
         },
         "latitude": {
           "name": "latitude",
-          "type": "numeric(10,8)",
+          "type": "numeric(15,10)",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": true,
-          "precision": 10,
-          "scale": 8,
+          "precision": 15,
+          "scale": 10,
           "mappedType": "decimal"
         },
         "longitude": {
           "name": "longitude",
-          "type": "numeric(11,8)",
+          "type": "numeric(15,10)",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": true,
-          "precision": 11,
-          "scale": 8,
+          "precision": 15,
+          "scale": 10,
           "mappedType": "decimal"
         },
         "flyer_url": {
@@ -2383,7 +2383,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": true,
+          "nullable": false,
           "mappedType": "uuid"
         }
       },
@@ -2426,19 +2426,6 @@
             "id"
           ],
           "referencedTableName": "public.competition_results",
-          "deleteRule": "set null",
-          "updateRule": "cascade"
-        },
-        "results_audit_log_user_id_foreign": {
-          "constraintName": "results_audit_log_user_id_foreign",
-          "columnNames": [
-            "user_id"
-          ],
-          "localTableName": "public.results_audit_log",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.profiles",
           "deleteRule": "set null",
           "updateRule": "cascade"
         }

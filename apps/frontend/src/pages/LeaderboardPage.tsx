@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Medal, Award, TrendingUp } from 'lucide-react';
+import { Trophy, Medal, Award, TrendingUp, Filter } from 'lucide-react';
 import { competitionResultsApi, CompetitionResult } from '../api-client/competition-results.api-client';
+import { competitionClassesApi, CompetitionClass } from '../api-client/competition-classes.api-client';
 import SeasonSelector from '../components/SeasonSelector';
 
 interface LeaderboardEntry {
   competitor_id: string;
   competitor_name: string;
+  competition_class: string;
   total_points: number;
   events_participated: number;
   first_place: number;
@@ -18,17 +20,22 @@ interface LeaderboardEntry {
 export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [classes, setClasses] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mostEventsAttended, setMostEventsAttended] = useState<LeaderboardEntry[]>([]);
+  const [highestSPLScores, setHighestSPLScores] = useState<any[]>([]);
 
   useEffect(() => {
     fetchLeaderboard();
-  }, [selectedSeasonId]);
+  }, [selectedSeasonId, selectedClass]);
 
   const processResults = (results: any[]): LeaderboardEntry[] => {
     const aggregated: { [key: string]: LeaderboardEntry } = {};
 
     results.forEach((result) => {
-      const key = result.competitor_id || result.competitor_name;
+      const compClass = result.competitionClass || result.competition_class || '';
+      const key = `${result.competitor_id || result.competitor_name}_${compClass}`;
       const mecaId = result.mecaId || result.meca_id;
       const membershipExpiry = result.competitor?.membership_expiry;
 
@@ -36,6 +43,7 @@ export default function LeaderboardPage() {
         aggregated[key] = {
           competitor_id: result.competitor_id || '',
           competitor_name: result.competitor_name,
+          competition_class: compClass,
           total_points: 0,
           events_participated: 0,
           first_place: 0,
@@ -46,7 +54,7 @@ export default function LeaderboardPage() {
         };
       }
 
-      aggregated[key].total_points += result.points_earned;
+      aggregated[key].total_points += result.points_earned || 0;
       aggregated[key].events_participated += 1;
 
       if (result.placement === 1) aggregated[key].first_place += 1;
@@ -58,22 +66,88 @@ export default function LeaderboardPage() {
   };
 
   const fetchLeaderboard = async () => {
+    setLoading(true);
     try {
-      const data = await competitionResultsApi.getLeaderboard(selectedSeasonId || undefined);
-      setLeaderboard(data.slice(0, 10));
+      const results = await competitionResultsApi.getAll(1, 1000);
+
+      // Extract unique classes from ALL results (not filtered by season)
+      const classSet = new Set<string>();
+      results.forEach((r: any) => {
+        const compClass = r.competitionClass || r.competition_class;
+        if (compClass) classSet.add(compClass);
+      });
+      setClasses(Array.from(classSet).sort());
+
+      // Filter by season if selected
+      let filtered = selectedSeasonId
+        ? results.filter((r: CompetitionResult) => r.season_id === selectedSeasonId)
+        : results;
+
+      // Process results to aggregate by competitor and class
+      let processed = processResults(filtered);
+
+      // Filter by class if selected
+      if (selectedClass !== 'all') {
+        processed = processed.filter(entry => entry.competition_class === selectedClass);
+        // Clear these stats when a specific class is selected
+        setMostEventsAttended([]);
+        setHighestSPLScores([]);
+      } else {
+        // For "All Classes", aggregate across all classes for each competitor
+        const overallAggregated: { [key: string]: LeaderboardEntry } = {};
+
+        processed.forEach(entry => {
+          const key = entry.competitor_id || entry.competitor_name;
+
+          if (!overallAggregated[key]) {
+            overallAggregated[key] = {
+              ...entry,
+              competition_class: 'Overall',
+            };
+          } else {
+            // Aggregate data across classes
+            overallAggregated[key].total_points += entry.total_points;
+            overallAggregated[key].events_participated += entry.events_participated;
+            overallAggregated[key].first_place += entry.first_place;
+            overallAggregated[key].second_place += entry.second_place;
+            overallAggregated[key].third_place += entry.third_place;
+            overallAggregated[key].best_placement = Math.min(
+              overallAggregated[key].best_placement,
+              entry.best_placement
+            );
+            overallAggregated[key].best_score = Math.max(
+              overallAggregated[key].best_score,
+              entry.best_score
+            );
+          }
+        });
+
+        processed = Object.values(overallAggregated).sort((a, b) => b.total_points - a.total_points);
+
+        // Calculate additional stats for "All Classes" view
+        // Top 3 by events attended
+        const byEvents = [...processed].sort((a, b) => b.events_participated - a.events_participated).slice(0, 3);
+        setMostEventsAttended(byEvents);
+
+        // Top 3 by highest SPL score
+        const splResults = filtered.filter((r: any) => r.format === 'SPL' && r.score);
+        const splByScore = splResults
+          .map((r: any) => ({
+            competitor_name: r.competitorName || r.competitor_name,
+            meca_id: r.mecaId || r.meca_id,
+            score: r.score,
+            competition_class: r.competitionClass || r.competition_class,
+            membership_expiry: r.competitor?.membership_expiry,
+          }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3);
+        setHighestSPLScores(splByScore);
+      }
+
+      // Take top 10
+      setLeaderboard(processed.slice(0, 10));
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
-      // Fallback: fetch all results and process manually
-      try {
-        const results = await competitionResultsApi.getAll(1, 1000);
-        const filtered = selectedSeasonId
-          ? results.filter((r: CompetitionResult) => r.season_id === selectedSeasonId)
-          : results;
-        const processed = processResults(filtered).slice(0, 10);
-        setLeaderboard(processed);
-      } catch (fallbackError) {
-        console.error('Error in fallback leaderboard fetch:', fallbackError);
-      }
     }
 
     setLoading(false);
@@ -123,91 +197,346 @@ export default function LeaderboardPage() {
           </p>
         </div>
 
-        {/* Season Filter */}
-        <div className="mb-8 bg-slate-800 rounded-xl p-6">
-          <SeasonSelector
-            selectedSeasonId={selectedSeasonId}
-            onSeasonChange={setSelectedSeasonId}
-            showAllOption={true}
-          />
+        {/* Season and Class Filters */}
+        <div className="mb-16 bg-slate-800 rounded-xl p-6">
+          <div className="flex flex-wrap items-center gap-6">
+            {/* Season Filter */}
+            <div className="flex-1 min-w-[250px]">
+              <SeasonSelector
+                selectedSeasonId={selectedSeasonId}
+                onSeasonChange={setSelectedSeasonId}
+                showAllOption={true}
+                autoSelectCurrent={true}
+              />
+            </div>
+
+            {/* Class Filter */}
+            <div className="flex items-center gap-3 flex-1 min-w-[250px]">
+              <Filter className="h-5 w-5 text-orange-500 flex-shrink-0" />
+              <label className="text-sm font-medium text-gray-300 whitespace-nowrap">Filter by Class:</label>
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="flex-1 px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="all">All Classes</option>
+                {classes.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
+
+        {/* Class Name Heading */}
+        {selectedClass !== 'all' && (
+          <div className="mb-8 text-center">
+            <h2 className="text-3xl font-bold text-white">{selectedClass}</h2>
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
           </div>
         ) : leaderboard.length > 0 ? (
-          <div className="space-y-4">
-            {leaderboard.map((entry, index) => {
-              const rank = index + 1;
-              const isTopThree = rank <= 3;
-              const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
-
-              return (
-                <div
-                  key={entry.competitor_id || entry.competitor_name}
-                  className={`bg-slate-800 rounded-xl shadow-lg overflow-hidden transition-all transform hover:-translate-y-1 hover:shadow-2xl ${
-                    isTopThree ? 'border-2 border-orange-500' : ''
-                  }`}
-                >
-                  <div className="flex items-center p-6 gap-6">
-                    <div
-                      className={`flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-br ${getMedalColor(
-                        rank
-                      )} flex items-center justify-center shadow-lg`}
-                    >
-                      {getMedalIcon(rank)}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-2xl font-bold text-white mb-1">
-                        {entry.competitor_name}
-                      </h3>
-                      <div className="flex flex-wrap items-center gap-4 text-sm">
-                        <div className={`flex items-center gap-1 font-semibold ${mecaDisplay.color}`}>
-                          <Award className="h-4 w-4" />
-                          <span>{mecaDisplay.text}</span>
+          <>
+            {/* Top 3 Podium - Only show if we have 3 or more */}
+            {leaderboard.length >= 3 ? (
+              <div className="mb-12">
+                {/* Podium Display */}
+                <div className="flex items-end justify-center gap-4 mb-8">
+                  {/* 2nd Place - Left */}
+                  {leaderboard[1] && (() => {
+                    const entry = leaderboard[1];
+                    const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
+                    return (
+                      <div className="flex flex-col items-center">
+                        <div className="bg-slate-800 rounded-xl p-6 border-2 border-gray-400 mb-4 w-64 text-center">
+                          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gray-300 to-gray-500 flex items-center justify-center mx-auto mb-4 shadow-lg">
+                            <Medal className="h-10 w-10 text-white" />
+                          </div>
+                          <div className="text-gray-400 text-sm font-semibold mb-1">2nd</div>
+                          <h3 className="text-xl font-bold text-white mb-2">{entry.competitor_name}</h3>
+                          <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
+                          <div className="text-3xl font-bold text-gray-400">{entry.total_points}</div>
+                          <div className="text-sm text-gray-500">points</div>
                         </div>
-                        <div className="flex items-center gap-1 text-gray-400">
-                          <TrendingUp className="h-4 w-4" />
-                          <span>{entry.events_participated} Events</span>
+                        <div className="w-64 h-32 bg-gradient-to-t from-gray-400 to-gray-500 rounded-t-lg flex items-center justify-center">
+                          <span className="text-6xl font-bold text-white opacity-50">2</span>
                         </div>
-                        {entry.first_place > 0 && (
-                          <div className="flex items-center gap-1 text-yellow-400">
-                            <Medal className="h-4 w-4" />
-                            <span>{entry.first_place} × 1st</span>
-                          </div>
-                        )}
-                        {entry.second_place > 0 && (
-                          <div className="flex items-center gap-1 text-gray-400">
-                            <Medal className="h-4 w-4" />
-                            <span>{entry.second_place} × 2nd</span>
-                          </div>
-                        )}
-                        {entry.third_place > 0 && (
-                          <div className="flex items-center gap-1 text-orange-400">
-                            <Medal className="h-4 w-4" />
-                            <span>{entry.third_place} × 3rd</span>
-                          </div>
-                        )}
                       </div>
-                    </div>
+                    );
+                  })()}
 
-                    <div className="text-right">
-                      <div className="text-4xl font-bold text-orange-500">
-                        {entry.total_points}
+                  {/* 1st Place - Center (Elevated) */}
+                  {leaderboard[0] && (() => {
+                    const entry = leaderboard[0];
+                    const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
+                    return (
+                      <div className="flex flex-col items-center -mt-8">
+                        <div className="bg-slate-800 rounded-xl p-6 border-4 border-yellow-500 mb-4 w-72 text-center shadow-2xl">
+                          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
+                            <Trophy className="h-12 w-12 text-white" />
+                          </div>
+                          <div className="text-yellow-500 text-sm font-semibold mb-1">1st</div>
+                          <h3 className="text-2xl font-bold text-white mb-2">{entry.competitor_name}</h3>
+                          <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
+                          <div className="text-4xl font-bold text-yellow-500">{entry.total_points}</div>
+                          <div className="text-sm text-gray-500">points</div>
+                        </div>
+                        <div className="w-72 h-40 bg-gradient-to-t from-yellow-500 to-yellow-400 rounded-t-lg flex items-center justify-center">
+                          <span className="text-7xl font-bold text-white opacity-50">1</span>
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-400">Total Points</div>
-                    </div>
+                    );
+                  })()}
+
+                  {/* 3rd Place - Right */}
+                  {leaderboard[2] && (() => {
+                    const entry = leaderboard[2];
+                    const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
+                    return (
+                      <div className="flex flex-col items-center">
+                        <div className="bg-slate-800 rounded-xl p-6 border-2 border-orange-500 mb-4 w-64 text-center">
+                          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
+                            <Medal className="h-10 w-10 text-white" />
+                          </div>
+                          <div className="text-orange-500 text-sm font-semibold mb-1">3rd</div>
+                          <h3 className="text-xl font-bold text-white mb-2">{entry.competitor_name}</h3>
+                          <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
+                          <div className="text-3xl font-bold text-orange-500">{entry.total_points}</div>
+                          <div className="text-sm text-gray-500">points</div>
+                        </div>
+                        <div className="w-64 h-24 bg-gradient-to-t from-orange-500 to-orange-400 rounded-t-lg flex items-center justify-center">
+                          <span className="text-6xl font-bold text-white opacity-50">3</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : (
+              /* Show simple list for 1-2 results */
+              <div className="mb-12">
+                <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+                  <div className="px-6 py-4 bg-slate-700">
+                    <h2 className="text-2xl font-bold text-white">Top Performers</h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-700">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Rank</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Competitor</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">MECA ID</th>
+                          <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Events</th>
+                          <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Wins</th>
+                          <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">Total Points</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700">
+                        {leaderboard.map((entry, index) => {
+                          const rank = index + 1;
+                          const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
+                          return (
+                            <tr key={`${entry.competitor_id || entry.competitor_name}_${index}`} className="hover:bg-slate-700/50 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-lg ${
+                                  rank === 1 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white' :
+                                  rank === 2 ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-white' :
+                                  'bg-slate-700 text-white'
+                                }`}>
+                                  {rank}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="font-semibold text-white text-lg">{entry.competitor_name}</div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className={`font-semibold ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <div className="flex items-center justify-center gap-1 text-gray-400">
+                                  <TrendingUp className="h-4 w-4" />
+                                  <span>{entry.events_participated}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  {entry.first_place > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-yellow-400 text-sm">
+                                      <Trophy className="h-4 w-4" />
+                                      {entry.first_place}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="text-3xl font-bold text-orange-500">{entry.total_points}</div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            )}
+
+            {/* Remaining Rankings (4-10) */}
+            {leaderboard.length > 3 && (
+              <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+                <div className="px-6 py-4 bg-slate-700">
+                  <h2 className="text-2xl font-bold text-white">Complete Rankings</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-700">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Rank</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Competitor</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">MECA ID</th>
+                        <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Events</th>
+                        <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Wins</th>
+                        <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">Total Points</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700">
+                      {leaderboard.slice(3).map((entry, index) => {
+                        const rank = index + 4;
+                        const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
+
+                        return (
+                          <tr key={`${entry.competitor_id || entry.competitor_name}_${index}`} className="hover:bg-slate-700/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-700 text-white font-bold">
+                                {rank}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="font-semibold text-white">{entry.competitor_name}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className={`font-semibold ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <div className="flex items-center justify-center gap-1 text-gray-400">
+                                <TrendingUp className="h-4 w-4" />
+                                <span>{entry.events_participated}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                {entry.first_place > 0 && (
+                                  <span className="inline-flex items-center gap-1 text-yellow-400 text-sm">
+                                    <Trophy className="h-4 w-4" />
+                                    {entry.first_place}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="text-2xl font-bold text-orange-500">{entry.total_points}</div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Additional Stats for "All Classes" View */}
+            {selectedClass === 'all' && (mostEventsAttended.length > 0 || highestSPLScores.length > 0) && (
+              <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Most Events Attended */}
+                {mostEventsAttended.length > 0 && (
+                  <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+                    <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700">
+                      <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <TrendingUp className="h-6 w-6" />
+                        Most Events Attended
+                      </h3>
+                    </div>
+                    <div className="p-6">
+                      {mostEventsAttended.map((entry, index) => {
+                        const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
+                        return (
+                          <div key={index} className="flex items-center justify-between py-3 border-b border-slate-700 last:border-b-0">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                                index === 0 ? 'bg-yellow-500 text-white' :
+                                index === 1 ? 'bg-gray-400 text-white' :
+                                'bg-orange-500 text-white'
+                              }`}>
+                                {index + 1}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-white">{entry.competitor_name}</div>
+                                <div className={`text-sm ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold text-blue-400">{entry.events_participated}</div>
+                              <div className="text-xs text-gray-400">events</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Highest SPL Scores */}
+                {highestSPLScores.length > 0 && (
+                  <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+                    <div className="px-6 py-4 bg-gradient-to-r from-purple-600 to-purple-700">
+                      <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <Trophy className="h-6 w-6" />
+                        Highest SPL Scores
+                      </h3>
+                    </div>
+                    <div className="p-6">
+                      {highestSPLScores.map((entry, index) => {
+                        const mecaDisplay = getMecaIdDisplay(entry.meca_id, entry.membership_expiry);
+                        return (
+                          <div key={index} className="flex items-center justify-between py-3 border-b border-slate-700 last:border-b-0">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                                index === 0 ? 'bg-yellow-500 text-white' :
+                                index === 1 ? 'bg-gray-400 text-white' :
+                                'bg-orange-500 text-white'
+                              }`}>
+                                {index + 1}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-white">{entry.competitor_name}</div>
+                                <div className={`text-sm ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                                <div className="text-xs text-gray-400">{entry.competition_class}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold text-purple-400">{entry.score.toFixed(2)}</div>
+                              <div className="text-xs text-gray-400">dB</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         ) : (
-          <div className="text-center py-20 bg-slate-800 rounded-xl">
-            <Trophy className="h-20 w-20 text-gray-500 mx-auto mb-4" />
-            <p className="text-gray-400 text-xl">No competition results available yet.</p>
+          <div className="text-center py-20">
+            <h2 className="text-4xl font-bold text-red-500 mb-4">NO RESULTS</h2>
+            <p className="text-2xl text-red-500">No competitors competed in this class for the selected season</p>
           </div>
         )}
       </div>
