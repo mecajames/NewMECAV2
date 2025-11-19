@@ -1,6 +1,9 @@
-import { Calendar, MapPin, Users, Megaphone, CheckCircle, Send, AlertCircle } from 'lucide-react';
-import { useState } from 'react';
+import { Calendar, Users, Megaphone, CheckCircle, Send, AlertCircle } from 'lucide-react';
+import { useState, useRef } from 'react';
 import axios from 'axios';
+import { ReCaptchaV2Widget } from '../shared/recaptcha';
+import type { ReCaptchaV2Ref } from '../shared/recaptcha';
+import { recaptchaApi } from '../api-client/recaptcha.api-client';
 
 const ADDITIONAL_SERVICES_OPTIONS = [
   'Staffing',
@@ -69,6 +72,7 @@ export default function HostEventPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const recaptchaRef = useRef<ReCaptchaV2Ref>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +80,31 @@ export default function HostEventPage() {
     setSubmitMessage(null);
 
     try {
+      // Get reCAPTCHA token from widget
+      const token = recaptchaRef.current?.getToken();
+      
+      if (!token) {
+        setSubmitMessage({
+          type: 'error',
+          text: 'Please complete the reCAPTCHA verification.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Verify token with backend
+      const verification = await recaptchaApi.verify(token);
+      
+      if (!verification.success) {
+        setSubmitMessage({
+          type: 'error',
+          text: 'reCAPTCHA verification failed. Please try again.',
+        });
+        recaptchaRef.current?.reset();
+        setIsSubmitting(false);
+        return;
+      }
+
       // Transform form data to match backend API expectations (snake_case)
       const requestData = {
         first_name: formData.firstName,
@@ -114,7 +143,7 @@ export default function HostEventPage() {
         text: 'Thank you for your interest in hosting a MECA event! We have received your request and will contact you soon.',
       });
 
-      // Reset form
+      // Reset form and reCAPTCHA
       setFormData({
         firstName: '',
         lastName: '',
@@ -144,12 +173,14 @@ export default function HostEventPage() {
         additionalInfo: '',
         estimatedBudget: '',
       });
-    } catch (error: any) {
+      recaptchaRef.current?.reset();
+    } catch (error) {
       console.error('Error submitting event hosting request:', error);
       setSubmitMessage({
         type: 'error',
         text: 'There was an error submitting your request. Please try again later.',
       });
+      recaptchaRef.current?.reset();
     } finally {
       setIsSubmitting(false);
     }
@@ -764,6 +795,11 @@ export default function HostEventPage() {
               </div>
             </div>
 
+            {/* reCAPTCHA v2 Widget */}
+            <div className="flex justify-center mt-6">
+              <ReCaptchaV2Widget ref={recaptchaRef} />
+            </div>
+
             <button
               type="submit"
               disabled={isSubmitting}
@@ -774,6 +810,19 @@ export default function HostEventPage() {
               <Send className="h-5 w-5 mr-2" />
               {isSubmitting ? 'Submitting...' : 'Submit Application'}
             </button>
+            
+            {/* reCAPTCHA Badge Notice */}
+            <p className="text-xs text-gray-400 text-center mt-4">
+              This site is protected by reCAPTCHA and the Google{' '}
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300">
+                Privacy Policy
+              </a>{' '}
+              and{' '}
+              <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300">
+                Terms of Service
+              </a>{' '}
+              apply.
+            </p>
           </form>
         </div>
       </div>

@@ -16,7 +16,7 @@ import { CompetitionFormatsModule } from './competition-formats/competition-form
 import { EventHostingRequestsModule } from './event-hosting-requests/event-hosting-requests.module';
 import { DatabaseModule } from './db/database.module';
 import { AuditModule } from './audit/audit.module';
-
+import { RecaptchaModule } from './recaptcha/recaptcha.module';
 
 @Module({
   imports: [
@@ -35,6 +35,7 @@ import { AuditModule } from './audit/audit.module';
     CompetitionFormatsModule,
     EventHostingRequestsModule,
     AuditModule,
+    RecaptchaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

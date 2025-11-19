@@ -66,7 +66,7 @@ export class Event {
   @Property({ type: 'integer', nullable: true, default: 2, fieldName: 'points_multiplier', serializedName: 'points_multiplier' })
   pointsMultiplier?: number;
 
-  @Property({ type: 'json', nullable: true, serializedName: 'formats' })
+  @Property({ type: 'text[]', nullable: true, serializedName: 'formats' })
   formats?: string[];
 
   @Property({ onCreate: () => new Date(), serializedName: 'created_at' })

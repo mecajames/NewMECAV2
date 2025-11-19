@@ -1,5 +1,8 @@
 import { Mail, Phone, MapPin, Send } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { ReCaptchaV2Widget } from '../shared/recaptcha';
+import type { ReCaptchaV2Ref } from '../shared/recaptcha';
+import { recaptchaApi } from '../api-client/recaptcha.api-client';
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
@@ -8,13 +11,45 @@ export default function ContactPage() {
     subject: '',
     message: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const recaptchaRef = useRef<ReCaptchaV2Ref>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement contact form submission
-    console.log('Contact form submitted:', formData);
-    alert('Thank you for your message! We will get back to you soon.');
-    setFormData({ name: '', email: '', subject: '', message: '' });
+    setIsSubmitting(true);
+
+    try {
+      // Get reCAPTCHA token from widget
+      const token = recaptchaRef.current?.getToken();
+      
+      if (!token) {
+        alert('Please complete the reCAPTCHA verification.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Verify token with backend
+      const verification = await recaptchaApi.verify(token);
+      
+      if (!verification.success) {
+        alert('reCAPTCHA verification failed. Please try again.');
+        recaptchaRef.current?.reset();
+        setIsSubmitting(false);
+        return;
+      }
+
+      // TODO: Implement contact form submission
+      console.log('Contact form submitted:', formData);
+      alert('Thank you for your message! We will get back to you soon.');
+      setFormData({ name: '', email: '', subject: '', message: '' });
+      recaptchaRef.current?.reset();
+    } catch (error) {
+      console.error('Form submission error:', error);
+      alert('An error occurred. Please try again.');
+      recaptchaRef.current?.reset();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -156,13 +191,34 @@ export default function ContactPage() {
                 />
               </div>
 
+              {/* reCAPTCHA v2 Widget */}
+              <div className="flex justify-center">
+                <ReCaptchaV2Widget ref={recaptchaRef} />
+              </div>
+
               <button
                 type="submit"
-                className="w-full flex items-center justify-center px-6 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                disabled={isSubmitting}
+                className={`w-full flex items-center justify-center px-6 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors ${
+                  isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 <Send className="h-5 w-5 mr-2" />
-                Send Message
+                {isSubmitting ? 'Sending...' : 'Send Message'}
               </button>
+              
+              {/* reCAPTCHA Badge Notice */}
+              <p className="text-xs text-gray-400 text-center mt-4">
+                This site is protected by reCAPTCHA and the Google{' '}
+                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300">
+                  Privacy Policy
+                </a>{' '}
+                and{' '}
+                <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300">
+                  Terms of Service
+                </a>{' '}
+                apply.
+              </p>
             </form>
           </div>
         </div>

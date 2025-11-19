@@ -1,256 +1,226 @@
-# MECA V2 - Car Audio Competition Management Platform
+# MECA Car Audio Platform
 
-A full-stack application for managing car audio competitions, built with React, Node.js, Express, MikroORM, and Supabase PostgreSQL.
+> Mobile Electronics Competition Association - Official Platform for Car Audio Competitions
 
-## Project Structure
+A modern, full-stack web application for managing car audio competitions, memberships, events, and results across the United States.
+
+## 🚀 Quick Start
+
+```bash
+# Install dependencies
+npm run install:all
+
+# Start everything (Supabase + Backend + Frontend)
+npm run start:all
+```
+
+Visit http://localhost:5173 to see the application running.
+
+## 📚 Documentation
+
+All documentation has been organized into the **[docs/](./docs/)** directory:
+
+### Essential Reading
+
+- **[Getting Started Guide](./docs/getting-started/README.md)** - Full project overview and setup
+- **[Developer Onboarding](./docs/getting-started/ONBOARDING.md)** - Architecture and development workflow
+- **[Quick Commands](./docs/getting-started/QUICK-COMMANDS.md)** - Common commands reference
+
+### Additional Documentation
+
+- **[Deployment](./docs/deployment/)** - Production deployment, Docker, backups
+- **[Frontend](./docs/frontend/)** - React/Vite setup and configuration
+- **[Backend](./docs/backend/)** - NestJS and MikroORM setup
+- **[Features](./docs/features/)** - Feature-specific documentation (e.g., reCAPTCHA)
+- **[Scripts](./docs/scripts/)** - Utility scripts documentation
+
+👉 **See the full [Documentation Index](./docs/README.md)** for all available guides.
+
+## 🏗️ Architecture
+
+- **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS
+- **Backend:** NestJS + MikroORM + PostgreSQL
+- **Database:** Supabase (PostgreSQL + Auth + Storage)
+- **Deployment:** Docker + Docker Compose
+
+### Project Structure
 
 ```
 NewMECAV2/
 ├── apps/
-│   ├── frontend/          # React + Vite + TypeScript frontend
-│   └── backend/           # Node.js + Express + MikroORM backend
-├── packages/
-│   └── shared/            # Shared types and utilities
-└── supabase/              # Supabase migrations and config
+│   ├── backend/          # NestJS API
+│   └── frontend/         # React + Vite
+├── docs/                 # 📚 All documentation
+├── scripts/              # Utility scripts
+└── supabase/            # Database migrations
 ```
 
-## Tech Stack
+## ✨ Features
+
+- 🏆 **Event Management** - Create and manage car audio competitions
+- 👥 **Member Portal** - Member registration, profiles, and memberships
+- 📊 **Results Tracking** - Competition results and leaderboards
+- 📅 **Event Calendar** - Browse upcoming and past events
+- 📖 **Digital Rulebooks** - Official competition rules and guidelines
+- 🎯 **Class Calculator** - Determine competition class eligibility
+- 🛡️ **reCAPTCHA v3** - Spam protection for forms
+- 🔐 **Role-Based Access** - Admin, Event Director, and User roles
+
+## 🛠️ Tech Stack
 
 ### Frontend
-- **React 18** with TypeScript
-- **Vite** for build tooling
-- **Tailwind CSS** for styling
-- **Supabase Client** for authentication
+- React 18 with TypeScript
+- Vite for fast development and builds
+- Tailwind CSS for styling
+- React Router for navigation
+- Lucide React for icons
 
 ### Backend
-- **Node.js** with TypeScript
-- **Express** web framework
-- **MikroORM** for database ORM
-- **Supabase PostgreSQL** as database
-- **Stripe** for payments
-- **Twilio** for SMS notifications
-- **SendGrid/Resend** for email
+- NestJS 10+ (Progressive Node.js framework)
+- MikroORM 6.5+ (TypeScript-first ORM)
+- PostgreSQL 15 (via Supabase)
+- Decorator-based routing and DI
 
-### Database
-- **PostgreSQL** via Supabase
-- Local development with Supabase CLI
-- Cloud hosting on Supabase
+### Infrastructure
+- Supabase for PostgreSQL, Auth, and Storage
+- Docker for containerization
+- Docker Compose for orchestration
 
-## Prerequisites
+## 📋 Prerequisites
 
 - Node.js >= 18.0.0
-- npm >= 9.0.0
-- Docker Desktop (for local Supabase)
-- Supabase CLI (`brew install supabase/tap/supabase`)
+- Docker Desktop
+- Supabase CLI (optional, for database management)
 
-## Quick Start
+## 🔧 Development
 
-### 1. Install Dependencies
+### Start All Services
 
 ```bash
+npm run start:all
+```
+
+This command starts:
+- Supabase (PostgreSQL + Auth + Storage)
+- Backend API (localhost:3001)
+- Frontend dev server (localhost:5173)
+
+### Individual Services
+
+```bash
+# Backend only (requires Supabase running)
+npm run dev:backend
+
+# Frontend only (requires backend running)
+npm run dev
+
+# Supabase only
+npm run supabase:start
+```
+
+### Useful Commands
+
+```bash
+# Install all dependencies
 npm run install:all
+
+# Build all workspaces
+npm run build
+
+# Type check all workspaces
+npm run typecheck
+
+# Database management
+npm run supabase:start     # Start Supabase
+npm run supabase:stop      # Stop Supabase
+npm run supabase:status    # Check status
 ```
 
-### 2. Set Up Environment Variables
+## 🌐 Environment Variables
 
-#### Frontend (`apps/frontend/.env.development`)
+### Backend (`apps/backend/.env`)
 ```bash
-cp apps/frontend/.env.example apps/frontend/.env.development
-```
-
-Edit `apps/frontend/.env.development`:
-```env
-VITE_SUPABASE_URL=http://127.0.0.1:54321
-VITE_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
-VITE_ENV=development
-```
-
-#### Backend (`apps/backend/.env`)
-```bash
-cp apps/backend/.env.example apps/backend/.env
-```
-
-Edit `apps/backend/.env`:
-```env
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-key
 PORT=3001
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173
+RECAPTCHA_SECRET_KEY=your-recaptcha-secret-key
 ```
 
-### 3. Start Development
-
-**Easy Mode - Start Everything:**
+### Frontend (`apps/frontend/.env.development`)
 ```bash
-npm run dev:all
+VITE_API_URL=http://localhost:3001
+VITE_RECAPTCHA_SITE_KEY=your-recaptcha-site-key
 ```
 
-This will:
-- ✅ Start Supabase locally
-- ✅ Start backend API server (http://localhost:3001)
-- ✅ Start frontend dev server (http://localhost:5173)
+See `.env.example` files in each directory for complete configuration options.
 
-**Or start services individually:**
+## 🧪 Testing
+
+Access the application:
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:3001
+- **Supabase Studio:** http://localhost:54323
+
+## 📦 Deployment
+
+See the [Deployment Guide](./docs/deployment/DEPLOYMENT-GUIDE.md) for production deployment instructions.
+
+Quick deploy with Docker:
 ```bash
-npm run supabase:start        # Start Supabase only
-npm run dev:backend           # Backend only
-npm run dev                   # Frontend only
+docker-compose up -d
 ```
 
-### 4. Access Local Services
+## 🤝 Contributing
 
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:3001
-- **Supabase Studio**: http://localhost:54323 (Database UI)
-- **Database**: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+1. Read the [Developer Onboarding Guide](./docs/getting-started/ONBOARDING.md)
+2. Follow the architecture patterns described in the documentation
+3. Create feature branches and submit pull requests
+4. Ensure all tests pass and documentation is updated
 
-## Development Workflow
+## 📖 Code Architecture
 
-### Frontend Development
-```bash
-cd apps/frontend
-npm run dev              # Start dev server
-npm run build            # Build for production
-npm run typecheck        # Type checking
-npm run lint             # Lint code
+This project follows a **3-tier architecture** with clear separation of concerns:
+
+**Backend (NestJS):**
+```
+Entity → Service (@Injectable) → Controller (@Controller) → Module (@Module)
 ```
 
-### Backend Development
-```bash
-cd apps/backend
-npm run dev              # Start dev server with hot reload
-npm run build            # Build TypeScript
-npm run typecheck        # Type checking
-npm run mikro-orm        # MikroORM CLI
+**Frontend (React):**
+```
+API Client → Hooks → Components → Pages
 ```
 
-### Shared Types
-The `packages/shared` package contains TypeScript types used by both frontend and backend. Changes to shared types will be automatically picked up by both apps.
+See [ONBOARDING.md](./docs/getting-started/ONBOARDING.md) for detailed architecture guidelines.
 
-## Database Management
+## 🔒 Security
 
-### Local Development
-```bash
-supabase start           # Start local Supabase
-supabase stop            # Stop local Supabase
-supabase status          # Check service status
-supabase db reset        # Reset database to migrations
-```
+- ✅ Environment variables for sensitive data
+- ✅ reCAPTCHA v3 for form protection
+- ✅ Role-based access control
+- ✅ Backend validation for all requests
+- ✅ Secure password hashing
 
-### Migrations
-```bash
-cd supabase
-supabase migration new <name>    # Create new migration
-supabase db push                 # Push to remote database
-```
+## 📄 License
 
-## API Endpoints
+Copyright © 2025 MECA (Mobile Electronics Competition Association)
 
-The backend exposes RESTful API endpoints:
+## 🆘 Support
 
-- `GET /health` - Health check
-- `POST /api/auth/login` - User login
-- `POST /api/auth/register` - User registration
-- `GET /api/events` - List events
-- `POST /api/events` - Create event
-- `GET /api/events/:id` - Get event details
-- `POST /api/registrations` - Register for event
-- `POST /api/payments` - Process payment (Stripe)
-- More endpoints to be documented...
+- **Documentation:** [docs/](./docs/)
+- **Issues:** Create an issue in the repository
+- **Questions:** Contact the development team
 
-## Environment Variables
+---
 
-### Frontend (.env)
-- `VITE_SUPABASE_URL` - Supabase project URL
-- `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `VITE_API_URL` - Backend API URL (default: http://localhost:3000)
+**For complete documentation, see the [docs/](./docs/) directory.**
 
-### Backend (.env)
-- `DATABASE_URL` - PostgreSQL connection string
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_KEY` - Supabase service role key (server-side only)
-- `PORT` - Server port (default: 3000)
-- `NODE_ENV` - Environment (development/production)
-- `STRIPE_SECRET_KEY` - Stripe API key
-- `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret
-- `TWILIO_ACCOUNT_SID` - Twilio account SID
-- `TWILIO_AUTH_TOKEN` - Twilio auth token
-- `TWILIO_PHONE_NUMBER` - Twilio phone number
-- `EMAIL_PROVIDER` - Email service (sendgrid/resend)
-- `SENDGRID_API_KEY` - SendGrid API key
-- `CORS_ORIGIN` - Allowed CORS origins
-
-## Building for Production
-
-```bash
-# Build all packages
-npm run build
-
-# Build specific apps
-npm run build:frontend
-npm run build:backend
-```
-
-## Deployment
-
-### Frontend
-The frontend can be deployed to:
-- Vercel
-- Netlify
-- Cloudflare Pages
-- Static hosting
-
-### Backend
-The backend can be deployed to:
-- Railway
-- Render
-- Fly.io
-- DigitalOcean App Platform
-
-### Database
-Production database is hosted on Supabase Cloud:
-- Project: garsyqgdjpryqleufrev
-- URL: https://garsyqgdjpryqleufrev.supabase.co
-
-## Testing
-
-```bash
-# Run tests (to be implemented)
-npm test
-```
-
-## Troubleshooting
-
-### Frontend shows white screen
-- Check that `.env` has correct `VITE_SUPABASE_URL` (should be URL, not email)
-- Verify Supabase project is accessible
-- Check browser console for errors
-
-### Backend can't connect to database
-- Verify `DATABASE_URL` is correct
-- Check that Supabase is running (`supabase status`)
-- Ensure PostgreSQL port 54322 is not blocked
-
-### MikroORM errors
-- Run `npm run build` in backend to compile TypeScript
-- Check that entities are properly defined with decorators
-- Verify database schema matches entity definitions
-
-## Contributing
-
-1. Create a feature branch
-2. Make changes
-3. Run `npm run typecheck` and `npm run lint`
-4. Test locally
-5. Submit pull request
-
-## License
-
-ISC
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
+**Quick Links:**
+- [Getting Started](./docs/getting-started/README.md)
+- [Developer Onboarding](./docs/getting-started/ONBOARDING.md)
+- [Deployment Guide](./docs/deployment/DEPLOYMENT-GUIDE.md)
+- [Feature Documentation](./docs/features/)
