@@ -39,16 +39,11 @@ function App() {
     <AuthProvider>
       <ReCaptchaProvider version="v2">
         <BrowserRouter>
+          <ScrollToTop />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
             <div className="flex-1">
               <Routes>
-      <BrowserRouter>
-        <ScrollToTop />
-        <div className="min-h-screen bg-slate-900 flex flex-col">
-          <Navbar />
-          <div className="flex-1">
-            <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
@@ -90,7 +85,7 @@ function App() {
           </div>
           <Footer />
         </div>
-      </BrowserRouter>
+        </BrowserRouter>
       </ReCaptchaProvider>
     </AuthProvider>
   );
