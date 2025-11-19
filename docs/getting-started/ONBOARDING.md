@@ -1469,6 +1469,205 @@ npx mikro-orm migration:list
 - **Full Docs**: `/README.md`
 - **Team Member**: Ask in team chat or tag someone in PR
 
+## ISO Standardized Form Fields
+
+**CRITICAL**: This project uses ISO-standardized, reusable form field components for consistency, validation, and international compatibility. **ALL** future development MUST use these standardized components.
+
+### Available Standardized Components
+
+All standardized field components are located in `apps/frontend/src/shared/fields/`:
+
+#### 1. **YearSelect** - ISO 8601 Year Selection
+- **Purpose**: Standardized year dropdown for dates, seasons, competitions
+- **Location**: `apps/frontend/src/shared/fields/YearSelect.tsx`
+- **Standards**: ISO 8601 date format (YYYY)
+- **Usage**:
+```tsx
+import { YearSelect } from '@/shared/fields';
+
+<YearSelect
+  value={selectedYear}
+  onChange={(year) => setSelectedYear(year)}
+  label="Competition Year"
+  yearRange={{ start: 2010, end: 2030 }}
+  showAllOption={true}
+  required
+/>
+```
+
+#### 2. **CountrySelect** - ISO 3166-1 Country Selection
+- **Purpose**: Country dropdown with ISO 3166-1 alpha-2 codes
+- **Location**: `apps/frontend/src/shared/fields/CountrySelect.tsx`
+- **Standards**: ISO 3166-1 alpha-2 country codes (e.g., US, CA, GB)
+- **Usage**:
+```tsx
+import { CountrySelect } from '@/shared/fields';
+
+<CountrySelect
+  value={countryCode}
+  onChange={(code) => setCountryCode(code)}
+  label="Country"
+  required
+/>
+```
+
+#### 3. **StateProvinceSelect** - ISO 3166-2 State/Province Selection
+- **Purpose**: State/province dropdown for US/Canada
+- **Location**: `apps/frontend/src/shared/fields/StateProvinceSelect.tsx`
+- **Standards**: ISO 3166-2 subdivision codes
+- **Usage**:
+```tsx
+import { StateProvinceSelect } from '@/shared/fields';
+
+<StateProvinceSelect
+  value={stateCode}
+  onChange={(code) => setStateCode(code)}
+  country="US"  // or "CA" for Canada
+  label="State"
+  required
+/>
+```
+
+#### 4. **PostalCodeInput** - Standardized Postal Code Input
+- **Purpose**: Postal/ZIP code input with country-specific validation
+- **Location**: `apps/frontend/src/shared/fields/PostalCodeInput.tsx`
+- **Standards**: Country-specific postal code formats
+- **Supported**: US (ZIP), CA (Postal Code), UK (Postcode), Generic
+- **Usage**:
+```tsx
+import { PostalCodeInput } from '@/shared/fields';
+
+<PostalCodeInput
+  value={postalCode}
+  onChange={(code) => setPostalCode(code)}
+  country="US"  // US, CA, UK, or GENERIC
+  label="ZIP Code"
+  required
+/>
+```
+
+#### 5. **PhoneInput** - E.164 International Phone Input
+- **Purpose**: Phone number input with country dial codes
+- **Location**: `apps/frontend/src/shared/fields/PhoneInput.tsx`
+- **Standards**: E.164 international telephone numbering
+- **Usage**:
+```tsx
+import { PhoneInput } from '@/shared/fields';
+
+<PhoneInput
+  value={phoneNumber}
+  onChange={(phone) => setPhoneNumber(phone)}
+  countryCode={countryCode}
+  onCountryCodeChange={(code) => setCountryCode(code)}
+  label="Phone Number"
+  required
+/>
+```
+
+#### 6. **DatePicker** - ISO 8601 Date Selection
+- **Purpose**: Date input field with ISO 8601 format
+- **Location**: `apps/frontend/src/shared/fields/DatePicker.tsx`
+- **Standards**: ISO 8601 date format (YYYY-MM-DD)
+- **Usage**:
+```tsx
+import { DatePicker } from '@/shared/fields';
+
+<DatePicker
+  value={eventDate}
+  onChange={(date) => setEventDate(date)}
+  label="Event Date"
+  min="2025-01-01"
+  max="2025-12-31"
+  required
+/>
+```
+
+### Mandatory Usage Rules
+
+**⚠️ CRITICAL RULES - MUST FOLLOW:**
+
+1. **NEVER create custom date/year/country/phone/postal code inputs**
+   - ❌ `<input type="text" placeholder="Enter year" />`
+   - ❌ `<input type="text" placeholder="Country" />`
+   - ❌ Custom dropdowns for years, countries, or states
+   - ✅ **ALWAYS** use the standardized components from `shared/fields/`
+
+2. **ALWAYS import from the barrel export**:
+   ```tsx
+   import { YearSelect, CountrySelect, DatePicker } from '@/shared/fields';
+   ```
+
+3. **ALWAYS use ISO standards**:
+   - Years: 4-digit format (2025, not '25)
+   - Dates: ISO 8601 (YYYY-MM-DD)
+   - Countries: ISO 3166-1 alpha-2 codes (US, not USA)
+   - States: ISO 3166-2 codes (CA for California)
+   - Phone: E.164 format (+1 555-123-4567)
+
+4. **ALWAYS validate data using these standards**:
+   - Store country codes as 2-letter ISO codes in database
+   - Store dates as ISO 8601 strings or Date objects
+   - Store phone numbers in E.164 format
+
+5. **Reference Implementation**:
+   - Admin Rulebook Management: `apps/frontend/src/components/admin/RulebookManagement.tsx:228-238`
+   - Public Rulebooks Page: `apps/frontend/src/pages/RulebooksPage.tsx:73-81`
+
+### When to Use Which Component
+
+| Use Case | Component | Example |
+|----------|-----------|---------|
+| Competition year, season | `YearSelect` | Season selection, event year |
+| User's country | `CountrySelect` | Registration forms, profiles |
+| User's state/province | `StateProvinceSelect` | US/Canada addresses |
+| ZIP/Postal code | `PostalCodeInput` | Address forms |
+| Contact number | `PhoneInput` | Member registration, contact info |
+| Event date, deadline | `DatePicker` | Event scheduling, registration deadlines |
+| Year filtering/search | `YearSelect` | Search filters, reports |
+
+### Adding New Standardized Fields
+
+If you need to add a new standardized field type:
+
+1. Create the component in `apps/frontend/src/shared/fields/`
+2. Follow the existing naming pattern: `[FieldName]Select.tsx` or `[FieldName]Input.tsx`
+3. Include comprehensive JSDoc comments with:
+   - ISO standard reference
+   - Usage examples
+   - Valid values/formats
+4. Export from `apps/frontend/src/shared/fields/index.ts`
+5. Update this ONBOARDING.md section with documentation
+6. Use consistent styling matching the app's design system:
+   - `bg-slate-700` background
+   - `border-slate-600` borders
+   - `text-white` text
+   - `focus:ring-orange-500` focus rings
+   - Lucide React icons in orange-500
+
+### Common Mistakes to Avoid
+
+❌ **WRONG**:
+```tsx
+// Custom year input
+<input type="number" min="2010" max="2030" />
+
+// Plain text country input
+<input type="text" placeholder="Country" />
+
+// Non-standard date format
+<input type="text" placeholder="MM/DD/YYYY" />
+```
+
+✅ **CORRECT**:
+```tsx
+import { YearSelect, CountrySelect, DatePicker } from '@/shared/fields';
+
+<YearSelect value={year} onChange={setYear} yearRange={{ start: 2010, end: 2030 }} />
+<CountrySelect value={country} onChange={setCountry} />
+<DatePicker value={date} onChange={setDate} />
+```
+
+
 ## For AI Developers / Code Assistants
 
 ### Critical Architecture Rules

@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Plus, Edit, Trash2, Check, X, ArrowLeft, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
 import { Season, CompetitionFormat } from '../../types/database';
+import { seasonsApi } from '../../api-client/seasons.api-client';
 import { useAuth } from '../../contexts/AuthContext';
+
+// TODO: Replace with backend API calls once seasons and competition_classes modules are implemented
+// Current status: seasons and competition_classes tables don't exist in database yet
+// Future implementation:
+// 1. Create seasons and competition_classes tables in database
+// 2. Create backend modules (entities, services, controllers) following MikroORM pattern
+// 3. Create API clients in frontend (seasons.api-client.ts, competition-classes.api-client.ts)
+// 4. Replace all direct Supabase calls with API client calls
+
+// Format date string (YYYY-MM-DD) to MM/DD/YYYY without timezone conversion
+const formatDateString = (dateString: string): string => {
+  const [year, month, day] = dateString.split('T')[0].split('-');
+  return `${month}/${day}/${year}`;
+};
 
 export default function SeasonManagementPage() {
   const { user } = useAuth();
@@ -32,13 +46,11 @@ export default function SeasonManagementPage() {
   }, []);
 
   const fetchSeasons = async () => {
-    const { data, error } = await supabase
-      .from('seasons')
-      .select('*')
-      .order('year', { ascending: false });
-
-    if (!error && data) {
-      setSeasons(data);
+    try {
+      const data = await seasonsApi.getAll();
+      setSeasons(data as any);
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
     }
     setLoading(false);
   };
@@ -46,31 +58,17 @@ export default function SeasonManagementPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingSeason) {
-      // Update existing season
-      const { error } = await supabase
-        .from('seasons')
-        .update({
+    try {
+      if (editingSeason) {
+        await seasonsApi.update(editingSeason.id, {
           name: formData.name,
           start_date: formData.start_date,
           end_date: formData.end_date,
           is_current: formData.is_current,
           is_next: formData.is_next,
-        })
-        .eq('id', editingSeason.id);
-
-      if (error) {
-        alert('Error updating season: ' + error.message);
+        });
       } else {
-        alert('Season updated successfully!');
-        resetForm();
-        fetchSeasons();
-      }
-    } else {
-      // Create new season
-      const { error} = await supabase
-        .from('seasons')
-        .insert({
+        await seasonsApi.create({
           year: formData.year,
           name: formData.name,
           start_date: formData.start_date,
@@ -78,14 +76,11 @@ export default function SeasonManagementPage() {
           is_current: formData.is_current,
           is_next: formData.is_next,
         });
-
-      if (error) {
-        alert('Error creating season: ' + error.message);
-      } else {
-        alert('Season created successfully!');
-        resetForm();
-        fetchSeasons();
       }
+      resetForm();
+      fetchSeasons();
+    } catch (error: any) {
+      alert('Error saving season: ' + error.message);
     }
   };
 
@@ -94,10 +89,10 @@ export default function SeasonManagementPage() {
     setFormData({
       year: season.year,
       name: season.name,
-      start_date: season.start_date.split('T')[0],
-      end_date: season.end_date.split('T')[0],
-      is_current: season.is_current,
-      is_next: season.is_next,
+      start_date: season.start_date ? season.start_date.split('T')[0] : '',
+      end_date: season.end_date ? season.end_date.split('T')[0] : '',
+      is_current: season.is_current ?? false,
+      is_next: season.is_next ?? false,
     });
     setShowForm(true);
   };
@@ -107,58 +102,29 @@ export default function SeasonManagementPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from('seasons')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      alert('Error deleting season: ' + error.message);
-    } else {
-      alert('Season deleted successfully!');
+    try {
+      await seasonsApi.delete(id);
       fetchSeasons();
+    } catch (error: any) {
+      alert('Error deleting season: ' + error.message);
     }
   };
 
   const setAsCurrent = async (id: string) => {
-    // First, set all seasons to not current
-    await supabase
-      .from('seasons')
-      .update({ is_current: false, is_next: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    // Then set this season as current
-    const { error } = await supabase
-      .from('seasons')
-      .update({ is_current: true, is_next: false })
-      .eq('id', id);
-
-    if (error) {
-      alert('Error setting current season: ' + error.message);
-    } else {
-      alert('Current season updated!');
+    try {
+      await seasonsApi.setAsCurrent(id);
       fetchSeasons();
+    } catch (error: any) {
+      alert('Error setting current season: ' + error.message);
     }
   };
 
   const setAsNext = async (id: string) => {
-    // First, set all seasons to not next
-    await supabase
-      .from('seasons')
-      .update({ is_next: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    // Then set this season as next (and ensure not current)
-    const { error } = await supabase
-      .from('seasons')
-      .update({ is_next: true, is_current: false })
-      .eq('id', id);
-
-    if (error) {
-      alert('Error setting next season: ' + error.message);
-    } else {
-      alert('Next season updated!');
+    try {
+      await seasonsApi.setAsNext(id);
       fetchSeasons();
+    } catch (error: any) {
+      alert('Error setting next season: ' + error.message);
     }
   };
 
@@ -186,64 +152,8 @@ export default function SeasonManagementPage() {
       return;
     }
 
-    if (!confirm(`Are you sure you want to copy ${copyFormat === 'all' ? 'all' : copyFormat} classes from the source season to the destination season?`)) {
-      return;
-    }
-
-    setCopying(true);
-
-    try {
-      // Fetch classes from source season
-      let query = supabase
-        .from('competition_classes')
-        .select('*')
-        .eq('season_id', copyFromSeasonId);
-
-      if (copyFormat !== 'all') {
-        query = query.eq('format', copyFormat);
-      }
-
-      const { data: sourceClasses, error: fetchError } = await query;
-
-      if (fetchError) {
-        alert('Error fetching classes: ' + fetchError.message);
-        setCopying(false);
-        return;
-      }
-
-      if (!sourceClasses || sourceClasses.length === 0) {
-        alert('No classes found to copy');
-        setCopying(false);
-        return;
-      }
-
-      // Copy classes to destination season
-      const classesToInsert = sourceClasses.map(cls => ({
-        name: cls.name,
-        abbreviation: cls.abbreviation,
-        format: cls.format,
-        season_id: copyToSeasonId,
-        is_active: cls.is_active,
-        display_order: cls.display_order,
-      }));
-
-      const { error: insertError } = await supabase
-        .from('competition_classes')
-        .insert(classesToInsert);
-
-      if (insertError) {
-        alert('Error copying classes: ' + insertError.message);
-      } else {
-        alert(`Successfully copied ${sourceClasses.length} classes!`);
-        setShowCopyDialog(false);
-        setCopyFromSeasonId('');
-        setCopyToSeasonId('');
-        setCopyFormat('all');
-      }
-    } catch (error: any) {
-      alert('Error: ' + error.message);
-    }
-
+    // TODO: Replace with API client call: competitionClassesApi.copyBetweenSeasons(copyFromSeasonId, copyToSeasonId, copyFormat)
+    alert('Copy classes feature not yet implemented. Competition classes table needs to be created in database first.');
     setCopying(false);
   };
 
@@ -506,7 +416,7 @@ export default function SeasonManagementPage() {
                     <td className="px-6 py-4 text-white font-semibold">{season.year}</td>
                     <td className="px-6 py-4 text-gray-300">{season.name}</td>
                     <td className="px-6 py-4 text-gray-300 text-sm">
-                      {new Date(season.start_date).toLocaleDateString()} - {new Date(season.end_date).toLocaleDateString()}
+                      {formatDateString(season.start_date)} - {formatDateString(season.end_date)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">

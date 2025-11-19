@@ -8,36 +8,72 @@ export class CompetitionResult {
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
 
-  @ManyToOne(() => Event, { fieldName: 'event_id' })
-  event!: Event;
+  @Property({ type: 'uuid', fieldName: 'event_id', serializedName: 'event_id', persist: false })
+  eventId!: string;
 
-  @ManyToOne(() => Profile, { fieldName: 'competitor_id' })
-  competitor!: Profile;
+  @ManyToOne(() => Event, { fieldName: 'event_id', nullable: true, hidden: true })
+  event?: Event;
 
-  @Property({ type: 'text', nullable: true })
-  category?: string;
+  @Property({ type: 'uuid', fieldName: 'competitor_id', serializedName: 'competitor_id', nullable: true, persist: false })
+  competitorId?: string;
+
+  @ManyToOne(() => Profile, { fieldName: 'competitor_id', nullable: true, hidden: true })
+  competitor?: Profile;
+
+  @Property({ type: 'text', fieldName: 'competitor_name', serializedName: 'competitor_name' })
+  competitorName!: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'meca_id', serializedName: 'meca_id' })
+  mecaId?: string;
+
+  @Property({ type: 'text', fieldName: 'competition_class', serializedName: 'competition_class' })
+  competitionClass!: string;
+
+  @Property({ type: 'text', nullable: true, serializedName: 'format' })
+  format?: string;
+
+  @Property({ type: 'decimal', precision: 10, scale: 2 })
+  score!: number;
+
+  @Property({ type: 'integer' })
+  placement!: number;
+
+  @Property({ type: 'integer', fieldName: 'points_earned', serializedName: 'points_earned', default: 0 })
+  pointsEarned: number = 0;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'vehicle_info', serializedName: 'vehicle_info' })
+  vehicleInfo?: string;
 
   @Property({ type: 'integer', nullable: true })
-  placement?: number;
+  wattage?: number;
 
-  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'score_sound' })
-  scoreSound?: number;
-
-  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'score_install' })
-  scoreInstall?: number;
-
-  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'score_overall' })
-  scoreOverall?: number;
+  @Property({ type: 'integer', nullable: true })
+  frequency?: number;
 
   @Property({ type: 'text', nullable: true })
   notes?: string;
 
-  @ManyToOne(() => Profile, { nullable: true, fieldName: 'created_by' })
-  createdBy?: Profile;
+  @Property({ type: 'uuid', nullable: true, fieldName: 'season_id', serializedName: 'season_id' })
+  seasonId?: string;
 
-  @Property({ onCreate: () => new Date() })
+  @Property({ type: 'uuid', nullable: true, fieldName: 'class_id', serializedName: 'class_id' })
+  classId?: string;
+
+  @Property({ type: 'uuid', fieldName: 'created_by', serializedName: 'created_by' })
+  createdBy!: string;
+
+  @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
 
-  @Property({ onUpdate: () => new Date() })
-  updatedAt: Date = new Date();
+  @Property({ type: 'uuid', nullable: true, fieldName: 'updated_by', serializedName: 'updated_by' })
+  updatedBy?: string;
+
+  @Property({ onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
+  updatedAt?: Date;
+
+  @Property({ type: 'integer', default: 0, fieldName: 'revision_count', serializedName: 'revision_count' })
+  revisionCount: number = 0;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'modification_reason', serializedName: 'modification_reason' })
+  modificationReason?: string;
 }

@@ -16,6 +16,11 @@ import { EventRegistration } from './event-registrations.entity';
 export class EventRegistrationsController {
   constructor(private readonly eventRegistrationsService: EventRegistrationsService) {}
 
+  @Get('stats')
+  async getStats(): Promise<{ totalRegistrations: number }> {
+    return this.eventRegistrationsService.getStats();
+  }
+
   @Get(':id')
   async getRegistration(@Param('id') id: string): Promise<EventRegistration> {
     return this.eventRegistrationsService.findById(id);

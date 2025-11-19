@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FileText, Download, Calendar, Tag } from 'lucide-react';
 import { useParams } from 'react-router-dom';
-import { supabase, Rulebook } from '../lib/supabase';
+import { rulebooksApi, Rulebook } from '../api-client/rulebooks.api-client';
+import { siteSettingsApi } from '../api-client/site-settings.api-client';
 
 export default function RulebookDetailPage() {
   const { rulebookId } = useParams<{ rulebookId: string }>();
@@ -16,39 +17,36 @@ export default function RulebookDetailPage() {
   }, [rulebookId]);
 
   const fetchRulebook = async () => {
-    const { data, error } = await supabase
-      .from('rulebooks')
-      .select('*')
-      .eq('id', rulebookId)
-      .single();
-
-    if (!error && data) {
-      setRulebook(data);
+    try {
+      if (rulebookId) {
+        const data = await rulebooksApi.getRulebook(rulebookId);
+        setRulebook(data as any);
+      }
+    } catch (error) {
+      console.error('Error fetching rulebook:', error);
     }
     setLoading(false);
   };
 
   const fetchPdfViewerSettings = async () => {
-    const { data: heightData } = await supabase
-      .from('site_settings')
-      .select('setting_value')
-      .eq('setting_key', 'pdf_viewer_height')
-      .single();
-
-    const { data: widthData } = await supabase
-      .from('site_settings')
-      .select('setting_value')
-      .eq('setting_key', 'pdf_viewer_width')
-      .single();
-
-    if (heightData?.setting_value) {
-      // If it's just a number, add 'px', otherwise use as-is
-      const height = heightData.setting_value;
-      setPdfViewerHeight(height.includes('px') || height.includes('%') ? height : `${height}px`);
+    try {
+      const heightData = await siteSettingsApi.getByKey('pdf_viewer_height');
+      if (heightData?.setting_value) {
+        // If it's just a number, add 'px', otherwise use as-is
+        const height = heightData.setting_value;
+        setPdfViewerHeight(height.includes('px') || height.includes('%') ? height : `${height}px`);
+      }
+    } catch (error) {
+      // Setting doesn't exist, use default
     }
 
-    if (widthData?.setting_value) {
-      setPdfViewerWidth(widthData.setting_value);
+    try {
+      const widthData = await siteSettingsApi.getByKey('pdf_viewer_width');
+      if (widthData?.setting_value) {
+        setPdfViewerWidth(widthData.setting_value);
+      }
+    } catch (error) {
+      // Setting doesn't exist, use default
     }
   };
 
@@ -95,7 +93,7 @@ export default function RulebookDetailPage() {
           <div className="p-8">
             <div className="mb-6">
               <a
-                href={rulebook.pdf_url}
+                href={rulebook.pdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
@@ -107,7 +105,7 @@ export default function RulebookDetailPage() {
 
             <div className="bg-slate-900 rounded-lg p-4">
               <iframe
-                src={rulebook.pdf_url}
+                src={rulebook.pdfUrl}
                 style={{ width: pdfViewerWidth, height: pdfViewerHeight }}
                 className="rounded"
                 title={rulebook.title}

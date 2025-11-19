@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X } from 'lucide-react';
-import { supabase, Event, EventRegistration } from '../lib/supabase';
+import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp } from 'lucide-react';
+import { eventsApi, Event } from '../api-client/events.api-client';
+import { eventRegistrationsApi, EventRegistration } from '../api-client/event-registrations.api-client';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function EventDetailPage() {
@@ -11,7 +12,8 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
   const [registrationData, setRegistrationData] = useState({
-    fullName: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     vehicleInfo: '',
@@ -33,7 +35,8 @@ export default function EventDetailPage() {
   useEffect(() => {
     if (profile && showRegistrationModal) {
       setRegistrationData({
-        fullName: profile.full_name,
+        firstName: profile.first_name || '',
+        lastName: profile.last_name || '',
         email: profile.email,
         phone: profile.phone || '',
         vehicleInfo: '',
@@ -44,16 +47,28 @@ export default function EventDetailPage() {
 
   const fetchEvent = async () => {
     if (!eventId) return;
-    const { data, error } = await supabase
-      .from('events')
-      .select('*, event_director:profiles!events_event_director_id_fkey(*)')
-      .eq('id', eventId)
-      .maybeSingle();
-
-    if (!error && data) {
+    try {
+      const data = await eventsApi.getById(eventId);
       setEvent(data);
+    } catch (error) {
+      console.error('Error fetching event:', error);
     }
     setLoading(false);
+  };
+
+  const getFormatColor = (format: string) => {
+    switch (format) {
+      case 'SPL':
+        return 'bg-purple-500/10 text-purple-400 border-purple-500';
+      case 'SQL':
+        return 'bg-cyan-500/10 text-cyan-400 border-cyan-500';
+      case 'Show and Shine':
+        return 'bg-pink-500/10 text-pink-400 border-pink-500';
+      case 'Ride the Light':
+        return 'bg-yellow-500/10 text-yellow-400 border-yellow-500';
+      default:
+        return 'bg-gray-500/10 text-gray-400 border-gray-500';
+    }
   };
 
   const handleRegistration = async (e: React.FormEvent) => {
@@ -63,7 +78,8 @@ export default function EventDetailPage() {
 
     const registrationPayload: any = {
       event_id: eventId,
-      full_name: registrationData.fullName,
+      first_name: registrationData.firstName,
+      last_name: registrationData.lastName,
       email: registrationData.email,
       phone: registrationData.phone,
       vehicle_info: registrationData.vehicleInfo,
@@ -76,27 +92,25 @@ export default function EventDetailPage() {
       registrationPayload.user_id = user.id;
     }
 
-    const { error } = await supabase
-      .from('event_registrations')
-      .insert(registrationPayload);
-
-    if (error) {
-      setError(error.message);
-      setSubmitting(false);
-    } else {
+    try {
+      await eventRegistrationsApi.create(registrationPayload);
       setSuccess(true);
       setSubmitting(false);
       setTimeout(() => {
         setShowRegistrationModal(false);
         setSuccess(false);
         setRegistrationData({
-          fullName: '',
+          firstName: '',
+          lastName: '',
           email: '',
           phone: '',
           vehicleInfo: '',
           competitionClass: '',
         });
       }, 2000);
+    } catch (err: any) {
+      setError(err.message);
+      setSubmitting(false);
     }
   };
 
@@ -114,7 +128,7 @@ export default function EventDetailPage() {
         <div className="text-center">
           <p className="text-gray-400 text-xl mb-4">Event not found</p>
           <button
-            onClick={() => onNavigate('events')}
+            onClick={() => navigate('/events')}
             className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Back to Events
@@ -132,7 +146,7 @@ export default function EventDetailPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
-          onClick={() => onNavigate('events')}
+          onClick={() => navigate('/events')}
           className="mb-6 text-gray-400 hover:text-white transition-colors"
         >
           ← Back to Events
@@ -163,6 +177,29 @@ export default function EventDetailPage() {
               {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
             </span>
           </div>
+
+          {/* Multiplier Badge - First Line */}
+          {event.points_multiplier !== undefined && event.points_multiplier !== null && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-orange-500/10 text-orange-400 border-orange-500">
+                {event.points_multiplier}X Points Event
+              </span>
+            </div>
+          )}
+
+          {/* Format Badges - Second Line */}
+          {event.formats && event.formats.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {event.formats.map((format) => (
+                <span
+                  key={format}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(format)}`}
+                >
+                  {format}
+                </span>
+              ))}
+            </div>
+          )}
 
           {event.description && (
             <p className="text-gray-300 text-lg mb-6 leading-relaxed">
@@ -215,7 +252,7 @@ export default function EventDetailPage() {
                   <User className="h-5 w-5 text-orange-500" />
                   Event Director
                 </h3>
-                <p className="text-white font-medium mb-2">{event.event_director.full_name}</p>
+                <p className="text-white font-medium mb-2">{`${event.event_director.first_name || ''} ${event.event_director.last_name || ''}`.trim()}</p>
                 <p className="text-gray-400 text-sm mb-1">{event.event_director.email}</p>
                 {event.event_director.phone && (
                   <p className="text-gray-400 text-sm">{event.event_director.phone}</p>
@@ -224,12 +261,23 @@ export default function EventDetailPage() {
             )}
           </div>
 
+          {/* Action Buttons */}
           {event.status === 'upcoming' && (
             <button
               onClick={() => setShowRegistrationModal(true)}
               className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
             >
               Pre-Register for This Event
+            </button>
+          )}
+
+          {event.status === 'completed' && (
+            <button
+              onClick={() => navigate('/results', { state: { eventId: event.id } })}
+              className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+            >
+              <TrendingUp className="h-6 w-6" />
+              View Event Results
             </button>
           )}
         </div>
@@ -278,21 +326,40 @@ export default function EventDetailPage() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={registrationData.fullName}
-                    onChange={(e) =>
-                      setRegistrationData({ ...registrationData, fullName: e.target.value })
-                    }
-                    className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    required
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    First Name
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={registrationData.firstName}
+                      onChange={(e) =>
+                        setRegistrationData({ ...registrationData, firstName: e.target.value })
+                      }
+                      className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Last Name
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={registrationData.lastName}
+                      onChange={(e) =>
+                        setRegistrationData({ ...registrationData, lastName: e.target.value })
+                      }
+                      className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 

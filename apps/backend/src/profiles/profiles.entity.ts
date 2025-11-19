@@ -9,10 +9,13 @@ export class Profile {
   @Property({ type: 'text', nullable: true })
   email?: string;
 
-  @Property({ type: 'text', nullable: true })
+  @Property({ type: 'text', nullable: true, unique: true, fieldName: 'meca_id' })
+  meca_id?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'first_name' })
   first_name?: string;
 
-  @Property({ type: 'text', nullable: true })
+  @Property({ type: 'text', nullable: true, fieldName: 'last_name' })
   last_name?: string;
 
   @Property({ type: 'text', nullable: true })
@@ -27,15 +30,67 @@ export class Profile {
   @Property({ type: 'text', nullable: true })
   state?: string;
 
-  @Property({ type: 'text', nullable: true })
-  zip?: string;
+  @Property({ type: 'text', nullable: true, fieldName: 'postal_code' })
+  postal_code?: string;
+
+  @Property({ type: 'text', nullable: true, default: 'US' })
+  country?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'billing_street' })
+  billing_street?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'billing_city' })
+  billing_city?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'billing_state' })
+  billing_state?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'billing_zip' })
+  billing_zip?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'billing_country' })
+  billing_country?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'shipping_street' })
+  shipping_street?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'shipping_city' })
+  shipping_city?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'shipping_state' })
+  shipping_state?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'shipping_zip' })
+  shipping_zip?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'shipping_country' })
+  shipping_country?: string;
+
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'use_billing_for_shipping' })
+  use_billing_for_shipping?: boolean;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'profile_picture_url' })
+  profile_picture_url?: string;
 
   @Property({ type: 'text', nullable: true })
+  role?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'membership_status' })
+  membership_status?: string;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'membership_expiry' })
+  membership_expiry?: Date;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'avatar_url' })
   avatar_url?: string;
 
-  @Property({ onCreate: () => new Date() })
+  @Property({ type: 'text', nullable: true })
+  bio?: string;
+
+  @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   created_at: Date = new Date();
 
-  @Property({ onUpdate: () => new Date() })
+  @Property({ onUpdate: () => new Date(), fieldName: 'updated_at' })
   updated_at: Date = new Date();
 }
+
