@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail } from 'lucide-react';
 import EventManagement from '../admin/EventManagement';
-import ResultsEntry from '../admin/ResultsEntry';
+import ResultsEntry from '../admin/ResultsEntryNew';
 import RulebookManagement from '../admin/RulebookManagement';
 import MediaLibrary from '../admin/MediaLibrary';
 import SiteSettings from '../admin/SiteSettings';
+import EventHostingRequestsManagement from '../admin/EventHostingRequestsManagement';
+import { profilesApi } from '../../api-client/profiles.api-client';
+import { eventsApi } from '../../api-client/events.api-client';
+import { eventRegistrationsApi } from '../../api-client/event-registrations.api-client';
 
-type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings';
+type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<AdminView>('overview');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
@@ -26,24 +30,30 @@ export default function AdminDashboard() {
   }, []);
 
   const fetchStats = async () => {
-    const [users, events, registrations, members] = await Promise.all([
-      supabase.from('profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('events').select('id', { count: 'exact', head: true }),
-      supabase.from('event_registrations').select('id', { count: 'exact', head: true }),
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('membership_status', 'active'),
-    ]);
+    try {
+      const [profileStats, eventStats, registrationStats] = await Promise.all([
+        profilesApi.getStats(),
+        eventsApi.getStats(),
+        eventRegistrationsApi.getStats(),
+      ]);
 
-    setStats({
-      totalUsers: users.count || 0,
-      totalEvents: events.count || 0,
-      totalRegistrations: registrations.count || 0,
-      totalMembers: members.count || 0,
-    });
-
-    setLoading(false);
+      setStats({
+        totalUsers: profileStats.totalUsers,
+        totalEvents: eventStats.totalEvents,
+        totalRegistrations: registrationStats.totalRegistrations,
+        totalMembers: profileStats.totalMembers,
+      });
+    } catch (error) {
+      console.error('Failed to fetch admin stats:', error);
+      setStats({
+        totalUsers: 0,
+        totalEvents: 0,
+        totalRegistrations: 0,
+        totalMembers: 0,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const adminActions = [
@@ -119,6 +129,22 @@ export default function AdminDashboard() {
       color: 'cyan',
       navigateTo: '/admin/classes',
     },
+    {
+      icon: Tags,
+      title: 'Format Management',
+      description: 'Manage competition format types',
+      action: 'formats' as AdminView,
+      color: 'violet',
+      navigateTo: '/admin/formats',
+    },
+    {
+      icon: Mail,
+      title: 'Hosting Requests',
+      description: 'Manage event hosting requests and inquiries',
+      action: 'hosting-requests' as AdminView,
+      color: 'rose',
+      navigateTo: undefined,
+    },
   ];
 
   const getColorClasses = (color: string) => {
@@ -132,6 +158,8 @@ export default function AdminDashboard() {
       indigo: 'bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20',
       teal: 'bg-teal-500/10 text-teal-500 hover:bg-teal-500/20',
       cyan: 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20',
+      violet: 'bg-violet-500/10 text-violet-500 hover:bg-violet-500/20',
+      rose: 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20',
     };
     return colors[color] || colors.orange;
   };
@@ -139,7 +167,12 @@ export default function AdminDashboard() {
   const renderView = () => {
     switch (currentView) {
       case 'events':
-        return <EventManagement />;
+        return <EventManagement
+          onViewResults={(eventId: string) => {
+            setSelectedEventId(eventId);
+            setCurrentView('results');
+          }}
+        />;
       case 'results':
         return <ResultsEntry />;
       case 'rulebooks':
@@ -148,6 +181,8 @@ export default function AdminDashboard() {
         return <MediaLibrary />;
       case 'settings':
         return <SiteSettings />;
+      case 'hosting-requests':
+        return <EventHostingRequestsManagement />;
       case 'memberships':
         return (
           <div className="bg-slate-800 rounded-xl p-8 text-center">

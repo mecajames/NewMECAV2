@@ -25,6 +25,11 @@ export class ProfilesController {
     return this.profilesService.findAll(page, limit);
   }
 
+  @Get('stats')
+  async getStats(): Promise<{ totalUsers: number; totalMembers: number }> {
+    return this.profilesService.getStats();
+  }
+
   @Get(':id')
   async getProfile(@Param('id') id: string): Promise<Profile> {
     return this.profilesService.findById(id);

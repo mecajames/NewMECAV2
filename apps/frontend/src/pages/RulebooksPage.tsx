@@ -1,32 +1,44 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, FileText, Archive as ArchiveIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, Rulebook } from '../lib/supabase';
+import { rulebooksApi, Rulebook } from '../api-client/rulebooks.api-client';
+import { YearSelect } from '../shared/fields';
 
 export default function RulebooksPage() {
   const navigate = useNavigate();
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState<string>('');
 
   useEffect(() => {
     fetchActiveRulebooks();
   }, []);
 
   const fetchActiveRulebooks = async () => {
-    const { data, error } = await supabase
-      .from('rulebooks')
-      .select('*')
-      .eq('status', 'active')
-      .order('category')
-      .order('season', { ascending: false });
+    try {
+      const data = await rulebooksApi.getActiveRulebooks();
 
-    if (!error && data) {
-      setRulebooks(data);
+      // Sort by category first, then by season descending
+      const sorted = data.sort((a, b) => {
+        if (a.category !== b.category) {
+          return a.category.localeCompare(b.category);
+        }
+        return b.season.localeCompare(a.season);
+      });
+
+      setRulebooks(sorted);
+    } catch (error) {
+      console.error('Error fetching active rulebooks:', error);
     }
     setLoading(false);
   };
 
-  const groupedRulebooks = rulebooks.reduce((acc, rulebook) => {
+  // Filter rulebooks by selected year
+  const filteredRulebooks = selectedYear
+    ? rulebooks.filter((rulebook) => rulebook.season === selectedYear)
+    : rulebooks;
+
+  const groupedRulebooks = filteredRulebooks.reduce((acc, rulebook) => {
     if (!acc[rulebook.category]) {
       acc[rulebook.category] = [];
     }
@@ -64,6 +76,17 @@ export default function RulebooksPage() {
             <ArchiveIcon className="h-5 w-5" />
             View Archive
           </button>
+        </div>
+
+        <div className="mb-6 max-w-xs">
+          <YearSelect
+            value={selectedYear}
+            onChange={(year) => setSelectedYear(year)}
+            label="Filter by Year"
+            yearRange={{ start: 2010, end: new Date().getFullYear() + 5 }}
+            showAllOption={true}
+            showIcon={true}
+          />
         </div>
 
         {Object.keys(groupedRulebooks).length > 0 ? (

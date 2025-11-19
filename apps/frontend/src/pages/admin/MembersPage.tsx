@@ -147,40 +147,37 @@ export default function MembersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back to Dashboard Button */}
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="mb-6 inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Dashboard
-        </button>
-
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                <Users className="h-8 w-8 text-orange-500" />
-                Members Management
-              </h1>
-              <p className="mt-2 text-gray-400">
-                Manage member accounts, permissions, and information
-              </p>
-            </div>
-            {hasPermission('create_user') && (
-              <button
-                onClick={() => navigate('/admin/members/new')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-              >
-                <UserPlus className="h-5 w-5" />
-                Add Member
-              </button>
-            )}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">Members Management</h1>
+            <p className="text-gray-400">
+              Manage member accounts, permissions, and information
+            </p>
           </div>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Dashboard
+          </button>
         </div>
+
+        {/* Add Member Button */}
+        {hasPermission('create_user') && (
+          <div className="mb-6 flex justify-end">
+            <button
+              onClick={() => navigate('/admin/members/new')}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+            >
+              <UserPlus className="h-5 w-5" />
+              Add Member
+            </button>
+          </div>
+        )}
 
         {/* Filters and Search */}
         <div className="bg-slate-800 rounded-lg shadow-sm p-6 mb-6">

@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Upload, Trash2, Edit2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, Filter, X } from 'lucide-react';
-import { supabase, MediaFile, MediaType } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
+import { MediaType, MediaFile } from '../../api-client/media-files.api-client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useMediaFiles, useCreateMediaFile, useDeleteMediaFile } from '../../hooks/useMediaFiles';
 
 export default function MediaLibrary() {
   const { user } = useAuth();
-  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const { mediaFiles: apiMediaFiles, loading, refetch } = useMediaFiles();
+  const { createMediaFile } = useCreateMediaFile();
+  const { deleteMediaFile } = useDeleteMediaFile();
+
   const [filteredFiles, setFilteredFiles] = useState<MediaFile[]>([]);
-  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<MediaType | 'all'>('all');
@@ -30,27 +34,11 @@ export default function MediaLibrary() {
   });
 
   useEffect(() => {
-    fetchMediaFiles();
-  }, []);
-
-  useEffect(() => {
     filterMedia();
-  }, [mediaFiles, searchTerm, filterType]);
-
-  const fetchMediaFiles = async () => {
-    const { data, error } = await supabase
-      .from('media_files')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setMediaFiles(data);
-    }
-    setLoading(false);
-  };
+  }, [apiMediaFiles, searchTerm, filterType]);
 
   const filterMedia = () => {
-    let filtered = [...mediaFiles];
+    let filtered = [...apiMediaFiles];
 
     if (searchTerm) {
       filtered = filtered.filter(
@@ -61,7 +49,7 @@ export default function MediaLibrary() {
     }
 
     if (filterType !== 'all') {
-      filtered = filtered.filter((file) => file.file_type === filterType);
+      filtered = filtered.filter((file) => file.fileType === filterType);
     }
 
     setFilteredFiles(filtered);
@@ -117,24 +105,22 @@ export default function MediaLibrary() {
 
       const mediaData = {
         title: uploadData.title,
-        description: uploadData.description || null,
-        file_url: publicUrl,
-        file_type: getFileType(uploadData.file.type),
-        file_size: uploadData.file.size,
-        mime_type: uploadData.file.type,
+        description: uploadData.description || undefined,
+        fileUrl: publicUrl,
+        fileType: getFileType(uploadData.file.type),
+        fileSize: uploadData.file.size,
+        mimeType: uploadData.file.type,
         dimensions,
-        is_external: false,
-        tags: uploadData.tags ? uploadData.tags.split(',').map((t) => t.trim()) : null,
-        created_by: user.id,
+        isExternal: false,
+        tags: uploadData.tags ? uploadData.tags.split(',').map((t) => t.trim()) : undefined,
+        createdBy: user.id,
       };
 
-      const { error: dbError } = await supabase.from('media_files').insert(mediaData);
-
-      if (dbError) throw dbError;
+      await createMediaFile(mediaData);
 
       setShowUploadModal(false);
       setUploadData({ title: '', description: '', tags: '', file: null });
-      fetchMediaFiles();
+      refetch();
     } catch (error: any) {
       alert('Error uploading file: ' + error.message);
     } finally {
@@ -150,23 +136,21 @@ export default function MediaLibrary() {
     try {
       const mediaData = {
         title: externalData.title,
-        description: externalData.description || null,
-        file_url: externalData.file_url,
-        file_type: externalData.file_type,
-        file_size: 0,
-        mime_type: `${externalData.file_type}/*`,
-        is_external: true,
-        tags: externalData.tags ? externalData.tags.split(',').map((t) => t.trim()) : null,
-        created_by: user.id,
+        description: externalData.description || undefined,
+        fileUrl: externalData.file_url,
+        fileType: externalData.file_type,
+        fileSize: 0,
+        mimeType: `${externalData.file_type}/*`,
+        isExternal: true,
+        tags: externalData.tags ? externalData.tags.split(',').map((t) => t.trim()) : undefined,
+        createdBy: user.id,
       };
 
-      const { error } = await supabase.from('media_files').insert(mediaData);
-
-      if (error) throw error;
+      await createMediaFile(mediaData);
 
       setShowExternalModal(false);
       setExternalData({ title: '', description: '', file_url: '', file_type: 'image', tags: '' });
-      fetchMediaFiles();
+      refetch();
     } catch (error: any) {
       alert('Error adding external media: ' + error.message);
     } finally {
@@ -174,7 +158,7 @@ export default function MediaLibrary() {
     }
   };
 
-  const deleteMedia = async (id: string, fileUrl: string, isExternal: boolean) => {
+  const handleDeleteMedia = async (id: string, fileUrl: string, isExternal: boolean) => {
     if (!confirm('Are you sure you want to delete this media file?')) return;
 
     try {
@@ -184,11 +168,8 @@ export default function MediaLibrary() {
         await supabase.storage.from('documents').remove([path]);
       }
 
-      const { error } = await supabase.from('media_files').delete().eq('id', id);
-
-      if (error) throw error;
-
-      fetchMediaFiles();
+      await deleteMediaFile(id);
+      refetch();
     } catch (error: any) {
       alert('Error deleting media: ' + error.message);
     }
@@ -279,7 +260,7 @@ export default function MediaLibrary() {
           </select>
         </div>
         <div className="mt-2 text-sm text-gray-400">
-          Showing {filteredFiles.length} of {mediaFiles.length} files
+          Showing {filteredFiles.length} of {apiMediaFiles.length} files
         </div>
       </div>
 
@@ -288,14 +269,14 @@ export default function MediaLibrary() {
         {filteredFiles.map((file) => (
           <div key={file.id} className="bg-slate-800 rounded-xl overflow-hidden hover:ring-2 hover:ring-orange-500 transition-all">
             <div className="aspect-video bg-slate-700 flex items-center justify-center relative">
-              {file.file_type === 'image' ? (
-                <img src={file.file_url} alt={file.title} className="w-full h-full object-cover" />
+              {file.fileType === 'image' ? (
+                <img src={file.fileUrl} alt={file.title} className="w-full h-full object-cover" />
               ) : (
                 <div className="text-gray-500">
-                  {getFileIcon(file.file_type)}
+                  {getFileIcon(file.fileType)}
                 </div>
               )}
-              {file.is_external && (
+              {file.isExternal && (
                 <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
                   External
                 </div>
@@ -303,19 +284,19 @@ export default function MediaLibrary() {
             </div>
             <div className="p-4">
               <h3 className="text-white font-semibold mb-1 truncate">{file.title}</h3>
-              <p className="text-gray-400 text-xs mb-2">{formatFileSize(file.file_size)}</p>
+              <p className="text-gray-400 text-xs mb-2">{formatFileSize(file.fileSize)}</p>
               {file.dimensions && (
                 <p className="text-gray-500 text-xs mb-2">{file.dimensions}</p>
               )}
               <div className="flex gap-2">
                 <button
-                  onClick={() => copyUrl(file.file_url)}
+                  onClick={() => copyUrl(file.fileUrl)}
                   className="flex-1 px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors"
                 >
                   Copy URL
                 </button>
                 <button
-                  onClick={() => deleteMedia(file.id, file.file_url, file.is_external)}
+                  onClick={() => handleDeleteMedia(file.id, file.fileUrl, file.isExternal)}
                   className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
