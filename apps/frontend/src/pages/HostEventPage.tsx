@@ -1,6 +1,7 @@
 import { Calendar, MapPin, Users, Megaphone, CheckCircle, Send, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
+import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../utils/countries';
 
 const ADDITIONAL_SERVICES_OPTIONS = [
   'Staffing',
@@ -56,7 +57,7 @@ export default function HostEventPage() {
     city: '',
     state: '',
     postalCode: '',
-    country: 'United States',
+    country: 'US',
     venueType: '',
     expectedParticipants: '',
     hasHostedBefore: '',
@@ -134,7 +135,7 @@ export default function HostEventPage() {
         city: '',
         state: '',
         postalCode: '',
-        country: 'United States',
+        country: 'US',
         venueType: '',
         expectedParticipants: '',
         hasHostedBefore: '',
@@ -579,10 +580,31 @@ export default function HostEventPage() {
                   />
                 </div>
 
+                <div>
+                  <label htmlFor="country" className="block text-sm font-medium text-gray-300 mb-2">
+                    Country *
+                  </label>
+                  <select
+                    id="country"
+                    name="country"
+                    value={formData.country}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  >
+                    <option value="">Select country</option>
+                    {countries.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <label htmlFor="city" className="block text-sm font-medium text-gray-300 mb-2">
-                      City
+                      City *
                     </label>
                     <input
                       type="text"
@@ -590,6 +612,7 @@ export default function HostEventPage() {
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
+                      required
                       className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                       placeholder="City"
                     />
@@ -597,22 +620,41 @@ export default function HostEventPage() {
 
                   <div>
                     <label htmlFor="state" className="block text-sm font-medium text-gray-300 mb-2">
-                      State / Province / Region
+                      {getStateLabel(formData.country)} *
                     </label>
-                    <input
-                      type="text"
-                      id="state"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                      placeholder="State"
-                    />
+                    {getStatesForCountry(formData.country).length > 0 ? (
+                      <select
+                        id="state"
+                        name="state"
+                        value={formData.state}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      >
+                        <option value="">Select {getStateLabel(formData.country).toLowerCase()}</option>
+                        {getStatesForCountry(formData.country).map((state) => (
+                          <option key={state.code} value={state.code}>
+                            {state.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        id="state"
+                        name="state"
+                        value={formData.state}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        placeholder={getStateLabel(formData.country)}
+                      />
+                    )}
                   </div>
 
                   <div>
                     <label htmlFor="postalCode" className="block text-sm font-medium text-gray-300 mb-2">
-                      Postal Code
+                      {getPostalCodeLabel(formData.country)} *
                     </label>
                     <input
                       type="text"
@@ -620,25 +662,11 @@ export default function HostEventPage() {
                       name="postalCode"
                       value={formData.postalCode}
                       onChange={handleChange}
+                      required
                       className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                      placeholder="12345"
+                      placeholder={getPostalCodeLabel(formData.country)}
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label htmlFor="country" className="block text-sm font-medium text-gray-300 mb-2">
-                    Country
-                  </label>
-                  <input
-                    type="text"
-                    id="country"
-                    name="country"
-                    value={formData.country}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    placeholder="United States"
-                  />
                 </div>
               </div>
             </div>
