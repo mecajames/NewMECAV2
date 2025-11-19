@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ReCaptchaProvider } from './shared/recaptcha';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
@@ -28,11 +29,12 @@ import FormatManagementPage from './pages/admin/FormatManagementPage';
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <div className="min-h-screen bg-slate-900 flex flex-col">
-          <Navbar />
-          <div className="flex-1">
-            <Routes>
+      <ReCaptchaProvider version="v2">
+        <BrowserRouter>
+          <div className="min-h-screen bg-slate-900 flex flex-col">
+            <Navbar />
+            <div className="flex-1">
+              <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
@@ -68,6 +70,7 @@ function App() {
           <Footer />
         </div>
       </BrowserRouter>
+      </ReCaptchaProvider>
     </AuthProvider>
   );
 }
