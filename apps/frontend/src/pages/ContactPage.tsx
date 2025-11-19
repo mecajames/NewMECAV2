@@ -85,7 +85,7 @@ export default function ContactPage() {
                 <Mail className="h-6 w-6 text-orange-500 mr-4 mt-1 flex-shrink-0" />
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-1">Email</h3>
-                  <p className="text-gray-400">info@mecacaraudio.com</p>
+                  <p className="text-gray-400">mecacaraudio@gmail.com</p>
                 </div>
               </div>
 
@@ -93,7 +93,7 @@ export default function ContactPage() {
                 <Phone className="h-6 w-6 text-orange-500 mr-4 mt-1 flex-shrink-0" />
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-1">Phone</h3>
-                  <p className="text-gray-400">Coming soon</p>
+                  <p className="text-gray-400">615-851-PHAT</p>
                 </div>
               </div>
 
@@ -101,7 +101,11 @@ export default function ContactPage() {
                 <MapPin className="h-6 w-6 text-orange-500 mr-4 mt-1 flex-shrink-0" />
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-1">Location</h3>
-                  <p className="text-gray-400">Nationwide - Events across the USA</p>
+                  <p className="text-gray-400">
+                    235 Flamingo Dr.<br />
+                    Louisville, KY 40218<br />
+                    USA
+                  </p>
                 </div>
               </div>
             </div>

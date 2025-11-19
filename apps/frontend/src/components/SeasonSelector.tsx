@@ -9,6 +9,7 @@ interface SeasonSelectorProps {
   showAllOption?: boolean;
   label?: string;
   className?: string;
+  autoSelectCurrent?: boolean;
 }
 
 export default function SeasonSelector({
@@ -17,6 +18,7 @@ export default function SeasonSelector({
   showAllOption = true,
   label = 'Filter by Season',
   className = '',
+  autoSelectCurrent = false,
 }: SeasonSelectorProps) {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,6 +29,14 @@ export default function SeasonSelector({
       try {
         const data = await seasonsApi.getAll();
         setSeasons(data as any);
+
+        // Auto-select current season if requested and no season is selected
+        if (autoSelectCurrent && !selectedSeasonId) {
+          const currentSeason = (data as Season[]).find(s => s.is_current);
+          if (currentSeason) {
+            onSeasonChange(currentSeason.id);
+          }
+        }
       } catch (error) {
         console.error('Error fetching seasons:', error);
         setSeasons([]);
@@ -36,7 +46,7 @@ export default function SeasonSelector({
     };
 
     fetchSeasons();
-  }, []);
+  }, [autoSelectCurrent, selectedSeasonId, onSeasonChange]);
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
