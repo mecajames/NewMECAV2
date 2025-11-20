@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "pg": "^8.16.3",
     "ts-node": "^10.9.2"
   },
   "engines": {
@@ -32,7 +33,6 @@
   },
   "dependencies": {
     "cheerio": "^1.1.2",
-    "node-fetch": "^2.7.0",
-    "pg": "^8.16.3"
+    "node-fetch": "^2.7.0"
   }
 }
