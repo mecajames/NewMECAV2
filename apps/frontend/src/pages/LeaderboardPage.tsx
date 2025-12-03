@@ -13,24 +13,32 @@ interface LeaderboardEntry {
   first_place: number;
   second_place: number;
   third_place: number;
+  best_score: number;
   meca_id?: string;
   membership_expiry?: string;
 }
+
+type RankByType = 'points' | 'score';
+
+const FORMATS = ['SPL', 'SQL', 'SSI', 'MK'];
 
 export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedFormat, setSelectedFormat] = useState<string>('all');
+  const [rankBy, setRankBy] = useState<RankByType>('points');
   const [classes, setClasses] = useState<string[]>([]);
+  const [formats, setFormats] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [mostEventsAttended, setMostEventsAttended] = useState<LeaderboardEntry[]>([]);
   const [highestSPLScores, setHighestSPLScores] = useState<any[]>([]);
 
   useEffect(() => {
     fetchLeaderboard();
-  }, [selectedSeasonId, selectedClass]);
+  }, [selectedSeasonId, selectedClass, selectedFormat, rankBy]);
 
-  const processResults = (results: any[]): LeaderboardEntry[] => {
+  const processResults = (results: any[], sortBy: RankByType = 'points'): LeaderboardEntry[] => {
     const aggregated: { [key: string]: LeaderboardEntry } = {};
 
     results.forEach((result) => {
@@ -38,6 +46,7 @@ export default function LeaderboardPage() {
       const key = `${result.competitor_id || result.competitor_name}_${compClass}`;
       const mecaId = result.mecaId || result.meca_id;
       const membershipExpiry = result.competitor?.membership_expiry;
+      const score = result.score || 0;
 
       if (!aggregated[key]) {
         aggregated[key] = {
@@ -49,6 +58,7 @@ export default function LeaderboardPage() {
           first_place: 0,
           second_place: 0,
           third_place: 0,
+          best_score: score,
           meca_id: mecaId,
           membership_expiry: membershipExpiry,
         };
@@ -56,13 +66,20 @@ export default function LeaderboardPage() {
 
       aggregated[key].total_points += result.points_earned || 0;
       aggregated[key].events_participated += 1;
+      aggregated[key].best_score = Math.max(aggregated[key].best_score, score);
 
       if (result.placement === 1) aggregated[key].first_place += 1;
       if (result.placement === 2) aggregated[key].second_place += 1;
       if (result.placement === 3) aggregated[key].third_place += 1;
     });
 
-    return Object.values(aggregated).sort((a, b) => b.total_points - a.total_points);
+    // Sort by the selected criterion
+    return Object.values(aggregated).sort((a, b) => {
+      if (sortBy === 'score') {
+        return b.best_score - a.best_score;
+      }
+      return b.total_points - a.total_points;
+    });
   };
 
   const fetchLeaderboard = async () => {
@@ -70,21 +87,33 @@ export default function LeaderboardPage() {
     try {
       const results = await competitionResultsApi.getAll(1, 1000);
 
-      // Extract unique classes from ALL results (not filtered by season)
+      // Extract unique classes based on selected format, and all formats
       const classSet = new Set<string>();
+      const formatSet = new Set<string>();
       results.forEach((r: any) => {
         const compClass = r.competitionClass || r.competition_class;
-        if (compClass) classSet.add(compClass);
+        const format = r.format;
+        if (format) formatSet.add(format);
+        // Only add class if it matches selected format (or all formats selected)
+        if (compClass && (selectedFormat === 'all' || format === selectedFormat)) {
+          classSet.add(compClass);
+        }
       });
       setClasses(Array.from(classSet).sort());
+      setFormats(Array.from(formatSet).sort());
 
       // Filter by season if selected
       let filtered = selectedSeasonId
         ? results.filter((r: CompetitionResult) => r.season_id === selectedSeasonId)
         : results;
 
+      // Filter by format if selected
+      if (selectedFormat !== 'all') {
+        filtered = filtered.filter((r: any) => r.format === selectedFormat);
+      }
+
       // Process results to aggregate by competitor and class
-      let processed = processResults(filtered);
+      let processed = processResults(filtered, rankBy);
 
       // Filter by class if selected
       if (selectedClass !== 'all') {
@@ -111,10 +140,6 @@ export default function LeaderboardPage() {
             overallAggregated[key].first_place += entry.first_place;
             overallAggregated[key].second_place += entry.second_place;
             overallAggregated[key].third_place += entry.third_place;
-            overallAggregated[key].best_placement = Math.min(
-              overallAggregated[key].best_placement,
-              entry.best_placement
-            );
             overallAggregated[key].best_score = Math.max(
               overallAggregated[key].best_score,
               entry.best_score
@@ -122,7 +147,13 @@ export default function LeaderboardPage() {
           }
         });
 
-        processed = Object.values(overallAggregated).sort((a, b) => b.total_points - a.total_points);
+        // Sort by the selected criterion
+        processed = Object.values(overallAggregated).sort((a, b) => {
+          if (rankBy === 'score') {
+            return b.best_score - a.best_score;
+          }
+          return b.total_points - a.total_points;
+        });
 
         // Calculate additional stats for "All Classes" view
         // Top 3 by events attended
@@ -193,31 +224,47 @@ export default function LeaderboardPage() {
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">Top 10 Leaderboard</h1>
           <p className="text-gray-400 text-lg">
-            The best competitors based on total points earned
+            The best competitors based on {rankBy === 'points' ? 'total points earned' : 'highest score achieved'}
           </p>
         </div>
 
-        {/* Season and Class Filters */}
+        {/* Filters */}
         <div className="mb-16 bg-slate-800 rounded-xl p-6">
-          <div className="flex flex-wrap items-center gap-6">
+          <div className="flex flex-wrap items-center gap-6 mb-6">
             {/* Season Filter */}
-            <div className="flex-1 min-w-[250px]">
-              <SeasonSelector
-                selectedSeasonId={selectedSeasonId}
-                onSeasonChange={setSelectedSeasonId}
-                showAllOption={true}
-                autoSelectCurrent={true}
-              />
+            <SeasonSelector
+              selectedSeasonId={selectedSeasonId}
+              onSeasonChange={setSelectedSeasonId}
+              showAllOption={true}
+              autoSelectCurrent={true}
+            />
+
+            {/* Rank By Filter */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-gray-300">
+                <TrendingUp className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                <span className="font-medium whitespace-nowrap">Rank By:</span>
+              </div>
+              <select
+                value={rankBy}
+                onChange={(e) => setRankBy(e.target.value as RankByType)}
+                className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 hover:bg-slate-600 transition-colors"
+              >
+                <option value="points">Total Points</option>
+                <option value="score">Highest Score</option>
+              </select>
             </div>
 
             {/* Class Filter */}
-            <div className="flex items-center gap-3 flex-1 min-w-[250px]">
-              <Filter className="h-5 w-5 text-orange-500 flex-shrink-0" />
-              <label className="text-sm font-medium text-gray-300 whitespace-nowrap">Filter by Class:</label>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-gray-300">
+                <Filter className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                <span className="font-medium whitespace-nowrap">Class:</span>
+              </div>
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                className="flex-1 px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 hover:bg-slate-600 transition-colors"
               >
                 <option value="all">All Classes</option>
                 {classes.map((cls) => (
@@ -227,6 +274,50 @@ export default function LeaderboardPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Format Toggle Buttons */}
+          <div className="flex items-center gap-4">
+            <span className="font-medium text-gray-300">Format:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setSelectedFormat(selectedFormat === 'SPL' ? 'all' : 'SPL');
+                  setSelectedClass('all');
+                }}
+                className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                  selectedFormat === 'SPL'
+                    ? 'bg-orange-500 text-white shadow-lg'
+                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                }`}
+              >
+                SPL
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedFormat(selectedFormat === 'SQL' ? 'all' : 'SQL');
+                  setSelectedClass('all');
+                }}
+                className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                  selectedFormat === 'SQL'
+                    ? 'bg-orange-500 text-white shadow-lg'
+                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                }`}
+              >
+                SQL
+              </button>
+            </div>
+            {selectedFormat !== 'all' && (
+              <button
+                onClick={() => {
+                  setSelectedFormat('all');
+                  setSelectedClass('all');
+                }}
+                className="text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
@@ -261,8 +352,10 @@ export default function LeaderboardPage() {
                           <div className="text-gray-400 text-sm font-semibold mb-1">2nd</div>
                           <h3 className="text-xl font-bold text-white mb-2">{entry.competitor_name}</h3>
                           <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
-                          <div className="text-3xl font-bold text-gray-400">{entry.total_points}</div>
-                          <div className="text-sm text-gray-500">points</div>
+                          <div className="text-3xl font-bold text-gray-400">
+                            {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-gray-500">{rankBy === 'points' ? 'points' : 'score'}</div>
                         </div>
                         <div className="w-64 h-32 bg-gradient-to-t from-gray-400 to-gray-500 rounded-t-lg flex items-center justify-center">
                           <span className="text-6xl font-bold text-white opacity-50">2</span>
@@ -284,8 +377,10 @@ export default function LeaderboardPage() {
                           <div className="text-yellow-500 text-sm font-semibold mb-1">1st</div>
                           <h3 className="text-2xl font-bold text-white mb-2">{entry.competitor_name}</h3>
                           <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
-                          <div className="text-4xl font-bold text-yellow-500">{entry.total_points}</div>
-                          <div className="text-sm text-gray-500">points</div>
+                          <div className="text-4xl font-bold text-yellow-500">
+                            {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-gray-500">{rankBy === 'points' ? 'points' : 'score'}</div>
                         </div>
                         <div className="w-72 h-40 bg-gradient-to-t from-yellow-500 to-yellow-400 rounded-t-lg flex items-center justify-center">
                           <span className="text-7xl font-bold text-white opacity-50">1</span>
@@ -307,8 +402,10 @@ export default function LeaderboardPage() {
                           <div className="text-orange-500 text-sm font-semibold mb-1">3rd</div>
                           <h3 className="text-xl font-bold text-white mb-2">{entry.competitor_name}</h3>
                           <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
-                          <div className="text-3xl font-bold text-orange-500">{entry.total_points}</div>
-                          <div className="text-sm text-gray-500">points</div>
+                          <div className="text-3xl font-bold text-orange-500">
+                            {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
+                          </div>
+                          <div className="text-sm text-gray-500">{rankBy === 'points' ? 'points' : 'score'}</div>
                         </div>
                         <div className="w-64 h-24 bg-gradient-to-t from-orange-500 to-orange-400 rounded-t-lg flex items-center justify-center">
                           <span className="text-6xl font-bold text-white opacity-50">3</span>
@@ -334,7 +431,9 @@ export default function LeaderboardPage() {
                           <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">MECA ID</th>
                           <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Events</th>
                           <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Wins</th>
-                          <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">Total Points</th>
+                          <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">
+                            {rankBy === 'points' ? 'Total Points' : 'Best Score'}
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-700">
@@ -375,7 +474,9 @@ export default function LeaderboardPage() {
                                 </div>
                               </td>
                               <td className="px-6 py-4 text-right">
-                                <div className="text-3xl font-bold text-orange-500">{entry.total_points}</div>
+                                <div className="text-3xl font-bold text-orange-500">
+                                  {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -402,7 +503,9 @@ export default function LeaderboardPage() {
                         <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">MECA ID</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Events</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-gray-300">Wins</th>
-                        <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">Total Points</th>
+                        <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">
+                          {rankBy === 'points' ? 'Total Points' : 'Best Score'}
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700">
@@ -440,7 +543,9 @@ export default function LeaderboardPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <div className="text-2xl font-bold text-orange-500">{entry.total_points}</div>
+                              <div className="text-2xl font-bold text-orange-500">
+                                {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
+                              </div>
                             </td>
                           </tr>
                         );

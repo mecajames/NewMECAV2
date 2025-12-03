@@ -8,10 +8,33 @@ import * as path from 'path';
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
-
   @Get('event/:eventId/sessions')
   async getEventSessions(@Param('eventId') eventId: string) {
     return this.auditService.getEventSessions(eventId);
+  }
+
+  @Get('event/:eventId/modifications')
+  async getEventModifications(@Param('eventId') eventId: string) {
+    return this.auditService.getEventModifications(eventId);
+  }
+
+  @Get('event/:eventId/deletions')
+  async getEventDeletions(@Param('eventId') eventId: string) {
+    return this.auditService.getEventDeletions(eventId);
+  }
+
+  @Get('event/:eventId/all')
+  async getEventAllLogs(@Param('eventId') eventId: string) {
+    return this.auditService.getEventAllLogs(eventId);
+  }
+
+  @Get('log/:logId')
+  async getAuditLogById(@Param('logId') logId: string) {
+    const log = await this.auditService.getAuditLogById(logId);
+    if (!log) {
+      throw new NotFoundException('Audit log not found');
+    }
+    return log;
   }
 
   @Get('session/:sessionId/logs')

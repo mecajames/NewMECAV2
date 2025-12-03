@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-import { BookOpen, FileText, Archive as ArchiveIcon } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { BookOpen, FileText, Archive as ArchiveIcon, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { rulebooksApi, Rulebook } from '../api-client/rulebooks.api-client';
-import { YearSelect } from '../shared/fields';
 
 export default function RulebooksPage() {
   const navigate = useNavigate();
@@ -33,9 +32,15 @@ export default function RulebooksPage() {
     setLoading(false);
   };
 
+  // Get unique years from rulebooks (sorted descending)
+  const availableYears = useMemo(() => {
+    const years = [...new Set(rulebooks.map((r) => String(r.season)))];
+    return years.sort((a, b) => Number(b) - Number(a));
+  }, [rulebooks]);
+
   // Filter rulebooks by selected year
   const filteredRulebooks = selectedYear
-    ? rulebooks.filter((rulebook) => rulebook.season === selectedYear)
+    ? rulebooks.filter((rulebook) => String(rulebook.season) === selectedYear)
     : rulebooks;
 
   const groupedRulebooks = filteredRulebooks.reduce((acc, rulebook) => {
@@ -79,14 +84,22 @@ export default function RulebooksPage() {
         </div>
 
         <div className="mb-6 max-w-xs">
-          <YearSelect
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
+            <Calendar className="h-4 w-4 text-orange-500" />
+            Filter by Year
+          </label>
+          <select
             value={selectedYear}
-            onChange={(year) => setSelectedYear(year)}
-            label="Filter by Year"
-            yearRange={{ start: 2010, end: new Date().getFullYear() + 5 }}
-            showAllOption={true}
-            showIcon={true}
-          />
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="">All Years</option>
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}{year === String(new Date().getFullYear()) ? ' (Current)' : ''}
+              </option>
+            ))}
+          </select>
         </div>
 
         {Object.keys(groupedRulebooks).length > 0 ? (

@@ -63,6 +63,7 @@ export default function Navbar() {
     if (path.startsWith('/standings')) return 'standings';
     if (path.startsWith('/leaderboard')) return 'leaderboard';
     if (path.startsWith('/rulebooks')) return 'rulebooks';
+    if (path.startsWith('/members')) return 'members';
     if (path.startsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/membership')) return 'membership';
     if (path.startsWith('/login')) return 'login';
@@ -79,6 +80,7 @@ export default function Navbar() {
     { id: 'results', label: 'Results', icon: Trophy, path: '/results' },
     { id: 'standings', label: 'Standings', icon: Award, path: '/standings' },
     { id: 'leaderboard', label: 'Top 10', icon: Trophy, path: '/leaderboard' },
+    { id: 'members', label: 'Members', icon: Users, path: '/members' },
   ];
 
   const groupedRulebooks = activeRulebooks.reduce((acc, rulebook) => {
@@ -313,7 +315,7 @@ export default function Navbar() {
                       <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
                         <button
                           onClick={() => {
-                            navigate('/profile');
+                            navigate('/dashboard');
                             setUserMenuOpen(false);
                           }}
                           className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
@@ -325,7 +327,7 @@ export default function Navbar() {
                         </button>
                         <button
                           onClick={() => {
-                            navigate('/profile'); // TODO: Navigate to public profile
+                            navigate('/public-profile');
                             setUserMenuOpen(false);
                           }}
                           className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"

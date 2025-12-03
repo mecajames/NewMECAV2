@@ -38,13 +38,16 @@ export default function KnowledgeBasePage() {
               tutorials, and FAQs.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto mt-12">
-              <div className="bg-slate-700 rounded-lg p-6">
-                <div className="text-orange-500 text-3xl mb-3">📚</div>
+              <Link
+                to="/competition-guides"
+                className="bg-slate-700 hover:bg-slate-600 rounded-lg p-6 transition-colors group"
+              >
+                <div className="text-orange-500 group-hover:text-orange-400 text-3xl mb-3">📚</div>
                 <h3 className="text-white font-semibold mb-2">Competition Guides</h3>
                 <p className="text-gray-400 text-sm">
                   Learn about different competition formats and what to expect
                 </p>
-              </div>
+              </Link>
               <div className="bg-slate-700 rounded-lg p-6">
                 <div className="text-orange-500 text-3xl mb-3">❓</div>
                 <h3 className="text-white font-semibold mb-2">FAQs</h3>

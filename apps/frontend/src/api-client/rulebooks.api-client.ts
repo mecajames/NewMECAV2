@@ -6,7 +6,7 @@ export interface Rulebook {
   category: string;
   season: string;
   pdfUrl?: string;
-  status: boolean;
+  status: string | boolean;  // String for new format ('active', 'inactive', 'archive'), boolean for legacy
   displayOrder: number;
   createdAt: string;
   updatedAt?: string;
@@ -48,12 +48,17 @@ export const rulebooksApi = {
   },
 
   updateRulebook: async (id: string, data: Partial<Rulebook>): Promise<Rulebook> => {
+    console.log('📤 Updating rulebook:', id, data);
     const response = await fetch(`${API_BASE_URL}/api/rulebooks/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to update rulebook');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Rulebook update failed:', response.status, errorText);
+      throw new Error(`Failed to update rulebook: ${errorText}`);
+    }
     return response.json();
   },
 

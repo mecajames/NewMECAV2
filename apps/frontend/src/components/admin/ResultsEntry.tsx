@@ -229,12 +229,19 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
   };
 
   const handleDeleteResult = async (resultId: string) => {
+    const reason = prompt('Please enter a reason for deleting this result:');
+    if (reason === null) return; // User cancelled
+    if (!reason.trim()) {
+      alert('A reason is required to delete a result.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this result?')) {
       return;
     }
 
     try {
-      await competitionResultsApi.delete(resultId);
+      await competitionResultsApi.delete(resultId, profile?.id, reason.trim());
       alert('Result deleted successfully!');
       fetchExistingResults();
     } catch (error: any) {
@@ -264,7 +271,7 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
         created_by: profile!.id,
       };
 
-      await competitionResultsApi.update(editingResult.id, resultData as any);
+      await competitionResultsApi.update(editingResult.id, resultData as any, profile?.id);
       alert('Result updated successfully!');
       setShowEditModal(false);
       setEditingResult(null);
@@ -452,7 +459,11 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
                     </span>
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
-                    Points awarded: 1st=<span className="text-white">{5 * selectedEvent.points_multiplier}pts</span>, 2nd=<span className="text-white">{4 * selectedEvent.points_multiplier}pts</span>, 3rd=<span className="text-white">{3 * selectedEvent.points_multiplier}pts</span>, 4th=<span className="text-white">{2 * selectedEvent.points_multiplier}pts</span>, 5th=<span className="text-white">{1 * selectedEvent.points_multiplier}pts</span>
+                    {selectedEvent.points_multiplier === 4 ? (
+                      <>Points (Top 5 only): 1st=<span className="text-white">20pts</span>, 2nd=<span className="text-white">19pts</span>, 3rd=<span className="text-white">18pts</span>, 4th=<span className="text-white">17pts</span>, 5th=<span className="text-white">16pts</span></>
+                    ) : (
+                      <>Points (Top 5 only): 1st=<span className="text-white">{5 * selectedEvent.points_multiplier}pts</span>, 2nd=<span className="text-white">{4 * selectedEvent.points_multiplier}pts</span>, 3rd=<span className="text-white">{3 * selectedEvent.points_multiplier}pts</span>, 4th=<span className="text-white">{2 * selectedEvent.points_multiplier}pts</span>, 5th=<span className="text-white">{1 * selectedEvent.points_multiplier}pts</span></>
+                    )}
                   </p>
                 </div>
               ) : null;

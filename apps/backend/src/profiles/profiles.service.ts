@@ -101,4 +101,20 @@ export class ProfilesService {
 
     return { totalUsers, totalMembers };
   }
+
+  async findPublicProfiles(): Promise<Profile[]> {
+    const em = this.em.fork();
+    return em.find(Profile, { is_public: true }, {
+      orderBy: { updated_at: 'DESC' }
+    });
+  }
+
+  async findPublicById(id: string): Promise<Profile> {
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id, is_public: true });
+    if (!profile) {
+      throw new NotFoundException(`Public profile with ID ${id} not found`);
+    }
+    return profile;
+  }
 }

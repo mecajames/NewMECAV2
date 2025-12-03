@@ -15,13 +15,16 @@ export class Rulebook {
   category!: RulebookCategory;
 
 @Property({ type: 'integer', fieldName: 'year' })
-  season!: string;
+  season!: number;
 
   @Property({ type: 'text', fieldName: 'pdf_url' })
   pdfUrl!: string;
 
 @Property({ type: 'boolean', fieldName: 'is_active' })
-  status: boolean = true;
+  isActive: boolean = true;
+
+  @Property({ type: 'text', default: 'active' })
+  status: string = 'active';
 
   @Property({ type: 'text', nullable: true })
   description?: string;

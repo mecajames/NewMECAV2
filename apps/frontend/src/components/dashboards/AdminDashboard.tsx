@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2 } from 'lucide-react';
 import EventManagement from '../admin/EventManagement';
 import ResultsEntry from '../admin/ResultsEntryNew';
 import RulebookManagement from '../admin/RulebookManagement';
 import MediaLibrary from '../admin/MediaLibrary';
 import SiteSettings from '../admin/SiteSettings';
 import EventHostingRequestsManagement from '../admin/EventHostingRequestsManagement';
+import ClassNameMappingManagement from '../admin/ClassNameMappingManagement';
 import { profilesApi } from '../../api-client/profiles.api-client';
 import { eventsApi } from '../../api-client/events.api-client';
 import { eventRegistrationsApi } from '../../api-client/event-registrations.api-client';
 
-type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests';
+type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -130,6 +131,14 @@ export default function AdminDashboard() {
       navigateTo: '/admin/classes',
     },
     {
+      icon: Link2,
+      title: 'Class Mappings',
+      description: 'Map imported class names to official classes',
+      action: 'class-mappings' as AdminView,
+      color: 'amber',
+      navigateTo: undefined,
+    },
+    {
       icon: Tags,
       title: 'Format Management',
       description: 'Manage competition format types',
@@ -160,6 +169,7 @@ export default function AdminDashboard() {
       cyan: 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20',
       violet: 'bg-violet-500/10 text-violet-500 hover:bg-violet-500/20',
       rose: 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20',
+      amber: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
     };
     return colors[color] || colors.orange;
   };
@@ -183,6 +193,8 @@ export default function AdminDashboard() {
         return <SiteSettings />;
       case 'hosting-requests':
         return <EventHostingRequestsManagement />;
+      case 'class-mappings':
+        return <ClassNameMappingManagement />;
       case 'memberships':
         return (
           <div className="bg-slate-800 rounded-xl p-8 text-center">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle, Eye, MessageSquare } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle, Eye, MessageSquare, Settings, Users, FileText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, EventRegistration, CompetitionResult } from '../../lib/supabase';
 import axios from 'axios';
@@ -17,11 +18,8 @@ interface EventHostingRequest {
   createdAt: string;
 }
 
-interface UserDashboardProps {
-  onNavigate: (page: string, data?: any) => void;
-}
-
-export default function UserDashboard({ onNavigate }: UserDashboardProps) {
+export default function UserDashboard() {
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [results, setResults] = useState<CompetitionResult[]>([]);
@@ -210,6 +208,54 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
           </div>
         )}
 
+        {/* Quick Links Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <button
+            onClick={() => navigate('/profile')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                <Settings className="h-6 w-6 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Personal Profile</h3>
+                <p className="text-gray-400 text-sm">Edit your account details</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigate('/public-profile')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                <Users className="h-6 w-6 text-green-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Public Profile</h3>
+                <p className="text-gray-400 text-sm">Manage your public presence</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigate('/billing')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                <FileText className="h-6 w-6 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Billing</h3>
+                <p className="text-gray-400 text-sm">View invoices & payments</p>
+              </div>
+            </div>
+          </button>
+        </div>
+
         {/* Event Hosting Requests - Only show if user has submitted requests */}
         {hostingRequests.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg mb-8">
@@ -266,7 +312,7 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
                     key={reg.id}
                     className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
                     onClick={() =>
-                      reg.event && onNavigate('event-detail', { eventId: reg.event.id })
+                      reg.event && navigate(`/events/${reg.event.id}`)
                     }
                   >
                     <h4 className="font-semibold text-white mb-2">
@@ -297,7 +343,7 @@ export default function UserDashboard({ onNavigate }: UserDashboardProps) {
                 <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
                 <p className="text-gray-400">No event registrations yet</p>
                 <button
-                  onClick={() => onNavigate('events')}
+                  onClick={() => navigate('/events')}
                   className="mt-4 px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                 >
                   Browse Events

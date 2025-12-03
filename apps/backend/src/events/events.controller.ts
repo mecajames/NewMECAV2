@@ -39,6 +39,11 @@ export class EventsController {
     return this.eventsService.findUpcoming();
   }
 
+  @Get('multi-day-group/:groupId')
+  async getEventsByMultiDayGroup(@Param('groupId') groupId: string): Promise<Event[]> {
+    return this.eventsService.findByMultiDayGroup(groupId);
+  }
+
   @Get(':id')
   async getEvent(@Param('id') id: string): Promise<Event> {
     return this.eventsService.findById(id);
@@ -48,6 +53,14 @@ export class EventsController {
   @HttpCode(HttpStatus.CREATED)
   async createEvent(@Body() data: Partial<Event>): Promise<Event> {
     return this.eventsService.create(data);
+  }
+
+  @Post('multi-day')
+  @HttpCode(HttpStatus.CREATED)
+  async createMultiDayEvent(
+    @Body() body: { data: Partial<Event>; numberOfDays: number; dayDates: string[] },
+  ): Promise<Event[]> {
+    return this.eventsService.createMultiDay(body.data, body.numberOfDays, body.dayDates);
   }
 
   @Put(':id')

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { eventsApi, Event } from '../api-client/events.api-client';
 import { competitionResultsApi, CompetitionResult } from '../api-client/competition-results.api-client';
 import { competitionClassesApi, CompetitionClass } from '../api-client/competition-classes.api-client';
@@ -17,9 +17,13 @@ type SortDirection = 'asc' | 'desc';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  // Get event ID from URL query params
+  const eventIdFromUrl = searchParams.get('eventId');
+
   const [events, setEvents] = useState<Event[]>([]);
-  const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const [selectedEventId, setSelectedEventId] = useState<string>(eventIdFromUrl || '');
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
@@ -30,6 +34,8 @@ export default function ResultsPage() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortColumn, setSortColumn] = useState<SortColumn>('placement');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [multiDayEvents, setMultiDayEvents] = useState<Event[]>([]);
+  const [isAggregatedView, setIsAggregatedView] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -56,14 +62,12 @@ export default function ResultsPage() {
     }
   }, [results, classes]);
 
-  // Handle event pre-selection from navigation state
+  // Handle URL param change - set selected event when URL param changes
   useEffect(() => {
-    if (location.state?.eventId) {
-      setSelectedEventId(location.state.eventId);
-      // Clear the state to prevent re-selection on page refresh
-      navigate(location.pathname, { replace: true, state: {} });
+    if (eventIdFromUrl && eventIdFromUrl !== selectedEventId) {
+      setSelectedEventId(eventIdFromUrl);
     }
-  }, [location.state]);
+  }, [eventIdFromUrl]);
 
   const fetchClasses = async () => {
     try {
@@ -90,9 +94,14 @@ export default function ResultsPage() {
       filtered.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
 
       setEvents(filtered);
-      if (filtered.length > 0) {
+
+      // Only auto-select first event if we didn't come from URL with a specific event
+      if (eventIdFromUrl && filtered.some(e => e.id === eventIdFromUrl)) {
+        // Event from URL exists in the filtered list, keep it selected
+        setSelectedEventId(eventIdFromUrl);
+      } else if (filtered.length > 0 && !eventIdFromUrl) {
         setSelectedEventId(filtered[0].id);
-      } else {
+      } else if (filtered.length === 0) {
         setSelectedEventId('');
         setResults([]);
       }
@@ -105,16 +114,87 @@ export default function ResultsPage() {
   const fetchResults = async () => {
     setResultsLoading(true);
     try {
-      const data = await competitionResultsApi.getByEvent(selectedEventId);
+      // Get the selected event to check if it's a multi-day State/World Finals
+      const selectedEvent = events.find(e => e.id === selectedEventId);
 
-      // Sort by placement ascending
-      data.sort((a, b) => a.placement - b.placement);
+      // Check if this is a multi-day State Finals or World Finals event
+      const isMultiDayFinals = selectedEvent?.multi_day_group_id &&
+        (selectedEvent.event_type === 'state_finals' || selectedEvent.event_type === 'world_finals');
 
-      setResults(data);
+      if (isMultiDayFinals && selectedEvent.multi_day_group_id) {
+        // Fetch all events in this multi-day group
+        const allDays = await eventsApi.getByMultiDayGroup(selectedEvent.multi_day_group_id);
+        setMultiDayEvents(allDays);
+
+        // Fetch results from all days
+        const allResults: CompetitionResult[] = [];
+        for (const dayEvent of allDays) {
+          const dayResults = await competitionResultsApi.getByEvent(dayEvent.id);
+          allResults.push(...dayResults);
+        }
+
+        // Aggregate results: for each (competitor + format + class), keep only highest score
+        const aggregatedResults = aggregateResults(allResults);
+        setResults(aggregatedResults);
+        setIsAggregatedView(true);
+      } else {
+        // Standard single event results
+        const data = await competitionResultsApi.getByEvent(selectedEventId);
+        data.sort((a, b) => a.placement - b.placement);
+        setResults(data);
+        setMultiDayEvents([]);
+        setIsAggregatedView(false);
+      }
     } catch (error) {
       console.error('Error fetching results:', error);
     }
     setResultsLoading(false);
+  };
+
+  // Aggregate results from multiple days - keep only highest score per competitor per format/class
+  const aggregateResults = (allResults: CompetitionResult[]): CompetitionResult[] => {
+    // Group by (mecaId or competitorName) + classId
+    const resultMap = new Map<string, CompetitionResult>();
+
+    allResults.forEach(result => {
+      // Create a unique key for each competitor + class combination
+      const competitorKey = result.mecaId || result.meca_id || result.competitorName || result.competitor_name || '';
+      const classId = result.classId || result.class_id || '';
+      const key = `${competitorKey}-${classId}`;
+
+      const existing = resultMap.get(key);
+      if (!existing || (result.score || 0) > (existing.score || 0)) {
+        // Keep the result with the highest score
+        resultMap.set(key, result);
+      }
+    });
+
+    // Convert to array and recalculate placements within each class
+    const aggregated = Array.from(resultMap.values());
+
+    // Group by classId and recalculate placements
+    const classGroups = new Map<string, CompetitionResult[]>();
+    aggregated.forEach(result => {
+      const classId = result.classId || result.class_id || '';
+      if (!classGroups.has(classId)) {
+        classGroups.set(classId, []);
+      }
+      classGroups.get(classId)!.push(result);
+    });
+
+    // Sort each group by score (descending) and assign placements
+    const finalResults: CompetitionResult[] = [];
+    classGroups.forEach((classResults) => {
+      classResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+      classResults.forEach((result, index) => {
+        finalResults.push({
+          ...result,
+          placement: index + 1
+        });
+      });
+    });
+
+    return finalResults;
   };
 
   const getPlacementBadge = (placement: number) => {
@@ -247,6 +327,16 @@ export default function ResultsPage() {
           </p>
         </div>
 
+        {/* Season Filter - Always visible */}
+        <div className="mb-8 bg-slate-800 rounded-xl p-6">
+          <SeasonSelector
+            selectedSeasonId={selectedSeasonId}
+            onSeasonChange={setSelectedSeasonId}
+            showAllOption={true}
+            autoSelectCurrent={!eventIdFromUrl}
+          />
+        </div>
+
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
@@ -254,15 +344,6 @@ export default function ResultsPage() {
         ) : events.length > 0 ? (
           <>
             <div className="mb-8 bg-slate-800 rounded-xl p-6">
-              {/* Season Filter */}
-              <div className="mb-6">
-                <SeasonSelector
-                  selectedSeasonId={selectedSeasonId}
-                  onSeasonChange={setSelectedSeasonId}
-                  showAllOption={true}
-                />
-              </div>
-
               {/* Event Selector */}
               <label className="block text-sm font-medium text-gray-300 mb-3">
                 Select Event
@@ -293,6 +374,11 @@ export default function ResultsPage() {
                     <div>
                       <h3 className="text-xl font-semibold text-white mb-1">
                         {selectedEvent.title}
+                        {selectedEvent.day_number && (
+                          <span className="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500">
+                            Day {selectedEvent.day_number}
+                          </span>
+                        )}
                       </h3>
                       <p className="text-gray-400">
                         {new Date(selectedEvent.event_date).toLocaleDateString('en-US', {
@@ -309,6 +395,37 @@ export default function ResultsPage() {
                     >
                       View Event
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Aggregated Results Banner */}
+              {isAggregatedView && multiDayEvents.length > 1 && (
+                <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Layers className="h-6 w-6 text-purple-400 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-purple-400 font-semibold">
+                        Combined Results from {multiDayEvents.length} Days
+                      </h4>
+                      <p className="text-gray-400 text-sm mt-1">
+                        Showing highest score per competitor per class across all days of this{' '}
+                        {selectedEvent?.event_type === 'world_finals' ? 'World Finals' : 'State Finals'} event.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {multiDayEvents.map((dayEvent) => (
+                          <span
+                            key={dayEvent.id}
+                            className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-700 text-gray-300"
+                          >
+                            Day {dayEvent.day_number}: {new Date(dayEvent.event_date).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -520,7 +637,8 @@ export default function ResultsPage() {
         ) : (
           <div className="text-center py-20 bg-slate-800 rounded-xl">
             <Calendar className="h-20 w-20 text-gray-500 mx-auto mb-4" />
-            <p className="text-gray-400 text-xl">No completed events with results yet.</p>
+            <p className="text-gray-400 text-xl">No completed events with results for this season.</p>
+            <p className="text-gray-500 mt-2">Try selecting a different season above to view past results.</p>
           </div>
         )}
       </div>

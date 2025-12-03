@@ -17,6 +17,7 @@ import { EventHostingRequestsModule } from './event-hosting-requests/event-hosti
 import { DatabaseModule } from './db/database.module';
 import { AuditModule } from './audit/audit.module';
 import { ChampionshipArchivesModule } from './championship-archives/championship-archives.module';
+import { ClassNameMappingsModule } from './class-name-mappings/class-name-mappings.module';
 
 import { RecaptchaModule } from './recaptcha/recaptcha.module';
 
@@ -38,6 +39,7 @@ import { RecaptchaModule } from './recaptcha/recaptcha.module';
     EventHostingRequestsModule,
     AuditModule,
     ChampionshipArchivesModule,
+    ClassNameMappingsModule,
     RecaptchaModule,
   ],
   controllers: [AppController],

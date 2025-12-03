@@ -87,7 +87,11 @@ export class AuditService {
     oldData?: any;
     newData?: any;
     userId: string;
+    ipAddress?: string;
   }): Promise<void> {
+    console.log(`[AUDIT] logAction called - action: ${data.action}, resultId: ${data.resultId}, userId: ${data.userId}`);
+    console.log(`[AUDIT] oldData event_id: ${data.oldData?.event_id}, eventId: ${data.oldData?.eventId}`);
+
     const em = this.em.fork();
     const log = em.create(ResultsAuditLog, {
       sessionId: data.sessionId || null,
@@ -100,6 +104,7 @@ export class AuditService {
     });
 
     await em.persistAndFlush(log);
+    console.log(`[AUDIT] Log entry created with id: ${log.id}`);
   }
 
   /**
@@ -218,5 +223,138 @@ export class AuditService {
     const em = this.em.fork();
     const session = await em.findOne(ResultsEntrySession, { id: sessionId });
     return session?.filePath || null;
+  }
+
+  /**
+   * Get all modifications (update actions) for an event
+   */
+  async getEventModifications(eventId: string): Promise<any[]> {
+    console.log(`[AUDIT] getEventModifications called for eventId: ${eventId}`);
+    const em = this.em.fork();
+    const conn = em.getConnection();
+
+    try {
+      // Query audit logs where action is 'update' and either oldData or newData contains this event_id
+      const results = await conn.execute(`
+        SELECT
+          ral.id,
+          ral.session_id,
+          ral.result_id,
+          ral.action,
+          ral.old_data,
+          ral.new_data,
+          ral.timestamp,
+          ral.user_id,
+          p.email as user_email,
+          p.first_name as user_first_name,
+          p.last_name as user_last_name
+        FROM results_audit_log ral
+        LEFT JOIN profiles p ON p.id = ral.user_id
+        WHERE ral.action = 'update'
+          AND (
+            ral.old_data->>'event_id' = ?
+            OR ral.new_data->>'event_id' = ?
+            OR ral.old_data->>'eventId' = ?
+            OR ral.new_data->>'eventId' = ?
+          )
+        ORDER BY ral.timestamp DESC
+      `, [eventId, eventId, eventId, eventId]);
+
+      console.log(`[AUDIT] getEventModifications found ${results.length} records`);
+      return results;
+    } catch (error) {
+      console.error('Error in getEventModifications:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all deletions (delete actions) for an event
+   */
+  async getEventDeletions(eventId: string): Promise<any[]> {
+    console.log(`[AUDIT] getEventDeletions called for eventId: ${eventId}`);
+    const em = this.em.fork();
+    const conn = em.getConnection();
+
+    try {
+      // Query audit logs where action is 'delete' and oldData contains this event_id
+      const results = await conn.execute(`
+        SELECT
+          ral.id,
+          ral.session_id,
+          ral.result_id,
+          ral.action,
+          ral.old_data,
+          ral.new_data,
+          ral.timestamp,
+          ral.user_id,
+          p.email as user_email,
+          p.first_name as user_first_name,
+          p.last_name as user_last_name
+        FROM results_audit_log ral
+        LEFT JOIN profiles p ON p.id = ral.user_id
+        WHERE ral.action = 'delete'
+          AND (
+            ral.old_data->>'event_id' = ?
+            OR ral.old_data->>'eventId' = ?
+          )
+        ORDER BY ral.timestamp DESC
+      `, [eventId, eventId]);
+
+      console.log(`[AUDIT] getEventDeletions found ${results.length} records`);
+      return results;
+    } catch (error) {
+      console.error('Error in getEventDeletions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all audit logs for an event (imports, modifications, deletions)
+   */
+  async getEventAllLogs(eventId: string): Promise<{
+    imports: ResultsEntrySession[];
+    modifications: any[];
+    deletions: any[];
+  }> {
+    const [imports, modifications, deletions] = await Promise.all([
+      this.getEventSessions(eventId),
+      this.getEventModifications(eventId),
+      this.getEventDeletions(eventId),
+    ]);
+
+    return {
+      imports,
+      modifications,
+      deletions,
+    };
+  }
+
+  /**
+   * Get a single audit log with details
+   */
+  async getAuditLogById(logId: string): Promise<any> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+
+    const results = await conn.execute(`
+      SELECT
+        ral.id,
+        ral.session_id,
+        ral.result_id,
+        ral.action,
+        ral.old_data,
+        ral.new_data,
+        ral.timestamp,
+        ral.user_id,
+        p.email as user_email,
+        p.first_name as user_first_name,
+        p.last_name as user_last_name
+      FROM results_audit_log ral
+      LEFT JOIN profiles p ON p.id = ral.user_id
+      WHERE ral.id = ?
+    `, [logId]);
+
+    return results[0] || null;
   }
 }
