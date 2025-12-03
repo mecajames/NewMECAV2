@@ -1,9 +1,10 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { EntityManager, Reference } from '@mikro-orm/core';
+import { EntityManager, Reference, wrap } from '@mikro-orm/core';
 import { CompetitionResult } from './competition-results.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CompetitionClass } from '../competition-classes/competition-classes.entity';
+import { ClassNameMapping } from '../class-name-mappings/class-name-mappings.entity';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -87,6 +88,34 @@ export class CompetitionResultsService {
   async findByCompetitor(competitorId: string): Promise<CompetitionResult[]> {
     const em = this.em.fork();
     return em.find(CompetitionResult, { competitorId });
+  }
+
+  async findByMecaId(mecaId: string): Promise<any[]> {
+    const em = this.em.fork();
+    const results = await em.find(CompetitionResult, { mecaId }, {
+      orderBy: { createdAt: 'DESC' },
+      populate: ['event'],
+    });
+
+    // Use wrap().toObject() for proper serialization, then add event data
+    // since event has hidden: true in the entity
+    return results.map(result => {
+      const serialized = wrap(result).toObject() as any;
+      // Manually add event since it's hidden in the entity
+      if (result.event) {
+        serialized.event = {
+          id: result.event.id,
+          name: result.event.title,
+          title: result.event.title,
+          event_date: result.event.eventDate,
+          venue_name: result.event.venueName,
+          venue_address: result.event.venueAddress,
+          venue_city: result.event.venueCity,
+          venue_state: result.event.venueState,
+        };
+      }
+      return serialized;
+    });
   }
 
   async create(data: Partial<CompetitionResult>, userId?: string): Promise<CompetitionResult> {
@@ -177,18 +206,41 @@ export class CompetitionResultsService {
     return result;
   }
 
-  async update(id: string, data: Partial<CompetitionResult>, userId?: string): Promise<CompetitionResult> {
+  async update(id: string, data: Partial<CompetitionResult>, userId?: string, ipAddress?: string): Promise<CompetitionResult> {
     const em = this.em.fork();
     const result = await em.findOne(CompetitionResult, { id }, { populate: ['event'] });
     if (!result) {
       throw new NotFoundException(`Competition result with ID ${id} not found`);
     }
 
-    // Capture old data for audit log
-    const oldData = { ...result };
+    // Capture event_id for points recalculation and audit
+    const eventIdFromEvent = result.event?.id;
+    const eventId = (data as any).event_id || eventIdFromEvent;
 
-    // Capture event_id for points recalculation
-    const eventId = (data as any).event_id || result.eventId;
+    // Capture old data for audit log BEFORE modifications
+    // Use wrap().toObject() for proper serialization of MikroORM entity
+    const serializedResult = wrap(result).toObject();
+    const oldData = {
+      id: result.id,
+      competitorName: result.competitorName,
+      competitionClass: result.competitionClass,
+      format: result.format,
+      score: result.score,
+      placement: result.placement,
+      pointsEarned: result.pointsEarned,
+      vehicleInfo: result.vehicleInfo,
+      wattage: result.wattage,
+      frequency: result.frequency,
+      notes: result.notes,
+      mecaId: result.mecaId,
+      classId: result.classId,
+      seasonId: result.seasonId,
+      createdBy: result.createdBy,
+      updatedBy: result.updatedBy,
+      revisionCount: result.revisionCount,
+      event_id: eventIdFromEvent,
+      eventId: eventIdFromEvent,
+    };
 
     // Transform snake_case API fields to camelCase entity properties
     const transformedData: any = { ...data };
@@ -268,43 +320,97 @@ export class CompetitionResultsService {
     }
 
     // Log to audit if userId is provided
+    console.log(`[AUDIT] Update called - userId: ${userId}, resultId: ${id}`);
     if (userId) {
+      // Capture new data AFTER modifications with explicit fields
+      const newData = {
+        id: result.id,
+        competitorName: result.competitorName,
+        competitionClass: result.competitionClass,
+        format: result.format,
+        score: result.score,
+        placement: result.placement,
+        pointsEarned: result.pointsEarned,
+        vehicleInfo: result.vehicleInfo,
+        wattage: result.wattage,
+        frequency: result.frequency,
+        notes: result.notes,
+        mecaId: result.mecaId,
+        classId: result.classId,
+        seasonId: result.seasonId,
+        createdBy: result.createdBy,
+        updatedBy: result.updatedBy,
+        revisionCount: result.revisionCount,
+        event_id: eventId,
+        eventId: eventId,
+      };
+      console.log(`[AUDIT] Logging update action for result ${id}`);
+      console.log(`[AUDIT] oldData:`, JSON.stringify(oldData));
+      console.log(`[AUDIT] newData:`, JSON.stringify(newData));
       await this.auditService.logAction({
         sessionId: this.currentSessionId ?? undefined,
         resultId: result.id,
         action: 'update',
-        oldData: oldData ? JSON.parse(JSON.stringify(oldData)) : null,
-        newData: JSON.parse(JSON.stringify(result)),
+        oldData,
+        newData,
         userId,
+        ipAddress,
       });
+    } else {
+      console.log(`[AUDIT] Skipping audit log - no userId provided`);
     }
 
     return result;
   }
 
-  async delete(id: string, userId?: string): Promise<void> {
+  async delete(id: string, userId?: string, ipAddress?: string, reason?: string): Promise<void> {
     const em = this.em.fork();
-    const result = await em.findOne(CompetitionResult, { id });
+    // Populate event relation to ensure we have eventId for audit log
+    const result = await em.findOne(CompetitionResult, { id }, { populate: ['event'] });
     if (!result) {
       throw new NotFoundException(`Competition result with ID ${id} not found`);
     }
 
-    // Capture old data for audit log before deletion
-    const oldData = { ...result };
+    // Capture old data for audit log before deletion with explicit fields
+    // Do NOT spread ...result as it includes MikroORM proxy data
+    const eventId = result.event?.id;
+    const oldData = {
+      id: result.id,
+      competitorName: result.competitorName,
+      competitionClass: result.competitionClass,
+      format: result.format,
+      score: result.score,
+      placement: result.placement,
+      pointsEarned: result.pointsEarned,
+      vehicleInfo: result.vehicleInfo,
+      wattage: result.wattage,
+      frequency: result.frequency,
+      notes: result.notes,
+      mecaId: result.mecaId,
+      classId: result.classId,
+      seasonId: result.seasonId,
+      createdBy: result.createdBy,
+      updatedBy: result.updatedBy,
+      revisionCount: result.revisionCount,
+      event_id: eventId,
+      eventId: eventId,
+    };
 
     await em.removeAndFlush(result);
 
     // Log to audit if userId is provided
     if (userId) {
-      // TODO: Fix audit logging - temporarily disabled
-      // await this.auditService.logAction({
-      //   sessionId: this.currentSessionId ?? undefined,
-      //   resultId: id,
-      //   action: 'delete',
-      //   oldData: oldData ? JSON.parse(JSON.stringify(oldData)) : null,
-      //   newData: null,
-      //   userId,
-      // });
+      console.log(`[AUDIT] Delete called - userId: ${userId}, resultId: ${id}`);
+      console.log(`[AUDIT] oldData:`, JSON.stringify(oldData));
+      await this.auditService.logAction({
+        sessionId: this.currentSessionId ?? undefined,
+        resultId: id,
+        action: 'delete',
+        oldData,
+        newData: reason ? { deletion_reason: reason } : null,
+        userId,
+        ipAddress,
+      });
     }
   }
 
@@ -358,9 +464,12 @@ export class CompetitionResultsService {
 
   /**
    * Calculate points for a single result based on placement and event multiplier
-   * Points are awarded to top 5 competitors only
-   * Base points: 1st=5, 2nd=4, 3rd=3, 4th=2, 5th=1
-   * Final points = base points × multiplier
+   *
+   * Point Structure (NO points awarded below 5th place for ANY event type):
+   * 1X Single Point Event: 1st=5, 2nd=4, 3rd=3, 4th=2, 5th=1
+   * 2X Double Points Event: 1st=10, 2nd=8, 3rd=6, 4th=4, 5th=2
+   * 3X Triple Points Event (SOUNDFEST): 1st=15, 2nd=12, 3rd=9, 4th=6, 5th=3
+   * 4X Points Event (SQ, Install, RTA, SQ2/SQ2+): 1st=20, 2nd=19, 3rd=18, 4th=17, 5th=16
    */
   private calculatePoints(placement: number, multiplier: number, format: string): number {
     // No points for multiplier 0 (non-competitive events)
@@ -368,12 +477,24 @@ export class CompetitionResultsService {
       return 0;
     }
 
-    // Only top 5 placements receive points
+    // Only top 5 placements receive points - NO exceptions
     if (placement < 1 || placement > 5) {
       return 0;
     }
 
-    // Base points for each placement
+    // 4X Points Event - Special scoring (SQ, Install, RTA, SQ2/SQ2+)
+    if (multiplier === 4) {
+      const fourXPoints: { [key: number]: number } = {
+        1: 20,
+        2: 19,
+        3: 18,
+        4: 17,
+        5: 16,
+      };
+      return fourXPoints[placement] || 0;
+    }
+
+    // Standard events (1X, 2X, 3X) - Base points × multiplier
     const basePoints: { [key: number]: number } = {
       1: 5,
       2: 4,
@@ -382,8 +503,7 @@ export class CompetitionResultsService {
       5: 1,
     };
 
-    const points = basePoints[placement] || 0;
-    return points * multiplier;
+    return (basePoints[placement] || 0) * multiplier;
   }
 
   /**
@@ -673,13 +793,31 @@ export class CompetitionResultsService {
         }
 
         // Try to find class_id by matching class name and format
+        // Uses case-insensitive matching and falls back to mapping table
         let classId: string | null = null;
         if (result.class && result.format) {
+          // 1. First try case-insensitive exact match
           const foundClass = competitionClasses.find(
-            c => c.name === result.class && c.format === result.format
+            c => c.name.toLowerCase() === result.class.toLowerCase() &&
+                 c.format.toLowerCase() === result.format.toLowerCase()
           );
+
           if (foundClass) {
             classId = foundClass.id;
+          } else {
+            // 2. Check the class name mappings table
+            const mapping = await em.findOne(ClassNameMapping, {
+              sourceName: { $ilike: result.class },
+              isActive: true,
+            });
+
+            if (mapping?.targetClassId) {
+              classId = mapping.targetClassId;
+              console.log(`[IMPORT] Mapped "${result.class}" to class ID ${classId} via mapping table`);
+            } else {
+              // 3. Log unmapped class for admin attention
+              console.warn(`[IMPORT] No class match found for "${result.class}" (${result.format}) - will show as Unknown`);
+            }
           }
         }
 
@@ -718,6 +856,339 @@ export class CompetitionResultsService {
     return {
       message: `Successfully imported ${imported} of ${parsedResults.length} results`,
       imported,
+      errors,
+    };
+  }
+
+  /**
+   * Check for duplicate results before importing
+   * Returns conflicts that need user resolution
+   */
+  async checkForDuplicates(
+    eventId: string,
+    parsedResults: any[]
+  ): Promise<{
+    duplicates: Array<{
+      index: number;
+      importData: any;
+      existingData: any;
+      matchType: 'meca_id' | 'name';
+    }>;
+    nonDuplicates: number[];
+  }> {
+    const em = this.em.fork();
+
+    // Get existing results for this event
+    const existingResults = await em.find(CompetitionResult, { eventId });
+
+    const duplicates: Array<{
+      index: number;
+      importData: any;
+      existingData: any;
+      matchType: 'meca_id' | 'name';
+    }> = [];
+    const nonDuplicates: number[] = [];
+
+    for (let i = 0; i < parsedResults.length; i++) {
+      const result = parsedResults[i];
+      const format = result.format || 'SPL';
+      const className = result.class;
+      const mecaId = result.memberID;
+      const name = result.name;
+
+      let existingMatch = null;
+      let matchType: 'meca_id' | 'name' = 'meca_id';
+
+      // For members (MECA ID != 999999): Match by format + class + MECA ID
+      if (mecaId && mecaId !== '999999') {
+        existingMatch = existingResults.find(
+          r => r.format?.toLowerCase() === format?.toLowerCase() &&
+               r.competitionClass?.toLowerCase() === className?.toLowerCase() &&
+               r.mecaId === mecaId
+        );
+        matchType = 'meca_id';
+      }
+
+      // For non-members (MECA ID = 999999): Match by format + class + name
+      if (!existingMatch && (!mecaId || mecaId === '999999') && name) {
+        existingMatch = existingResults.find(
+          r => r.format?.toLowerCase() === format?.toLowerCase() &&
+               r.competitionClass?.toLowerCase() === className?.toLowerCase() &&
+               r.mecaId === '999999' &&
+               r.competitorName?.toLowerCase() === name?.toLowerCase()
+        );
+        matchType = 'name';
+      }
+
+      if (existingMatch) {
+        duplicates.push({
+          index: i,
+          importData: {
+            memberID: mecaId,
+            name: name,
+            class: className,
+            format: format,
+            score: result.score,
+            placement: result.placement,
+            points: result.points,
+            wattage: result.wattage,
+            frequency: result.frequency,
+          },
+          existingData: {
+            id: existingMatch.id,
+            mecaId: existingMatch.mecaId,
+            competitorName: existingMatch.competitorName,
+            competitionClass: existingMatch.competitionClass,
+            format: existingMatch.format,
+            score: existingMatch.score,
+            placement: existingMatch.placement,
+            pointsEarned: existingMatch.pointsEarned,
+            wattage: existingMatch.wattage,
+            frequency: existingMatch.frequency,
+          },
+          matchType,
+        });
+      } else {
+        nonDuplicates.push(i);
+      }
+    }
+
+    return { duplicates, nonDuplicates };
+  }
+
+  /**
+   * Import results with duplicate resolution
+   * Resolutions: 'skip' = keep existing, 'replace' = use imported value
+   */
+  async importResultsWithResolution(
+    eventId: string,
+    parsedResults: any[],
+    createdBy: string,
+    fileExtension: string,
+    resolutions: Record<number, 'skip' | 'replace'>,
+    file?: Express.Multer.File,
+    ipAddress?: string
+  ): Promise<{ message: string; imported: number; updated: number; skipped: number; errors: string[] }> {
+    const em = this.em.fork();
+    const errors: string[] = [];
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    // Fetch the event to get its season_id
+    const event = await em.findOne(Event, { id: eventId }, { populate: ['season'] });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+    const eventSeasonId = event.season?.id || null;
+
+    // Determine entry method based on file extension
+    const entryMethod = fileExtension === 'xlsx' || fileExtension === 'xls' ? 'excel' : 'termlab';
+
+    // Get format from first result if available
+    const format = parsedResults.length > 0 ? parsedResults[0].format : null;
+
+    // Create audit session
+    const session = await this.auditService.createSession({
+      eventId,
+      userId: createdBy,
+      entryMethod,
+      format,
+      filePath: file ? 'pending' : undefined,
+      originalFilename: file?.originalname,
+    });
+    this.currentSessionId = session.id;
+
+    // Save uploaded file if provided
+    if (file) {
+      const filePath = await this.auditService.saveUploadedFile(file, eventId, session.id);
+      await this.auditService.updateSessionFilePath(session.id, filePath);
+    }
+
+    // Fetch all profiles
+    const profiles = await em.find(Profile, {});
+    const today = new Date();
+
+    // Fetch all competition classes
+    const competitionClasses = await em.find(CompetitionClass, {});
+
+    // Get existing results for this event (for replacement)
+    const existingResults = await em.find(CompetitionResult, { eventId });
+
+    // Helper function to check if membership is active
+    const hasActiveMembership = (profile: Profile): boolean => {
+      if (profile.membership_status !== 'active') {
+        return false;
+      }
+      if (!profile.membership_expiry) {
+        return true;
+      }
+      return new Date(profile.membership_expiry) > today;
+    };
+
+    for (let i = 0; i < parsedResults.length; i++) {
+      const result = parsedResults[i];
+
+      // Check if this index has a resolution
+      const resolution = resolutions[i];
+
+      // If resolution is 'skip', skip this result
+      if (resolution === 'skip') {
+        skipped++;
+        continue;
+      }
+
+      try {
+        let finalMecaId: string | null = null;
+        let finalName: string = result.name || '';
+        let competitorId: string | null = null;
+        let hasValidActiveMembership = false;
+
+        // SCENARIO 1: MECA ID provided in file
+        if (result.memberID && result.memberID !== '999999') {
+          const profile = profiles.find(p => p.meca_id === result.memberID);
+
+          if (profile && hasActiveMembership(profile)) {
+            finalMecaId = profile.meca_id || null;
+            finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || result.name;
+            competitorId = profile.id;
+            hasValidActiveMembership = true;
+          } else {
+            finalMecaId = result.memberID;
+            finalName = result.name;
+            competitorId = null;
+            hasValidActiveMembership = false;
+          }
+        }
+        // SCENARIO 2: No MECA ID, but name provided
+        else if (!result.memberID || result.memberID === '999999') {
+          if (result.name) {
+            const nameParts = result.name.trim().split(/\s+/);
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ');
+
+            const profile = profiles.find(p => {
+              const matchesName =
+                (p.first_name?.toLowerCase() === firstName?.toLowerCase() &&
+                 p.last_name?.toLowerCase() === lastName?.toLowerCase()) ||
+                `${p.first_name} ${p.last_name}`.toLowerCase() === result.name.toLowerCase();
+              return matchesName && hasActiveMembership(p);
+            });
+
+            if (profile) {
+              finalMecaId = profile.meca_id || '999999';
+              finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+              competitorId = profile.id;
+              hasValidActiveMembership = true;
+            } else {
+              finalMecaId = '999999';
+              finalName = result.name;
+              competitorId = null;
+              hasValidActiveMembership = false;
+            }
+          } else {
+            finalMecaId = '999999';
+            finalName = 'Unknown Competitor';
+            competitorId = null;
+            hasValidActiveMembership = false;
+          }
+        }
+
+        // Find class_id
+        let classId: string | null = null;
+        if (result.class && result.format) {
+          const foundClass = competitionClasses.find(
+            c => c.name.toLowerCase() === result.class.toLowerCase() &&
+                 c.format.toLowerCase() === result.format.toLowerCase()
+          );
+
+          if (foundClass) {
+            classId = foundClass.id;
+          } else {
+            const mapping = await em.findOne(ClassNameMapping, {
+              sourceName: { $ilike: result.class },
+              isActive: true,
+            });
+            if (mapping?.targetClassId) {
+              classId = mapping.targetClassId;
+            }
+          }
+        }
+
+        const pointsEarned = hasValidActiveMembership ? (result.points || 0) : 0;
+
+        // If resolution is 'replace', find and update existing record
+        if (resolution === 'replace') {
+          // Find the existing record to replace
+          let existingMatch = null;
+
+          if (result.memberID && result.memberID !== '999999') {
+            existingMatch = existingResults.find(
+              r => r.format?.toLowerCase() === result.format?.toLowerCase() &&
+                   r.competitionClass?.toLowerCase() === result.class?.toLowerCase() &&
+                   r.mecaId === result.memberID
+            );
+          } else if (result.name) {
+            existingMatch = existingResults.find(
+              r => r.format?.toLowerCase() === result.format?.toLowerCase() &&
+                   r.competitionClass?.toLowerCase() === result.class?.toLowerCase() &&
+                   r.mecaId === '999999' &&
+                   r.competitorName?.toLowerCase() === result.name?.toLowerCase()
+            );
+          }
+
+          if (existingMatch) {
+            // Update existing record
+            await this.update(existingMatch.id, {
+              competitor_id: competitorId,
+              competitor_name: finalName,
+              meca_id: finalMecaId,
+              score: result.score,
+              placement: result.placement || 0,
+              points_earned: pointsEarned,
+              wattage: result.wattage || null,
+              frequency: result.frequency || null,
+              notes: `Updated from ${fileExtension} import`,
+            } as any, createdBy, ipAddress);
+            updated++;
+            continue;
+          }
+        }
+
+        // Create new record
+        await this.create({
+          event_id: eventId,
+          season_id: eventSeasonId,
+          competitor_id: competitorId,
+          competitor_name: finalName,
+          meca_id: finalMecaId,
+          competition_class: result.class,
+          class_id: classId,
+          format: result.format || null,
+          score: result.score,
+          placement: result.placement || 0,
+          points_earned: pointsEarned,
+          vehicle_info: result.vehicleInfo || null,
+          wattage: result.wattage || null,
+          frequency: result.frequency || null,
+          notes: `Imported from ${fileExtension} file`,
+          created_by: createdBy,
+        } as any, createdBy);
+        imported++;
+      } catch (error: any) {
+        errors.push(`Failed to import ${result.name} in ${result.class}: ${error.message}`);
+      }
+    }
+
+    // End the audit session
+    await this.auditService.endSession(session.id, imported + updated);
+    this.currentSessionId = null;
+
+    return {
+      message: `Imported: ${imported}, Updated: ${updated}, Skipped: ${skipped}`,
+      imported,
+      updated,
+      skipped,
       errors,
     };
   }

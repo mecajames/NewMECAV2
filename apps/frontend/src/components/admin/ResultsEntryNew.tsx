@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, Filter, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, Filter, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Check, X } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { eventsApi, Event } from '../../api-client/events.api-client';
 import { profilesApi, Profile } from '../../api-client/profiles.api-client';
@@ -9,6 +9,13 @@ import { seasonsApi, Season } from '../../api-client/seasons.api-client';
 import { useAuth } from '../../contexts/AuthContext';
 import SeasonSelector from '../SeasonSelector';
 import { AuditLogModal } from './AuditLogModal';
+
+interface DuplicateItem {
+  index: number;
+  importData: any;
+  existingData: any;
+  matchType: 'meca_id' | 'name';
+}
 
 interface ResultEntry {
   id?: string;
@@ -537,7 +544,7 @@ export default function ResultsEntryNew() {
         modification_reason: modificationReason,
       };
 
-      await competitionResultsApi.update(editingResult.id, resultData as any);
+      await competitionResultsApi.update(editingResult.id, resultData as any, profile?.id);
 
       // Recalculate points after editing
       await handleRecalculatePoints();
@@ -555,10 +562,17 @@ export default function ResultsEntryNew() {
   };
 
   const handleDeleteResult = async (resultId: string) => {
+    const reason = prompt('Please enter a reason for deleting this result:');
+    if (reason === null) return; // User cancelled
+    if (!reason.trim()) {
+      alert('A reason is required to delete a result.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this result?')) return;
 
     try {
-      await competitionResultsApi.delete(resultId);
+      await competitionResultsApi.delete(resultId, profile?.id, reason.trim());
 
       // Recalculate points after deletion
       await handleRecalculatePoints();
@@ -622,6 +636,13 @@ export default function ResultsEntryNew() {
       return;
     }
 
+    const reason = prompt(`Please enter a reason for deleting ${selectedResultIds.size} result(s):`);
+    if (reason === null) return; // User cancelled
+    if (!reason.trim()) {
+      alert('A reason is required to delete results.');
+      return;
+    }
+
     const confirmMessage = `Are you sure you want to delete ${selectedResultIds.size} result(s)?\n\nThis action is IRREVERSIBLE and cannot be undone.`;
 
     if (!confirm(confirmMessage)) {
@@ -633,7 +654,7 @@ export default function ResultsEntryNew() {
     try {
       // Delete each selected result
       const deletePromises = Array.from(selectedResultIds).map(id =>
-        competitionResultsApi.delete(id)
+        competitionResultsApi.delete(id, profile?.id, reason.trim())
       );
 
       await Promise.all(deletePromises);
@@ -715,7 +736,11 @@ export default function ResultsEntryNew() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
-                  Points: 1st={5 * selectedEvent.points_multiplier}, 2nd={4 * selectedEvent.points_multiplier}, 3rd={3 * selectedEvent.points_multiplier}, 4th={2 * selectedEvent.points_multiplier}, 5th={1 * selectedEvent.points_multiplier}
+                  {selectedEvent.points_multiplier === 4 ? (
+                    <>Points (Top 5 only): 1st=20, 2nd=19, 3rd=18, 4th=17, 5th=16</>
+                  ) : (
+                    <>Points (Top 5 only): 1st={5 * selectedEvent.points_multiplier}, 2nd={4 * selectedEvent.points_multiplier}, 3rd={3 * selectedEvent.points_multiplier}, 4th={2 * selectedEvent.points_multiplier}, 5th={1 * selectedEvent.points_multiplier}</>
+                  )}
                 </p>
               </div>
             )}

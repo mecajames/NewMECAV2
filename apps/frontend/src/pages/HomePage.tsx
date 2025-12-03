@@ -576,7 +576,7 @@ export default function HomePage() {
         )}
 
         <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-12 text-center text-white">
-          <h2 className="text-4xl font-bold mb-4">Ready to Compete?</h2>
+          <h2 className="text-4xl font-bold mb-4">Are you ready to be a MECA World Champion?</h2>
           <p className="text-xl mb-8">
             Join thousands of car audio enthusiasts and showcase your skills
           </p>
@@ -584,7 +584,7 @@ export default function HomePage() {
             onClick={() => navigate('/signup')}
             className="px-8 py-4 bg-white text-orange-600 font-semibold rounded-lg text-lg hover:bg-gray-100 transition-all transform hover:scale-105 shadow-lg"
           >
-            Get Started Today
+            Start Your Journey Today!
           </button>
         </div>
       </div>

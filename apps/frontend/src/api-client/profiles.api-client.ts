@@ -29,6 +29,11 @@ export interface Profile {
   use_billing_for_shipping?: boolean;
   avatar_url?: string;
   bio?: string;
+  // Public profile fields
+  is_public?: boolean;
+  vehicle_info?: string;
+  car_audio_system?: string;
+  profile_images?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +81,18 @@ export const profilesApi = {
   getStats: async (): Promise<{ totalUsers: number; totalMembers: number }> => {
     const response = await fetch(`${API_BASE_URL}/api/profiles/stats`);
     if (!response.ok) throw new Error('Failed to fetch profile stats');
+    return response.json();
+  },
+
+  getPublicProfiles: async (): Promise<Profile[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/public`);
+    if (!response.ok) throw new Error('Failed to fetch public profiles');
+    return response.json();
+  },
+
+  getPublicProfileById: async (id: string): Promise<Profile> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/public/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch public profile');
     return response.json();
   },
 };

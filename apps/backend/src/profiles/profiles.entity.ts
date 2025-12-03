@@ -87,6 +87,19 @@ export class Profile {
   @Property({ type: 'text', nullable: true })
   bio?: string;
 
+  // Public profile fields
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'is_public' })
+  is_public?: boolean;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'vehicle_info' })
+  vehicle_info?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'car_audio_system' })
+  car_audio_system?: string;
+
+  @Property({ type: 'json', nullable: true, fieldName: 'profile_images' })
+  profile_images?: string[];
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   created_at: Date = new Date();
 

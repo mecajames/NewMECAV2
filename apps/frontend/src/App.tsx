@@ -28,6 +28,12 @@ import MemberSupportPage from './pages/MemberSupportPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsAndConditionsPage from './pages/TermsAndConditionsPage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
+import CompetitionGuidesPage from './pages/CompetitionGuidesPage';
+import MECAQuickStartGuidePage from './pages/MECAQuickStartGuidePage';
+import PublicProfilePage from './pages/PublicProfilePage';
+import MemberDirectoryPage from './pages/MemberDirectoryPage';
+import MemberProfilePage from './pages/MemberProfilePage';
+import BillingPage from './pages/BillingPage';
 import MembersPage from './pages/admin/MembersPage';
 import MemberDetailPage from './pages/admin/MemberDetailPage';
 import SeasonManagementPage from './pages/admin/SeasonManagementPage';
@@ -66,10 +72,18 @@ function App() {
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
               <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
               <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+              <Route path="/competition-guides" element={<CompetitionGuidesPage />} />
+              <Route path="/competition-guides/quick-start" element={<MECAQuickStartGuidePage />} />
+
+              {/* Public Member Directory Routes */}
+              <Route path="/members" element={<MemberDirectoryPage />} />
+              <Route path="/members/:id" element={<MemberProfilePage />} />
 
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/public-profile" element={<PublicProfilePage />} />
+              <Route path="/billing" element={<BillingPage />} />
               <Route path="/membership" element={<MembershipPage />} />
 
               {/* Admin Routes */}

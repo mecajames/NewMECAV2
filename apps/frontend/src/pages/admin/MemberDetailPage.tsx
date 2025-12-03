@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { usePermissions } from '../../hooks/usePermissions';
 import { profilesApi } from '../../api-client/profiles.api-client';
+import { competitionResultsApi, CompetitionResult } from '../../api-client/competition-results.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
 
 type TabType =
@@ -1174,12 +1175,180 @@ function EventRegistrationsTab({ member }: { member: Profile }) {
 }
 
 function CompetitionResultsTab({ member }: { member: Profile }) {
+  const [results, setResults] = useState<CompetitionResult[]>([]);
+  const [eventMap, setEventMap] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchResults = async () => {
+      if (!member.meca_id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const data = await competitionResultsApi.getByMecaId(member.meca_id);
+        setResults(data);
+
+        // Fetch events to get event names for lookup
+        // Get unique event IDs from results
+        const eventIds = [...new Set(data.map(r => r.eventId || r.event_id).filter(Boolean))];
+        if (eventIds.length > 0) {
+          try {
+            const eventsResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/events`);
+            if (eventsResponse.ok) {
+              const events = await eventsResponse.json();
+              const map: Record<string, string> = {};
+              events.forEach((event: any) => {
+                map[event.id] = event.title || event.name;
+              });
+              setEventMap(map);
+            }
+          } catch (eventErr) {
+            console.error('Error fetching events for names:', eventErr);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching competition results:', err);
+        setError('Failed to load competition results');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchResults();
+  }, [member.meca_id]);
+
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-6">Competition Results</h2>
+        <div className="text-center py-12 text-gray-400">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
+          <p className="mt-4">Loading results...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-6">Competition Results</h2>
+        <div className="text-center py-12 text-red-400">
+          <Trophy className="h-16 w-16 mx-auto mb-4 text-red-500" />
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!member.meca_id) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-6">Competition Results</h2>
+        <div className="text-center py-12 text-gray-400">
+          <Trophy className="h-16 w-16 mx-auto mb-4 text-gray-500" />
+          <p>No MECA ID assigned - cannot look up competition results</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (results.length === 0) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-6">Competition Results</h2>
+        <div className="text-center py-12 text-gray-400">
+          <Trophy className="h-16 w-16 mx-auto mb-4 text-gray-500" />
+          <p>No competition results found for MECA ID: {member.meca_id}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate totals
+  const totalPoints = results.reduce((sum, r) => sum + (r.pointsEarned || r.points_earned || 0), 0);
+  const totalEvents = new Set(results.map(r => r.eventId || r.event_id)).size;
+  const firstPlaceCount = results.filter(r => r.placement === 1).length;
+
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-6">Competition Results</h2>
-      <div className="text-center py-12 text-gray-400">
-        <Trophy className="h-16 w-16 mx-auto mb-4 text-gray-500" />
-        <p>No competition results</p>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-slate-700 rounded-lg p-4">
+          <p className="text-gray-400 text-sm">Total Results</p>
+          <p className="text-2xl font-bold text-white">{results.length}</p>
+        </div>
+        <div className="bg-slate-700 rounded-lg p-4">
+          <p className="text-gray-400 text-sm">Events Competed</p>
+          <p className="text-2xl font-bold text-white">{totalEvents}</p>
+        </div>
+        <div className="bg-slate-700 rounded-lg p-4">
+          <p className="text-gray-400 text-sm">Total Points</p>
+          <p className="text-2xl font-bold text-orange-500">{totalPoints}</p>
+        </div>
+        <div className="bg-slate-700 rounded-lg p-4">
+          <p className="text-gray-400 text-sm">1st Place Finishes</p>
+          <p className="text-2xl font-bold text-yellow-500">{firstPlaceCount}</p>
+        </div>
+      </div>
+
+      {/* Results Table */}
+      <div className="bg-slate-700 rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-slate-600">
+            <tr>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Event</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Class</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Format</th>
+              <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Score</th>
+              <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Place</th>
+              <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Points</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Date</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-600">
+            {results.map((result) => (
+              <tr key={result.id} className="hover:bg-slate-600/50">
+                <td className="px-4 py-3 text-white">
+                  {result.event?.name || result.event?.title || eventMap[result.eventId || result.event_id || ''] || 'Unknown Event'}
+                </td>
+                <td className="px-4 py-3 text-gray-300">
+                  {result.competitionClass || result.competition_class}
+                </td>
+                <td className="px-4 py-3 text-gray-300">
+                  {result.format || '-'}
+                </td>
+                <td className="px-4 py-3 text-center text-white font-medium">
+                  {result.score?.toFixed(2) || '-'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                    result.placement === 1 ? 'bg-yellow-500 text-black' :
+                    result.placement === 2 ? 'bg-gray-300 text-black' :
+                    result.placement === 3 ? 'bg-amber-600 text-white' :
+                    'bg-slate-500 text-white'
+                  }`}>
+                    {result.placement}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center text-orange-400 font-medium">
+                  {result.pointsEarned || result.points_earned || 0}
+                </td>
+                <td className="px-4 py-3 text-gray-400 text-sm">
+                  {result.createdAt || result.created_at
+                    ? new Date(result.createdAt || result.created_at!).toLocaleDateString()
+                    : '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

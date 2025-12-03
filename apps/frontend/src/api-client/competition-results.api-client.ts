@@ -62,6 +62,12 @@ export const competitionResultsApi = {
     return response.json();
   },
 
+  getByMecaId: async (mecaId: string): Promise<CompetitionResult[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/by-meca-id/${mecaId}`);
+    if (!response.ok) throw new Error('Failed to fetch results for MECA ID');
+    return response.json();
+  },
+
   getLeaderboard: async (seasonId?: string): Promise<any[]> => {
     const url = seasonId
       ? `${API_BASE_URL}/api/competition-results/leaderboard?seasonId=${seasonId}`
@@ -81,19 +87,21 @@ export const competitionResultsApi = {
     return response.json();
   },
 
-  update: async (id: string, data: Partial<CompetitionResult>): Promise<CompetitionResult> => {
+  update: async (id: string, data: Partial<CompetitionResult>, userId?: string): Promise<CompetitionResult> => {
     const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, userId }),
     });
     if (!response.ok) throw new Error('Failed to update competition result');
     return response.json();
   },
 
-  delete: async (id: string): Promise<void> => {
+  delete: async (id: string, userId?: string, reason?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`, {
       method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, reason }),
     });
     if (!response.ok) throw new Error('Failed to delete competition result');
   },
@@ -124,6 +132,61 @@ export const competitionResultsApi = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Failed to import results');
+    }
+
+    return response.json();
+  },
+
+  checkDuplicates: async (
+    eventId: string,
+    file: File
+  ): Promise<{
+    duplicates: Array<{
+      index: number;
+      importData: any;
+      existingData: any;
+      matchType: 'meca_id' | 'name';
+    }>;
+    nonDuplicates: number[];
+    parsedResults: any[];
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/check-duplicates/${eventId}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to check for duplicates');
+    }
+
+    return response.json();
+  },
+
+  importWithResolution: async (
+    eventId: string,
+    parsedResults: any[],
+    resolutions: Record<number, 'skip' | 'replace'>,
+    createdBy: string,
+    fileExtension: string
+  ): Promise<{ message: string; imported: number; updated: number; skipped: number; errors: string[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/import-with-resolution/${eventId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        parsedResults,
+        resolutions,
+        createdBy,
+        fileExtension,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to import results with resolution');
     }
 
     return response.json();

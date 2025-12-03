@@ -30,6 +30,16 @@ export class ProfilesController {
     return this.profilesService.getStats();
   }
 
+  @Get('public')
+  async getPublicProfiles(): Promise<Profile[]> {
+    return this.profilesService.findPublicProfiles();
+  }
+
+  @Get('public/:id')
+  async getPublicProfile(@Param('id') id: string): Promise<Profile> {
+    return this.profilesService.findPublicById(id);
+  }
+
   @Get(':id')
   async getProfile(@Param('id') id: string): Promise<Profile> {
     return this.profilesService.findById(id);

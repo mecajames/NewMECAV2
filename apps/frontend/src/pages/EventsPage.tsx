@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Calendar, MapPin, Users, DollarSign, Filter, TrendingUp } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Calendar, MapPin, Users, DollarSign, Filter, TrendingUp, Search, Globe, Map, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '../api-client/events.api-client';
 import { seasonsApi, Season } from '../api-client/seasons.api-client';
+import { countries, getStatesForCountry } from '../utils/countries';
 
-type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+type EventStatus = 'upcoming' | 'completed';
 
 export default function EventsPage() {
   const navigate = useNavigate();
@@ -13,6 +14,23 @@ export default function EventsPage() {
   const [filter, setFilter] = useState<EventStatus | 'all'>('all');
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState<string>('all');
+  const [selectedState, setSelectedState] = useState<string>('all');
+  const [selectedMultiplier, setSelectedMultiplier] = useState<string>('all');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [filtersOpen, setFiltersOpen] = useState(true);
+
+  // Get states based on selected country
+  const availableStates = useMemo(() => {
+    if (selectedCountry === 'all') return [];
+    return getStatesForCountry(selectedCountry);
+  }, [selectedCountry]);
+
+  // Reset state when country changes
+  useEffect(() => {
+    setSelectedState('all');
+  }, [selectedCountry]);
 
   useEffect(() => {
     fetchEvents();
@@ -47,24 +65,72 @@ export default function EventsPage() {
       // Filter out not_public events (public page should never show them)
       const publicEvents = data.filter(e => e.status !== 'not_public');
 
-      // Filter by status if needed
-      const filtered = filter !== 'all'
-        ? publicEvents.filter(e => e.status === filter)
-        : publicEvents;
-
       // Sort by event_date ascending
-      filtered.sort((a, b) =>
+      publicEvents.sort((a, b) =>
         new Date(a.event_date).getTime() - new Date(b.event_date).getTime()
       );
 
-      setEvents(filtered);
+      setEvents(publicEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
     }
     setLoading(false);
   };
 
-  const getStatusColor = (status: EventStatus) => {
+  // Apply all filters to events
+  const filteredEvents = useMemo(() => {
+    let result = [...events];
+
+    // Filter by status
+    if (filter !== 'all') {
+      result = result.filter(e => e.status === filter);
+    }
+
+    // Filter by country
+    if (selectedCountry !== 'all') {
+      result = result.filter(e => e.venue_country === selectedCountry);
+    }
+
+    // Filter by state
+    if (selectedState !== 'all') {
+      result = result.filter(e => e.venue_state === selectedState);
+    }
+
+    // Filter by multiplier
+    if (selectedMultiplier !== 'all') {
+      const multiplierValue = parseInt(selectedMultiplier);
+      result = result.filter(e => e.points_multiplier === multiplierValue);
+    }
+
+    // Filter by search term
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase().trim();
+      result = result.filter(e =>
+        e.title.toLowerCase().includes(search) ||
+        e.venue_name.toLowerCase().includes(search) ||
+        e.venue_address.toLowerCase().includes(search) ||
+        (e.venue_city && e.venue_city.toLowerCase().includes(search)) ||
+        (e.description && e.description.toLowerCase().includes(search))
+      );
+    }
+
+    // Filter by specific date
+    if (selectedDate) {
+      const filterDate = new Date(selectedDate);
+      result = result.filter(e => {
+        const eventDate = new Date(e.event_date);
+        return (
+          eventDate.getFullYear() === filterDate.getFullYear() &&
+          eventDate.getMonth() === filterDate.getMonth() &&
+          eventDate.getDate() === filterDate.getDate()
+        );
+      });
+    }
+
+    return result;
+  }, [events, filter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate]);
+
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'upcoming':
         return 'bg-blue-500/10 text-blue-400 border-blue-500';
@@ -74,6 +140,8 @@ export default function EventsPage() {
         return 'bg-gray-500/10 text-gray-400 border-gray-500';
       case 'cancelled':
         return 'bg-red-500/10 text-red-400 border-red-500';
+      default:
+        return 'bg-gray-500/10 text-gray-400 border-gray-500';
     }
   };
 
@@ -102,48 +170,217 @@ export default function EventsPage() {
           </p>
         </div>
 
-                {/* Season Filter */}
-        <div className="mb-6">
-          <label className="block text-gray-300 font-medium mb-2">Filter by Season:</label>
-          <select
-            value={selectedSeason}
-            onChange={(e) => setSelectedSeason(e.target.value)}
-            className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+        {/* Filters Section */}
+        <div className="bg-slate-800 rounded-xl mb-8 overflow-hidden">
+          {/* Accordion Header */}
+          <button
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            className="w-full px-6 py-4 flex items-center justify-between bg-slate-700 hover:bg-slate-600 transition-colors"
           >
-            <option value="all">All Seasons</option>
-            {seasons.map((season) => (
-              <option key={season.id} value={season.id}>
-                {season.name} ({season.year})
-                {(season.is_current || season.isCurrent) && ' - Current'}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="flex items-center gap-3">
+              <Filter className="h-5 w-5 text-orange-500" />
+              <span className="text-lg font-semibold text-white">Search and Filter Events</span>
+            </div>
+            <ChevronDown
+              className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+                filtersOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
 
-        <div className="mb-8 flex flex-wrap gap-4 items-center">
-          <div className="flex items-center gap-2 text-gray-300">
-            <Filter className="h-5 w-5" />
-            <span className="font-medium">Filter by status:</span>
+          {/* Collapsible Content */}
+          <div
+            className={`transition-all duration-300 ease-in-out ${
+              filtersOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+            }`}
+          >
+            <div className="p-6">
+          {/* Search Field and Date Filter */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="md:col-span-3">
+              <label className="block text-gray-300 font-medium mb-2">
+                <Search className="h-4 w-4 inline mr-2" />
+                Search Events
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by event name, venue, city, or description..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-gray-300 font-medium mb-2">
+                <Calendar className="h-4 w-4 inline mr-2" />
+                Specific Date
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 [color-scheme:dark]"
+                />
+                {selectedDate && (
+                  <button
+                    onClick={() => setSelectedDate('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                    title="Clear date"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { value: 'all', label: 'All Events' },
-              { value: 'upcoming', label: 'Upcoming' },
-              { value: 'ongoing', label: 'Ongoing' },
-              { value: 'completed', label: 'Completed' },
-            ].map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setFilter(option.value as EventStatus | 'all')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  filter === option.value
-                    ? 'bg-orange-600 text-white'
-                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                }`}
+
+          {/* First Row: Season, Country, State */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Season Filter */}
+            <div>
+              <label className="block text-gray-300 font-medium mb-2">
+                <Calendar className="h-4 w-4 inline mr-2" />
+                Season
+              </label>
+              <select
+                value={selectedSeason}
+                onChange={(e) => setSelectedSeason(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
-                {option.label}
-              </button>
-            ))}
+                <option value="all">All Seasons</option>
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name} ({season.year})
+                    {(season.is_current || season.isCurrent) && ' - Current'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Country Filter */}
+            <div>
+              <label className="block text-gray-300 font-medium mb-2">
+                <Globe className="h-4 w-4 inline mr-2" />
+                Country
+              </label>
+              <select
+                value={selectedCountry}
+                onChange={(e) => setSelectedCountry(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="all">All Countries</option>
+                {countries.map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* State Filter */}
+            <div>
+              <label className="block text-gray-300 font-medium mb-2">
+                <Map className="h-4 w-4 inline mr-2" />
+                State/Province
+              </label>
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                disabled={selectedCountry === 'all'}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="all">All States</option>
+                {availableStates.map((state) => (
+                  <option key={state.code} value={state.code}>
+                    {state.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Second Row: Multiplier Filter */}
+          <div className="mb-6">
+            <label className="block text-gray-300 font-medium mb-2">
+              <TrendingUp className="h-4 w-4 inline mr-2" />
+              Points Multiplier
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'All Multipliers' },
+                { value: '1', label: '1X Points' },
+                { value: '2', label: '2X Points' },
+                { value: '3', label: '3X Points' },
+                { value: '4', label: '4X Points' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setSelectedMultiplier(option.value)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    selectedMultiplier === option.value
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Third Row: Status Filter */}
+          <div>
+            <div className="flex items-center gap-2 text-gray-300 mb-2">
+              <Filter className="h-4 w-4" />
+              <span className="font-medium">Event Status</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'All Events' },
+                { value: 'upcoming', label: 'Upcoming' },
+                { value: 'completed', label: 'Completed' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setFilter(option.value as EventStatus | 'all')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    filter === option.value
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <p className="text-gray-400">
+              Showing <span className="text-white font-semibold">{filteredEvents.length}</span> event{filteredEvents.length !== 1 ? 's' : ''}
+              {(filter !== 'all' || selectedCountry !== 'all' || selectedState !== 'all' || selectedMultiplier !== 'all' || searchTerm || selectedDate) && (
+                <button
+                  onClick={() => {
+                    setFilter('all');
+                    setSelectedCountry('all');
+                    setSelectedState('all');
+                    setSelectedMultiplier('all');
+                    setSearchTerm('');
+                    setSelectedDate('');
+                  }}
+                  className="ml-4 text-orange-500 hover:text-orange-400 underline"
+                >
+                  Clear all filters
+                </button>
+              )}
+            </p>
+          </div>
+            </div>
           </div>
         </div>
 
@@ -151,9 +388,9 @@ export default function EventsPage() {
           <div className="text-center py-20">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
           </div>
-        ) : events.length > 0 ? (
+        ) : filteredEvents.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {events.map((event) => (
+            {filteredEvents.map((event) => (
               <div
                 key={event.id}
                 className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1"
@@ -186,8 +423,13 @@ export default function EventsPage() {
                     </span>
                   </div>
 
-                  {/* Season and Multiplier Badges - First Line */}
+                  {/* Season, Multiplier, and Day Badges - First Line */}
                   <div className="flex flex-wrap gap-2 mb-2">
+                    {event.day_number && (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-blue-500/10 text-blue-400 border-blue-500">
+                        Day {event.day_number}
+                      </span>
+                    )}
                     {event.season && (
                       <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-teal-500/10 text-teal-400 border-teal-500">
                         {event.season.year} Season
@@ -283,7 +525,7 @@ export default function EventsPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate('/results', { state: { eventId: event.id } });
+                          navigate(`/results?eventId=${event.id}`);
                         }}
                         className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
                       >

@@ -50,6 +50,9 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     formats: [] as string[],
     points_multiplier: '1',
     event_type: 'standard',
+    number_of_days: '1',
+    day2_date: '',
+    day3_date: '',
   });
 
   useEffect(() => {
@@ -220,8 +223,24 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
         console.log('📤 FRONTEND - Updating event ID:', editingEvent.id);
         await eventsApi.update(editingEvent.id, eventData);
       } else {
-        console.log('📤 FRONTEND - Creating new event');
-        await eventsApi.create(eventData);
+        const numberOfDays = parseInt(formData.number_of_days);
+
+        if (numberOfDays > 1) {
+          // Multi-day event: collect all dates and call createMultiDay
+          const dayDates: string[] = [convertToISO(formData.event_date)!];
+          if (numberOfDays >= 2 && formData.day2_date) {
+            dayDates.push(convertToISO(formData.day2_date)!);
+          }
+          if (numberOfDays >= 3 && formData.day3_date) {
+            dayDates.push(convertToISO(formData.day3_date)!);
+          }
+
+          console.log('📤 FRONTEND - Creating multi-day event:', numberOfDays, 'days');
+          await eventsApi.createMultiDay(eventData, numberOfDays, dayDates);
+        } else {
+          console.log('📤 FRONTEND - Creating new event');
+          await eventsApi.create(eventData);
+        }
       }
 
       setShowModal(false);
@@ -309,6 +328,9 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       points_multiplier: '1',
       event_type: 'standard',
       formats: [],
+      number_of_days: '1',
+      day2_date: '',
+      day3_date: '',
     });
   };
 
@@ -499,6 +521,11 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   {/* Events Offered (Formats) */}
                   <td className="px-4 py-3 align-top">
                     <div className="flex flex-wrap gap-1">
+                      {(event as any).day_number && (
+                        <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500">
+                          Day {(event as any).day_number}
+                        </span>
+                      )}
                       {event.formats && event.formats.length > 0 ? (
                         event.formats.map((format) => (
                           <span
@@ -610,9 +637,32 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   />
                 </div>
 
+                {/* Number of Days - only show when creating new event */}
+                {!editingEvent && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Number of Days
+                    </label>
+                    <select
+                      value={formData.number_of_days}
+                      onChange={(e) => setFormData({ ...formData, number_of_days: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="1">1 Day (Standard Event)</option>
+                      <option value="2">2 Days (Multi-Day Event)</option>
+                      <option value="3">3 Days (Multi-Day Event)</option>
+                    </select>
+                    {parseInt(formData.number_of_days) > 1 && (
+                      <p className="text-xs text-orange-400 mt-1">
+                        A separate event entry will be created for each day in the calendar.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Event Date & Time *
+                    {parseInt(formData.number_of_days) > 1 ? 'Day 1 Date & Time *' : 'Event Date & Time *'}
                   </label>
                   <input
                     type="datetime-local"
@@ -622,6 +672,38 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     required
                   />
                 </div>
+
+                {/* Day 2 Date - only show if 2+ days selected */}
+                {parseInt(formData.number_of_days) >= 2 && !editingEvent && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Day 2 Date & Time *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.day2_date}
+                      onChange={(e) => setFormData({ ...formData, day2_date: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                )}
+
+                {/* Day 3 Date - only show if 3 days selected */}
+                {parseInt(formData.number_of_days) >= 3 && !editingEvent && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Day 3 Date & Time *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.day3_date}
+                      onChange={(e) => setFormData({ ...formData, day3_date: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">

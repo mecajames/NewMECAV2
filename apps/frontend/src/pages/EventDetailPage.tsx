@@ -9,6 +9,7 @@ export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const [event, setEvent] = useState<Event | null>(null);
+  const [multiDayEvents, setMultiDayEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
   const [registrationData, setRegistrationData] = useState({
@@ -50,6 +51,18 @@ export default function EventDetailPage() {
     try {
       const data = await eventsApi.getById(eventId);
       setEvent(data);
+
+      // If this is part of a multi-day event, fetch all days
+      if (data.multi_day_group_id) {
+        try {
+          const allDays = await eventsApi.getByMultiDayGroup(data.multi_day_group_id);
+          setMultiDayEvents(allDays);
+        } catch (err) {
+          console.error('Error fetching multi-day events:', err);
+        }
+      } else {
+        setMultiDayEvents([]);
+      }
     } catch (error) {
       console.error('Error fetching event:', error);
     }
@@ -165,18 +178,52 @@ export default function EventDetailPage() {
         <div className="bg-slate-800 rounded-xl shadow-2xl p-8 mb-8">
           <div className="flex items-start justify-between mb-6">
             <h1 className="text-4xl font-bold text-white">{event.title}</h1>
-            <span
-              className={`px-4 py-2 rounded-full text-sm font-semibold ${
-                event.status === 'upcoming'
-                  ? 'bg-blue-500/10 text-blue-400'
-                  : event.status === 'ongoing'
-                  ? 'bg-green-500/10 text-green-400'
-                  : 'bg-gray-500/10 text-gray-400'
-              }`}
-            >
-              {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-            </span>
+            <div className="flex items-center gap-2">
+              {event.day_number && (
+                <span className="px-4 py-2 rounded-full text-sm font-semibold bg-blue-500/10 text-blue-400 border border-blue-500">
+                  Day {event.day_number}
+                </span>
+              )}
+              <span
+                className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                  event.status === 'upcoming'
+                    ? 'bg-blue-500/10 text-blue-400'
+                    : event.status === 'ongoing'
+                    ? 'bg-green-500/10 text-green-400'
+                    : 'bg-gray-500/10 text-gray-400'
+                }`}
+              >
+                {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+              </span>
+            </div>
           </div>
+
+          {/* Multi-Day Event Navigation */}
+          {multiDayEvents.length > 1 && (
+            <div className="mb-6 p-4 bg-slate-700 rounded-lg">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">
+                This is a {multiDayEvents.length}-day event
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {multiDayEvents.map((dayEvent) => (
+                  <button
+                    key={dayEvent.id}
+                    onClick={() => dayEvent.id !== event.id && navigate(`/events/${dayEvent.id}`)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      dayEvent.id === event.id
+                        ? 'bg-orange-600 text-white cursor-default'
+                        : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+                    }`}
+                  >
+                    Day {dayEvent.day_number} - {new Date(dayEvent.event_date).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Multiplier Badge - First Line */}
           {event.points_multiplier !== undefined && event.points_multiplier !== null && (
@@ -273,7 +320,7 @@ export default function EventDetailPage() {
 
           {event.status === 'completed' && (
             <button
-              onClick={() => navigate('/results', { state: { eventId: event.id } })}
+              onClick={() => navigate(`/results?eventId=${event.id}`)}
               className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
             >
               <TrendingUp className="h-6 w-6" />

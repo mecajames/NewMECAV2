@@ -23,6 +23,9 @@ export interface Event {
   points_multiplier?: number;
   format?: string;
   formats?: string[];
+  event_type?: string;
+  multi_day_group_id?: string;
+  day_number?: number;
   created_at: string;
   updated_at: string;
   event_director?: any;
@@ -54,7 +57,11 @@ export const eventsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to create event');
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('Event creation failed:', response.status, errorBody);
+      throw new Error(`Failed to create event: ${errorBody}`);
+    }
     return response.json();
   },
 
@@ -78,6 +85,30 @@ export const eventsApi = {
   getStats: async (): Promise<{ totalEvents: number }> => {
     const response = await fetch(`${API_BASE_URL}/api/events/stats`);
     if (!response.ok) throw new Error('Failed to fetch event stats');
+    return response.json();
+  },
+
+  createMultiDay: async (
+    data: Partial<Event>,
+    numberOfDays: number,
+    dayDates: string[]
+  ): Promise<Event[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/events/multi-day`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, numberOfDays, dayDates }),
+    });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('Multi-day event creation failed:', response.status, errorBody);
+      throw new Error(`Failed to create multi-day event: ${errorBody}`);
+    }
+    return response.json();
+  },
+
+  getByMultiDayGroup: async (groupId: string): Promise<Event[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/events/multi-day-group/${groupId}`);
+    if (!response.ok) throw new Error('Failed to fetch events by multi-day group');
     return response.json();
   },
 };

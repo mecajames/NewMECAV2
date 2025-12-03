@@ -3,6 +3,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
 import { EventStatus } from '../types/enums';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class EventsService {
@@ -61,6 +62,15 @@ export class EventsService {
     return em.find(Event, { eventDirector: directorId });
   }
 
+  /**
+   * Find all events in a multi-day event group
+   */
+  async findByMultiDayGroup(multiDayGroupId: string): Promise<Event[]> {
+    const em = this.em.fork();
+    return em.find(Event, { multiDayGroupId }, {
+      orderBy: { dayNumber: 'ASC' }
+    });
+  }
 
   /**
    * Find the appropriate season for a given event date
@@ -103,50 +113,179 @@ export class EventsService {
   async create(data: Partial<Event>): Promise<Event> {
     const em = this.em.fork();
 
-    // Transform snake_case API fields to camelCase entity properties
-    const transformedData: any = {};
+    try {
+      console.log('📝 CREATE EVENT - Received data:', JSON.stringify(data, null, 2));
 
-    // Map snake_case to camelCase
-    if ((data as any).event_date !== undefined) transformedData.eventDate = (data as any).event_date;
-    if ((data as any).registration_deadline !== undefined) transformedData.registrationDeadline = (data as any).registration_deadline;
-    if ((data as any).venue_name !== undefined) transformedData.venueName = (data as any).venue_name;
-    if ((data as any).venue_address !== undefined) transformedData.venueAddress = (data as any).venue_address;
-    if ((data as any).venue_city !== undefined) transformedData.venueCity = (data as any).venue_city;
-    if ((data as any).venue_state !== undefined) transformedData.venueState = (data as any).venue_state;
-    if ((data as any).venue_postal_code !== undefined) transformedData.venuePostalCode = (data as any).venue_postal_code;
-    if ((data as any).venue_country !== undefined) transformedData.venueCountry = (data as any).venue_country;
-    if ((data as any).flyer_url !== undefined) transformedData.flyerUrl = (data as any).flyer_url;
-    if ((data as any).event_director_id !== undefined) transformedData.eventDirector = (data as any).event_director_id;
-    if ((data as any).season_id !== undefined) transformedData.season = (data as any).season_id;
-    if ((data as any).max_participants !== undefined) transformedData.maxParticipants = (data as any).max_participants;
-    if ((data as any).registration_fee !== undefined) transformedData.registrationFee = (data as any).registration_fee;
+      // Transform snake_case API fields to camelCase entity properties
+      const transformedData: any = {};
 
-    // Copy fields that don't need transformation
-    if (data.title !== undefined) transformedData.title = data.title;
-    if (data.description !== undefined) transformedData.description = data.description;
-    if (data.latitude !== undefined) transformedData.latitude = data.latitude;
-    if (data.longitude !== undefined) transformedData.longitude = data.longitude;
-    if (data.status !== undefined) transformedData.status = data.status;
-    if (data.formats !== undefined) transformedData.formats = data.formats;
-    if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
+      // Map snake_case to camelCase
+      if ((data as any).event_date !== undefined) transformedData.eventDate = (data as any).event_date;
+      if ((data as any).registration_deadline !== undefined) transformedData.registrationDeadline = (data as any).registration_deadline;
+      if ((data as any).venue_name !== undefined) transformedData.venueName = (data as any).venue_name;
+      if ((data as any).venue_address !== undefined) transformedData.venueAddress = (data as any).venue_address;
+      if ((data as any).venue_city !== undefined) transformedData.venueCity = (data as any).venue_city;
+      if ((data as any).venue_state !== undefined) transformedData.venueState = (data as any).venue_state;
+      if ((data as any).venue_postal_code !== undefined) transformedData.venuePostalCode = (data as any).venue_postal_code;
+      if ((data as any).venue_country !== undefined) transformedData.venueCountry = (data as any).venue_country;
+      if ((data as any).flyer_url !== undefined) transformedData.flyerUrl = (data as any).flyer_url;
+      if ((data as any).max_participants !== undefined) transformedData.maxParticipants = (data as any).max_participants;
+      if ((data as any).registration_fee !== undefined) transformedData.registrationFee = (data as any).registration_fee;
 
-    // Auto-assign season based on event date (if not manually set)
-    if (transformedData.eventDate && !transformedData.season) {
-      const season = await this.findSeasonForEventDate(em, new Date(transformedData.eventDate));
-      if (season) {
-        transformedData.season = season;
+      // Handle relationships - only set if non-empty string
+      const eventDirectorId = (data as any).event_director_id;
+      if (eventDirectorId && eventDirectorId.trim() !== '') {
+        transformedData.eventDirector = eventDirectorId;
       }
-    }
 
-    // Auto-detect status based on event date (if not manually set to cancelled or not_public)
-    if (transformedData.eventDate && (!transformedData.status ||
-        (transformedData.status !== EventStatus.CANCELLED && transformedData.status !== EventStatus.NOT_PUBLIC))) {
-      transformedData.status = this.detectStatusFromDate(new Date(transformedData.eventDate));
-    }
+      const seasonId = (data as any).season_id;
+      if (seasonId && seasonId.trim() !== '') {
+        transformedData.season = seasonId;
+      }
 
-    const event = em.create(Event, transformedData);
-    await em.persistAndFlush(event);
-    return event;
+      // Copy fields that don't need transformation
+      if (data.title !== undefined) transformedData.title = data.title;
+      if (data.description !== undefined) transformedData.description = data.description;
+      if (data.latitude !== undefined) transformedData.latitude = data.latitude;
+      if (data.longitude !== undefined) transformedData.longitude = data.longitude;
+      if (data.status !== undefined) transformedData.status = data.status;
+      if (data.formats !== undefined) transformedData.formats = data.formats;
+      if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
+      if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
+
+      // Auto-assign season based on event date (if not manually set)
+      if (transformedData.eventDate && !transformedData.season) {
+        const season = await this.findSeasonForEventDate(em, new Date(transformedData.eventDate));
+        if (season) {
+          transformedData.season = season;
+        }
+      }
+
+      // Auto-detect status based on event date (if not manually set to cancelled or not_public)
+      if (transformedData.eventDate && (!transformedData.status ||
+          (transformedData.status !== EventStatus.CANCELLED && transformedData.status !== EventStatus.NOT_PUBLIC))) {
+        transformedData.status = this.detectStatusFromDate(new Date(transformedData.eventDate));
+      }
+
+      console.log('📝 CREATE EVENT - Transformed data:', JSON.stringify(transformedData, null, 2));
+
+      const event = em.create(Event, transformedData);
+      await em.persistAndFlush(event);
+
+      console.log('📝 CREATE EVENT - Success, ID:', event.id);
+      return event;
+    } catch (error) {
+      console.error('❌ CREATE EVENT - Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a multi-day event (creates separate event entries for each day)
+   * @param data Base event data
+   * @param numberOfDays Number of days (1, 2, or 3)
+   * @param dayDates Array of ISO date strings for each day
+   * @returns Array of created events
+   */
+  async createMultiDay(data: Partial<Event>, numberOfDays: number, dayDates: string[]): Promise<Event[]> {
+    const em = this.em.fork();
+
+    try {
+      console.log('📝 CREATE MULTI-DAY EVENT - Received data:', JSON.stringify(data, null, 2));
+      console.log('📝 CREATE MULTI-DAY EVENT - Days:', numberOfDays, 'Dates:', dayDates);
+
+      // Generate a shared group ID for all days of this event
+      const multiDayGroupId = randomUUID();
+
+      const createdEvents: Event[] = [];
+
+      for (let dayNum = 1; dayNum <= numberOfDays; dayNum++) {
+        const dayDate = dayDates[dayNum - 1];
+        if (!dayDate) {
+          throw new Error(`Missing date for day ${dayNum}`);
+        }
+
+        // Transform snake_case API fields to camelCase entity properties
+        const transformedData: any = {};
+
+        // Map snake_case to camelCase
+        if ((data as any).venue_name !== undefined) transformedData.venueName = (data as any).venue_name;
+        if ((data as any).venue_address !== undefined) transformedData.venueAddress = (data as any).venue_address;
+        if ((data as any).venue_city !== undefined) transformedData.venueCity = (data as any).venue_city;
+        if ((data as any).venue_state !== undefined) transformedData.venueState = (data as any).venue_state;
+        if ((data as any).venue_postal_code !== undefined) transformedData.venuePostalCode = (data as any).venue_postal_code;
+        if ((data as any).venue_country !== undefined) transformedData.venueCountry = (data as any).venue_country;
+        if ((data as any).flyer_url !== undefined) transformedData.flyerUrl = (data as any).flyer_url;
+        if ((data as any).max_participants !== undefined) transformedData.maxParticipants = (data as any).max_participants;
+        if ((data as any).registration_fee !== undefined) transformedData.registrationFee = (data as any).registration_fee;
+
+        // Handle relationships - only set if non-empty string
+        const eventDirectorId = (data as any).event_director_id;
+        if (eventDirectorId && eventDirectorId.trim() !== '') {
+          transformedData.eventDirector = eventDirectorId;
+        }
+
+        const seasonId = (data as any).season_id;
+        if (seasonId && seasonId.trim() !== '') {
+          transformedData.season = seasonId;
+        }
+
+        // Copy fields that don't need transformation
+        if (data.title !== undefined) transformedData.title = data.title;
+        if (data.latitude !== undefined) transformedData.latitude = data.latitude;
+        if (data.longitude !== undefined) transformedData.longitude = data.longitude;
+        if (data.status !== undefined) transformedData.status = data.status;
+        if (data.formats !== undefined) transformedData.formats = data.formats;
+        if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
+        if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
+
+        // Set the date for this specific day
+        transformedData.eventDate = dayDate;
+
+        // Set multi-day fields
+        transformedData.multiDayGroupId = multiDayGroupId;
+        transformedData.dayNumber = dayNum;
+
+        // Append day number to description
+        const baseDescription = data.description || '';
+        transformedData.description = baseDescription
+          ? `${baseDescription}\n\n(Day ${dayNum} of ${numberOfDays})`
+          : `(Day ${dayNum} of ${numberOfDays})`;
+
+        // Handle registration deadline - only set on day 1
+        if (dayNum === 1 && (data as any).registration_deadline) {
+          transformedData.registrationDeadline = (data as any).registration_deadline;
+        }
+
+        // Auto-assign season based on event date (if not manually set)
+        if (transformedData.eventDate && !transformedData.season) {
+          const season = await this.findSeasonForEventDate(em, new Date(transformedData.eventDate));
+          if (season) {
+            transformedData.season = season;
+          }
+        }
+
+        // Auto-detect status based on event date (if not manually set to cancelled or not_public)
+        if (transformedData.eventDate && (!transformedData.status ||
+            (transformedData.status !== EventStatus.CANCELLED && transformedData.status !== EventStatus.NOT_PUBLIC))) {
+          transformedData.status = this.detectStatusFromDate(new Date(transformedData.eventDate));
+        }
+
+        console.log(`📝 CREATE MULTI-DAY EVENT - Day ${dayNum} transformed data:`, JSON.stringify(transformedData, null, 2));
+
+        const event = em.create(Event, transformedData);
+        createdEvents.push(event);
+      }
+
+      // Persist all events
+      await em.persistAndFlush(createdEvents);
+
+      console.log('📝 CREATE MULTI-DAY EVENT - Success, IDs:', createdEvents.map(e => e.id));
+      return createdEvents;
+    } catch (error) {
+      console.error('❌ CREATE MULTI-DAY EVENT - Error:', error);
+      throw error;
+    }
   }
 
   async update(id: string, data: Partial<Event>): Promise<Event> {
@@ -186,6 +325,7 @@ export class EventsService {
     if (data.status !== undefined) transformedData.status = data.status;
     if (data.formats !== undefined) transformedData.formats = data.formats;
     if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
+    if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
 
     console.log('🔍 UPDATE EVENT - Transformed eventDate:', transformedData.eventDate);
 

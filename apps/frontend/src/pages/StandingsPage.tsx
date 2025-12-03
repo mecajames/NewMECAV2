@@ -176,6 +176,7 @@ export default function StandingsPage() {
               selectedSeasonId={selectedSeasonId}
               onSeasonChange={setSelectedSeasonId}
               showAllOption={true}
+              autoSelectCurrent={true}
             />
 
             <div className="flex items-center gap-3">
