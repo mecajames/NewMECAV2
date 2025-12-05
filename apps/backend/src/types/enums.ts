@@ -103,3 +103,16 @@ export enum PaymentType {
   EVENT_REGISTRATION = 'event_registration',
   OTHER = 'other'
 }
+
+export enum HostType {
+  BUSINESS = 'business',
+  INDIVIDUAL = 'individual',
+  ORGANIZATION = 'organization',
+  OTHER = 'other'
+}
+
+export enum IndoorOutdoor {
+  INDOOR = 'indoor',
+  OUTDOOR = 'outdoor',
+  BOTH = 'both'
+}
