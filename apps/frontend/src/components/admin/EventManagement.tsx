@@ -47,6 +47,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     status: 'upcoming',
     max_participants: '',
     registration_fee: '0',
+    member_entry_fee: '',
+    non_member_entry_fee: '',
+    has_gate_fee: false,
+    gate_fee: '',
     formats: [] as string[],
     points_multiplier: '1',
     event_type: 'standard',
@@ -209,6 +213,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       status: formData.status,
       max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
       registration_fee: parseFloat(formData.registration_fee),
+      member_entry_fee: formData.member_entry_fee ? parseFloat(formData.member_entry_fee) : null,
+      non_member_entry_fee: formData.non_member_entry_fee ? parseFloat(formData.non_member_entry_fee) : null,
+      has_gate_fee: formData.has_gate_fee,
+      gate_fee: formData.gate_fee ? parseFloat(formData.gate_fee) : null,
       formats: formData.formats.length > 0 ? formData.formats : null,
       points_multiplier: parseInt(formData.points_multiplier),
       event_type: formData.event_type,
@@ -285,7 +293,11 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       season_id: event.season_id || '',
       status: event.status,
       max_participants: event.max_participants?.toString() || '',
-      registration_fee: event.registration_fee.toString(),
+      registration_fee: event.registration_fee?.toString() || '0',
+      member_entry_fee: (event as any).member_entry_fee?.toString() || '',
+      non_member_entry_fee: (event as any).non_member_entry_fee?.toString() || '',
+      has_gate_fee: (event as any).has_gate_fee || false,
+      gate_fee: (event as any).gate_fee?.toString() || '',
       formats: event.formats || [],
       points_multiplier: (event as any).points_multiplier?.toString() || '1',
       event_type: (event as any).event_type || 'standard',
@@ -325,6 +337,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       status: 'upcoming',
       max_participants: '',
       registration_fee: '0',
+      member_entry_fee: '',
+      non_member_entry_fee: '',
+      has_gate_fee: false,
+      gate_fee: '',
       points_multiplier: '1',
       event_type: 'standard',
       formats: [],
@@ -456,6 +472,35 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
           >
             Recent & Upcoming
           </button>
+          <button
+            onClick={() => {
+              setStatusFilter('pending');
+              setQuickFilter('all');
+            }}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              statusFilter === 'pending'
+                ? 'bg-yellow-600 text-white'
+                : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+            }`}
+          >
+            Pending Approval
+          </button>
+          {statusFilter !== 'all' && statusFilter !== 'pending' && (
+            <button
+              onClick={() => setStatusFilter('all')}
+              className="px-4 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
+            >
+              Clear Status Filter: {statusFilter}
+            </button>
+          )}
+          {statusFilter === 'pending' && (
+            <button
+              onClick={() => setStatusFilter('all')}
+              className="px-4 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
+            >
+              Clear Pending Filter
+            </button>
+          )}
         </div>
 
         <div className="mt-3 text-xs text-gray-400">
@@ -505,6 +550,16 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     <div className="text-sm">
                       <div className="text-blue-400 font-medium">
                         {event.title}
+                        {event.day_number && (
+                          <span className="ml-2 px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded">
+                            Day {event.day_number}
+                          </span>
+                        )}
+                        {event.status === 'pending' && (
+                          <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500 rounded font-semibold">
+                            PENDING
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-400 mt-1">
                         hosted at {event.venue_name}
@@ -903,12 +958,18 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     required
                   >
+                    <option value="pending">Pending Approval</option>
                     <option value="upcoming">Upcoming</option>
                     <option value="ongoing">Ongoing</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                     <option value="not_public">Not Public</option>
                   </select>
+                  {formData.status === 'pending' && (
+                    <p className="text-xs text-yellow-400 mt-1">
+                      Pending events are not visible on the public calendar. Change status to "Upcoming" to publish.
+                    </p>
+                  )}
                 </div>
 
                 <div className="md:col-span-2">
@@ -997,20 +1058,77 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   />
                 </div>
 
+              </div>
+
+              {/* Entry Fees (per class/format) */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Registration Fee ($)
+                    Member Entry Fee (per class/format) ($)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    value={formData.registration_fee}
+                    value={formData.member_entry_fee}
                     onChange={(e) =>
-                      setFormData({ ...formData, registration_fee: e.target.value })
+                      setFormData({ ...formData, member_entry_fee: e.target.value })
                     }
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="e.g., 25.00"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Non-Member Entry Fee (per class/format) ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.non_member_entry_fee}
+                    onChange={(e) =>
+                      setFormData({ ...formData, non_member_entry_fee: e.target.value })
+                    }
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="e.g., 35.00"
+                  />
+                </div>
+              </div>
+
+              {/* Gate Fee */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Gate Fee?
+                  </label>
+                  <select
+                    value={formData.has_gate_fee}
+                    onChange={(e) =>
+                      setFormData({ ...formData, has_gate_fee: e.target.value })
+                    }
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">Select...</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                {formData.has_gate_fee === 'yes' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Gate Fee Amount ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.gate_fee}
+                      onChange={(e) =>
+                        setFormData({ ...formData, gate_fee: e.target.value })
+                      }
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="e.g., 10.00"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-4">

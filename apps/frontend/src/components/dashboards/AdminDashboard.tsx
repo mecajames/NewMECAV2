@@ -309,8 +309,14 @@ export default function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Admin Dashboard</h1>
-            <p className="text-gray-400">Complete system management and oversight</p>
+            <h1 className="text-4xl font-bold text-white mb-2">
+              {currentView === 'hosting-requests' ? 'Event Request Admin' : 'Admin Dashboard'}
+            </h1>
+            <p className="text-gray-400">
+              {currentView === 'hosting-requests'
+                ? 'Manage and approve event hosting requests'
+                : 'Complete system management and oversight'}
+            </p>
           </div>
           {currentView !== 'overview' && (
             <button

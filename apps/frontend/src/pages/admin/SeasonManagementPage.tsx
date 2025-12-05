@@ -3,6 +3,7 @@ import { Calendar, Plus, Edit, Trash2, Check, X, ArrowLeft, Copy } from 'lucide-
 import { useNavigate } from 'react-router-dom';
 import { Season, CompetitionFormat } from '../../types/database';
 import { seasonsApi } from '../../api-client/seasons.api-client';
+import { competitionClassesApi } from '../../api-client/competition-classes.api-client';
 import { useAuth } from '../../contexts/AuthContext';
 
 // TODO: Replace with backend API calls once seasons and competition_classes modules are implemented
@@ -152,9 +153,29 @@ export default function SeasonManagementPage() {
       return;
     }
 
-    // TODO: Replace with API client call: competitionClassesApi.copyBetweenSeasons(copyFromSeasonId, copyToSeasonId, copyFormat)
-    alert('Copy classes feature not yet implemented. Competition classes table needs to be created in database first.');
-    setCopying(false);
+    setCopying(true);
+    try {
+      const result = await competitionClassesApi.copyBetweenSeasons(
+        copyFromSeasonId,
+        copyToSeasonId,
+        copyFormat === 'all' ? undefined : copyFormat
+      );
+
+      if (result.copied === 0) {
+        alert('No classes were copied. Either the source season has no classes, or all classes already exist in the destination season.');
+      } else {
+        alert(`Successfully copied ${result.copied} class${result.copied === 1 ? '' : 'es'} to the destination season.`);
+        // Reset the form
+        setShowCopyDialog(false);
+        setCopyFromSeasonId('');
+        setCopyToSeasonId('');
+        setCopyFormat('all');
+      }
+    } catch (error: any) {
+      alert('Error copying classes: ' + (error.message || 'Unknown error'));
+    } finally {
+      setCopying(false);
+    }
   };
 
   if (loading) {

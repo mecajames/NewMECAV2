@@ -130,4 +130,30 @@ export const competitionClassesApi = {
       throw new Error(`Failed to delete competition class ${id}`);
     }
   },
+
+  /**
+   * Copy competition classes from one season to another
+   * @param fromSeasonId Source season ID
+   * @param toSeasonId Destination season ID
+   * @param format Optional format filter ('SPL', 'SQL', 'all', etc.)
+   * @returns Object with count of copied classes and the new class objects
+   */
+  copyBetweenSeasons: async (
+    fromSeasonId: string,
+    toSeasonId: string,
+    format?: string
+  ): Promise<{ copied: number; classes: CompetitionClass[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-classes/copy-between-seasons`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fromSeasonId, toSeasonId, format }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to copy classes' }));
+      throw new Error(error.message || 'Failed to copy classes between seasons');
+    }
+    return response.json();
+  },
 };
