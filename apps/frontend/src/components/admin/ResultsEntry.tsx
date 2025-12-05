@@ -442,8 +442,8 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
             >
               {events.map((event) => (
                 <option key={event.id} value={event.id}>
-                  {event.title} -{' '}
-                  {new Date(event.event_date).toLocaleDateString()}
+                  {event.title} - {new Date(event.event_date).toLocaleDateString()}
+                  {event.day_number ? ` (Day ${event.day_number})` : ''}
                 </option>
               ))}
             </select>

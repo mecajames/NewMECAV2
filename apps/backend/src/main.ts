@@ -2,6 +2,7 @@ import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './all-exceptions.filter';
 
 async function bootstrap() {
   // Parse CORS_ORIGIN to handle multiple origins
@@ -15,6 +16,9 @@ async function bootstrap() {
       credentials: true,
     },
   });
+
+  // Global exception filter to catch and log all errors
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const port = process.env.PORT || 3000;
 

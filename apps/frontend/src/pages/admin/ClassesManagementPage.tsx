@@ -25,6 +25,11 @@ export default function ClassesManagementPage() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'abbreviation' | 'display_order'>('display_order');
 
+  // Bulk Delete
+  const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     abbreviation: '',
@@ -60,6 +65,9 @@ export default function ClassesManagementPage() {
 
   useEffect(() => {
     applyFilters();
+    // Clear selections when filters change
+    setSelectedClassIds(new Set());
+    setSelectAll(false);
   }, [classes, searchQuery, activeFilter, sortBy]);
 
   const fetchSeasons = async () => {
@@ -202,6 +210,65 @@ export default function ClassesManagementPage() {
     } catch (error) {
       console.error('Error deleting class:', error);
       alert('Failed to delete class. Please try again.');
+    }
+  };
+
+  // Bulk selection handlers
+  const handleSelectClass = (classId: string) => {
+    const newSelected = new Set(selectedClassIds);
+    if (newSelected.has(classId)) {
+      newSelected.delete(classId);
+    } else {
+      newSelected.add(classId);
+    }
+    setSelectedClassIds(newSelected);
+    setSelectAll(newSelected.size === filteredClasses.length && filteredClasses.length > 0);
+  };
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedClassIds(new Set());
+      setSelectAll(false);
+    } else {
+      const allIds = new Set(filteredClasses.map(c => c.id));
+      setSelectedClassIds(allIds);
+      setSelectAll(true);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedClassIds.size === 0) {
+      alert('Please select at least one class to delete');
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to delete ${selectedClassIds.size} class(es)?\n\nThis action cannot be undone.`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      // Delete each selected class
+      const deletePromises = Array.from(selectedClassIds).map(id =>
+        competitionClassesApi.delete(id)
+      );
+
+      await Promise.all(deletePromises);
+
+      alert(`Successfully deleted ${selectedClassIds.size} class(es)`);
+
+      // Clear selection and refresh
+      setSelectedClassIds(new Set());
+      setSelectAll(false);
+      fetchClasses();
+    } catch (error: any) {
+      console.error('Error deleting classes:', error);
+      alert('Failed to delete some classes. Please try again.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -349,7 +416,7 @@ export default function ClassesManagementPage() {
 
         {selectedSeasonId && (
           <>
-            <div className="mb-6">
+            <div className="mb-6 flex gap-4">
               <button
                 onClick={() => setShowForm(!showForm)}
                 className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
@@ -357,6 +424,16 @@ export default function ClassesManagementPage() {
                 <Plus className="h-5 w-5" />
                 Create New Class
               </button>
+              {selectedClassIds.size > 0 && (
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={deleting}
+                  className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="h-5 w-5" />
+                  Delete Selected ({selectedClassIds.size})
+                </button>
+              )}
             </div>
 
             {showForm && (
@@ -461,6 +538,15 @@ export default function ClassesManagementPage() {
                 <table className="w-full">
                   <thead className="bg-slate-700">
                     <tr>
+                      <th className="px-4 py-4 text-left">
+                        <input
+                          type="checkbox"
+                          checked={selectAll}
+                          onChange={handleSelectAll}
+                          disabled={filteredClasses.length === 0}
+                          className="w-4 h-4 cursor-pointer rounded border-slate-500 bg-slate-600 text-orange-500 focus:ring-orange-500"
+                        />
+                      </th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Order</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Name</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Abbreviation</th>
@@ -471,7 +557,15 @@ export default function ClassesManagementPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-700">
                     {filteredClasses.map((classItem) => (
-                      <tr key={classItem.id} className="hover:bg-slate-750">
+                      <tr key={classItem.id} className={`hover:bg-slate-750 ${selectedClassIds.has(classItem.id) ? 'bg-slate-700/50' : ''}`}>
+                        <td className="px-4 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedClassIds.has(classItem.id)}
+                            onChange={() => handleSelectClass(classItem.id)}
+                            className="w-4 h-4 cursor-pointer rounded border-slate-500 bg-slate-600 text-orange-500 focus:ring-orange-500"
+                          />
+                        </td>
                         <td className="px-6 py-4 text-gray-400 text-sm">{classItem.display_order}</td>
                         <td className="px-6 py-4 text-white font-medium">{classItem.name}</td>
                         <td className="px-6 py-4">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Trophy, Medal, Award, TrendingUp, Filter } from 'lucide-react';
 import { competitionResultsApi, CompetitionResult } from '../api-client/competition-results.api-client';
 import { competitionClassesApi, CompetitionClass } from '../api-client/competition-classes.api-client';
+import { eventsApi } from '../api-client/events.api-client';
 import SeasonSelector from '../components/SeasonSelector';
 
 interface LeaderboardEntry {
@@ -10,6 +11,7 @@ interface LeaderboardEntry {
   competition_class: string;
   total_points: number;
   events_participated: number;
+  event_ids: Set<string>; // Track unique event IDs
   first_place: number;
   second_place: number;
   third_place: number;
@@ -38,8 +40,14 @@ export default function LeaderboardPage() {
     fetchLeaderboard();
   }, [selectedSeasonId, selectedClass, selectedFormat, rankBy]);
 
-  const processResults = (results: any[], sortBy: RankByType = 'points'): LeaderboardEntry[] => {
+  const processResults = (results: any[], sortBy: RankByType = 'points', allEvents: any[] = []): LeaderboardEntry[] => {
     const aggregated: { [key: string]: LeaderboardEntry } = {};
+
+    // Build a map of event_id -> event data for quick lookup
+    const eventMap = new Map<string, any>();
+    allEvents.forEach(event => {
+      eventMap.set(event.id, event);
+    });
 
     results.forEach((result) => {
       const compClass = result.competitionClass || result.competition_class || '';
@@ -47,6 +55,16 @@ export default function LeaderboardPage() {
       const mecaId = result.mecaId || result.meca_id;
       const membershipExpiry = result.competitor?.membership_expiry;
       const score = result.score || 0;
+      const eventId = result.event_id || result.eventId || '';
+
+      // Get event data to check if it's a multi-day State/World Finals
+      const eventData = eventMap.get(eventId);
+      const isMultiDayFinals = eventData?.multi_day_group_id &&
+        (eventData?.event_type === 'state_finals' || eventData?.event_type === 'world_finals');
+
+      // For multi-day State/World Finals, use the group ID to count as 1 event
+      // For regular events (including regular multi-day), use event_id (each day = separate event)
+      const eventKey = isMultiDayFinals ? eventData.multi_day_group_id : eventId;
 
       if (!aggregated[key]) {
         aggregated[key] = {
@@ -55,6 +73,7 @@ export default function LeaderboardPage() {
           competition_class: compClass,
           total_points: 0,
           events_participated: 0,
+          event_ids: new Set<string>(),
           first_place: 0,
           second_place: 0,
           third_place: 0,
@@ -65,7 +84,10 @@ export default function LeaderboardPage() {
       }
 
       aggregated[key].total_points += result.points_earned || 0;
-      aggregated[key].events_participated += 1;
+      // Track unique events - uses group ID for State/World Finals, event ID for others
+      if (eventKey) {
+        aggregated[key].event_ids.add(eventKey);
+      }
       aggregated[key].best_score = Math.max(aggregated[key].best_score, score);
 
       if (result.placement === 1) aggregated[key].first_place += 1;
@@ -73,8 +95,13 @@ export default function LeaderboardPage() {
       if (result.placement === 3) aggregated[key].third_place += 1;
     });
 
-    // Sort by the selected criterion
-    return Object.values(aggregated).sort((a, b) => {
+    // Calculate events_participated from unique event IDs and sort
+    const entries = Object.values(aggregated);
+    entries.forEach(entry => {
+      entry.events_participated = entry.event_ids.size;
+    });
+
+    return entries.sort((a, b) => {
       if (sortBy === 'score') {
         return b.best_score - a.best_score;
       }
@@ -85,7 +112,11 @@ export default function LeaderboardPage() {
   const fetchLeaderboard = async () => {
     setLoading(true);
     try {
-      const results = await competitionResultsApi.getAll(1, 1000);
+      // Fetch both results and events in parallel
+      const [results, allEvents] = await Promise.all([
+        competitionResultsApi.getAll(1, 1000),
+        eventsApi.getAll(1, 1000)
+      ]);
 
       // Extract unique classes based on selected format, and all formats
       const classSet = new Set<string>();
@@ -113,7 +144,8 @@ export default function LeaderboardPage() {
       }
 
       // Process results to aggregate by competitor and class
-      let processed = processResults(filtered, rankBy);
+      // Pass events so we can check for multi-day State/World Finals
+      let processed = processResults(filtered, rankBy, allEvents);
 
       // Filter by class if selected
       if (selectedClass !== 'all') {
@@ -132,11 +164,13 @@ export default function LeaderboardPage() {
             overallAggregated[key] = {
               ...entry,
               competition_class: 'Overall',
+              event_ids: new Set(entry.event_ids), // Clone the Set
             };
           } else {
             // Aggregate data across classes
             overallAggregated[key].total_points += entry.total_points;
-            overallAggregated[key].events_participated += entry.events_participated;
+            // Merge event_ids from all classes to count unique events
+            entry.event_ids.forEach(id => overallAggregated[key].event_ids.add(id));
             overallAggregated[key].first_place += entry.first_place;
             overallAggregated[key].second_place += entry.second_place;
             overallAggregated[key].third_place += entry.third_place;
@@ -145,6 +179,11 @@ export default function LeaderboardPage() {
               entry.best_score
             );
           }
+        });
+
+        // Calculate events_participated from merged event_ids
+        Object.values(overallAggregated).forEach(entry => {
+          entry.events_participated = entry.event_ids.size;
         });
 
         // Sort by the selected criterion

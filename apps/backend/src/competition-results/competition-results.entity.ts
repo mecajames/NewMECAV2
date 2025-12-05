@@ -2,6 +2,8 @@ import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { Season } from '../seasons/seasons.entity';
+import { CompetitionClass } from '../competition-classes/competition-classes.entity';
 
 @Entity({ tableName: 'competition_results', schema: 'public' })
 export class CompetitionResult {
@@ -53,20 +55,32 @@ export class CompetitionResult {
   @Property({ type: 'text', nullable: true })
   notes?: string;
 
-  @Property({ type: 'uuid', nullable: true, fieldName: 'season_id', serializedName: 'season_id' })
+  @Property({ type: 'uuid', nullable: true, fieldName: 'season_id', serializedName: 'season_id', persist: false })
   seasonId?: string;
 
-  @Property({ type: 'uuid', nullable: true, fieldName: 'class_id', serializedName: 'class_id' })
+  @ManyToOne(() => Season, { fieldName: 'season_id', nullable: true, hidden: true })
+  season?: Season;
+
+  @Property({ type: 'uuid', nullable: true, fieldName: 'class_id', serializedName: 'class_id', persist: false })
   classId?: string;
 
-  @Property({ type: 'uuid', fieldName: 'created_by', serializedName: 'created_by' })
+  @ManyToOne(() => CompetitionClass, { fieldName: 'class_id', nullable: true, hidden: true })
+  competitionClassEntity?: CompetitionClass;
+
+  @Property({ type: 'uuid', fieldName: 'created_by', serializedName: 'created_by', persist: false })
   createdBy!: string;
+
+  @ManyToOne(() => Profile, { fieldName: 'created_by', nullable: true, hidden: true })
+  creator?: Profile;
 
   @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
 
-  @Property({ type: 'uuid', nullable: true, fieldName: 'updated_by', serializedName: 'updated_by' })
+  @Property({ type: 'uuid', nullable: true, fieldName: 'updated_by', serializedName: 'updated_by', persist: false })
   updatedBy?: string;
+
+  @ManyToOne(() => Profile, { fieldName: 'updated_by', nullable: true, hidden: true })
+  updater?: Profile;
 
   @Property({ onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
   updatedAt?: Date;

@@ -54,8 +54,9 @@ export class CompetitionResultsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async createResult(@Body() data: Partial<CompetitionResult & { userId?: string }>): Promise<CompetitionResult> {
-    const userId = data.userId;
+  async createResult(@Body() data: Partial<CompetitionResult & { userId?: string; created_by?: string }>): Promise<CompetitionResult> {
+    // Support both userId and created_by for audit logging
+    const userId = data.userId || data.created_by;
     delete data.userId;
     return this.competitionResultsService.create(data, userId);
   }

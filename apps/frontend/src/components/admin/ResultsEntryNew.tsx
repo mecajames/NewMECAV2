@@ -768,6 +768,7 @@ export default function ResultsEntryNew() {
               {filteredEvents.map((event) => (
                 <option key={event.id} value={event.id}>
                   {event.title} - {new Date(event.event_date).toLocaleDateString()}
+                  {event.day_number ? ` (Day ${event.day_number})` : ''}
                 </option>
               ))}
             </select>
@@ -994,7 +995,12 @@ export default function ResultsEntryNew() {
         <div className="bg-slate-700 rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-xl font-semibold text-white">Event Results</h3>
+              <h3 className="text-xl font-semibold text-white">
+                Event Results
+                <span className="ml-2 text-sm bg-orange-500 text-white px-2 py-0.5 rounded-full">
+                  {existingResults.length}
+                </span>
+              </h3>
               {(() => {
                 // Show audit summary for selected format only
                 const formatResults = selectedFormat

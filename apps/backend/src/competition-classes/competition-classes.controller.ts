@@ -61,4 +61,16 @@ export class CompetitionClassesController {
   async deleteClass(@Param('id') id: string): Promise<void> {
     return this.competitionClassesService.delete(id);
   }
+
+  @Post('copy-between-seasons')
+  @HttpCode(HttpStatus.CREATED)
+  async copyBetweenSeasons(
+    @Body() data: { fromSeasonId: string; toSeasonId: string; format?: string },
+  ): Promise<{ copied: number; classes: CompetitionClass[] }> {
+    return this.competitionClassesService.copyBetweenSeasons(
+      data.fromSeasonId,
+      data.toSeasonId,
+      data.format,
+    );
+  }
 }
