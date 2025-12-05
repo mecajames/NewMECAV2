@@ -18,6 +18,7 @@ export enum MembershipType {
 }
 
 export enum EventStatus {
+  PENDING = 'pending',  // For events created from hosting requests, awaiting admin approval
   UPCOMING = 'upcoming',
   ONGOING = 'ongoing',
   COMPLETED = 'completed',
@@ -39,10 +40,31 @@ export enum RegistrationStatus {
 
 export enum EventHostingRequestStatus {
   PENDING = 'pending',
+  ASSIGNED_TO_ED = 'assigned_to_ed',
+  ED_REVIEWING = 'ed_reviewing',
+  ED_ACCEPTED = 'ed_accepted',
+  ED_REJECTED = 'ed_rejected',  // Back to admin for reassignment
   UNDER_REVIEW = 'under_review',
   APPROVED = 'approved',
+  APPROVED_PENDING_INFO = 'approved_pending_info',
+  PENDING_INFO = 'pending_info',
   REJECTED = 'rejected',
   CANCELLED = 'cancelled'
+}
+
+// Event Director Assignment Status (internal tracking)
+export enum EDAssignmentStatus {
+  PENDING_REVIEW = 'pending_review',
+  ACCEPTED = 'accepted',
+  REJECTED_TO_ADMIN = 'rejected_to_admin'
+}
+
+// Final Approval Status options for admin
+export enum FinalApprovalStatus {
+  APPROVED = 'approved',
+  APPROVED_PENDING_INFO = 'approved_pending_info',
+  REJECTED = 'rejected',
+  PENDING_INFO = 'pending_info'
 }
 
 export enum EventTypeOption {
@@ -60,4 +82,18 @@ export enum EventType {
   STATE_FINALS = 'state_finals',
   WORLD_FINALS = 'world_finals',
   JUDGES_POINT = 'judges_point'
+}
+
+// Host Type for Event Hosting Requests
+export enum HostType {
+  BUSINESS = 'business',
+  CLUB = 'club',
+  INDIVIDUAL = 'individual'
+}
+
+// Indoor/Outdoor venue type
+export enum IndoorOutdoor {
+  INDOOR = 'indoor',
+  OUTDOOR = 'outdoor',
+  BOTH = 'both'
 }

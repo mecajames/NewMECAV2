@@ -63,6 +63,20 @@ export class Event {
   @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'registration_fee', serializedName: 'registration_fee' })
   registrationFee?: number;
 
+  // Entry Fees (per class/format)
+  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'member_entry_fee', serializedName: 'member_entry_fee' })
+  memberEntryFee?: number;
+
+  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'non_member_entry_fee', serializedName: 'non_member_entry_fee' })
+  nonMemberEntryFee?: number;
+
+  // Gate Fee
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'has_gate_fee', serializedName: 'has_gate_fee' })
+  hasGateFee?: boolean;
+
+  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'gate_fee', serializedName: 'gate_fee' })
+  gateFee?: number;
+
   @Property({ type: 'integer', nullable: true, default: 2, fieldName: 'points_multiplier', serializedName: 'points_multiplier' })
   pointsMultiplier?: number;
 

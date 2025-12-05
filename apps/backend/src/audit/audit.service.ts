@@ -89,22 +89,39 @@ export class AuditService {
     userId: string;
     ipAddress?: string;
   }): Promise<void> {
-    console.log(`[AUDIT] logAction called - action: ${data.action}, resultId: ${data.resultId}, userId: ${data.userId}`);
+    console.log(`[AUDIT] logAction called - action: ${data.action}, resultId: ${data.resultId}, sessionId: ${data.sessionId}, userId: ${data.userId}`);
     console.log(`[AUDIT] oldData event_id: ${data.oldData?.event_id}, eventId: ${data.oldData?.eventId}`);
 
     const em = this.em.fork();
-    const log = em.create(ResultsAuditLog, {
-      sessionId: data.sessionId || null,
-      resultId: data.resultId || null,
+
+    // Build the log entry - use relations since virtual properties have persist: false
+    const logData: any = {
       action: data.action,
       oldData: data.oldData || null,
       newData: data.newData || null,
       timestamp: new Date(),
-      userId: data.userId,
-    });
+    };
+
+    // Set session relation using Reference if sessionId is provided
+    if (data.sessionId) {
+      logData.session = Reference.createFromPK(ResultsEntrySession, data.sessionId);
+    }
+
+    // Set result relation using Reference if resultId is provided
+    if (data.resultId) {
+      const { CompetitionResult } = await import('../competition-results/competition-results.entity');
+      logData.result = Reference.createFromPK(CompetitionResult, data.resultId);
+    }
+
+    // Set user relation using Reference
+    if (data.userId) {
+      logData.user = Reference.createFromPK(Profile, data.userId);
+    }
+
+    const log = em.create(ResultsAuditLog, logData);
 
     await em.persistAndFlush(log);
-    console.log(`[AUDIT] Log entry created with id: ${log.id}`);
+    console.log(`[AUDIT] Log entry created with id: ${log.id}, session_id: ${data.sessionId}`);
   }
 
   /**
@@ -183,23 +200,91 @@ export class AuditService {
   }
 
   /**
-   * Get sessions for an event
+   * Get sessions for an event (with result details)
    */
-  async getEventSessions(eventId: string): Promise<ResultsEntrySession[]> {
+  async getEventSessions(eventId: string): Promise<any[]> {
     const em = this.em.fork();
-    const sessions = await em.find(
-      ResultsEntrySession,
-      { eventId },
-      {
-        populate: ['user'],
-        orderBy: { sessionStart: 'DESC' },
-      }
-    );
-    console.log(`[AUDIT] Found ${sessions.length} sessions for event ${eventId}`);
-    sessions.forEach(s => {
-      console.log(`[AUDIT] Session ${s.id}: resultCount=${s.resultCount}, user=${s.user?.email || 'NO USER'}`);
-    });
-    return sessions;
+
+    try {
+      const sessions = await em.find(
+        ResultsEntrySession,
+        { event: eventId },
+        {
+          populate: ['user'],
+          orderBy: { sessionStart: 'DESC' },
+        }
+      );
+
+      // For each session, fetch the associated audit log entries to get result details
+      const sessionsWithDetails = await Promise.all(
+        sessions.map(async (session) => {
+          const sessionData: any = {
+            id: session.id,
+            eventId: eventId, // Use parameter since session.eventId may not be populated
+            userId: session.userId || (session.user as any)?.id,
+            user: session.user ? {
+              id: session.user.id,
+              email: session.user.email,
+              first_name: session.user.first_name,
+              last_name: session.user.last_name,
+            } : null,
+            entryMethod: session.entryMethod,
+            format: session.format,
+            filePath: session.filePath,
+            originalFilename: session.originalFilename,
+            resultCount: session.resultCount,
+            sessionStart: session.sessionStart,
+            sessionEnd: session.sessionEnd,
+            createdAt: session.createdAt,
+            entries: [],
+          };
+
+          try {
+            // Fetch audit log entries for this session using MikroORM
+            const auditLogs = await em.find(
+              ResultsAuditLog,
+              { session: session.id, action: 'create' },
+              { orderBy: { timestamp: 'ASC' } }
+            );
+
+            // Extract competitor info from audit logs
+            sessionData.entries = auditLogs.map((log) => {
+              const data = log.newData || {};
+              return {
+                id: log.id,
+                competitorName: data.competitorName || data.competitor_name || 'Unknown',
+                competitionClass: data.competitionClass || data.competition_class || 'N/A',
+                format: data.format || session.format || 'N/A',
+                score: data.score ?? 'N/A',
+                placement: data.placement ?? 'N/A',
+                pointsEarned: data.pointsEarned ?? data.points_earned ?? 0,
+                mecaId: data.mecaId || data.meca_id || null,
+                timestamp: log.timestamp,
+              };
+            });
+          } catch (err) {
+            console.error(`Error fetching entries for session ${session.id}:`, err);
+            // Continue without entries if there's an error
+          }
+
+          return sessionData;
+        })
+      );
+
+      return sessionsWithDetails;
+    } catch (error) {
+      console.error('Error in getEventSessions:', error);
+      // Fall back to simple query without entries
+      const sessions = await em.find(
+        ResultsEntrySession,
+        { event: eventId },
+        {
+          populate: ['user'],
+          orderBy: { sessionStart: 'DESC' },
+        }
+      );
+      return sessions;
+    }
   }
 
   /**
@@ -231,34 +316,40 @@ export class AuditService {
   async getEventModifications(eventId: string): Promise<any[]> {
     console.log(`[AUDIT] getEventModifications called for eventId: ${eventId}`);
     const em = this.em.fork();
-    const conn = em.getConnection();
 
     try {
       // Query audit logs where action is 'update' and either oldData or newData contains this event_id
-      const results = await conn.execute(`
-        SELECT
-          ral.id,
-          ral.session_id,
-          ral.result_id,
-          ral.action,
-          ral.old_data,
-          ral.new_data,
-          ral.timestamp,
-          ral.user_id,
-          p.email as user_email,
-          p.first_name as user_first_name,
-          p.last_name as user_last_name
-        FROM results_audit_log ral
-        LEFT JOIN profiles p ON p.id = ral.user_id
-        WHERE ral.action = 'update'
-          AND (
-            ral.old_data->>'event_id' = ?
-            OR ral.new_data->>'event_id' = ?
-            OR ral.old_data->>'eventId' = ?
-            OR ral.new_data->>'eventId' = ?
-          )
-        ORDER BY ral.timestamp DESC
-      `, [eventId, eventId, eventId, eventId]);
+      const logs = await em.find(
+        ResultsAuditLog,
+        {
+          action: 'update',
+          $or: [
+            { oldData: { event_id: eventId } },
+            { newData: { event_id: eventId } },
+            { oldData: { eventId: eventId } },
+            { newData: { eventId: eventId } },
+          ],
+        },
+        {
+          populate: ['user'],
+          orderBy: { timestamp: 'DESC' },
+        }
+      );
+
+      // Map to expected format for frontend
+      const results = logs.map(log => ({
+        id: log.id,
+        session_id: log.session?.id || null,
+        result_id: log.result?.id || null,
+        action: log.action,
+        old_data: log.oldData,
+        new_data: log.newData,
+        timestamp: log.timestamp,
+        user_id: log.user?.id || null,
+        user_email: log.user?.email || null,
+        user_first_name: log.user?.first_name || null,
+        user_last_name: log.user?.last_name || null,
+      }));
 
       console.log(`[AUDIT] getEventModifications found ${results.length} records`);
       return results;
@@ -274,32 +365,38 @@ export class AuditService {
   async getEventDeletions(eventId: string): Promise<any[]> {
     console.log(`[AUDIT] getEventDeletions called for eventId: ${eventId}`);
     const em = this.em.fork();
-    const conn = em.getConnection();
 
     try {
       // Query audit logs where action is 'delete' and oldData contains this event_id
-      const results = await conn.execute(`
-        SELECT
-          ral.id,
-          ral.session_id,
-          ral.result_id,
-          ral.action,
-          ral.old_data,
-          ral.new_data,
-          ral.timestamp,
-          ral.user_id,
-          p.email as user_email,
-          p.first_name as user_first_name,
-          p.last_name as user_last_name
-        FROM results_audit_log ral
-        LEFT JOIN profiles p ON p.id = ral.user_id
-        WHERE ral.action = 'delete'
-          AND (
-            ral.old_data->>'event_id' = ?
-            OR ral.old_data->>'eventId' = ?
-          )
-        ORDER BY ral.timestamp DESC
-      `, [eventId, eventId]);
+      const logs = await em.find(
+        ResultsAuditLog,
+        {
+          action: 'delete',
+          $or: [
+            { oldData: { event_id: eventId } },
+            { oldData: { eventId: eventId } },
+          ],
+        },
+        {
+          populate: ['user'],
+          orderBy: { timestamp: 'DESC' },
+        }
+      );
+
+      // Map to expected format for frontend
+      const results = logs.map(log => ({
+        id: log.id,
+        session_id: log.session?.id || null,
+        result_id: log.result?.id || null,
+        action: log.action,
+        old_data: log.oldData,
+        new_data: log.newData,
+        timestamp: log.timestamp,
+        user_id: log.user?.id || null,
+        user_email: log.user?.email || null,
+        user_first_name: log.user?.first_name || null,
+        user_last_name: log.user?.last_name || null,
+      }));
 
       console.log(`[AUDIT] getEventDeletions found ${results.length} records`);
       return results;
@@ -335,26 +432,29 @@ export class AuditService {
    */
   async getAuditLogById(logId: string): Promise<any> {
     const em = this.em.fork();
-    const conn = em.getConnection();
 
-    const results = await conn.execute(`
-      SELECT
-        ral.id,
-        ral.session_id,
-        ral.result_id,
-        ral.action,
-        ral.old_data,
-        ral.new_data,
-        ral.timestamp,
-        ral.user_id,
-        p.email as user_email,
-        p.first_name as user_first_name,
-        p.last_name as user_last_name
-      FROM results_audit_log ral
-      LEFT JOIN profiles p ON p.id = ral.user_id
-      WHERE ral.id = ?
-    `, [logId]);
+    const log = await em.findOne(
+      ResultsAuditLog,
+      { id: logId },
+      { populate: ['user'] }
+    );
 
-    return results[0] || null;
+    if (!log) {
+      return null;
+    }
+
+    return {
+      id: log.id,
+      session_id: log.session?.id || null,
+      result_id: log.result?.id || null,
+      action: log.action,
+      old_data: log.oldData,
+      new_data: log.newData,
+      timestamp: log.timestamp,
+      user_id: log.user?.id || null,
+      user_email: log.user?.email || null,
+      user_first_name: log.user?.first_name || null,
+      user_last_name: log.user?.last_name || null,
+    };
   }
 }

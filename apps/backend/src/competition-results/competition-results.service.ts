@@ -5,6 +5,7 @@ import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CompetitionClass } from '../competition-classes/competition-classes.entity';
 import { ClassNameMapping } from '../class-name-mappings/class-name-mappings.entity';
+import { Season } from '../seasons/seasons.entity';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -79,7 +80,7 @@ export class CompetitionResultsService {
 
   async findByEvent(eventId: string): Promise<CompetitionResult[]> {
     const em = this.em.fork();
-    return em.find(CompetitionResult, { eventId }, {
+    return em.find(CompetitionResult, { event: eventId }, {
       orderBy: { placement: 'ASC' },
       populate: ['competitor'],
     });
@@ -87,7 +88,7 @@ export class CompetitionResultsService {
 
   async findByCompetitor(competitorId: string): Promise<CompetitionResult[]> {
     const em = this.em.fork();
-    return em.find(CompetitionResult, { competitorId });
+    return em.find(CompetitionResult, { competitor: competitorId });
   }
 
   async findByMecaId(mecaId: string): Promise<any[]> {
@@ -158,8 +159,11 @@ export class CompetitionResultsService {
       transformedData.format = (data as any).format;
     }
     if ((data as any).class_id !== undefined) {
-      transformedData.classId = (data as any).class_id;
+      if ((data as any).class_id) {
+        transformedData.competitionClassEntity = Reference.createFromPK(CompetitionClass, (data as any).class_id);
+      }
       delete transformedData.class_id;
+      delete transformedData.classId;
     }
     if ((data as any).points_earned !== undefined) {
       transformedData.pointsEarned = (data as any).points_earned;
@@ -170,12 +174,18 @@ export class CompetitionResultsService {
       delete transformedData.vehicle_info;
     }
     if ((data as any).season_id !== undefined) {
-      transformedData.seasonId = (data as any).season_id;
+      if ((data as any).season_id) {
+        transformedData.season = Reference.createFromPK(Season, (data as any).season_id);
+      }
       delete transformedData.season_id;
+      delete transformedData.seasonId;
     }
     if ((data as any).created_by !== undefined) {
-      transformedData.createdBy = (data as any).created_by;
+      if ((data as any).created_by) {
+        transformedData.creator = Reference.createFromPK(Profile, (data as any).created_by);
+      }
       delete transformedData.created_by;
+      delete transformedData.createdBy;
     }
 
     const result = em.create(CompetitionResult, transformedData);
@@ -189,18 +199,40 @@ export class CompetitionResultsService {
       await em.refresh(result);
     }
 
-    // Log to audit if there's an active session or userId provided
-    if (this.currentSessionId && userId) {
+    // Log to audit if userId is provided
+    if (userId) {
+      let sessionId = this.currentSessionId;
+      let createdManualSession = false;
+
+      // If no active session, create a manual entry session
+      if (!sessionId && eventId) {
+        const session = await this.auditService.createSession({
+          eventId,
+          userId,
+          entryMethod: 'manual',
+          format: transformedData.format || (data as any).format,
+        });
+        sessionId = session.id;
+        createdManualSession = true;
+      }
+
       await this.auditService.logAction({
-        sessionId: this.currentSessionId,
+        sessionId: sessionId ?? undefined,
         resultId: result.id,
         action: 'create',
         newData: JSON.parse(JSON.stringify(result)),
         userId,
       });
 
-      // Track manual entries for Excel generation
-      this.manualEntryResults.push(result);
+      // End the manual session immediately (single entry)
+      if (createdManualSession && sessionId) {
+        await this.auditService.endSession(sessionId, 1);
+      }
+
+      // Track manual entries for Excel generation if there's an active batch session
+      if (this.currentSessionId) {
+        this.manualEntryResults.push(result);
+      }
     }
 
     return result;
@@ -276,8 +308,11 @@ export class CompetitionResultsService {
       transformedData.format = (data as any).format;
     }
     if ((data as any).class_id !== undefined) {
-      transformedData.classId = (data as any).class_id;
+      if ((data as any).class_id) {
+        transformedData.competitionClassEntity = Reference.createFromPK(CompetitionClass, (data as any).class_id);
+      }
       delete transformedData.class_id;
+      delete transformedData.classId;
     }
     if ((data as any).points_earned !== undefined) {
       transformedData.pointsEarned = (data as any).points_earned;
@@ -288,14 +323,20 @@ export class CompetitionResultsService {
       delete transformedData.vehicle_info;
     }
     if ((data as any).season_id !== undefined) {
-      transformedData.seasonId = (data as any).season_id;
+      if ((data as any).season_id) {
+        transformedData.season = Reference.createFromPK(Season, (data as any).season_id);
+      }
       delete transformedData.season_id;
+      delete transformedData.seasonId;
     }
 
     // Track audit trail for updates
     if ((data as any).updated_by !== undefined) {
-      transformedData.updatedBy = (data as any).updated_by;
+      if ((data as any).updated_by) {
+        transformedData.updater = Reference.createFromPK(Profile, (data as any).updated_by);
+      }
       delete transformedData.updated_by;
+      delete transformedData.updatedBy;
     }
 
     if ((data as any).modification_reason !== undefined) {
@@ -365,6 +406,7 @@ export class CompetitionResultsService {
 
   async delete(id: string, userId?: string, ipAddress?: string, reason?: string): Promise<void> {
     const em = this.em.fork();
+
     // Populate event relation to ensure we have eventId for audit log
     const result = await em.findOne(CompetitionResult, { id }, { populate: ['event'] });
     if (!result) {
@@ -400,8 +442,6 @@ export class CompetitionResultsService {
 
     // Log to audit if userId is provided
     if (userId) {
-      console.log(`[AUDIT] Delete called - userId: ${userId}, resultId: ${id}`);
-      console.log(`[AUDIT] oldData:`, JSON.stringify(oldData));
       await this.auditService.logAction({
         sessionId: this.currentSessionId ?? undefined,
         resultId: id,
@@ -420,7 +460,7 @@ export class CompetitionResultsService {
     // Build the query filter
     const filter: any = {};
     if (seasonId) {
-      filter.seasonId = seasonId;
+      filter.season = seasonId;
     }
 
     // Fetch all results with the filter
@@ -569,7 +609,7 @@ export class CompetitionResultsService {
     // Fetch all results for this event, populated with competitor and class info
     const results = await em.find(
       CompetitionResult,
-      { eventId },
+      { event: eventId },
       {
         populate: ['competitor'],
       }
@@ -879,7 +919,7 @@ export class CompetitionResultsService {
     const em = this.em.fork();
 
     // Get existing results for this event
-    const existingResults = await em.find(CompetitionResult, { eventId });
+    const existingResults = await em.find(CompetitionResult, { event: eventId });
 
     const duplicates: Array<{
       index: number;
@@ -1013,7 +1053,7 @@ export class CompetitionResultsService {
     const competitionClasses = await em.find(CompetitionClass, {});
 
     // Get existing results for this event (for replacement)
-    const existingResults = await em.find(CompetitionResult, { eventId });
+    const existingResults = await em.find(CompetitionResult, { event: eventId });
 
     // Helper function to check if membership is active
     const hasActiveMembership = (profile: Profile): boolean => {
