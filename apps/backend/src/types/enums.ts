@@ -13,6 +13,12 @@ export enum MembershipStatus {
 }
 
 export enum MembershipType {
+  // New membership types based on membership type configs
+  DOMESTIC = 'domestic',
+  INTERNATIONAL = 'international',
+  TEAM = 'team',
+  RETAILER = 'retailer',
+  // Legacy types for backward compatibility
   ANNUAL = 'annual',
   LIFETIME = 'lifetime'
 }
@@ -60,4 +66,18 @@ export enum EventType {
   STATE_FINALS = 'state_finals',
   WORLD_FINALS = 'world_finals',
   JUDGES_POINT = 'judges_point'
+}
+
+export enum PaymentMethod {
+  STRIPE = 'stripe',
+  PAYPAL = 'paypal',
+  CREDIT_CARD = 'credit_card',
+  MANUAL = 'manual',
+  WORDPRESS_PMPRO = 'wordpress_pmpro'
+}
+
+export enum PaymentType {
+  MEMBERSHIP = 'membership',
+  EVENT_REGISTRATION = 'event_registration',
+  OTHER = 'other'
 }

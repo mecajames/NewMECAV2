@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { LogIn, Mail, Lock } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get('redirect');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -25,7 +27,8 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      navigate('/dashboard');
+      // Navigate to redirect URL if provided, otherwise dashboard
+      navigate(redirectUrl || '/dashboard');
     }
   };
 
@@ -161,7 +164,7 @@ export default function LoginPage() {
             <p className="text-gray-400">
               Don't have an account?{' '}
               <button
-                onClick={() => navigate('/signup')}
+                onClick={() => navigate(redirectUrl ? `/signup?redirect=${encodeURIComponent(redirectUrl)}` : '/signup')}
                 className="text-orange-500 hover:text-orange-400 font-semibold"
               >
                 Sign up

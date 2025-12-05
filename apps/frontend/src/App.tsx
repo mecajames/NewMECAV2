@@ -18,6 +18,7 @@ import RulebookArchivePage from './pages/RulebookArchivePage';
 import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import MembershipPage from './pages/MembershipPage';
+import MembershipCheckoutPage from './pages/MembershipCheckoutPage';
 import ContactPage from './pages/ContactPage';
 import HostEventPage from './pages/HostEventPage';
 import ClassCalculatorPage from './pages/ClassCalculatorPage';
@@ -39,6 +40,7 @@ import MemberDetailPage from './pages/admin/MemberDetailPage';
 import SeasonManagementPage from './pages/admin/SeasonManagementPage';
 import ClassesManagementPage from './pages/admin/ClassesManagementPage';
 import FormatManagementPage from './pages/admin/FormatManagementPage';
+import MembershipTypeManagementPage from './pages/admin/MembershipTypeManagementPage';
 
 function App() {
   return (
@@ -85,6 +87,7 @@ function App() {
               <Route path="/public-profile" element={<PublicProfilePage />} />
               <Route path="/billing" element={<BillingPage />} />
               <Route path="/membership" element={<MembershipPage />} />
+              <Route path="/membership/checkout/:membershipId" element={<MembershipCheckoutPage />} />
 
               {/* Admin Routes */}
               <Route path="/admin/members" element={<MembersPage />} />
@@ -92,6 +95,7 @@ function App() {
               <Route path="/admin/seasons" element={<SeasonManagementPage />} />
               <Route path="/admin/classes" element={<ClassesManagementPage />} />
               <Route path="/admin/formats" element={<FormatManagementPage />} />
+              <Route path="/admin/membership-types" element={<MembershipTypeManagementPage />} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />

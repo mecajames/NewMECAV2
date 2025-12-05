@@ -252,7 +252,7 @@ export default function HomePage() {
               {heroSettings.button_text}
             </button>
             <button
-              onClick={() => navigate('/signup')}
+              onClick={() => navigate('/membership')}
               className="px-8 py-4 bg-white hover:bg-gray-100 text-slate-900 font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
             >
               Become a Member

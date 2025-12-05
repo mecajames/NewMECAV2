@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { UserPlus, Mail, Lock, User } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SignUpPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get('redirect');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -29,7 +31,8 @@ export default function SignUpPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      navigate('/dashboard');
+      // Navigate to redirect URL if provided, otherwise dashboard
+      navigate(redirectUrl || '/dashboard');
     }
   };
 
@@ -121,7 +124,7 @@ export default function SignUpPage() {
             <p className="text-gray-400">
               Already have an account?{' '}
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate(redirectUrl ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : '/login')}
                 className="text-orange-500 hover:text-orange-400 font-semibold"
               >
                 Sign in

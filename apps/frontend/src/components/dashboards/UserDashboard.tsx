@@ -200,7 +200,10 @@ export default function UserDashboard() {
                   Get access to exclusive features, event discounts, and more
                 </p>
               </div>
-              <button className="px-6 py-3 bg-white text-orange-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2">
+              <button
+                onClick={() => navigate('/membership')}
+                className="px-6 py-3 bg-white text-orange-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
+              >
                 <CreditCard className="h-5 w-5" />
                 Purchase Membership
               </button>

@@ -1,8 +1,33 @@
-import { Check, Star, Users, Trophy, Calendar, DollarSign, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, Star, Users, Trophy, Calendar, DollarSign, Globe, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { membershipTypeConfigsApi, MembershipTypeConfig, MembershipCategory } from '../api-client/membership-type-configs.api-client';
 
 export default function MembershipPage() {
   const navigate = useNavigate();
+  const [memberships, setMemberships] = useState<MembershipTypeConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchMemberships = async () => {
+      try {
+        setLoading(true);
+        const data = await membershipTypeConfigsApi.getPublic();
+        // Sort by display order
+        const sorted = data.sort((a, b) => a.displayOrder - b.displayOrder);
+        setMemberships(sorted);
+      } catch (err) {
+        console.error('Error fetching memberships:', err);
+        setError('Failed to load membership options');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMemberships();
+  }, []);
+
   const benefits = [
     {
       icon: DollarSign,
@@ -36,22 +61,36 @@ export default function MembershipPage() {
     },
   ];
 
-  const membershipTiers = [
-    {
-      name: 'Annual Membership',
-      price: '$40',
-      period: 'per year',
-      features: [
-        'All membership benefits',
-        'Valid for 12 months',
-        'Discounted event entries',
-        'Points accumulation',
-        'Leaderboard eligibility',
-        'Member certificate',
-      ],
-      highlighted: true,
-    },
-  ];
+  const getCategoryLabel = (category: MembershipCategory): string => {
+    switch (category) {
+      case MembershipCategory.COMPETITOR:
+        return 'Competitor';
+      case MembershipCategory.TEAM:
+        return 'Team';
+      case MembershipCategory.RETAIL:
+        return 'Retailer';
+      default:
+        return category;
+    }
+  };
+
+  const getCategoryDescription = (category: MembershipCategory): string => {
+    switch (category) {
+      case MembershipCategory.COMPETITOR:
+        return 'For individual competitors looking to compete in MECA events';
+      case MembershipCategory.TEAM:
+        return 'For competition teams and car audio clubs';
+      case MembershipCategory.RETAIL:
+        return 'For retailers and dealers supporting the car audio community';
+      default:
+        return '';
+    }
+  };
+
+  const handleSelectMembership = (membership: MembershipTypeConfig) => {
+    // Go directly to checkout - account creation happens after payment
+    navigate(`/membership/checkout/${membership.id}`);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
@@ -87,51 +126,100 @@ export default function MembershipPage() {
 
         <div className="mb-16">
           <h2 className="text-3xl font-bold text-white text-center mb-12">
-            Membership Options
+            Choose Your Membership
           </h2>
-          <div className="flex justify-center">
-            {membershipTiers.map((tier, index) => (
-              <div
-                key={index}
-                className={`bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-md w-full ${
-                  tier.highlighted
-                    ? 'ring-4 ring-orange-500 transform scale-105'
-                    : ''
-                }`}
+
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
+              <span className="ml-3 text-gray-400">Loading membership options...</span>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-red-400 mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="text-orange-500 hover:text-orange-400"
               >
-                {tier.highlighted && (
-                  <div className="bg-orange-500 text-white text-sm font-semibold px-4 py-1 rounded-full inline-block mb-4">
-                    Most Popular
-                  </div>
-                )}
-                <h3 className="text-2xl font-bold text-white mb-2">
-                  {tier.name}
-                </h3>
-                <div className="mb-6">
-                  <span className="text-5xl font-bold text-white">{tier.price}</span>
-                  <span className="text-gray-400 ml-2">{tier.period}</span>
-                </div>
-                <ul className="space-y-4 mb-8">
-                  {tier.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-start">
-                      <Check className="h-6 w-6 text-orange-500 mr-3 flex-shrink-0" />
-                      <span className="text-gray-300">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => navigate('/signup')}
-                  className={`w-full py-4 rounded-lg font-semibold text-lg transition-all ${
-                    tier.highlighted
-                      ? 'bg-orange-600 hover:bg-orange-700 text-white'
-                      : 'bg-slate-700 hover:bg-slate-600 text-white'
+                Try again
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {memberships.map((membership, index) => (
+                <div
+                  key={membership.id}
+                  className={`bg-slate-800 rounded-2xl shadow-2xl p-8 flex flex-col ${
+                    membership.isFeatured
+                      ? 'ring-4 ring-orange-500 transform scale-105 relative z-10'
+                      : ''
                   }`}
                 >
-                  Get Started
-                </button>
-              </div>
-            ))}
-          </div>
+                  {membership.isFeatured && (
+                    <div className="bg-orange-500 text-white text-sm font-semibold px-4 py-1 rounded-full inline-block mb-4 w-fit">
+                      Most Popular
+                    </div>
+                  )}
+                  <div className="mb-2">
+                    <span className="text-sm text-orange-400 font-medium uppercase tracking-wide">
+                      {getCategoryLabel(membership.category)}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-2">
+                    {membership.name}
+                  </h3>
+                  <p className="text-gray-400 text-sm mb-4 flex-grow-0">
+                    {membership.description || getCategoryDescription(membership.category)}
+                  </p>
+                  <div className="mb-6">
+                    <span className="text-5xl font-bold text-white">
+                      ${membership.price.toFixed(0)}
+                    </span>
+                    <span className="text-gray-400 ml-2">per year</span>
+                  </div>
+                  <ul className="space-y-4 mb-8 flex-grow">
+                    {membership.benefits && membership.benefits.length > 0 ? (
+                      membership.benefits.map((benefit, featureIndex) => (
+                        <li key={featureIndex} className="flex items-start">
+                          <Check className="h-6 w-6 text-orange-500 mr-3 flex-shrink-0" />
+                          <span className="text-gray-300">{benefit}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <>
+                        <li className="flex items-start">
+                          <Check className="h-6 w-6 text-orange-500 mr-3 flex-shrink-0" />
+                          <span className="text-gray-300">All membership benefits</span>
+                        </li>
+                        <li className="flex items-start">
+                          <Check className="h-6 w-6 text-orange-500 mr-3 flex-shrink-0" />
+                          <span className="text-gray-300">Valid for 12 months</span>
+                        </li>
+                        <li className="flex items-start">
+                          <Check className="h-6 w-6 text-orange-500 mr-3 flex-shrink-0" />
+                          <span className="text-gray-300">Discounted event entries</span>
+                        </li>
+                        <li className="flex items-start">
+                          <Check className="h-6 w-6 text-orange-500 mr-3 flex-shrink-0" />
+                          <span className="text-gray-300">Points accumulation</span>
+                        </li>
+                      </>
+                    )}
+                  </ul>
+                  <button
+                    onClick={() => handleSelectMembership(membership)}
+                    className={`w-full py-4 rounded-lg font-semibold text-lg transition-all ${
+                      membership.isFeatured
+                        ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                        : 'bg-slate-700 hover:bg-slate-600 text-white'
+                    }`}
+                  >
+                    Get Started
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="bg-slate-800 rounded-2xl p-8 md:p-12">
@@ -144,7 +232,7 @@ export default function MembershipPage() {
                 How do I become a member?
               </h3>
               <p className="text-gray-400">
-                Simply create an account and complete the membership registration. Your membership will be activated once payment is processed.
+                Simply select a membership option above and complete the registration. Your membership will be activated once payment is processed.
               </p>
             </div>
             <div>
@@ -152,7 +240,7 @@ export default function MembershipPage() {
                 When does my membership expire?
               </h3>
               <p className="text-gray-400">
-                Memberships are valid for 12 months from the date of purchase. You'll receive renewal reminders before expiration.
+                All memberships are valid for 12 months from the date of purchase. You'll receive renewal reminders before expiration.
               </p>
             </div>
             <div>
@@ -161,6 +249,14 @@ export default function MembershipPage() {
               </h3>
               <p className="text-gray-400">
                 Non-members may participate in events at standard entry fees, but won't accumulate points or appear on official leaderboards.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                What's the difference between membership types?
+              </h3>
+              <p className="text-gray-400">
+                Competitor memberships are for individuals competing in events. Team memberships are for clubs and groups. Retailer memberships are for businesses in the car audio industry.
               </p>
             </div>
           </div>
