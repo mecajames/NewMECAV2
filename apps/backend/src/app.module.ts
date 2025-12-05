@@ -18,8 +18,9 @@ import { DatabaseModule } from './db/database.module';
 import { AuditModule } from './audit/audit.module';
 import { ChampionshipArchivesModule } from './championship-archives/championship-archives.module';
 import { ClassNameMappingsModule } from './class-name-mappings/class-name-mappings.module';
-
+import { MembershipTypeConfigsModule } from './membership-type-configs/membership-type-configs.module';
 import { RecaptchaModule } from './recaptcha/recaptcha.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -27,6 +28,8 @@ import { RecaptchaModule } from './recaptcha/recaptcha.module';
     ProfilesModule,
     EventsModule,
     MembershipsModule,
+    MembershipTypeConfigsModule,
+    PaymentsModule,
     EventRegistrationsModule,
     RulebooksModule,
     CompetitionResultsModule,

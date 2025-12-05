@@ -1,9 +1,9 @@
-import { defineConfig } from '@mikro-orm/core';
-import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { Migrator } from '@mikro-orm/migrations';
-import { SeedManager } from '@mikro-orm/seeder';
+const { defineConfig } = require('@mikro-orm/core');
+const { PostgreSqlDriver } = require('@mikro-orm/postgresql');
+const { Migrator } = require('@mikro-orm/migrations');
+const { SeedManager } = require('@mikro-orm/seeder');
 
-export default defineConfig({
+module.exports = defineConfig({
   driver: PostgreSqlDriver,
   clientUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
   entities: ['./dist/**/*.entity.js'],

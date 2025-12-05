@@ -31,10 +31,11 @@
   "license": "ISC",
   "dependencies": {
     "@mikro-orm/core": "^6.4.2",
-    "@mikro-orm/migrations": "^6.5.8",
-    "@mikro-orm/postgresql": "^6.4.2",
-    "@mikro-orm/reflection": "^6.4.2",
-    "@mikro-orm/seeder": "^6.5.8",
+    "@mikro-orm/migrations": "^6.6.1",
+    "@mikro-orm/nestjs": "^6.1.1",
+    "@mikro-orm/postgresql": "^6.6.1",
+    "@mikro-orm/reflection": "^6.6.1",
+    "@mikro-orm/seeder": "^6.6.1",
     "@nestjs/common": "^11.1.7",
     "@nestjs/core": "^11.1.7",
     "@nestjs/platform-express": "^11.1.7",
@@ -54,7 +55,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@mikro-orm/cli": "^6.4.2",
+    "@mikro-orm/cli": "^6.6.1",
     "@nestjs/cli": "^11.0.10",
     "@nestjs/schematics": "^11.0.9",
     "@nestjs/testing": "^11.1.7",

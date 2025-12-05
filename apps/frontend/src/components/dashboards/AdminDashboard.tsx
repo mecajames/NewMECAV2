@@ -112,7 +112,7 @@ export default function AdminDashboard() {
       description: 'Manage membership purchases and renewals',
       action: 'memberships' as AdminView,
       color: 'green',
-      navigateTo: undefined,
+      navigateTo: '/admin/membership-types',
     },
     {
       icon: CalendarCheck,
