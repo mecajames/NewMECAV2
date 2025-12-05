@@ -1,7 +1,8 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, Reference } from '@mikro-orm/core';
 import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
+import { Profile } from '../profiles/profiles.entity';
 import { EventStatus } from '../types/enums';
 import { randomUUID } from 'crypto';
 
@@ -131,16 +132,20 @@ export class EventsService {
       if ((data as any).flyer_url !== undefined) transformedData.flyerUrl = (data as any).flyer_url;
       if ((data as any).max_participants !== undefined) transformedData.maxParticipants = (data as any).max_participants;
       if ((data as any).registration_fee !== undefined) transformedData.registrationFee = (data as any).registration_fee;
+      if ((data as any).member_entry_fee !== undefined) transformedData.memberEntryFee = (data as any).member_entry_fee;
+      if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
+      if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
+      if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
 
-      // Handle relationships - only set if non-empty string
+      // Handle relationships using Reference.createFromPK for proper MikroORM pattern
       const eventDirectorId = (data as any).event_director_id;
       if (eventDirectorId && eventDirectorId.trim() !== '') {
-        transformedData.eventDirector = eventDirectorId;
+        transformedData.eventDirector = Reference.createFromPK(Profile, eventDirectorId);
       }
 
       const seasonId = (data as any).season_id;
       if (seasonId && seasonId.trim() !== '') {
-        transformedData.season = seasonId;
+        transformedData.season = Reference.createFromPK(Season, seasonId);
       }
 
       // Copy fields that don't need transformation
@@ -218,16 +223,20 @@ export class EventsService {
         if ((data as any).flyer_url !== undefined) transformedData.flyerUrl = (data as any).flyer_url;
         if ((data as any).max_participants !== undefined) transformedData.maxParticipants = (data as any).max_participants;
         if ((data as any).registration_fee !== undefined) transformedData.registrationFee = (data as any).registration_fee;
+        if ((data as any).member_entry_fee !== undefined) transformedData.memberEntryFee = (data as any).member_entry_fee;
+        if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
+        if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
+        if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
 
-        // Handle relationships - only set if non-empty string
+        // Handle relationships using Reference.createFromPK for proper MikroORM pattern
         const eventDirectorId = (data as any).event_director_id;
         if (eventDirectorId && eventDirectorId.trim() !== '') {
-          transformedData.eventDirector = eventDirectorId;
+          transformedData.eventDirector = Reference.createFromPK(Profile, eventDirectorId);
         }
 
         const seasonId = (data as any).season_id;
         if (seasonId && seasonId.trim() !== '') {
-          transformedData.season = seasonId;
+          transformedData.season = Reference.createFromPK(Season, seasonId);
         }
 
         // Copy fields that don't need transformation
@@ -312,10 +321,31 @@ export class EventsService {
     if ((data as any).venue_postal_code !== undefined) transformedData.venuePostalCode = (data as any).venue_postal_code;
     if ((data as any).venue_country !== undefined) transformedData.venueCountry = (data as any).venue_country;
     if ((data as any).flyer_url !== undefined) transformedData.flyerUrl = (data as any).flyer_url;
-    if ((data as any).event_director_id !== undefined) transformedData.eventDirector = (data as any).event_director_id;
-    if ((data as any).season_id !== undefined) transformedData.season = (data as any).season_id;
+
+    // Handle relationships using Reference.createFromPK - allow null/empty to clear relation
+    if ((data as any).event_director_id !== undefined) {
+      const directorId = (data as any).event_director_id;
+      if (directorId && directorId.trim() !== '') {
+        transformedData.eventDirector = Reference.createFromPK(Profile, directorId);
+      } else {
+        transformedData.eventDirector = null;
+      }
+    }
+    if ((data as any).season_id !== undefined) {
+      const seasonId = (data as any).season_id;
+      if (seasonId && seasonId.trim() !== '') {
+        transformedData.season = Reference.createFromPK(Season, seasonId);
+      } else {
+        transformedData.season = null;
+      }
+    }
+
     if ((data as any).max_participants !== undefined) transformedData.maxParticipants = (data as any).max_participants;
     if ((data as any).registration_fee !== undefined) transformedData.registrationFee = (data as any).registration_fee;
+    if ((data as any).member_entry_fee !== undefined) transformedData.memberEntryFee = (data as any).member_entry_fee;
+    if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
+    if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
+    if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
 
     // Copy fields that don't need transformation
     if (data.title !== undefined) transformedData.title = data.title;

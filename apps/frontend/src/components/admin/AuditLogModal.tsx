@@ -4,6 +4,18 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+interface AuditSessionEntry {
+  id: string;
+  competitorName: string;
+  competitionClass: string;
+  format: string;
+  score: number | string;
+  placement: number | string;
+  pointsEarned: number;
+  mecaId: string | null;
+  timestamp: string;
+}
+
 interface AuditSession {
   id: string;
   eventId: string;
@@ -22,6 +34,7 @@ interface AuditSession {
   sessionStart: string;
   sessionEnd: string | null;
   createdAt: string;
+  entries?: AuditSessionEntry[];
 }
 
 interface AuditLogEntry {
@@ -220,7 +233,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
               }`}
             >
               <FileSpreadsheet className="h-5 w-5" />
-              Imports
+              Result Entries
               <span className="ml-2 px-2 py-0.5 bg-slate-600 text-xs rounded-full">
                 {tabCounts.imports}
               </span>
@@ -268,7 +281,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                   <div className="space-y-4">
                     {sessions.length === 0 ? (
                       <div className="flex items-center justify-center py-12">
-                        <div className="text-gray-400">No import sessions found for this event</div>
+                        <div className="text-gray-400">No result entries found for this event</div>
                       </div>
                     ) : (
                       sessions.map((session) => (
@@ -294,18 +307,18 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                   <div>
-                                    <span className="text-gray-400">Uploaded by:</span>
+                                    <span className="text-gray-400">Entered by:</span>
                                     <span className="ml-2 text-gray-200">
                                       {session.user?.email || 'Unknown'}
                                     </span>
                                   </div>
                                   <div>
-                                    <span className="text-gray-400">Started:</span>
+                                    <span className="text-gray-400">Date/Time:</span>
                                     <span className="ml-2 text-gray-200">
                                       {formatDateTime(session.sessionStart)}
                                     </span>
                                   </div>
-                                  {session.sessionEnd && (
+                                  {session.sessionEnd && session.entryMethod !== 'manual' && (
                                     <div>
                                       <span className="text-gray-400">Duration:</span>
                                       <span className="ml-2 text-gray-200">
@@ -328,6 +341,44 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                     </div>
                                   )}
                                 </div>
+
+                                {/* Show entry details for all sessions */}
+                                {session.entries && session.entries.length > 0 && (
+                                  <div className="mt-3 pt-3 border-t border-slate-600">
+                                    <div className="text-xs text-gray-400 mb-2">Entry Details:</div>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                      {session.entries.map((entry, idx) => (
+                                        <div
+                                          key={entry.id || idx}
+                                          className="bg-slate-600/50 rounded p-2 text-sm grid grid-cols-2 md:grid-cols-4 gap-2"
+                                        >
+                                          <div>
+                                            <span className="text-gray-400 text-xs">Competitor:</span>
+                                            <div className="text-white font-medium">{entry.competitorName}</div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-400 text-xs">Class:</span>
+                                            <div className="text-gray-200">{entry.competitionClass}</div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-400 text-xs">Score:</span>
+                                            <div className="text-gray-200">{entry.score}</div>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-400 text-xs">Points:</span>
+                                            <div className="text-gray-200">{entry.pointsEarned}</div>
+                                          </div>
+                                          {entry.mecaId && (
+                                            <div className="col-span-2">
+                                              <span className="text-gray-400 text-xs">MECA ID:</span>
+                                              <span className="ml-2 text-gray-200">{entry.mecaId}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             {session.filePath && (

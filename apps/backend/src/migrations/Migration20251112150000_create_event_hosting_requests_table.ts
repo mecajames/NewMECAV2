@@ -62,41 +62,69 @@ export class Migration20251112150000_create_event_hosting_requests_table extends
     // Enable RLS
     this.addSql(`ALTER TABLE public.event_hosting_requests ENABLE ROW LEVEL SECURITY;`);
 
-    // Create RLS policies
+    // Create RLS policies with IF NOT EXISTS pattern using DO blocks
     this.addSql(`
-      CREATE POLICY "Users can view their own event hosting requests"
-      ON public.event_hosting_requests FOR SELECT
-      USING (auth.uid() = user_id OR EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE profiles.id = auth.uid()
-        AND profiles.role IN ('admin', 'event_director')
-      ));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE policyname = 'Users can view their own event hosting requests' AND tablename = 'event_hosting_requests'
+        ) THEN
+          CREATE POLICY "Users can view their own event hosting requests"
+          ON public.event_hosting_requests FOR SELECT
+          USING (auth.uid() = user_id OR EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid()
+            AND profiles.role IN ('admin', 'event_director')
+          ));
+        END IF;
+      END $$;
     `);
 
     this.addSql(`
-      CREATE POLICY "Admins can insert event hosting requests"
-      ON public.event_hosting_requests FOR INSERT
-      WITH CHECK (true);
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE policyname = 'Admins can insert event hosting requests' AND tablename = 'event_hosting_requests'
+        ) THEN
+          CREATE POLICY "Admins can insert event hosting requests"
+          ON public.event_hosting_requests FOR INSERT
+          WITH CHECK (true);
+        END IF;
+      END $$;
     `);
 
     this.addSql(`
-      CREATE POLICY "Admins and users can update their own requests"
-      ON public.event_hosting_requests FOR UPDATE
-      USING (auth.uid() = user_id OR EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE profiles.id = auth.uid()
-        AND profiles.role = 'admin'
-      ));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE policyname = 'Admins and users can update their own requests' AND tablename = 'event_hosting_requests'
+        ) THEN
+          CREATE POLICY "Admins and users can update their own requests"
+          ON public.event_hosting_requests FOR UPDATE
+          USING (auth.uid() = user_id OR EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid()
+            AND profiles.role = 'admin'
+          ));
+        END IF;
+      END $$;
     `);
 
     this.addSql(`
-      CREATE POLICY "Admins can delete event hosting requests"
-      ON public.event_hosting_requests FOR DELETE
-      USING (EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE profiles.id = auth.uid()
-        AND profiles.role = 'admin'
-      ));
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies WHERE policyname = 'Admins can delete event hosting requests' AND tablename = 'event_hosting_requests'
+        ) THEN
+          CREATE POLICY "Admins can delete event hosting requests"
+          ON public.event_hosting_requests FOR DELETE
+          USING (EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid()
+            AND profiles.role = 'admin'
+          ));
+        END IF;
+      END $$;
     `);
   }
 

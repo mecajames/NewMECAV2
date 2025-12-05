@@ -18,7 +18,7 @@ export class ResultsAuditLog {
   @Property({ type: 'uuid', nullable: true, fieldName: 'result_id', serializedName: 'result_id', persist: false })
   resultId?: string;
 
-  @ManyToOne(() => CompetitionResult, { fieldName: 'result_id', nullable: true, hidden: true })
+  @ManyToOne(() => CompetitionResult, { fieldName: 'result_id', nullable: true, hidden: true, deleteRule: 'set null' })
   result?: CompetitionResult;
 
   @Property({ type: 'text' })
@@ -33,6 +33,9 @@ export class ResultsAuditLog {
   @Property({ onCreate: () => new Date(), type: 'timestamptz' })
   timestamp: Date = new Date();
 
-  @Property({ type: 'uuid', fieldName: 'user_id', serializedName: 'userId' })
+  @Property({ type: 'uuid', fieldName: 'user_id', serializedName: 'userId', persist: false })
   userId!: string;
+
+  @ManyToOne(() => Profile, { fieldName: 'user_id', nullable: true })
+  user?: Profile;
 }

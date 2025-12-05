@@ -37,6 +37,32 @@ export default function ResultsPage() {
   const [multiDayEvents, setMultiDayEvents] = useState<Event[]>([]);
   const [isAggregatedView, setIsAggregatedView] = useState(false);
 
+  // Computed list of events for the dropdown - groups multi-day State/World Finals into single entries
+  const displayEvents = (() => {
+    const grouped: Event[] = [];
+    const processedGroups = new Set<string>();
+
+    events.forEach(event => {
+      // Check if this is a multi-day State/World Finals event
+      if (event.multi_day_group_id &&
+          (event.event_type === 'state_finals' || event.event_type === 'world_finals')) {
+        // Only add one entry per multi-day group
+        if (!processedGroups.has(event.multi_day_group_id)) {
+          processedGroups.add(event.multi_day_group_id);
+          // Find all events in this group to get the earliest one (Day 1)
+          const groupEvents = events.filter(e => e.multi_day_group_id === event.multi_day_group_id);
+          const dayOne = groupEvents.find(e => e.day_number === 1) || groupEvents[0];
+          grouped.push(dayOne);
+        }
+      } else {
+        // Regular event or non-State/World Finals multi-day - show normally
+        grouped.push(event);
+      }
+    });
+
+    return grouped;
+  })();
+
   useEffect(() => {
     fetchEvents();
     fetchClasses();
@@ -355,49 +381,83 @@ export default function ResultsPage() {
                   onChange={(e) => setSelectedEventId(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
-                  {events.map((event) => (
-                    <option key={event.id} value={event.id}>
-                      {event.title} -{' '}
-                      {new Date(event.event_date).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </option>
-                  ))}
+                  {displayEvents.map((event) => {
+                    // Check if this is a combined multi-day State/World Finals event
+                    const isMultiDayFinals = event.multi_day_group_id &&
+                      (event.event_type === 'state_finals' || event.event_type === 'world_finals');
+                    const groupEvents = isMultiDayFinals
+                      ? events.filter(e => e.multi_day_group_id === event.multi_day_group_id)
+                      : [];
+
+                    return (
+                      <option key={event.id} value={event.id}>
+                        {event.title}
+                        {isMultiDayFinals && groupEvents.length > 1
+                          ? ` (${groupEvents.length}-Day Event)`
+                          : ` - ${new Date(event.event_date).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })}`
+                        }
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              {selectedEvent && (
-                <div className="mt-4 pt-4 border-t border-slate-700">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white mb-1">
-                        {selectedEvent.title}
-                        {selectedEvent.day_number && (
-                          <span className="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500">
-                            Day {selectedEvent.day_number}
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-gray-400">
-                        {new Date(selectedEvent.event_date).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })}
-                      </p>
+              {selectedEvent && (() => {
+                // Check if this is an aggregated multi-day State/World Finals
+                const isMultiDayFinals = selectedEvent.multi_day_group_id &&
+                  (selectedEvent.event_type === 'state_finals' || selectedEvent.event_type === 'world_finals');
+                const showDayBadge = selectedEvent.day_number && !isMultiDayFinals;
+
+                return (
+                  <div className="mt-4 pt-4 border-t border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-xl font-semibold text-white mb-1">
+                          {selectedEvent.title}
+                          {showDayBadge && (
+                            <span className="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500">
+                              Day {selectedEvent.day_number}
+                            </span>
+                          )}
+                          {isMultiDayFinals && multiDayEvents.length > 1 && (
+                            <span className="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500">
+                              {multiDayEvents.length}-Day Event
+                            </span>
+                          )}
+                        </h3>
+                        <p className="text-gray-400">
+                          {isMultiDayFinals && multiDayEvents.length > 1
+                            ? `${new Date(multiDayEvents[0]?.event_date || selectedEvent.event_date).toLocaleDateString('en-US', {
+                                month: 'long',
+                                day: 'numeric',
+                              })} - ${new Date(multiDayEvents[multiDayEvents.length - 1]?.event_date || selectedEvent.event_date).toLocaleDateString('en-US', {
+                                month: 'long',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}`
+                            : new Date(selectedEvent.event_date).toLocaleDateString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                              })
+                          }
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => navigate(`/events/${selectedEvent.id}`)}
+                        className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                      >
+                        View Event
+                      </button>
                     </div>
-                    <button
-                      onClick={() => navigate(`/events/${selectedEvent.id}`)}
-                      className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
-                    >
-                      View Event
-                    </button>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Aggregated Results Banner */}
               {isAggregatedView && multiDayEvents.length > 1 && (
@@ -488,7 +548,12 @@ export default function ResultsPage() {
                   {Object.entries(groupedResults).map(([format, classesByName]) => (
                     <div key={format} className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
                       <div className="bg-slate-700 px-6 py-4">
-                        <h2 className="text-2xl font-bold text-white">{format} Results</h2>
+                        <h2 className="text-2xl font-bold text-white">
+                          {format} Results
+                          <span className="ml-3 text-sm bg-orange-500 text-white px-2.5 py-1 rounded-full">
+                            {Object.values(classesByName).reduce((sum, arr) => sum + arr.length, 0)}
+                          </span>
+                        </h2>
                       </div>
 
                       <div className="p-6 space-y-6">

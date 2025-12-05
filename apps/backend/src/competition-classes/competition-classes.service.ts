@@ -1,6 +1,7 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, Reference } from '@mikro-orm/core';
 import { CompetitionClass } from './competition-classes.entity';
+import { Season } from '../seasons/seasons.entity';
 
 @Injectable()
 export class CompetitionClassesService {
@@ -82,5 +83,77 @@ export class CompetitionClassesService {
       throw new NotFoundException(`Competition class with ID ${id} not found`);
     }
     await em.removeAndFlush(competitionClass);
+  }
+
+  /**
+   * Copy competition classes from one season to another
+   * @param fromSeasonId Source season ID
+   * @param toSeasonId Destination season ID
+   * @param format Optional format filter (e.g., 'SPL', 'SQL', or 'all' for all formats)
+   * @returns Array of newly created competition classes
+   */
+  async copyBetweenSeasons(
+    fromSeasonId: string,
+    toSeasonId: string,
+    format?: string
+  ): Promise<{ copied: number; classes: CompetitionClass[] }> {
+    const em = this.em.fork();
+
+    // Verify both seasons exist
+    const fromSeason = await em.findOne(Season, { id: fromSeasonId });
+    if (!fromSeason) {
+      throw new NotFoundException(`Source season with ID ${fromSeasonId} not found`);
+    }
+
+    const toSeason = await em.findOne(Season, { id: toSeasonId });
+    if (!toSeason) {
+      throw new NotFoundException(`Destination season with ID ${toSeasonId} not found`);
+    }
+
+    // Get classes from source season
+    const whereClause: any = { season: fromSeasonId };
+    if (format && format !== 'all') {
+      whereClause.format = format;
+    }
+
+    const sourceClasses = await em.find(CompetitionClass, whereClause, {
+      orderBy: { displayOrder: 'ASC' },
+    });
+
+    if (sourceClasses.length === 0) {
+      return { copied: 0, classes: [] };
+    }
+
+    // Check for existing classes in destination season to avoid duplicates
+    const existingClasses = await em.find(CompetitionClass, { season: toSeasonId });
+    const existingNames = new Set(existingClasses.map(c => `${c.name}-${c.format}`));
+
+    // Create copies for destination season
+    const newClasses: CompetitionClass[] = [];
+    for (const sourceClass of sourceClasses) {
+      // Skip if a class with same name and format already exists in destination
+      const key = `${sourceClass.name}-${sourceClass.format}`;
+      if (existingNames.has(key)) {
+        console.log(`Skipping duplicate class: ${sourceClass.name} (${sourceClass.format})`);
+        continue;
+      }
+
+      const newClass = em.create(CompetitionClass, {
+        name: sourceClass.name,
+        abbreviation: sourceClass.abbreviation,
+        format: sourceClass.format,
+        season: Reference.createFromPK(Season, toSeasonId),
+        isActive: sourceClass.isActive,
+        displayOrder: sourceClass.displayOrder,
+      } as any);
+      newClasses.push(newClass);
+    }
+
+    if (newClasses.length > 0) {
+      await em.persistAndFlush(newClasses);
+    }
+
+    console.log(`Copied ${newClasses.length} classes from season ${fromSeasonId} to ${toSeasonId}`);
+    return { copied: newClasses.length, classes: newClasses };
   }
 }
