@@ -3,20 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "description": "MECA V2 - Car Audio Competition Management Platform",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
-    "dev": "npm run dev --workspace=@newmeca/frontend",
-    "dev:backend": "npm run dev --workspace=@newmeca/backend",
-    "dev:all": "npm run supabase:start && concurrently \"npm run dev:backend\" \"npm run dev\"",
-    "build": "npm run build --workspaces",
-    "build:frontend": "npm run build --workspace=@newmeca/frontend",
-    "build:backend": "npm run build --workspace=@newmeca/backend",
-    "typecheck": "npm run typecheck --workspaces",
-    "lint": "npm run lint --workspaces",
-    "install:all": "npm install && npm install --workspaces",
+    "dev": "rush dev -t @newmeca/frontend",
+    "dev:backend": "rush dev -t @newmeca/backend",
+    "dev:all": "npm run supabase:start && concurrently \"rush dev -t @newmeca/backend\" \"rush dev -t @newmeca/frontend\"",
+    "build": "rush build",
+    "build:frontend": "rush build -t @newmeca/frontend",
+    "build:backend": "rush build -t @newmeca/backend",
+    "typecheck": "rush typecheck",
+    "lint": "rush lint",
+    "install:all": "rush update",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
     "supabase:status": "npx supabase status",
@@ -28,8 +24,7 @@
     "ts-node": "^10.9.2"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "cheerio": "^1.1.2",
