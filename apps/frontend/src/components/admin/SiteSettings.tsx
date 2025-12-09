@@ -3,6 +3,7 @@ import { Save, Image as ImageIcon, Plus, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { siteSettingsApi, SiteSetting } from '../../api-client/site-settings.api-client';
 import { mediaFilesApi, MediaFile } from '../../api-client/media-files.api-client';
+import QuickBooksSettings from './QuickBooksSettings';
 
 export default function SiteSettings() {
   const { user } = useAuth();
@@ -865,6 +866,9 @@ export default function SiteSettings() {
           {saving ? 'Saving...' : 'Save All Settings'}
         </button>
       </div>
+
+      {/* QuickBooks Integration */}
+      <QuickBooksSettings />
 
       {/* Media Picker Modal */}
       {showMediaPicker && (

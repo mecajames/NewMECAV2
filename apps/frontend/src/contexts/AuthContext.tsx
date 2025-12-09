@@ -8,7 +8,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any; data: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<{ error: any }>;
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (error || !data.user) {
-      return { error };
+      return { error, data: null };
     }
 
     // Generate MECA ID by calling the database function
@@ -118,10 +118,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
     if (profileError) {
-      return { error: profileError };
+      return { error: profileError, data: null };
     }
 
-    return { error: null };
+    return { error: null, data };
   };
 
   const signOut = async () => {

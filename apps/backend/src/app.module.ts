@@ -21,6 +21,8 @@ import { ClassNameMappingsModule } from './class-name-mappings/class-name-mappin
 import { MembershipTypeConfigsModule } from './membership-type-configs/membership-type-configs.module';
 import { RecaptchaModule } from './recaptcha/recaptcha.module';
 import { PaymentsModule } from './payments/payments.module';
+import { StripeModule } from './stripe/stripe.module';
+import { QuickBooksModule } from './quickbooks/quickbooks.module';
 
 @Module({
   imports: [
@@ -44,6 +46,8 @@ import { PaymentsModule } from './payments/payments.module';
     ChampionshipArchivesModule,
     ClassNameMappingsModule,
     RecaptchaModule,
+    StripeModule,
+    QuickBooksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
