@@ -1,8 +1,8 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { EventHostingRequest } from './event-hosting-requests.entity';
-import { EventHostingRequestMessage, SenderRole, RecipientType } from './event-hosting-request-message.entity';
-import { EventHostingRequestStatus, EDAssignmentStatus, FinalApprovalStatus, EventStatus, EventTypeOption } from '../types/enums';
+import { EventHostingRequestMessage } from './event-hosting-request-message.entity';
+import { EventHostingRequestStatus, EDAssignmentStatus, FinalApprovalStatus, EventStatus, EventTypeOption, SenderRole, RecipientType, UserRole } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -430,10 +430,10 @@ export class EventHostingRequestsService {
       await this.addMessage(
         requestId,
         adminId,
-        'admin',
+        SenderRole.ADMIN,
         `Assignment revoked: ${reason}`,
         true, // Private message (ED/Admin only)
-        'event_director',
+        RecipientType.EVENT_DIRECTOR,
       );
     }
 
@@ -477,7 +477,7 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Notify admins
-    const admins = await em.find(Profile, { role: 'admin' });
+    const admins = await em.find(Profile, { role: UserRole.ADMIN });
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,
@@ -519,7 +519,7 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Notify admins (but NOT the requestor)
-    const admins = await em.find(Profile, { role: 'admin' });
+    const admins = await em.find(Profile, { role: UserRole.ADMIN });
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,
@@ -595,8 +595,8 @@ export class EventHostingRequestsService {
     }
 
     // Notify admins if message is for them
-    if (recipientType === 'admin' || recipientType === 'all') {
-      const admins = await em.find(Profile, { role: 'admin' });
+    if (recipientType === RecipientType.ADMIN || recipientType === RecipientType.ALL) {
+      const admins = await em.find(Profile, { role: UserRole.ADMIN });
       for (const admin of admins) {
         if (admin.id !== senderId) {
           await this.notificationsService.create({
@@ -619,14 +619,14 @@ export class EventHostingRequestsService {
    */
   async getMessages(
     requestId: string,
-    viewerRole: 'requestor' | 'event_director' | 'admin',
+    viewerRole: SenderRole,
   ): Promise<EventHostingRequestMessage[]> {
     const em = this.em.fork();
 
     const where: any = { request: requestId };
 
     // Requestors can only see non-private messages
-    if (viewerRole === 'requestor') {
+    if (viewerRole === SenderRole.REQUESTOR) {
       where.isPrivate = false;
     }
 
@@ -740,7 +740,7 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Add message
-    await this.addMessage(requestId, senderId, senderRole, messageText, false, 'requestor');
+    await this.addMessage(requestId, senderId, senderRole, messageText, false, RecipientType.REQUESTOR);
 
     return request;
   }
@@ -777,8 +777,8 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Add message and notify appropriate parties
-    const recipientType: RecipientType = request.assignedEventDirectorId ? 'all' : 'admin';
-    return this.addMessage(requestId, requestorId, 'requestor', messageText, false, recipientType);
+    const recipientType: RecipientType = request.assignedEventDirectorId ? RecipientType.ALL : RecipientType.ADMIN;
+    return this.addMessage(requestId, requestorId, SenderRole.REQUESTOR, messageText, false, recipientType);
   }
 
   // ==================== EVENT DIRECTOR QUERIES ====================
@@ -866,7 +866,7 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Notify admins about the created event
-    const admins = await em.find(Profile, { role: 'admin' });
+    const admins = await em.find(Profile, { role: UserRole.ADMIN });
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,
@@ -889,8 +889,8 @@ export class EventHostingRequestsService {
     const em = this.em.fork();
     return em.find(Profile, {
       $or: [
-        { role: 'event_director' },
-        { role: 'admin' },
+        { role: UserRole.EVENT_DIRECTOR },
+        { role: UserRole.ADMIN },
       ],
     }, {
       orderBy: { last_name: 'ASC', first_name: 'ASC' },

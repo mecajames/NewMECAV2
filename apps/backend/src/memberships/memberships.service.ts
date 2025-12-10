@@ -1,37 +1,7 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { Membership } from './memberships.entity';
-import { MembershipType, PaymentStatus } from '../types/enums';
-
-export interface CreateGuestMembershipDto {
-  email: string;
-  membershipTypeConfigId: string;
-  membershipType: MembershipType;
-  amountPaid: number;
-  stripePaymentIntentId?: string;
-  transactionId?: string;
-  billingFirstName: string;
-  billingLastName: string;
-  billingPhone?: string;
-  billingAddress: string;
-  billingCity: string;
-  billingState: string;
-  billingPostalCode: string;
-  billingCountry?: string;
-  teamName?: string;
-  teamDescription?: string;
-  businessName?: string;
-  businessWebsite?: string;
-}
-
-export interface CreateUserMembershipDto {
-  userId: string;
-  membershipTypeConfigId: string;
-  membershipType: MembershipType;
-  amountPaid: number;
-  stripePaymentIntentId?: string;
-  transactionId?: string;
-}
+import { PaymentStatus, CreateGuestMembershipDto, CreateUserMembershipDto } from '@newmeca/shared';
 
 @Injectable()
 export class MembershipsService {

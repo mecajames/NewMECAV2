@@ -10,12 +10,8 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  MembershipTypeConfigsService,
-  CreateMembershipTypeConfigDto,
-  UpdateMembershipTypeConfigDto,
-} from './membership-type-configs.service';
-import { MembershipCategory } from './membership-type-configs.entity';
+import { MembershipTypeConfigsService } from './membership-type-configs.service';
+import { MembershipCategory, CreateMembershipTypeConfigDto, UpdateMembershipTypeConfigDto } from '@newmeca/shared';
 
 @Controller('api/membership-type-configs')
 export class MembershipTypeConfigsController {

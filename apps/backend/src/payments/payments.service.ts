@@ -3,35 +3,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { PaymentStatus, PaymentMethod, PaymentType, MembershipType } from '../types/enums';
-
-export interface CreatePaymentDto {
-  userId: string;
-  membershipId?: string;
-  paymentType: PaymentType;
-  paymentMethod: PaymentMethod;
-  amount: number;
-  currency?: string;
-  transactionId?: string;
-  externalPaymentId?: string;
-  stripePaymentIntentId?: string;
-  stripeCustomerId?: string;
-  wordpressOrderId?: string;
-  wordpressSubscriptionId?: string;
-  description?: string;
-  paymentMetadata?: Record<string, any>;
-}
-
-export interface ProcessPaymentDto {
-  paymentId: string;
-  transactionId?: string;
-  paidAt?: Date;
-}
-
-export interface RefundPaymentDto {
-  paymentId: string;
-  reason: string;
-}
+import { PaymentStatus, PaymentMethod, PaymentType, MembershipType, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from '@newmeca/shared';
 
 @Injectable()
 export class PaymentsService {

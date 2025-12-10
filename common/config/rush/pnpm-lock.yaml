@@ -37,6 +37,9 @@ importers:
       '@nestjs/platform-express':
         specifier: ^11.1.7
         version: 11.1.9(@nestjs/common@11.1.9)(@nestjs/core@11.1.9)
+      '@newmeca/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@supabase/supabase-js':
         specifier: ^2.48.0
         version: 2.87.1
@@ -209,6 +212,10 @@ importers:
         version: 5.4.21
 
   ../../packages/shared:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.7.2

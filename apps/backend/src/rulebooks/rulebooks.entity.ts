@@ -1,7 +1,6 @@
 import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-
-export type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
+import { RulebookCategory } from '@newmeca/shared';
 
 @Entity({ tableName: 'rulebooks', schema: 'public' })
 export class Rulebook {

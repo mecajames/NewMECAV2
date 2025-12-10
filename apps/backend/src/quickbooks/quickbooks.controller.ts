@@ -9,7 +9,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { QuickBooksService, QuickBooksCompanyInfo } from './quickbooks.service';
+import { QuickBooksService } from './quickbooks.service';
+import { QuickBooksCompanyInfo } from '@newmeca/shared';
 
 @Controller('api/quickbooks')
 export class QuickBooksController {

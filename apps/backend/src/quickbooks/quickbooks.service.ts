@@ -4,29 +4,7 @@ import OAuthClient from 'intuit-oauth';
 import QuickBooks from 'node-quickbooks';
 import { QuickBooksConnection } from './quickbooks-connection.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
-
-export interface CreateSalesReceiptDto {
-  customerEmail: string;
-  customerName: string;
-  membershipTypeConfigId: string;
-  amount: number;
-  paymentDate: Date;
-  stripePaymentIntentId: string;
-  billingAddress?: {
-    line1: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
-  };
-}
-
-export interface QuickBooksCompanyInfo {
-  companyName: string;
-  realmId: string;
-  isConnected: boolean;
-  lastSyncAt?: Date;
-}
+import { CreateSalesReceiptDto, QuickBooksCompanyInfo } from '@newmeca/shared';
 
 @Injectable()
 export class QuickBooksService {

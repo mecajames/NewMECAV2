@@ -9,8 +9,9 @@ import {
   HttpCode,
   HttpStatus
 } from '@nestjs/common';
-import { MembershipsService, CreateGuestMembershipDto, CreateUserMembershipDto } from './memberships.service';
+import { MembershipsService } from './memberships.service';
 import { Membership } from './memberships.entity';
+import { CreateGuestMembershipDto, CreateUserMembershipDto } from '@newmeca/shared';
 
 @Controller('api/memberships')
 export class MembershipsController {

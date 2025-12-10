@@ -11,7 +11,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { MediaFilesService } from './media-files.service';
-import { MediaFile, MediaType } from './media-files.entity';
+import { MediaFile } from './media-files.entity';
+import { MediaType } from '@newmeca/shared';
 
 @Controller('api/media-files')
 export class MediaFilesController {

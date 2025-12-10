@@ -1,19 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-
-export enum MembershipCategory {
-  COMPETITOR = 'competitor',
-  TEAM = 'team',
-  RETAIL = 'retail',
-  MANUFACTURER = 'manufacturer',
-}
-
-// Manufacturer tiers for tiered pricing
-export enum ManufacturerTier {
-  BRONZE = 'bronze',
-  SILVER = 'silver',
-  GOLD = 'gold',
-}
+import { MembershipCategory, ManufacturerTier } from '@newmeca/shared';
 
 @Entity({ tableName: 'membership_type_configs', schema: 'public' })
 export class MembershipTypeConfig {

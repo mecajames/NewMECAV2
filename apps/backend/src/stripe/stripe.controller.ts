@@ -12,11 +12,11 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { EntityManager } from '@mikro-orm/core';
-import { StripeService, PaymentIntentResult } from './stripe.service';
+import { StripeService } from './stripe.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { QuickBooksService } from '../quickbooks/quickbooks.service';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
-import { MembershipType } from '../types/enums';
+import { MembershipType, PaymentIntentResult } from '@newmeca/shared';
 import Stripe from 'stripe';
 
 interface CreateMembershipPaymentIntentDto {

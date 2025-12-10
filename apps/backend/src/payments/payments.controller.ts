@@ -10,10 +10,10 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { PaymentsService, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from './payments.service';
+import { PaymentsService } from './payments.service';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
-import { PaymentMethod, MembershipType } from '../types/enums';
+import { PaymentMethod, MembershipType, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from '@newmeca/shared';
 
 @Controller('api/payments')
 export class PaymentsController {

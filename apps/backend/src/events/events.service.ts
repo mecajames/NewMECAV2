@@ -3,7 +3,7 @@ import { EntityManager, Reference } from '@mikro-orm/core';
 import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { EventStatus } from '../types/enums';
+import { EventStatus } from '@newmeca/shared';
 import { randomUUID } from 'crypto';
 
 @Injectable()

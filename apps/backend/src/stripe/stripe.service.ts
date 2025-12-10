@@ -1,19 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import Stripe from 'stripe';
-
-export interface CreatePaymentIntentDto {
-  amount: number; // Amount in cents
-  currency?: string;
-  membershipTypeConfigId: string;
-  membershipTypeName: string;
-  email: string;
-  metadata?: Record<string, string>;
-}
-
-export interface PaymentIntentResult {
-  clientSecret: string;
-  paymentIntentId: string;
-}
+import { CreatePaymentIntentDto, PaymentIntentResult } from '@newmeca/shared';
 
 @Injectable()
 export class StripeService {

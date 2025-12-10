@@ -1,8 +1,7 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { MediaType } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
-
-export type MediaType = 'image' | 'video' | 'pdf' | 'document' | 'other';
 
 @Entity({ tableName: 'media_files', schema: 'public' })
 export class MediaFile {

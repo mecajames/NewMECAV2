@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { MembershipType, PaymentStatus } from '../types/enums';
+import { MembershipType, PaymentStatus } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 
