@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { EntityManager, Reference, wrap } from '@mikro-orm/core';
+import { MembershipStatus } from '@newmeca/shared';
 import { CompetitionResult } from './competition-results.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
@@ -570,7 +571,7 @@ export class CompetitionResultsService {
     }
 
     // Check membership status if provided
-    if (membershipStatus && membershipStatus !== 'active') {
+    if (membershipStatus && membershipStatus !== MembershipStatus.ACTIVE) {
       return false;
     }
 
@@ -763,7 +764,7 @@ export class CompetitionResultsService {
 
         // Helper function to check if membership is active
         const hasActiveMembership = (profile: Profile): boolean => {
-          if (profile.membership_status !== 'active') {
+          if (profile.membership_status !== MembershipStatus.ACTIVE) {
             return false;
           }
 
@@ -1057,7 +1058,7 @@ export class CompetitionResultsService {
 
     // Helper function to check if membership is active
     const hasActiveMembership = (profile: Profile): boolean => {
-      if (profile.membership_status !== 'active') {
+      if (profile.membership_status !== MembershipStatus.ACTIVE) {
         return false;
       }
       if (!profile.membership_expiry) {

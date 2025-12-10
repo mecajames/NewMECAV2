@@ -12,8 +12,8 @@ import {
 } from '@nestjs/common';
 import { EventHostingRequestsService } from './event-hosting-requests.service';
 import { EventHostingRequest } from './event-hosting-requests.entity';
-import { EventHostingRequestMessage, SenderRole, RecipientType } from './event-hosting-request-message.entity';
-import { EventHostingRequestStatus, FinalApprovalStatus } from '../types/enums';
+import { EventHostingRequestMessage } from './event-hosting-request-message.entity';
+import { EventHostingRequestStatus, FinalApprovalStatus, SenderRole, RecipientType } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 
 @Controller('api/event-hosting-requests')
@@ -208,7 +208,7 @@ export class EventHostingRequestsController {
   @Get(':id/messages')
   async getMessages(
     @Param('id') id: string,
-    @Query('viewer_role') viewerRole: 'requestor' | 'event_director' | 'admin' = 'requestor',
+    @Query('viewer_role') viewerRole: SenderRole = SenderRole.REQUESTOR,
   ): Promise<EventHostingRequestMessage[]> {
     return this.eventHostingRequestsService.getMessages(id, viewerRole);
   }

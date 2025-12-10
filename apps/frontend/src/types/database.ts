@@ -27,6 +27,7 @@ export interface Profile {
   membership_expiry?: string;
   meca_id?: string;
   profile_picture_url?: string;
+  profile_images?: string[];
   // Primary address fields
   address?: string;
   city?: string;
@@ -48,6 +49,12 @@ export interface Profile {
   use_billing_for_shipping?: boolean;
   avatar_url?: string;
   bio?: string;
+  // Public profile fields
+  is_public?: boolean;
+  vehicle_info?: string;
+  car_audio_system?: string;
+  // Computed field (from AuthContext)
+  full_name?: string;
   created_at: string;
   updated_at: string;
 }

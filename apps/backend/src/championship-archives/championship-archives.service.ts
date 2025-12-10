@@ -5,7 +5,7 @@ import { ChampionshipAward, AwardSection } from './championship-awards.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { Event } from '../events/events.entity';
 import { Season } from '../seasons/seasons.entity';
-import { EventType } from '../types/enums';
+import { EventType } from '@newmeca/shared';
 
 @Injectable()
 export class ChampionshipArchivesService {

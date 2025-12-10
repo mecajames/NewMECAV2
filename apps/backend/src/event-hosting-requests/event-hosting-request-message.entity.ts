@@ -1,10 +1,8 @@
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { SenderRole, RecipientType } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { EventHostingRequest } from './event-hosting-requests.entity';
-
-export type SenderRole = 'requestor' | 'event_director' | 'admin';
-export type RecipientType = 'requestor' | 'event_director' | 'admin' | 'all';
 
 @Entity({ tableName: 'event_hosting_request_messages', schema: 'public' })
 export class EventHostingRequestMessage {

@@ -6,7 +6,6 @@ import Footer from './components/Footer';
 import ScrollToTop from './components/ScrollToTop';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
-import SignUpPage from './pages/SignUpPage';
 import EventsPage from './pages/EventsPage';
 import EventDetailPage from './pages/EventDetailPage';
 import ResultsPage from './pages/ResultsPage';
@@ -41,6 +40,8 @@ import SeasonManagementPage from './pages/admin/SeasonManagementPage';
 import ClassesManagementPage from './pages/admin/ClassesManagementPage';
 import FormatManagementPage from './pages/admin/FormatManagementPage';
 import MembershipTypeManagementPage from './pages/admin/MembershipTypeManagementPage';
+import MyMecaDashboardPage from './pages/MyMecaDashboardPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 function App() {
   return (
@@ -55,7 +56,6 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/signup" element={<SignUpPage />} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:eventId" element={<EventDetailPage />} />
               <Route path="/results" element={<ResultsPage />} />
@@ -83,6 +83,8 @@ function App() {
 
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/dashboard/mymeca" element={<MyMecaDashboardPage />} />
+              <Route path="/dashboard/admin" element={<AdminDashboardPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/public-profile" element={<PublicProfilePage />} />
               <Route path="/billing" element={<BillingPage />} />

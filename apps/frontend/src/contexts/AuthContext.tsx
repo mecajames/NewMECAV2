@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Profile } from '../lib/supabase';
+import { setAxiosUserId } from '../lib/axios';
 
 interface AuthContextType {
   user: User | null;
@@ -8,7 +9,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any; data: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<{ error: any }>;
@@ -55,6 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (async () => {
         setSession(session);
         setUser(session?.user ?? null);
+        // Set axios user ID for authenticated API calls
+        setAxiosUserId(session?.user?.id ?? null);
 
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id);
@@ -69,6 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (async () => {
         setSession(session);
         setUser(session?.user ?? null);
+        // Update axios user ID when auth state changes
+        setAxiosUserId(session?.user?.id ?? null);
 
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id);
@@ -98,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (error || !data.user) {
-      return { error };
+      return { error, data: null };
     }
 
     // Generate MECA ID by calling the database function
@@ -118,10 +123,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
     if (profileError) {
-      return { error: profileError };
+      return { error: profileError, data: null };
     }
 
-    return { error: null };
+    return { error: null, data };
   };
 
   const signOut = async () => {
@@ -129,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setSession(null);
+    setAxiosUserId(null);
   };
 
   const updatePassword = async (currentPassword: string, newPassword: string) => {

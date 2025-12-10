@@ -1,36 +1,15 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { PaymentStatus, CreateGuestMembershipDto, CreateUserMembershipDto } from '@newmeca/shared';
 import { Membership } from './memberships.entity';
-import { MembershipType, PaymentStatus } from '../types/enums';
+import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
+import { Profile } from '../profiles/profiles.entity';
 
-export interface CreateGuestMembershipDto {
-  email: string;
-  membershipTypeConfigId: string;
-  membershipType: MembershipType;
-  amountPaid: number;
-  stripePaymentIntentId?: string;
-  transactionId?: string;
-  billingFirstName: string;
-  billingLastName: string;
-  billingPhone?: string;
-  billingAddress: string;
-  billingCity: string;
-  billingState: string;
-  billingPostalCode: string;
-  billingCountry?: string;
-  teamName?: string;
-  teamDescription?: string;
-  businessName?: string;
-  businessWebsite?: string;
-}
-
-export interface CreateUserMembershipDto {
+export interface AdminAssignMembershipDto {
   userId: string;
   membershipTypeConfigId: string;
-  membershipType: MembershipType;
-  amountPaid: number;
-  stripePaymentIntentId?: string;
-  transactionId?: string;
+  durationMonths?: number; // Default 12 months
+  notes?: string;
 }
 
 @Injectable()
@@ -41,7 +20,8 @@ export class MembershipsService {
   ) {}
 
   async findById(id: string): Promise<Membership> {
-    const membership = await this.em.findOne(Membership, { id }, { populate: ['user', 'membershipTypeConfig'] });
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id }, { populate: ['user', 'membershipTypeConfig'] });
     if (!membership) {
       throw new NotFoundException(`Membership with ID ${id} not found`);
     }
@@ -49,21 +29,30 @@ export class MembershipsService {
   }
 
   async create(data: Partial<Membership>): Promise<Membership> {
-    const membership = this.em.create(Membership, data as any);
-    await this.em.persistAndFlush(membership);
+    const em = this.em.fork();
+    const membership = em.create(Membership, data as any);
+    await em.persistAndFlush(membership);
     return membership;
   }
 
   async update(id: string, data: Partial<Membership>): Promise<Membership> {
-    const membership = await this.findById(id);
-    this.em.assign(membership, data);
-    await this.em.flush();
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id }, { populate: ['user', 'membershipTypeConfig'] });
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${id} not found`);
+    }
+    em.assign(membership, data);
+    await em.flush();
     return membership;
   }
 
   async delete(id: string): Promise<void> {
-    const membership = await this.findById(id);
-    await this.em.removeAndFlush(membership);
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id });
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${id} not found`);
+    }
+    await em.removeAndFlush(membership);
   }
 
   async findByUser(userId: string): Promise<Membership[]> {
@@ -104,7 +93,6 @@ export class MembershipsService {
     const membership = this.em.create(Membership, {
       email: data.email.toLowerCase(),
       membershipTypeConfig: data.membershipTypeConfigId as any,
-      membershipType: data.membershipType,
       startDate,
       endDate,
       amountPaid: data.amountPaid,
@@ -140,7 +128,6 @@ export class MembershipsService {
     const membership = this.em.create(Membership, {
       user: data.userId as any,
       membershipTypeConfig: data.membershipTypeConfigId as any,
-      membershipType: data.membershipType,
       startDate,
       endDate,
       amountPaid: data.amountPaid,
@@ -172,12 +159,14 @@ export class MembershipsService {
     return orphanMemberships;
   }
 
-  async renewMembership(userId: string, membershipType: string): Promise<Membership> {
+  async renewMembership(userId: string, membershipTypeConfigId: string): Promise<Membership> {
     const newMembership = this.em.create(Membership, {
       user: userId as any,
-      membershipType: membershipType as any,
+      membershipTypeConfig: membershipTypeConfigId as any,
       startDate: new Date(),
       endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+      amountPaid: 0, // Will be set when payment is processed
+      paymentStatus: PaymentStatus.PENDING,
     } as any);
 
     await this.em.persistAndFlush(newMembership);
@@ -190,4 +179,66 @@ export class MembershipsService {
     }
     return membership.endDate < new Date();
   }
+
+  /**
+   * Admin function to assign a membership to a user without payment
+   */
+  async adminAssignMembership(data: AdminAssignMembershipDto): Promise<Membership> {
+    const em = this.em.fork();
+
+    // Get the membership type config
+    const membershipConfig = await em.findOne(MembershipTypeConfig, { id: data.membershipTypeConfigId });
+    if (!membershipConfig) {
+      throw new NotFoundException(`Membership type config with ID ${data.membershipTypeConfigId} not found`);
+    }
+
+    const startDate = new Date();
+    const endDate = new Date();
+    const months = data.durationMonths || 12;
+    endDate.setMonth(endDate.getMonth() + months);
+
+    // Create membership using reference
+    const membership = new Membership();
+    membership.user = em.getReference(Profile, data.userId);
+    membership.membershipTypeConfig = membershipConfig;
+    membership.startDate = startDate;
+    membership.endDate = endDate;
+    membership.amountPaid = 0; // Admin assigned - no payment
+    membership.paymentStatus = PaymentStatus.PAID; // Marked as paid since admin assigned
+    membership.transactionId = `ADMIN-${Date.now()}`;
+
+    await em.persistAndFlush(membership);
+    return membership;
+  }
+
+  /**
+   * Get all memberships for a user (including expired)
+   */
+  async getAllMembershipsByUser(userId: string): Promise<Membership[]> {
+    const em = this.em.fork();
+    return em.find(
+      Membership,
+      { user: userId },
+      {
+        populate: ['membershipTypeConfig'],
+        orderBy: { startDate: 'DESC' }
+      }
+    );
+  }
+
+  /**
+   * Get all memberships in the system (admin)
+   */
+  async getAllMemberships(): Promise<Membership[]> {
+    const em = this.em.fork();
+    return em.find(
+      Membership,
+      {},
+      {
+        populate: ['user', 'membershipTypeConfig'],
+        orderBy: { createdAt: 'DESC' }
+      }
+    );
+  }
+
 }

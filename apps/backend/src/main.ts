@@ -15,6 +15,8 @@ async function bootstrap() {
       origin: corsOrigin,
       credentials: true,
     },
+    // Enable raw body parsing for Stripe webhooks
+    rawBody: true,
   });
 
   // Global exception filter to catch and log all errors

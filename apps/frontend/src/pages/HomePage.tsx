@@ -581,7 +581,7 @@ export default function HomePage() {
             Join thousands of car audio enthusiasts and showcase your skills
           </p>
           <button
-            onClick={() => navigate('/signup')}
+            onClick={() => navigate('/membership')}
             className="px-8 py-4 bg-white text-orange-600 font-semibold rounded-lg text-lg hover:bg-gray-100 transition-all transform hover:scale-105 shadow-lg"
           >
             Start Your Journey Today!

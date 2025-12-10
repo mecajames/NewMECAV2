@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from 'axios';
 
 export enum MembershipCategory {
   COMPETITOR = 'competitor',
@@ -85,33 +85,24 @@ export const membershipTypeConfigsApi = {
     if (includeInactive) {
       params.append('includeInactive', 'true');
     }
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs?${params}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch membership type configs');
-    }
-    return response.json();
+    const response = await axios.get(`/api/membership-type-configs?${params}`);
+    return response.data;
   },
 
   /**
    * Get active membership type configurations
    */
   getActive: async (): Promise<MembershipTypeConfig[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/active`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch active membership type configs');
-    }
-    return response.json();
+    const response = await axios.get('/api/membership-type-configs/active');
+    return response.data;
   },
 
   /**
    * Get featured membership type configurations
    */
   getFeatured: async (): Promise<MembershipTypeConfig[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/featured`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch featured membership type configs');
-    }
-    return response.json();
+    const response = await axios.get('/api/membership-type-configs/featured');
+    return response.data;
   },
 
   /**
@@ -119,109 +110,61 @@ export const membershipTypeConfigsApi = {
    * Excludes manufacturer memberships (showOnPublicSite = false)
    */
   getPublic: async (): Promise<MembershipTypeConfig[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/public`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch public membership type configs');
-    }
-    return response.json();
+    const response = await axios.get('/api/membership-type-configs/public');
+    return response.data;
   },
 
   /**
    * Get membership type configurations by category
    */
   getByCategory: async (category: MembershipCategory): Promise<MembershipTypeConfig[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/category/${category}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch membership type configs for category ${category}`);
-    }
-    return response.json();
+    const response = await axios.get(`/api/membership-type-configs/category/${category}`);
+    return response.data;
   },
 
   /**
    * Get membership type configuration by ID
    */
   getById: async (id: string): Promise<MembershipTypeConfig> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/${id}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch membership type config ${id}`);
-    }
-    return response.json();
+    const response = await axios.get(`/api/membership-type-configs/${id}`);
+    return response.data;
   },
 
   /**
    * Create a new membership type configuration
    */
   create: async (data: CreateMembershipTypeConfigDto): Promise<MembershipTypeConfig> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create membership type config');
-    }
-    return response.json();
+    const response = await axios.post('/api/membership-type-configs', data);
+    return response.data;
   },
 
   /**
    * Update a membership type configuration
    */
   update: async (id: string, data: UpdateMembershipTypeConfigDto): Promise<MembershipTypeConfig> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || `Failed to update membership type config ${id}`);
-    }
-    return response.json();
+    const response = await axios.put(`/api/membership-type-configs/${id}`, data);
+    return response.data;
   },
 
   /**
    * Delete a membership type configuration
    */
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to delete membership type config ${id}`);
-    }
+    await axios.delete(`/api/membership-type-configs/${id}`);
   },
 
   /**
    * Toggle active status of a membership type configuration
    */
   toggleActive: async (id: string): Promise<MembershipTypeConfig> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/${id}/toggle-active`, {
-      method: 'POST',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to toggle active status for membership type config ${id}`);
-    }
-    return response.json();
+    const response = await axios.post(`/api/membership-type-configs/${id}/toggle-active`);
+    return response.data;
   },
 
   /**
    * Update display order of membership type configurations
    */
   updateDisplayOrder: async (updates: Array<{ id: string; displayOrder: number }>): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/membership-type-configs/display-order`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
-    if (!response.ok) {
-      throw new Error('Failed to update display order');
-    }
+    await axios.put('/api/membership-type-configs/display-order', updates);
   },
 };

@@ -37,8 +37,8 @@ export default function PublicProfilePage() {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
-    if (profileImages.length >= 5) {
-      setError('Maximum 5 images allowed');
+    if (profileImages.length >= 6) {
+      setError('Maximum 6 images allowed');
       return;
     }
 

@@ -164,10 +164,10 @@ export default function LoginPage() {
             <p className="text-gray-400">
               Don't have an account?{' '}
               <button
-                onClick={() => navigate(redirectUrl ? `/signup?redirect=${encodeURIComponent(redirectUrl)}` : '/signup')}
+                onClick={() => navigate('/membership')}
                 className="text-orange-500 hover:text-orange-400 font-semibold"
               >
-                Sign up
+                Become a Member
               </button>
             </p>
           </div>

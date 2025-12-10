@@ -3,7 +3,7 @@ import { EntityManager, Reference } from '@mikro-orm/core';
 import { EventRegistration } from './event-registrations.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { RegistrationStatus, PaymentStatus } from '../types/enums';
+import { RegistrationStatus, PaymentStatus } from '@newmeca/shared';
 
 @Injectable()
 export class EventRegistrationsService {

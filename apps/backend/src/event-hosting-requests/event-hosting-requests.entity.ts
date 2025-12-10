@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { EventHostingRequestStatus, EventTypeOption, EDAssignmentStatus, FinalApprovalStatus, HostType, IndoorOutdoor } from '../types/enums';
+import { EventHostingRequestStatus, EventTypeOption, EDAssignmentStatus, FinalApprovalStatus, HostType, IndoorOutdoor } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
 

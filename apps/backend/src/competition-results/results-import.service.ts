@@ -1,19 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
-
-export interface ParsedResult {
-  memberID: string;
-  name: string;
-  class: string;
-  classAbbreviation: string;
-  score: number;
-  placement?: number;
-  points?: number;
-  vehicleInfo?: string;
-  format?: string;
-  wattage?: number;
-  frequency?: number;
-}
+import { ParsedResult } from '@newmeca/shared';
 
 @Injectable()
 export class ResultsImportService {

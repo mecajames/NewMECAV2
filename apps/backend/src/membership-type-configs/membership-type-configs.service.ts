@@ -1,45 +1,7 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
-import { MembershipTypeConfig, MembershipCategory, ManufacturerTier } from './membership-type-configs.entity';
-
-export interface CreateMembershipTypeConfigDto {
-  name: string;
-  description?: string;
-  category: MembershipCategory;
-  tier?: ManufacturerTier; // Only for manufacturer memberships
-  price: number;
-  currency?: string;
-  benefits?: string[];
-  requiredFields?: string[];
-  optionalFields?: string[];
-  isActive?: boolean;
-  isFeatured?: boolean;
-  showOnPublicSite?: boolean; // False for manufacturer memberships
-  displayOrder?: number;
-  stripePriceId?: string;
-  stripeProductId?: string;
-  quickbooksItemId?: string;
-  quickbooksAccountId?: string;
-}
-
-export interface UpdateMembershipTypeConfigDto {
-  name?: string;
-  description?: string;
-  tier?: ManufacturerTier;
-  price?: number;
-  currency?: string;
-  benefits?: string[];
-  requiredFields?: string[];
-  optionalFields?: string[];
-  isActive?: boolean;
-  isFeatured?: boolean;
-  showOnPublicSite?: boolean;
-  displayOrder?: number;
-  stripePriceId?: string;
-  stripeProductId?: string;
-  quickbooksItemId?: string;
-  quickbooksAccountId?: string;
-}
+import { MembershipCategory, ManufacturerTier, CreateMembershipTypeConfigDto, UpdateMembershipTypeConfigDto } from '@newmeca/shared';
+import { MembershipTypeConfig } from './membership-type-configs.entity';
 
 @Injectable()
 export class MembershipTypeConfigsService {
@@ -71,12 +33,13 @@ export class MembershipTypeConfigsService {
   /**
    * Find memberships visible on the public website
    * Excludes manufacturer memberships (showOnPublicSite = false)
+   * Excludes upgrade-only memberships (isUpgradeOnly = true)
    */
   async findPublic(): Promise<MembershipTypeConfig[]> {
     const em = this.em.fork();
     return em.find(
       MembershipTypeConfig,
-      { isActive: true, showOnPublicSite: true },
+      { isActive: true, showOnPublicSite: true, isUpgradeOnly: false },
       {
         orderBy: { displayOrder: 'ASC', name: 'ASC' },
       },
@@ -138,8 +101,8 @@ export class MembershipTypeConfigsService {
       price: data.price,
       currency: data.currency || 'USD',
       benefits: data.benefits || [],
-      requiredFields: data.requiredFields || this.getDefaultRequiredFields(data.category),
-      optionalFields: data.optionalFields || this.getDefaultOptionalFields(data.category),
+      requiredFields: data.requiredFields || this.getDefaultRequiredFields(data.category as MembershipCategory),
+      optionalFields: data.optionalFields || this.getDefaultOptionalFields(data.category as MembershipCategory),
       isActive: data.isActive !== undefined ? data.isActive : true,
       isFeatured: data.isFeatured || false,
       showOnPublicSite: showOnPublic,
@@ -170,7 +133,7 @@ export class MembershipTypeConfigsService {
       }
     }
 
-    em.assign(config, data);
+    em.assign(config, data as any);
     await em.flush();
     return config;
   }

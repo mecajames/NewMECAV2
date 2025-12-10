@@ -1,0 +1,43 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/rush/v5/rush.schema.json",
+  "rushVersion": "5.119.0",
+  "pnpmVersion": "8.15.5",
+  "pnpmOptions": {
+    "pnpmStore": "global",
+    "useWorkspaces": true
+  },
+  "nodeSupportedVersionRange": ">=18.0.0",
+  "ensureConsistentVersions": false,
+  "projectFolderMinDepth": 2,
+  "projectFolderMaxDepth": 2,
+  "repository": {
+    "defaultBranch": "main",
+    "defaultRemote": "origin"
+  },
+  "eventHooks": {
+    "preRushInstall": [],
+    "postRushInstall": [],
+    "preRushBuild": [],
+    "postRushBuild": []
+  },
+  "projects": [
+    {
+      "packageName": "@newmeca/shared",
+      "projectFolder": "packages/shared",
+      "shouldPublish": false,
+      "reviewCategory": "libraries"
+    },
+    {
+      "packageName": "@newmeca/backend",
+      "projectFolder": "apps/backend",
+      "shouldPublish": false,
+      "reviewCategory": "apps"
+    },
+    {
+      "packageName": "@newmeca/frontend",
+      "projectFolder": "apps/frontend",
+      "shouldPublish": false,
+      "reviewCategory": "apps"
+    }
+  ]
+}
