@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { MembershipType, PaymentStatus } from '../types/enums';
+import { PaymentStatus } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 
@@ -17,13 +17,9 @@ export class Membership {
   @Property({ type: 'text', nullable: true })
   email?: string;
 
-  // Reference to membership type configuration
-  @ManyToOne(() => MembershipTypeConfig, { nullable: true, fieldName: 'membership_type_config_id' })
-  membershipTypeConfig?: MembershipTypeConfig;
-
-  @Enum(() => MembershipType)
-  @Property({ fieldName: 'membership_type' })
-  membershipType!: MembershipType;
+  // Reference to membership type configuration (required)
+  @ManyToOne(() => MembershipTypeConfig, { nullable: false, fieldName: 'membership_type_config_id' })
+  membershipTypeConfig!: MembershipTypeConfig;
 
   @Property({ type: 'timestamptz', fieldName: 'start_date' })
   startDate!: Date;

@@ -1,21 +1,25 @@
-// Database Types
-export type UserRole = 'user' | 'event_director' | 'retailer' | 'admin';
-export type MembershipStatus = 'none' | 'active' | 'expired';
-export type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
-export type PaymentStatus = 'pending' | 'paid' | 'refunded';
-export type RegistrationStatus = 'pending' | 'confirmed' | 'cancelled';
-export type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
-export type RulebookStatus = 'active' | 'inactive' | 'archive';
-export type MediaType = 'image' | 'video' | 'pdf' | 'document' | 'other';
+// Legacy Types (snake_case format for API/Database compatibility)
+// These are kept for backward compatibility with existing code
+// New code should prefer the Zod schemas from ./schemas
 
-// Profile Interface
-export interface Profile {
+// Legacy Database Types - use schema types for new code
+export type LegacyUserRole = 'user' | 'event_director' | 'retailer' | 'admin';
+export type LegacyMembershipStatus = 'none' | 'active' | 'expired';
+export type LegacyEventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+export type LegacyPaymentStatus = 'pending' | 'paid' | 'refunded';
+export type LegacyRegistrationStatus = 'pending' | 'confirmed' | 'cancelled';
+export type LegacyRulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
+export type LegacyRulebookStatus = 'active' | 'inactive' | 'archive';
+export type LegacyMediaType = 'image' | 'video' | 'pdf' | 'document' | 'other';
+
+// Legacy Profile Interface (snake_case)
+export interface LegacyProfile {
   id: string;
   email: string;
   full_name: string;
   phone?: string;
-  role: UserRole;
-  membership_status: MembershipStatus;
+  role: LegacyUserRole;
+  membership_status: LegacyMembershipStatus;
   membership_expiry?: string;
   avatar_url?: string;
   bio?: string;
@@ -23,8 +27,8 @@ export interface Profile {
   updated_at: string;
 }
 
-// Event Interface
-export interface Event {
+// Legacy Event Interface (snake_case)
+export interface LegacyEvent {
   id: string;
   title: string;
   description?: string;
@@ -36,16 +40,16 @@ export interface Event {
   longitude?: number;
   flyer_url?: string;
   event_director_id?: string;
-  status: EventStatus;
+  status: LegacyEventStatus;
   max_participants?: number;
   registration_fee: number;
   created_at: string;
   updated_at: string;
-  event_director?: Profile;
+  event_director?: LegacyProfile;
 }
 
-// Event Registration Interface
-export interface EventRegistration {
+// Legacy Event Registration Interface (snake_case)
+export interface LegacyEventRegistration {
   id: string;
   event_id: string;
   user_id?: string;
@@ -55,13 +59,13 @@ export interface EventRegistration {
   vehicle_info?: string;
   competition_class?: string;
   registration_date: string;
-  payment_status: PaymentStatus;
-  status: RegistrationStatus;
-  event?: Event;
+  payment_status: LegacyPaymentStatus;
+  status: LegacyRegistrationStatus;
+  event?: LegacyEvent;
 }
 
-// Competition Result Interface
-export interface CompetitionResult {
+// Legacy Competition Result Interface (snake_case)
+export interface LegacyCompetitionResult {
   id: string;
   event_id: string;
   competitor_id?: string;
@@ -74,18 +78,18 @@ export interface CompetitionResult {
   notes?: string;
   created_by: string;
   created_at: string;
-  event?: Event;
-  competitor?: Profile;
+  event?: LegacyEvent;
+  competitor?: LegacyProfile;
 }
 
 // Rulebook Interface
 export interface Rulebook {
   id: string;
   title: string;
-  category: RulebookCategory;
+  category: LegacyRulebookCategory;
   season: string;
   pdf_url: string;
-  status: RulebookStatus;
+  status: LegacyRulebookStatus;
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -97,7 +101,7 @@ export interface MediaFile {
   title: string;
   description?: string;
   file_url: string;
-  file_type: MediaType;
+  file_type: LegacyMediaType;
   file_size: number;
   mime_type: string;
   dimensions?: string;

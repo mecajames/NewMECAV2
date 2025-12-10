@@ -1,13 +1,21 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import UserDashboard from '../components/dashboards/UserDashboard';
-import AdminDashboard from '../components/dashboards/AdminDashboard';
-import EventDirectorDashboard from '../components/dashboards/EventDirectorDashboard';
-import RetailerDashboard from '../components/dashboards/RetailerDashboard';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { profile, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && profile) {
+      // Redirect based on role
+      if (profile.role === 'admin') {
+        navigate('/dashboard/admin', { replace: true });
+      } else {
+        navigate('/dashboard/mymeca', { replace: true });
+      }
+    }
+  }, [profile, loading, navigate]);
 
   if (loading) {
     return (
@@ -33,14 +41,10 @@ export default function DashboardPage() {
     );
   }
 
-  switch (profile.role) {
-    case 'admin':
-      return <AdminDashboard />;
-    case 'event_director':
-      return <EventDirectorDashboard />;
-    case 'retailer':
-      return <RetailerDashboard />;
-    default:
-      return <UserDashboard />;
-  }
+  // Show loading while redirecting
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+      <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+    </div>
+  );
 }

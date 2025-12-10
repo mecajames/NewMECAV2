@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { RegistrationStatus, PaymentStatus } from '../types/enums';
+import { RegistrationStatus, PaymentStatus } from '@newmeca/shared';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 

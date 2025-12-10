@@ -67,7 +67,6 @@ export default function Navbar() {
     if (path.startsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/membership')) return 'membership';
     if (path.startsWith('/login')) return 'login';
-    if (path.startsWith('/signup')) return 'signup';
     if (path.startsWith('/admin')) return 'admin';
     return 'home';
   };
@@ -315,7 +314,7 @@ export default function Navbar() {
                       <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
                         <button
                           onClick={() => {
-                            navigate('/dashboard');
+                            navigate('/dashboard/mymeca');
                             setUserMenuOpen(false);
                           }}
                           className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
@@ -325,6 +324,20 @@ export default function Navbar() {
                             My MECA
                           </div>
                         </button>
+                        {profile?.role === 'admin' && (
+                          <button
+                            onClick={() => {
+                              navigate('/dashboard/admin');
+                              setUserMenuOpen(false);
+                            }}
+                            className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <LayoutDashboard className="h-4 w-4" />
+                              Admin Dashboard
+                            </div>
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             navigate('/public-profile');
@@ -362,10 +375,10 @@ export default function Navbar() {
                   Sign In
                 </button>
                 <button
-                  onClick={() => navigate('/signup')}
+                  onClick={() => navigate('/membership')}
                   className="px-4 py-2 rounded-md text-sm font-medium bg-orange-600 hover:bg-orange-700 transition-colors"
                 >
-                  Sign Up
+                  Join
                 </button>
               </div>
             )}
@@ -407,7 +420,7 @@ export default function Navbar() {
               <>
                 <button
                   onClick={() => {
-                    navigate('/dashboard');
+                    navigate('/dashboard/mymeca');
                     setMobileMenuOpen(false);
                   }}
                   className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
@@ -416,9 +429,21 @@ export default function Navbar() {
                       : 'text-gray-300 hover:bg-slate-700 hover:text-white'
                   }`}
                 >
-                  <LayoutDashboard className="h-5 w-5" />
-                  Dashboard
+                  <User className="h-5 w-5" />
+                  My MECA
                 </button>
+                {profile?.role === 'admin' && (
+                  <button
+                    onClick={() => {
+                      navigate('/dashboard/admin');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+                  >
+                    <LayoutDashboard className="h-5 w-5" />
+                    Admin Dashboard
+                  </button>
+                )}
                 <button
                   onClick={handleSignOut}
                   className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
@@ -440,12 +465,12 @@ export default function Navbar() {
                 </button>
                 <button
                   onClick={() => {
-                    navigate('/signup');
+                    navigate('/membership');
                     setMobileMenuOpen(false);
                   }}
                   className="w-full px-3 py-2 rounded-md text-base font-medium bg-orange-600 hover:bg-orange-700"
                 >
-                  Sign Up
+                  Join
                 </button>
               </>
             )}

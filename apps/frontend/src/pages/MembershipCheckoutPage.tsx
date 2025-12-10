@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { loadStripe } from '@stripe/stripe-js';
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from '@stripe/react-stripe-js';
 import {
   ArrowLeft,
   Check,
@@ -23,9 +30,11 @@ import {
 } from '../api-client/membership-type-configs.api-client';
 import {
   membershipsApi,
-  MembershipType,
   Membership,
 } from '../api-client/memberships.api-client';
+
+// Initialize Stripe
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 // US States for dropdown
 const US_STATES = [
@@ -105,7 +114,6 @@ interface FormData {
 
 interface OrderData {
   membershipId: string;
-  membershipRecordId: string; // The created membership record ID
   membershipName: string;
   category: MembershipCategory;
   price: number;
@@ -116,6 +124,115 @@ interface OrderData {
 
 type CheckoutStep = 'info' | 'payment' | 'confirmation';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// Stripe Payment Form Component
+function StripePaymentForm({
+  membership,
+  formData,
+  onSuccess,
+  onBack,
+}: {
+  membership: MembershipTypeConfig;
+  formData: FormData;
+  onSuccess: (paymentIntentId: string) => void;
+  onBack: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!stripe || !elements) {
+      return;
+    }
+
+    setSubmitting(true);
+    setPaymentError(null);
+
+    try {
+      const { error, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: window.location.href,
+          receipt_email: formData.email,
+        },
+        redirect: 'if_required',
+      });
+
+      if (error) {
+        setPaymentError(error.message || 'Payment failed. Please try again.');
+      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+        onSuccess(paymentIntent.id);
+      } else {
+        setPaymentError('Payment was not completed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Payment error:', err);
+      setPaymentError('An unexpected error occurred. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {paymentError && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
+          <p className="text-red-500 text-sm">{paymentError}</p>
+        </div>
+      )}
+
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+          <CreditCard className="h-5 w-5 mr-2 text-orange-500" />
+          Card Information
+        </h3>
+        <div className="bg-slate-700 rounded-lg p-4">
+          <PaymentElement
+            options={{
+              layout: 'tabs',
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center text-sm text-gray-400 mb-6">
+        <Lock className="h-4 w-4 mr-2" />
+        Your payment information is secure and encrypted
+      </div>
+
+      <div className="flex gap-4">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={submitting}
+          className="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+        >
+          Back
+        </button>
+        <button
+          type="submit"
+          disabled={!stripe || !elements || submitting}
+          className="flex-1 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {submitting ? (
+            <span className="flex items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Processing Payment...
+            </span>
+          ) : (
+            `Pay $${membership.price.toFixed(2)}`
+          )}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
   const navigate = useNavigate();
@@ -125,8 +242,10 @@ export default function MembershipCheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<CheckoutStep>('info');
-  const [submitting, setSubmitting] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Stripe-related state
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [creatingPaymentIntent, setCreatingPaymentIntent] = useState(false);
 
   // Order data saved after successful payment
   const [orderData, setOrderData] = useState<OrderData | null>(null);
@@ -154,14 +273,6 @@ export default function MembershipCheckoutPage() {
     teamDescription: '',
     businessName: '',
     businessWebsite: '',
-  });
-
-  // Card state (simulated - in production would use Stripe Elements)
-  const [cardData, setCardData] = useState({
-    number: '',
-    expiry: '',
-    cvc: '',
-    name: '',
   });
 
   useEffect(() => {
@@ -210,40 +321,6 @@ export default function MembershipCheckoutPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-
-    // Format card number with spaces
-    if (name === 'number') {
-      const formatted = value
-        .replace(/\s/g, '')
-        .replace(/(\d{4})/g, '$1 ')
-        .trim()
-        .slice(0, 19);
-      setCardData((prev) => ({ ...prev, [name]: formatted }));
-      return;
-    }
-
-    // Format expiry as MM/YY
-    if (name === 'expiry') {
-      const cleaned = value.replace(/\D/g, '');
-      let formatted = cleaned;
-      if (cleaned.length >= 2) {
-        formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2, 4);
-      }
-      setCardData((prev) => ({ ...prev, [name]: formatted }));
-      return;
-    }
-
-    // Limit CVC to 4 digits
-    if (name === 'cvc') {
-      setCardData((prev) => ({ ...prev, [name]: value.slice(0, 4) }));
-      return;
-    }
-
-    setCardData((prev) => ({ ...prev, [name]: value }));
-  };
-
   const validateInfoStep = (): boolean => {
     // Email required for guests
     if (!user && !formData.email) {
@@ -286,86 +363,25 @@ export default function MembershipCheckoutPage() {
     return true;
   };
 
-  const validatePaymentStep = (): boolean => {
-    if (!cardData.number || cardData.number.replace(/\s/g, '').length < 16) {
-      setPaymentError('Valid card number is required');
-      return false;
-    }
-    if (!cardData.expiry || cardData.expiry.length < 5) {
-      setPaymentError('Valid expiry date is required');
-      return false;
-    }
-    if (!cardData.cvc || cardData.cvc.length < 3) {
-      setPaymentError('Valid CVC is required');
-      return false;
-    }
-    if (!cardData.name) {
-      setPaymentError('Cardholder name is required');
-      return false;
-    }
+  const handleContinueToPayment = async () => {
+    if (!validateInfoStep() || !membership) return;
 
-    setPaymentError(null);
-    return true;
-  };
-
-  const handleContinueToPayment = () => {
-    if (!validateInfoStep()) return;
-    setStep('payment');
-  };
-
-  // Map category to membership type
-  const getMembershipTypeFromCategory = (category: MembershipCategory): MembershipType => {
-    switch (category) {
-      case MembershipCategory.COMPETITOR:
-        return MembershipType.DOMESTIC; // Default to domestic, could be international based on country
-      case MembershipCategory.TEAM:
-        return MembershipType.TEAM;
-      case MembershipCategory.RETAIL:
-        return MembershipType.RETAILER;
-      default:
-        return MembershipType.ANNUAL;
-    }
-  };
-
-  const handleSubmitPayment = async () => {
-    if (!validatePaymentStep() || !membership) return;
-
-    setSubmitting(true);
-    setPaymentError(null);
+    setCreatingPaymentIntent(true);
+    setError(null);
 
     try {
-      // TODO: In production, integrate with Stripe:
-      // 1. Create a Stripe PaymentIntent via backend
-      // 2. Confirm the payment with Stripe.js
-      // 3. Pass the stripePaymentIntentId to the membership creation
+      const email = user ? (profile?.email || formData.email) : formData.email;
 
-      // Simulate payment processing for now
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Generate a simulated transaction ID
-      const transactionId = `TXN-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-      let createdMembership: Membership;
-      const membershipType = getMembershipTypeFromCategory(membership.category);
-      const email = user ? (profile?.email || '') : formData.email;
-
-      if (user) {
-        // Create membership for logged-in user
-        createdMembership = await membershipsApi.createUserMembership({
-          userId: user.id,
+      // Create Payment Intent via backend
+      const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           membershipTypeConfigId: membership.id,
-          membershipType,
-          amountPaid: membership.price,
-          transactionId,
-        });
-      } else {
-        // Create guest membership
-        createdMembership = await membershipsApi.createGuestMembership({
           email,
-          membershipTypeConfigId: membership.id,
-          membershipType,
-          amountPaid: membership.price,
-          transactionId,
+          userId: user?.id,
           billingFirstName: formData.firstName,
           billingLastName: formData.lastName,
           billingPhone: formData.phone || undefined,
@@ -378,33 +394,47 @@ export default function MembershipCheckoutPage() {
           teamDescription: formData.teamDescription || undefined,
           businessName: formData.businessName || undefined,
           businessWebsite: formData.businessWebsite || undefined,
-        });
-      }
-
-      // Save order data for confirmation page
-      setOrderData({
-        membershipId: membership.id,
-        membershipRecordId: createdMembership.id,
-        membershipName: membership.name,
-        category: membership.category,
-        price: membership.price,
-        email,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
+        }),
       });
 
-      // Proceed to confirmation
-      setStep('confirmation');
-
-      // Show account creation prompt for guests
-      if (!user) {
-        setShowAccountCreation(true);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to initialize payment');
       }
+
+      const { clientSecret: secret } = await response.json();
+      setClientSecret(secret);
+      setStep('payment');
     } catch (err) {
-      console.error('Payment error:', err);
-      setPaymentError('Payment failed. Please try again.');
+      console.error('Error creating payment intent:', err);
+      setError(err instanceof Error ? err.message : 'Failed to initialize payment. Please try again.');
     } finally {
-      setSubmitting(false);
+      setCreatingPaymentIntent(false);
+    }
+  };
+
+  const handlePaymentSuccess = async (_paymentIntentId: string) => {
+    if (!membership) return;
+
+    const email = user ? (profile?.email || formData.email) : formData.email;
+
+    // Save order data for confirmation page
+    setOrderData({
+      membershipId: membership.id,
+      membershipName: membership.name,
+      category: membership.category,
+      price: membership.price,
+      email,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+    });
+
+    // Proceed to confirmation
+    setStep('confirmation');
+
+    // Show account creation prompt for guests
+    if (!user) {
+      setShowAccountCreation(true);
     }
   };
 
@@ -448,7 +478,6 @@ export default function MembershipCheckoutPage() {
         } catch (linkError) {
           console.error('Failed to link membership:', linkError);
           // Don't fail the account creation if linking fails
-          // The membership can be linked manually later
         }
       }
 
@@ -1002,123 +1031,46 @@ export default function MembershipCheckoutPage() {
 
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={creatingPaymentIntent}
                     className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Continue to Payment
+                    {creatingPaymentIntent ? (
+                      <span className="flex items-center justify-center">
+                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                        Initializing Payment...
+                      </span>
+                    ) : (
+                      'Continue to Payment'
+                    )}
                   </button>
                 </form>
               )}
 
-              {step === 'payment' && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSubmitPayment();
+              {step === 'payment' && clientSecret && (
+                <Elements
+                  stripe={stripePromise}
+                  options={{
+                    clientSecret,
+                    appearance: {
+                      theme: 'night',
+                      variables: {
+                        colorPrimary: '#f97316',
+                        colorBackground: '#334155',
+                        colorText: '#ffffff',
+                        colorDanger: '#ef4444',
+                        fontFamily: 'system-ui, sans-serif',
+                        borderRadius: '8px',
+                      },
+                    },
                   }}
                 >
-                  {paymentError && (
-                    <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
-                      <p className="text-red-500 text-sm">{paymentError}</p>
-                    </div>
-                  )}
-
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                      <CreditCard className="h-5 w-5 mr-2 text-orange-500" />
-                      Card Information
-                    </h3>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Card Number
-                        </label>
-                        <input
-                          type="text"
-                          name="number"
-                          value={cardData.number}
-                          onChange={handleCardChange}
-                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          placeholder="1234 5678 9012 3456"
-                          required
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Expiry Date
-                          </label>
-                          <input
-                            type="text"
-                            name="expiry"
-                            value={cardData.expiry}
-                            onChange={handleCardChange}
-                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="MM/YY"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">
-                            CVC
-                          </label>
-                          <input
-                            type="text"
-                            name="cvc"
-                            value={cardData.cvc}
-                            onChange={handleCardChange}
-                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="123"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Name on Card
-                        </label>
-                        <input
-                          type="text"
-                          name="name"
-                          value={cardData.name}
-                          onChange={handleCardChange}
-                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          placeholder="John Doe"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center text-sm text-gray-400 mb-6">
-                    <Lock className="h-4 w-4 mr-2" />
-                    Your payment information is secure and encrypted
-                  </div>
-
-                  <div className="flex gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setStep('info')}
-                      className="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="flex-1 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {submitting ? (
-                        <span className="flex items-center justify-center">
-                          <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                          Processing Payment...
-                        </span>
-                      ) : (
-                        `Pay $${membership.price.toFixed(2)}`
-                      )}
-                    </button>
-                  </div>
-                </form>
+                  <StripePaymentForm
+                    membership={membership}
+                    formData={formData}
+                    onSuccess={handlePaymentSuccess}
+                    onBack={() => setStep('info')}
+                  />
+                </Elements>
               )}
             </div>
           </div>

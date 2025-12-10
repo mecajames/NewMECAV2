@@ -9,8 +9,9 @@ import {
   HttpCode,
   HttpStatus
 } from '@nestjs/common';
-import { MembershipsService, CreateGuestMembershipDto, CreateUserMembershipDto } from './memberships.service';
+import { MembershipsService, AdminAssignMembershipDto } from './memberships.service';
 import { Membership } from './memberships.entity';
+import { CreateGuestMembershipDto, CreateUserMembershipDto } from '@newmeca/shared';
 
 @Controller('api/memberships')
 export class MembershipsController {
@@ -91,5 +92,30 @@ export class MembershipsController {
     @Body('membershipType') membershipType: string,
   ): Promise<Membership> {
     return this.membershipsService.renewMembership(userId, membershipType);
+  }
+
+  /**
+   * Admin: Get all memberships for a user
+   */
+  @Get('user/:userId/all')
+  async getAllUserMemberships(@Param('userId') userId: string): Promise<Membership[]> {
+    return this.membershipsService.getAllMembershipsByUser(userId);
+  }
+
+  /**
+   * Admin: Get all memberships in the system
+   */
+  @Get('admin/all')
+  async getAllMemberships(): Promise<Membership[]> {
+    return this.membershipsService.getAllMemberships();
+  }
+
+  /**
+   * Admin: Assign a membership to a user without payment
+   */
+  @Post('admin/assign')
+  @HttpCode(HttpStatus.CREATED)
+  async adminAssignMembership(@Body() data: AdminAssignMembershipDto): Promise<Membership> {
+    return this.membershipsService.adminAssignMembership(data);
   }
 }

@@ -1,19 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-
-export enum MembershipCategory {
-  COMPETITOR = 'competitor',
-  TEAM = 'team',
-  RETAIL = 'retail',
-  MANUFACTURER = 'manufacturer',
-}
-
-// Manufacturer tiers for tiered pricing
-export enum ManufacturerTier {
-  BRONZE = 'bronze',
-  SILVER = 'silver',
-  GOLD = 'gold',
-}
+import { MembershipCategory, ManufacturerTier } from '@newmeca/shared';
 
 @Entity({ tableName: 'membership_type_configs', schema: 'public' })
 export class MembershipTypeConfig {
@@ -60,6 +47,11 @@ export class MembershipTypeConfig {
   // Manufacturer memberships are admin-only
   @Property({ type: 'boolean', fieldName: 'show_on_public_site', default: true })
   showOnPublicSite: boolean = true;
+
+  // Whether this membership type is only available as an upgrade (not shown on main membership page)
+  // Used for team add-ons that require an existing competitor membership
+  @Property({ type: 'boolean', fieldName: 'is_upgrade_only', default: false })
+  isUpgradeOnly: boolean = false;
 
   @Property({ type: 'integer', fieldName: 'display_order', default: 0 })
   displayOrder: number = 0;

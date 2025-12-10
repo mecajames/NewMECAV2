@@ -504,10 +504,10 @@ export default function EventHostingRequestsManagement() {
           <div class="field"><span class="label">Event Name:</span> <span class="value">${selectedRequest.event_name}</span></div>
           <div class="field"><span class="label">Event Type:</span> <span class="value">${selectedRequest.event_type === 'Other' ? selectedRequest.event_type_other : selectedRequest.event_type}</span></div>
           ${selectedRequest.is_multi_day ? `<div class="field multi-day">Multi-Day Event</div>` : ''}
-          ${selectedRequest.event_start_date ? `<div class="field"><span class="label">${selectedRequest.is_multi_day ? 'Day 1' : 'Start'}:</span> <span class="value">${formatDate(selectedRequest.event_start_date)} ${selectedRequest.event_start_time || ''}${selectedRequest.event_end_time ? ` - ${selectedRequest.event_end_time}` : ''}</span></div>` : ''}
-          ${selectedRequest.is_multi_day && selectedRequest.day_2_date ? `<div class="field"><span class="label">Day 2:</span> <span class="value">${formatDate(selectedRequest.day_2_date)} ${selectedRequest.day_2_start_time || ''}${selectedRequest.day_2_end_time ? ` - ${selectedRequest.day_2_end_time}` : ''}</span></div>` : ''}
-          ${selectedRequest.is_multi_day && selectedRequest.day_3_date ? `<div class="field"><span class="label">Day 3:</span> <span class="value">${formatDate(selectedRequest.day_3_date)} ${selectedRequest.day_3_start_time || ''}${selectedRequest.day_3_end_time ? ` - ${selectedRequest.day_3_end_time}` : ''}</span></div>` : ''}
-          ${!selectedRequest.is_multi_day && selectedRequest.event_end_date ? `<div class="field"><span class="label">End:</span> <span class="value">${formatDate(selectedRequest.event_end_date)} ${selectedRequest.event_end_time || ''}</span></div>` : ''}
+          ${selectedRequest.event_start_date ? `<div class="field"><span class="label">${selectedRequest.is_multi_day ? 'Day 1' : 'Start'}:</span> <span class="value">${formatDate(selectedRequest.event_start_date)} ${formatTime(selectedRequest.event_start_time)}${selectedRequest.event_end_time ? ` - ${formatTime(selectedRequest.event_end_time)}` : ''}</span></div>` : ''}
+          ${selectedRequest.is_multi_day && selectedRequest.day_2_date ? `<div class="field"><span class="label">Day 2:</span> <span class="value">${formatDate(selectedRequest.day_2_date)} ${formatTime(selectedRequest.day_2_start_time)}${selectedRequest.day_2_end_time ? ` - ${formatTime(selectedRequest.day_2_end_time)}` : ''}</span></div>` : ''}
+          ${selectedRequest.is_multi_day && selectedRequest.day_3_date ? `<div class="field"><span class="label">Day 3:</span> <span class="value">${formatDate(selectedRequest.day_3_date)} ${formatTime(selectedRequest.day_3_start_time)}${selectedRequest.day_3_end_time ? ` - ${formatTime(selectedRequest.day_3_end_time)}` : ''}</span></div>` : ''}
+          ${!selectedRequest.is_multi_day && selectedRequest.event_end_date ? `<div class="field"><span class="label">End:</span> <span class="value">${formatDate(selectedRequest.event_end_date)} ${formatTime(selectedRequest.event_end_time)}</span></div>` : ''}
         </div>
 
         <h2>Event Description</h2>
@@ -634,10 +634,12 @@ export default function EventHostingRequestsManagement() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
+    // Use UTC timezone to prevent date shifting due to local timezone conversion
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      timeZone: 'UTC',
     });
   };
 
@@ -649,6 +651,16 @@ export default function EventHostingRequestsManagement() {
       hour: 'numeric',
       minute: '2-digit',
     });
+  };
+
+  // Convert 24-hour time (HH:MM) to 12-hour format (h:MM AM/PM)
+  const formatTime = (timeString?: string) => {
+    if (!timeString) return '';
+    const [hours, minutes] = timeString.split(':').map(Number);
+    if (isNaN(hours) || isNaN(minutes)) return timeString;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
   const getEDName = (edId: string) => {
@@ -975,29 +987,29 @@ export default function EventHostingRequestsManagement() {
                       <p className="text-gray-300">
                         <span className="text-gray-400">{selectedRequest.is_multi_day ? 'Day 1:' : 'Start:'}</span>{' '}
                         {formatDate(selectedRequest.event_start_date)}{' '}
-                        {selectedRequest.event_start_time && `${selectedRequest.event_start_time}`}
-                        {selectedRequest.event_end_time && ` - ${selectedRequest.event_end_time}`}
+                        {selectedRequest.event_start_time && formatTime(selectedRequest.event_start_time)}
+                        {selectedRequest.event_end_time && ` - ${formatTime(selectedRequest.event_end_time)}`}
                       </p>
                     )}
                     {selectedRequest.is_multi_day && selectedRequest.day_2_date && (
                       <p className="text-gray-300">
                         <span className="text-gray-400">Day 2:</span>{' '}
                         {formatDate(selectedRequest.day_2_date)}{' '}
-                        {selectedRequest.day_2_start_time && `${selectedRequest.day_2_start_time}`}
-                        {selectedRequest.day_2_end_time && ` - ${selectedRequest.day_2_end_time}`}
+                        {selectedRequest.day_2_start_time && formatTime(selectedRequest.day_2_start_time)}
+                        {selectedRequest.day_2_end_time && ` - ${formatTime(selectedRequest.day_2_end_time)}`}
                       </p>
                     )}
                     {selectedRequest.is_multi_day && selectedRequest.day_3_date && (
                       <p className="text-gray-300">
                         <span className="text-gray-400">Day 3:</span>{' '}
                         {formatDate(selectedRequest.day_3_date)}{' '}
-                        {selectedRequest.day_3_start_time && `${selectedRequest.day_3_start_time}`}
-                        {selectedRequest.day_3_end_time && ` - ${selectedRequest.day_3_end_time}`}
+                        {selectedRequest.day_3_start_time && formatTime(selectedRequest.day_3_start_time)}
+                        {selectedRequest.day_3_end_time && ` - ${formatTime(selectedRequest.day_3_end_time)}`}
                       </p>
                     )}
                     {!selectedRequest.is_multi_day && selectedRequest.event_end_date && (
                       <p className="text-gray-300">
-                        <span className="text-gray-400">End:</span> {formatDate(selectedRequest.event_end_date)} {selectedRequest.event_end_time}
+                        <span className="text-gray-400">End:</span> {formatDate(selectedRequest.event_end_date)} {formatTime(selectedRequest.event_end_time)}
                       </p>
                     )}
                   </div>

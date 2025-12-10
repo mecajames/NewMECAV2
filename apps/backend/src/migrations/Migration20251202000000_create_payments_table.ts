@@ -3,6 +3,15 @@ import { Migration } from '@mikro-orm/migrations';
 export class Migration20251202000000_create_payments_table extends Migration {
 
   async up(): Promise<void> {
+    // Create payment_status enum type (if not exists)
+    this.addSql(`
+      DO $$ BEGIN
+        CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'refunded', 'failed', 'cancelled');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
     // Create payment_method enum type
     this.addSql(`
       DO $$ BEGIN
@@ -70,6 +79,9 @@ export class Migration20251202000000_create_payments_table extends Migration {
 
     // Drop payment_method enum
     this.addSql('DROP TYPE IF EXISTS payment_method CASCADE;');
+
+    // Drop payment_status enum
+    this.addSql('DROP TYPE IF EXISTS payment_status CASCADE;');
   }
 
 }

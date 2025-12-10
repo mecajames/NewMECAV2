@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { RulebookStatus } from '@newmeca/shared';
 import { Rulebook } from './rulebooks.entity';
 
 @Injectable()
@@ -11,7 +12,7 @@ export class RulebooksService {
 
   async findAll(): Promise<Rulebook[]> {
     const em = this.em.fork();
-    return em.find(Rulebook, { status: 'active' }, {
+    return em.find(Rulebook, { status: RulebookStatus.ACTIVE }, {
       orderBy: { category: 'ASC', season: 'DESC' }
     });
   }
@@ -35,7 +36,7 @@ export class RulebooksService {
   async findBySeason(season: string): Promise<Rulebook[]> {
     const em = this.em.fork();
     const seasonNum = parseInt(season, 10);
-    return em.find(Rulebook, { season: seasonNum, status: 'active' });
+    return em.find(Rulebook, { season: seasonNum, status: RulebookStatus.ACTIVE });
   }
 
   async create(data: Partial<Rulebook>): Promise<Rulebook> {
@@ -52,7 +53,7 @@ export class RulebooksService {
     }
     // Sync isActive boolean with status text
     if (transformedData.status !== undefined) {
-      transformedData.isActive = transformedData.status === 'active';
+      transformedData.isActive = transformedData.status === RulebookStatus.ACTIVE;
     }
 
     console.log('📝 CREATE RULEBOOK - Transformed data:', JSON.stringify(transformedData, null, 2));
@@ -90,12 +91,12 @@ export class RulebooksService {
     if (data.status !== undefined) {
       if (typeof data.status === 'boolean') {
         // Convert boolean to string status
-        transformedData.status = data.status ? 'active' : 'inactive';
+        transformedData.status = data.status ? RulebookStatus.ACTIVE : RulebookStatus.INACTIVE;
         transformedData.isActive = data.status;
       } else {
         // Use string status directly
         transformedData.status = data.status;
-        transformedData.isActive = data.status === 'active';
+        transformedData.isActive = data.status === RulebookStatus.ACTIVE;
       }
     }
     if ((data as any).pdfUrl !== undefined) transformedData.pdfUrl = (data as any).pdfUrl;

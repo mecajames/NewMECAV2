@@ -132,6 +132,227 @@
           "nullable": false,
           "mappedType": "uuid"
         },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "competitor",
+            "team",
+            "retail",
+            "manufacturer"
+          ],
+          "mappedType": "enum"
+        },
+        "tier": {
+          "name": "tier",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "enumItems": [
+            "bronze",
+            "silver",
+            "gold"
+          ],
+          "mappedType": "enum"
+        },
+        "price": {
+          "name": "price",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 3,
+          "mappedType": "string"
+        },
+        "benefits": {
+          "name": "benefits",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "required_fields": {
+          "name": "required_fields",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "optional_fields": {
+          "name": "optional_fields",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "true",
+          "mappedType": "boolean"
+        },
+        "is_featured": {
+          "name": "is_featured",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "show_on_public_site": {
+          "name": "show_on_public_site",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "true",
+          "mappedType": "boolean"
+        },
+        "display_order": {
+          "name": "display_order",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "0",
+          "mappedType": "integer"
+        },
+        "stripe_price_id": {
+          "name": "stripe_price_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "stripe_product_id": {
+          "name": "stripe_product_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "quickbooks_item_id": {
+          "name": "quickbooks_item_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "quickbooks_account_id": {
+          "name": "quickbooks_account_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "membership_type_configs",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "membership_type_configs_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {},
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
         "email": {
           "name": "email",
           "type": "text",
@@ -378,6 +599,43 @@
           "nullable": true,
           "mappedType": "text"
         },
+        "is_public": {
+          "name": "is_public",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "vehicle_info": {
+          "name": "vehicle_info",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "car_audio_system": {
+          "name": "car_audio_system",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "profile_images": {
+          "name": "profile_images",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamptz",
@@ -585,7 +843,25 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "membership_type_config_id": {
+          "name": "membership_type_config_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
           "mappedType": "uuid"
         },
         "membership_type": {
@@ -596,6 +872,10 @@
           "primary": false,
           "nullable": false,
           "enumItems": [
+            "domestic",
+            "international",
+            "team",
+            "retailer",
             "annual",
             "lifetime"
           ],
@@ -656,6 +936,123 @@
           "nullable": true,
           "mappedType": "text"
         },
+        "stripe_payment_intent_id": {
+          "name": "stripe_payment_intent_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_first_name": {
+          "name": "billing_first_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_last_name": {
+          "name": "billing_last_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_phone": {
+          "name": "billing_phone",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_address": {
+          "name": "billing_address",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_city": {
+          "name": "billing_city",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_state": {
+          "name": "billing_state",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_postal_code": {
+          "name": "billing_postal_code",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_country": {
+          "name": "billing_country",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "team_name": {
+          "name": "team_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "team_description": {
+          "name": "team_description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "business_name": {
+          "name": "business_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "business_website": {
+          "name": "business_website",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamptz",
@@ -703,6 +1100,290 @@
             "id"
           ],
           "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "memberships_membership_type_config_id_foreign": {
+          "constraintName": "memberships_membership_type_config_id_foreign",
+          "columnNames": [
+            "membership_type_config_id"
+          ],
+          "localTableName": "public.memberships",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.membership_type_configs",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "membership_id": {
+          "name": "membership_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "payment_type": {
+          "name": "payment_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "membership",
+            "event_registration",
+            "other"
+          ],
+          "mappedType": "enum"
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "stripe",
+            "paypal",
+            "credit_card",
+            "manual",
+            "wordpress_pmpro"
+          ],
+          "mappedType": "enum"
+        },
+        "payment_status": {
+          "name": "payment_status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "'pending'",
+          "enumItems": [
+            "pending",
+            "paid",
+            "refunded"
+          ],
+          "mappedType": "enum"
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 3,
+          "mappedType": "string"
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "external_payment_id": {
+          "name": "external_payment_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "stripe_payment_intent_id": {
+          "name": "stripe_payment_intent_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "stripe_customer_id": {
+          "name": "stripe_customer_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "wordpress_order_id": {
+          "name": "wordpress_order_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "wordpress_subscription_id": {
+          "name": "wordpress_subscription_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "payment_metadata": {
+          "name": "payment_metadata",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "refunded_at": {
+          "name": "refunded_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "refund_reason": {
+          "name": "refund_reason",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "failure_reason": {
+          "name": "failure_reason",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "payments",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "payments_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "payments_user_id_foreign": {
+          "constraintName": "payments_user_id_foreign",
+          "columnNames": [
+            "user_id"
+          ],
+          "localTableName": "public.payments",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "updateRule": "cascade"
+        },
+        "payments_membership_id_foreign": {
+          "constraintName": "payments_membership_id_foreign",
+          "columnNames": [
+            "membership_id"
+          ],
+          "localTableName": "public.payments",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.memberships",
+          "deleteRule": "set null",
           "updateRule": "cascade"
         }
       },
@@ -875,8 +1556,8 @@
           "nullable": false,
           "mappedType": "uuid"
         },
-        "first_name": {
-          "name": "first_name",
+        "realm_id": {
+          "name": "realm_id",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -884,8 +1565,8 @@
           "nullable": false,
           "mappedType": "text"
         },
-        "last_name": {
-          "name": "last_name",
+        "access_token": {
+          "name": "access_token",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -893,8 +1574,8 @@
           "nullable": false,
           "mappedType": "text"
         },
-        "email": {
-          "name": "email",
+        "refresh_token": {
+          "name": "refresh_token",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -902,109 +1583,28 @@
           "nullable": false,
           "mappedType": "text"
         },
-        "phone": {
-          "name": "phone",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "business_name": {
-          "name": "business_name",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "uuid"
-        },
-        "event_name": {
-          "name": "event_name",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "mappedType": "text"
-        },
-        "event_type": {
-          "name": "event_type",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "enumItems": [
-            "1x Event",
-            "2x Event",
-            "3x Event",
-            "4x Event",
-            "Branded Event",
-            "Sponsored Event",
-            "Other"
-          ],
-          "mappedType": "enum"
-        },
-        "event_type_other": {
-          "name": "event_type_other",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "event_description": {
-          "name": "event_description",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "mappedType": "text"
-        },
-        "event_start_date": {
-          "name": "event_start_date",
+        "access_token_expires_at": {
+          "name": "access_token_expires_at",
           "type": "timestamptz",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": true,
+          "nullable": false,
           "length": 6,
           "mappedType": "datetime"
         },
-        "event_start_time": {
-          "name": "event_start_time",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "event_end_date": {
-          "name": "event_end_date",
+        "refresh_token_expires_at": {
+          "name": "refresh_token_expires_at",
           "type": "timestamptz",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": true,
+          "nullable": false,
           "length": 6,
           "mappedType": "datetime"
         },
-        "event_end_time": {
-          "name": "event_end_time",
+        "company_name": {
+          "name": "company_name",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -1012,177 +1612,15 @@
           "nullable": true,
           "mappedType": "text"
         },
-        "address_line_1": {
-          "name": "address_line_1",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "address_line_2": {
-          "name": "address_line_2",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "city": {
-          "name": "city",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "postal_code": {
-          "name": "postal_code",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "country": {
-          "name": "country",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "default": "'United States'",
-          "mappedType": "text"
-        },
-        "venue_type": {
-          "name": "venue_type",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "expected_participants": {
-          "name": "expected_participants",
-          "type": "int",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "integer"
-        },
-        "has_hosted_before": {
-          "name": "has_hosted_before",
+        "is_active": {
+          "name": "is_active",
           "type": "boolean",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": true,
-          "mappedType": "boolean"
-        },
-        "additional_services": {
-          "name": "additional_services",
-          "type": "jsonb",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "json"
-        },
-        "other_services_details": {
-          "name": "other_services_details",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "other_requests": {
-          "name": "other_requests",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "additional_info": {
-          "name": "additional_info",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "estimated_budget": {
-          "name": "estimated_budget",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
           "nullable": false,
-          "default": "'pending'",
-          "enumItems": [
-            "pending",
-            "under_review",
-            "approved",
-            "rejected",
-            "cancelled"
-          ],
-          "mappedType": "enum"
-        },
-        "admin_response": {
-          "name": "admin_response",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "text"
-        },
-        "admin_response_date": {
-          "name": "admin_response_date",
-          "type": "timestamptz",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "length": 6,
-          "mappedType": "datetime"
-        },
-        "admin_responder_id": {
-          "name": "admin_responder_id",
-          "type": "uuid",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "mappedType": "uuid"
+          "default": "true",
+          "mappedType": "boolean"
         },
         "created_at": {
           "name": "created_at",
@@ -1203,13 +1641,23 @@
           "nullable": false,
           "length": 6,
           "mappedType": "datetime"
+        },
+        "last_sync_at": {
+          "name": "last_sync_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
         }
       },
-      "name": "event_hosting_requests",
+      "name": "quickbooks_connections",
       "schema": "public",
       "indexes": [
         {
-          "keyName": "event_hosting_requests_pkey",
+          "keyName": "quickbooks_connections_pkey",
           "columnNames": [
             "id"
           ],
@@ -1220,34 +1668,7 @@
         }
       ],
       "checks": [],
-      "foreignKeys": {
-        "event_hosting_requests_user_id_foreign": {
-          "constraintName": "event_hosting_requests_user_id_foreign",
-          "columnNames": [
-            "user_id"
-          ],
-          "localTableName": "public.event_hosting_requests",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.profiles",
-          "deleteRule": "set null",
-          "updateRule": "cascade"
-        },
-        "event_hosting_requests_admin_responder_id_foreign": {
-          "constraintName": "event_hosting_requests_admin_responder_id_foreign",
-          "columnNames": [
-            "admin_responder_id"
-          ],
-          "localTableName": "public.event_hosting_requests",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.profiles",
-          "deleteRule": "set null",
-          "updateRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "nativeEnums": {}
     },
     {
@@ -1306,6 +1727,16 @@
           "nullable": false,
           "default": "true",
           "mappedType": "boolean"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "'active'",
+          "mappedType": "text"
         },
         "description": {
           "name": "description",
@@ -1643,6 +2074,7 @@
           "nullable": false,
           "default": "'upcoming'",
           "enumItems": [
+            "pending",
             "upcoming",
             "ongoing",
             "completed",
@@ -1671,6 +2103,49 @@
           "scale": 2,
           "mappedType": "decimal"
         },
+        "member_entry_fee": {
+          "name": "member_entry_fee",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "non_member_entry_fee": {
+          "name": "non_member_entry_fee",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "has_gate_fee": {
+          "name": "has_gate_fee",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "gate_fee": {
+          "name": "gate_fee",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
         "points_multiplier": {
           "name": "points_multiplier",
           "type": "int",
@@ -1681,6 +2156,22 @@
           "default": "2",
           "mappedType": "integer"
         },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "'standard'",
+          "enumItems": [
+            "standard",
+            "state_finals",
+            "world_finals",
+            "judges_point"
+          ],
+          "mappedType": "enum"
+        },
         "formats": {
           "name": "formats",
           "type": "jsonb",
@@ -1689,6 +2180,24 @@
           "primary": false,
           "nullable": true,
           "mappedType": "json"
+        },
+        "multi_day_group_id": {
+          "name": "multi_day_group_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "day_number": {
+          "name": "day_number",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "integer"
         },
         "created_at": {
           "name": "created_at",
@@ -2070,6 +2579,940 @@
           "nullable": false,
           "mappedType": "uuid"
         },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "business_name": {
+          "name": "business_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "host_type": {
+          "name": "host_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "venue_name": {
+          "name": "venue_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "indoor_outdoor": {
+          "name": "indoor_outdoor",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "power_available": {
+          "name": "power_available",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "boolean"
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "1x Event",
+            "2x Event",
+            "3x Event",
+            "4x Event",
+            "Branded Event",
+            "Sponsored Event",
+            "Other"
+          ],
+          "mappedType": "enum"
+        },
+        "event_type_other": {
+          "name": "event_type_other",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "event_description": {
+          "name": "event_description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "event_start_date": {
+          "name": "event_start_date",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "event_start_time": {
+          "name": "event_start_time",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "event_end_date": {
+          "name": "event_end_date",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "event_end_time": {
+          "name": "event_end_time",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "competition_formats": {
+          "name": "competition_formats",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "is_multi_day": {
+          "name": "is_multi_day",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "day_2_date": {
+          "name": "day_2_date",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "day_2_start_time": {
+          "name": "day_2_start_time",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "day_2_end_time": {
+          "name": "day_2_end_time",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "day_3_date": {
+          "name": "day_3_date",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "day_3_start_time": {
+          "name": "day_3_start_time",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "day_3_end_time": {
+          "name": "day_3_end_time",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "address_line_1": {
+          "name": "address_line_1",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "address_line_2": {
+          "name": "address_line_2",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "postal_code": {
+          "name": "postal_code",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "country": {
+          "name": "country",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "default": "'United States'",
+          "mappedType": "text"
+        },
+        "venue_type": {
+          "name": "venue_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "expected_participants": {
+          "name": "expected_participants",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "integer"
+        },
+        "has_hosted_before": {
+          "name": "has_hosted_before",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "boolean"
+        },
+        "additional_services": {
+          "name": "additional_services",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "other_services_details": {
+          "name": "other_services_details",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "other_requests": {
+          "name": "other_requests",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "additional_info": {
+          "name": "additional_info",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "estimated_budget": {
+          "name": "estimated_budget",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "has_registration_fee": {
+          "name": "has_registration_fee",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "boolean"
+        },
+        "estimated_entry_fee": {
+          "name": "estimated_entry_fee",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "pre_registration_available": {
+          "name": "pre_registration_available",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "boolean"
+        },
+        "member_entry_fee": {
+          "name": "member_entry_fee",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "non_member_entry_fee": {
+          "name": "non_member_entry_fee",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "has_gate_fee": {
+          "name": "has_gate_fee",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "boolean"
+        },
+        "gate_fee": {
+          "name": "gate_fee",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "'pending'",
+          "enumItems": [
+            "pending",
+            "assigned_to_ed",
+            "ed_reviewing",
+            "ed_accepted",
+            "ed_rejected",
+            "under_review",
+            "approved",
+            "approved_pending_info",
+            "pending_info",
+            "rejected",
+            "cancelled"
+          ],
+          "mappedType": "enum"
+        },
+        "admin_response": {
+          "name": "admin_response",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "admin_response_date": {
+          "name": "admin_response_date",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "admin_responder_id": {
+          "name": "admin_responder_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "assigned_event_director_id": {
+          "name": "assigned_event_director_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "assigned_at": {
+          "name": "assigned_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "assignment_notes": {
+          "name": "assignment_notes",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "ed_status": {
+          "name": "ed_status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "ed_response_date": {
+          "name": "ed_response_date",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "ed_rejection_reason": {
+          "name": "ed_rejection_reason",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "final_status": {
+          "name": "final_status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "final_status_reason": {
+          "name": "final_status_reason",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "awaiting_requestor_response": {
+          "name": "awaiting_requestor_response",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "created_event_id": {
+          "name": "created_event_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "event_hosting_requests",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "event_hosting_requests_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "event_hosting_requests_user_id_foreign": {
+          "constraintName": "event_hosting_requests_user_id_foreign",
+          "columnNames": [
+            "user_id"
+          ],
+          "localTableName": "public.event_hosting_requests",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "event_hosting_requests_admin_responder_id_foreign": {
+          "constraintName": "event_hosting_requests_admin_responder_id_foreign",
+          "columnNames": [
+            "admin_responder_id"
+          ],
+          "localTableName": "public.event_hosting_requests",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "event_hosting_requests_assigned_event_director_id_foreign": {
+          "constraintName": "event_hosting_requests_assigned_event_director_id_foreign",
+          "columnNames": [
+            "assigned_event_director_id"
+          ],
+          "localTableName": "public.event_hosting_requests",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "event_hosting_requests_created_event_id_foreign": {
+          "constraintName": "event_hosting_requests_created_event_id_foreign",
+          "columnNames": [
+            "created_event_id"
+          ],
+          "localTableName": "public.event_hosting_requests",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.events",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "sender_id": {
+          "name": "sender_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "sender_role": {
+          "name": "sender_role",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "is_private": {
+          "name": "is_private",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "recipient_type": {
+          "name": "recipient_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "event_hosting_request_messages",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "event_hosting_request_messages_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "event_hosting_request_messages_request_id_foreign": {
+          "constraintName": "event_hosting_request_messages_request_id_foreign",
+          "columnNames": [
+            "request_id"
+          ],
+          "localTableName": "public.event_hosting_request_messages",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.event_hosting_requests",
+          "updateRule": "cascade"
+        },
+        "event_hosting_request_messages_sender_id_foreign": {
+          "constraintName": "event_hosting_request_messages_sender_id_foreign",
+          "columnNames": [
+            "sender_id"
+          ],
+          "localTableName": "public.event_hosting_request_messages",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "abbreviation": {
+          "name": "abbreviation",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "format": {
+          "name": "format",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "season_id": {
+          "name": "season_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "true",
+          "mappedType": "boolean"
+        },
+        "display_order": {
+          "name": "display_order",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "0",
+          "mappedType": "integer"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "competition_classes",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "competition_classes_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "competition_classes_season_id_foreign": {
+          "constraintName": "competition_classes_season_id_foreign",
+          "columnNames": [
+            "season_id"
+          ],
+          "localTableName": "public.competition_classes",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.seasons",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
         "event_id": {
           "name": "event_id",
           "type": "uuid",
@@ -2214,7 +3657,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "mappedType": "uuid"
         },
         "created_at": {
@@ -2307,6 +3750,58 @@
           "referencedTableName": "public.profiles",
           "deleteRule": "set null",
           "updateRule": "cascade"
+        },
+        "competition_results_season_id_foreign": {
+          "constraintName": "competition_results_season_id_foreign",
+          "columnNames": [
+            "season_id"
+          ],
+          "localTableName": "public.competition_results",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.seasons",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "competition_results_class_id_foreign": {
+          "constraintName": "competition_results_class_id_foreign",
+          "columnNames": [
+            "class_id"
+          ],
+          "localTableName": "public.competition_results",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.competition_classes",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "competition_results_created_by_foreign": {
+          "constraintName": "competition_results_created_by_foreign",
+          "columnNames": [
+            "created_by"
+          ],
+          "localTableName": "public.competition_results",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "competition_results_updated_by_foreign": {
+          "constraintName": "competition_results_updated_by_foreign",
+          "columnNames": [
+            "updated_by"
+          ],
+          "localTableName": "public.competition_results",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
         }
       },
       "nativeEnums": {}
@@ -2383,7 +3878,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "mappedType": "uuid"
         }
       },
@@ -2428,6 +3923,19 @@
           "referencedTableName": "public.competition_results",
           "deleteRule": "set null",
           "updateRule": "cascade"
+        },
+        "results_audit_log_user_id_foreign": {
+          "constraintName": "results_audit_log_user_id_foreign",
+          "columnNames": [
+            "user_id"
+          ],
+          "localTableName": "public.results_audit_log",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
         }
       },
       "nativeEnums": {}
@@ -2443,8 +3951,8 @@
           "nullable": false,
           "mappedType": "uuid"
         },
-        "name": {
-          "name": "name",
+        "source_name": {
+          "name": "source_name",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -2452,32 +3960,24 @@
           "nullable": false,
           "mappedType": "text"
         },
-        "abbreviation": {
-          "name": "abbreviation",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "mappedType": "text"
-        },
-        "format": {
-          "name": "format",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "mappedType": "text"
-        },
-        "season_id": {
-          "name": "season_id",
+        "target_class_id": {
+          "name": "target_class_id",
           "type": "uuid",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "mappedType": "uuid"
+        },
+        "source_system": {
+          "name": "source_system",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "'termlab'",
+          "mappedType": "text"
         },
         "is_active": {
           "name": "is_active",
@@ -2488,6 +3988,290 @@
           "nullable": false,
           "default": "true",
           "mappedType": "boolean"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "class_name_mappings",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "class_name_mappings_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {},
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "season_id": {
+          "name": "season_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "year": {
+          "name": "year",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "integer"
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "hero_image_url": {
+          "name": "hero_image_url",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "world_finals_event_id": {
+          "name": "world_finals_event_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "published": {
+          "name": "published",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "special_awards_content": {
+          "name": "special_awards_content",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "club_awards_content": {
+          "name": "club_awards_content",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "additional_content": {
+          "name": "additional_content",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "championship_archives",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "championship_archives_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "championship_archives_season_id_foreign": {
+          "constraintName": "championship_archives_season_id_foreign",
+          "columnNames": [
+            "season_id"
+          ],
+          "localTableName": "public.championship_archives",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.seasons",
+          "updateRule": "cascade"
+        },
+        "championship_archives_world_finals_event_id_foreign": {
+          "constraintName": "championship_archives_world_finals_event_id_foreign",
+          "columnNames": [
+            "world_finals_event_id"
+          ],
+          "localTableName": "public.championship_archives",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.events",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "archive_id": {
+          "name": "archive_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "section": {
+          "name": "section",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "special_awards",
+            "club_awards"
+          ],
+          "mappedType": "enum"
+        },
+        "award_name": {
+          "name": "award_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "recipient_name": {
+          "name": "recipient_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "recipient_team": {
+          "name": "recipient_team",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "recipient_state": {
+          "name": "recipient_state",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
         },
         "display_order": {
           "name": "display_order",
@@ -2520,11 +4304,11 @@
           "mappedType": "datetime"
         }
       },
-      "name": "competition_classes",
+      "name": "championship_awards",
       "schema": "public",
       "indexes": [
         {
-          "keyName": "competition_classes_pkey",
+          "keyName": "championship_awards_pkey",
           "columnNames": [
             "id"
           ],
@@ -2536,16 +4320,16 @@
       ],
       "checks": [],
       "foreignKeys": {
-        "competition_classes_season_id_foreign": {
-          "constraintName": "competition_classes_season_id_foreign",
+        "championship_awards_archive_id_foreign": {
+          "constraintName": "championship_awards_archive_id_foreign",
           "columnNames": [
-            "season_id"
+            "archive_id"
           ],
-          "localTableName": "public.competition_classes",
+          "localTableName": "public.championship_awards",
           "referencedColumnNames": [
             "id"
           ],
-          "referencedTableName": "public.seasons",
+          "referencedTableName": "public.championship_archives",
           "updateRule": "cascade"
         }
       },

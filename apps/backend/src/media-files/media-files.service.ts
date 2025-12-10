@@ -1,6 +1,7 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
-import { MediaFile, MediaType } from './media-files.entity';
+import { MediaType } from '@newmeca/shared';
+import { MediaFile } from './media-files.entity';
 
 @Injectable()
 export class MediaFilesService {

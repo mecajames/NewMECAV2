@@ -6,6 +6,11 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Rush
+common/temp/
+common/autoinstallers/*/.npmrc
+.rush/
+
 node_modules
 dist
 dist-ssr
