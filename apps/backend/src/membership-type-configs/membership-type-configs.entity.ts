@@ -48,6 +48,11 @@ export class MembershipTypeConfig {
   @Property({ type: 'boolean', fieldName: 'show_on_public_site', default: true })
   showOnPublicSite: boolean = true;
 
+  // Whether this membership type is only available as an upgrade (not shown on main membership page)
+  // Used for team add-ons that require an existing competitor membership
+  @Property({ type: 'boolean', fieldName: 'is_upgrade_only', default: false })
+  isUpgradeOnly: boolean = false;
+
   @Property({ type: 'integer', fieldName: 'display_order', default: 0 })
   displayOrder: number = 0;
 

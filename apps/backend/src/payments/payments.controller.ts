@@ -13,7 +13,11 @@ import {
 import { PaymentsService } from './payments.service';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
+<<<<<<< Updated upstream
 import { PaymentMethod, MembershipType, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from '@newmeca/shared';
+=======
+import { PaymentMethod } from '../types/enums';
+>>>>>>> Stashed changes
 
 @Controller('api/payments')
 export class PaymentsController {
@@ -75,7 +79,7 @@ export class PaymentsController {
     @Body()
     data: {
       userId: string;
-      membershipType: MembershipType;
+      membershipTypeConfigId: string;
       amount: number;
       paymentMethod: PaymentMethod;
       stripePaymentIntentId?: string;
@@ -86,7 +90,7 @@ export class PaymentsController {
   ): Promise<{ payment: Payment; membership: Membership }> {
     return this.paymentsService.createMembershipPayment(
       data.userId,
-      data.membershipType,
+      data.membershipTypeConfigId,
       data.amount,
       data.paymentMethod,
       {
@@ -106,7 +110,7 @@ export class PaymentsController {
       wordpressOrderId: string;
       wordpressSubscriptionId?: string;
       userId: string;
-      membershipType: MembershipType;
+      membershipTypeConfigId: string;
       amount: number;
       expirationDate: string;
       paidAt: string;
@@ -116,7 +120,7 @@ export class PaymentsController {
       wordpressOrderId: data.wordpressOrderId,
       wordpressSubscriptionId: data.wordpressSubscriptionId,
       userId: data.userId,
-      membershipType: data.membershipType,
+      membershipTypeConfigId: data.membershipTypeConfigId,
       amount: data.amount,
       expirationDate: new Date(data.expirationDate),
       paidAt: new Date(data.paidAt),

@@ -21,8 +21,12 @@ import { ClassNameMappingsModule } from './class-name-mappings/class-name-mappin
 import { MembershipTypeConfigsModule } from './membership-type-configs/membership-type-configs.module';
 import { RecaptchaModule } from './recaptcha/recaptcha.module';
 import { PaymentsModule } from './payments/payments.module';
+<<<<<<< Updated upstream
 import { StripeModule } from './stripe/stripe.module';
 import { QuickBooksModule } from './quickbooks/quickbooks.module';
+=======
+import { TeamsModule } from './teams/teams.module';
+>>>>>>> Stashed changes
 
 @Module({
   imports: [
@@ -46,8 +50,12 @@ import { QuickBooksModule } from './quickbooks/quickbooks.module';
     ChampionshipArchivesModule,
     ClassNameMappingsModule,
     RecaptchaModule,
+<<<<<<< Updated upstream
     StripeModule,
     QuickBooksModule,
+=======
+    TeamsModule,
+>>>>>>> Stashed changes
   ],
   controllers: [AppController],
   providers: [AppService],

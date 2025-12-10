@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Profile } from '../lib/supabase';
+import { setAxiosUserId } from '../lib/axios';
 
 interface AuthContextType {
   user: User | null;
@@ -55,6 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (async () => {
         setSession(session);
         setUser(session?.user ?? null);
+        // Set axios user ID for authenticated API calls
+        setAxiosUserId(session?.user?.id ?? null);
 
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id);
@@ -69,6 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (async () => {
         setSession(session);
         setUser(session?.user ?? null);
+        // Update axios user ID when auth state changes
+        setAxiosUserId(session?.user?.id ?? null);
 
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id);
@@ -129,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setSession(null);
+    setAxiosUserId(null);
   };
 
   const updatePassword = async (currentPassword: string, newPassword: string) => {

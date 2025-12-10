@@ -33,12 +33,13 @@ export class MembershipTypeConfigsService {
   /**
    * Find memberships visible on the public website
    * Excludes manufacturer memberships (showOnPublicSite = false)
+   * Excludes upgrade-only memberships (isUpgradeOnly = true)
    */
   async findPublic(): Promise<MembershipTypeConfig[]> {
     const em = this.em.fork();
     return em.find(
       MembershipTypeConfig,
-      { isActive: true, showOnPublicSite: true },
+      { isActive: true, showOnPublicSite: true, isUpgradeOnly: false },
       {
         orderBy: { displayOrder: 'ASC', name: 'ASC' },
       },

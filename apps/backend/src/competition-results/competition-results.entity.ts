@@ -82,7 +82,7 @@ export class CompetitionResult {
   @ManyToOne(() => Profile, { fieldName: 'updated_by', nullable: true, hidden: true })
   updater?: Profile;
 
-  @Property({ onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
+  @Property({ type: 'timestamptz', onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
   updatedAt?: Date;
 
   @Property({ type: 'integer', default: 0, fieldName: 'revision_count', serializedName: 'revision_count' })

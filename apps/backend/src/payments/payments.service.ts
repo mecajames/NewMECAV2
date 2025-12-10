@@ -3,7 +3,40 @@ import { EntityManager } from '@mikro-orm/core';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { Profile } from '../profiles/profiles.entity';
+<<<<<<< Updated upstream
 import { PaymentStatus, PaymentMethod, PaymentType, MembershipType, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from '@newmeca/shared';
+=======
+import { PaymentStatus, PaymentMethod, PaymentType } from '../types/enums';
+import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
+
+export interface CreatePaymentDto {
+  userId: string;
+  membershipId?: string;
+  paymentType: PaymentType;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  currency?: string;
+  transactionId?: string;
+  externalPaymentId?: string;
+  stripePaymentIntentId?: string;
+  stripeCustomerId?: string;
+  wordpressOrderId?: string;
+  wordpressSubscriptionId?: string;
+  description?: string;
+  paymentMetadata?: Record<string, any>;
+}
+
+export interface ProcessPaymentDto {
+  paymentId: string;
+  transactionId?: string;
+  paidAt?: Date;
+}
+
+export interface RefundPaymentDto {
+  paymentId: string;
+  reason: string;
+}
+>>>>>>> Stashed changes
 
 @Injectable()
 export class PaymentsService {
@@ -190,7 +223,7 @@ export class PaymentsService {
 
   async createMembershipPayment(
     userId: string,
-    membershipType: MembershipType,
+    membershipTypeConfigId: string,
     amount: number,
     paymentMethod: PaymentMethod,
     metadata?: {
@@ -208,21 +241,22 @@ export class PaymentsService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
+    // Get the membership type config
+    const membershipConfig = await em.findOne(MembershipTypeConfig, { id: membershipTypeConfigId });
+    if (!membershipConfig) {
+      throw new NotFoundException(`Membership type config with ID ${membershipTypeConfigId} not found`);
+    }
+
     // Create membership
     const startDate = new Date();
     const endDate = new Date(startDate);
 
-    // Set expiration based on membership type
-    if (membershipType === MembershipType.ANNUAL) {
-      endDate.setFullYear(endDate.getFullYear() + 1);
-    } else if (membershipType === MembershipType.LIFETIME) {
-      // Lifetime memberships expire in 100 years (effectively never)
-      endDate.setFullYear(endDate.getFullYear() + 100);
-    }
+    // Default to 1 year membership
+    endDate.setFullYear(endDate.getFullYear() + 1);
 
     const membership = em.create(Membership, {
       user: user,
-      membershipType: membershipType,
+      membershipTypeConfig: membershipConfig,
       startDate: startDate,
       endDate: endDate,
       amountPaid: amount,
@@ -239,7 +273,7 @@ export class PaymentsService {
       paymentMethod: paymentMethod,
       amount: amount,
       currency: 'USD',
-      description: `${membershipType} membership`,
+      description: `${membershipConfig.name} membership`,
       stripePaymentIntentId: metadata?.stripePaymentIntentId,
       stripeCustomerId: metadata?.stripeCustomerId,
       wordpressOrderId: metadata?.wordpressOrderId,
@@ -256,7 +290,7 @@ export class PaymentsService {
     wordpressOrderId: string;
     wordpressSubscriptionId?: string;
     userId: string;
-    membershipType: MembershipType;
+    membershipTypeConfigId: string;
     amount: number;
     expirationDate: Date;
     paidAt: Date;
@@ -278,10 +312,16 @@ export class PaymentsService {
       throw new NotFoundException(`User with ID ${data.userId} not found`);
     }
 
+    // Get the membership type config
+    const membershipConfig = await em.findOne(MembershipTypeConfig, { id: data.membershipTypeConfigId });
+    if (!membershipConfig) {
+      throw new NotFoundException(`Membership type config with ID ${data.membershipTypeConfigId} not found`);
+    }
+
     // Create membership
     const membership = em.create(Membership, {
       user: user,
-      membershipType: data.membershipType,
+      membershipTypeConfig: membershipConfig,
       startDate: data.paidAt,
       endDate: data.expirationDate,
       amountPaid: data.amount,
@@ -298,7 +338,7 @@ export class PaymentsService {
       paymentMethod: PaymentMethod.WORDPRESS_PMPRO,
       amount: data.amount,
       currency: 'USD',
-      description: `${data.membershipType} membership (WordPress sync)`,
+      description: `${membershipConfig.name} membership (WordPress sync)`,
       wordpressOrderId: data.wordpressOrderId,
       wordpressSubscriptionId: data.wordpressSubscriptionId,
       paymentStatus: PaymentStatus.PAID,
