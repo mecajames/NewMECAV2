@@ -5,6 +5,7 @@ export class Migration20251208200000_remove_membership_type_enum extends Migrati
   async up(): Promise<void> {
     // First, make sure all memberships have a membership_type_config_id
     // For any that don't, we'll need to set them based on their current membership_type
+    // Use text casting to avoid enum validation issues
 
     // Update any memberships that might be missing membership_type_config_id
     // Map old types to new config IDs:
@@ -16,31 +17,42 @@ export class Migration20251208200000_remove_membership_type_enum extends Migrati
       UPDATE memberships
       SET membership_type_config_id = '854d992c-4f6f-452b-8f81-649eb10425f0'
       WHERE membership_type_config_id IS NULL
-        AND membership_type IN ('domestic', 'annual', 'lifetime', 'international');
+        AND membership_type::text IN ('domestic', 'annual', 'lifetime', 'international');
     `);
 
     this.addSql(`
       UPDATE memberships
       SET membership_type_config_id = '65f8b5f4-14e8-4e21-b265-256fdc8f7b7e'
       WHERE membership_type_config_id IS NULL
-        AND membership_type = 'team';
+        AND membership_type::text = 'team';
     `);
 
     this.addSql(`
       UPDATE memberships
       SET membership_type_config_id = '9ad7c4ee-f3d8-45f5-94c2-5259d032314b'
       WHERE membership_type_config_id IS NULL
-        AND membership_type = 'retailer';
+        AND membership_type::text = 'retailer';
     `);
 
     // Drop the membership_type column
     this.addSql('ALTER TABLE "memberships" DROP COLUMN IF EXISTS "membership_type";');
 
-    // Make membership_type_config_id NOT NULL now that it's the primary identifier
-    this.addSql('ALTER TABLE "memberships" ALTER COLUMN "membership_type_config_id" SET NOT NULL;');
+    // Make membership_type_config_id NOT NULL only if there are no NULL values
+    // (skip if there are NULL values to avoid breaking existing data)
+    this.addSql(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM memberships WHERE membership_type_config_id IS NULL) THEN
+          ALTER TABLE memberships ALTER COLUMN membership_type_config_id SET NOT NULL;
+        END IF;
+      END $$;
+    `);
 
     // Drop the membership_type enum type
     this.addSql('DROP TYPE IF EXISTS "membership_type";');
+
+    // Also drop the membership_type_enum type if it exists (created by a previous migration)
+    this.addSql('DROP TYPE IF EXISTS "membership_type_enum";');
   }
 
   async down(): Promise<void> {

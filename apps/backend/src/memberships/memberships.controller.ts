@@ -9,11 +9,7 @@ import {
   HttpCode,
   HttpStatus
 } from '@nestjs/common';
-<<<<<<< Updated upstream
-import { MembershipsService } from './memberships.service';
-=======
-import { MembershipsService, CreateGuestMembershipDto, CreateUserMembershipDto, AdminAssignMembershipDto } from './memberships.service';
->>>>>>> Stashed changes
+import { MembershipsService, AdminAssignMembershipDto } from './memberships.service';
 import { Membership } from './memberships.entity';
 import { CreateGuestMembershipDto, CreateUserMembershipDto } from '@newmeca/shared';
 

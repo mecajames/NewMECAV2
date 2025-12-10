@@ -1,41 +1,9 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
-import { Membership } from './memberships.entity';
-<<<<<<< Updated upstream
 import { PaymentStatus, CreateGuestMembershipDto, CreateUserMembershipDto } from '@newmeca/shared';
-=======
-import { PaymentStatus } from '../types/enums';
+import { Membership } from './memberships.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 import { Profile } from '../profiles/profiles.entity';
-
-export interface CreateGuestMembershipDto {
-  email: string;
-  membershipTypeConfigId: string;
-  amountPaid: number;
-  stripePaymentIntentId?: string;
-  transactionId?: string;
-  billingFirstName: string;
-  billingLastName: string;
-  billingPhone?: string;
-  billingAddress: string;
-  billingCity: string;
-  billingState: string;
-  billingPostalCode: string;
-  billingCountry?: string;
-  teamName?: string;
-  teamDescription?: string;
-  businessName?: string;
-  businessWebsite?: string;
-}
-
-export interface CreateUserMembershipDto {
-  userId: string;
-  membershipTypeConfigId: string;
-  amountPaid: number;
-  stripePaymentIntentId?: string;
-  transactionId?: string;
-}
->>>>>>> Stashed changes
 
 export interface AdminAssignMembershipDto {
   userId: string;

@@ -30,10 +30,7 @@ import {
 } from '../api-client/membership-type-configs.api-client';
 import {
   membershipsApi,
-<<<<<<< Updated upstream
-=======
   Membership,
->>>>>>> Stashed changes
 } from '../api-client/memberships.api-client';
 
 // Initialize Stripe
@@ -369,30 +366,12 @@ export default function MembershipCheckoutPage() {
   const handleContinueToPayment = async () => {
     if (!validateInfoStep() || !membership) return;
 
-<<<<<<< Updated upstream
     setCreatingPaymentIntent(true);
     setError(null);
-=======
-    setPaymentError(null);
-    return true;
-  };
-
-  const handleContinueToPayment = () => {
-    if (!validateInfoStep()) return;
-    setStep('payment');
-  };
-
-  const handleSubmitPayment = async () => {
-    if (!validatePaymentStep() || !membership) return;
-
-    setSubmitting(true);
-    setPaymentError(null);
->>>>>>> Stashed changes
 
     try {
       const email = user ? (profile?.email || formData.email) : formData.email;
 
-<<<<<<< Updated upstream
       // Create Payment Intent via backend
       const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
         method: 'POST',
@@ -403,32 +382,6 @@ export default function MembershipCheckoutPage() {
           membershipTypeConfigId: membership.id,
           email,
           userId: user?.id,
-=======
-      // Simulate payment processing for now
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // Generate a simulated transaction ID
-      const transactionId = `TXN-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-      let createdMembership: Membership;
-      const email = user ? (profile?.email || '') : formData.email;
-
-      if (user) {
-        // Create membership for logged-in user
-        createdMembership = await membershipsApi.createUserMembership({
-          userId: user.id,
-          membershipTypeConfigId: membership.id,
-          amountPaid: membership.price,
-          transactionId,
-        });
-      } else {
-        // Create guest membership
-        createdMembership = await membershipsApi.createGuestMembership({
-          email,
-          membershipTypeConfigId: membership.id,
-          amountPaid: membership.price,
-          transactionId,
->>>>>>> Stashed changes
           billingFirstName: formData.firstName,
           billingLastName: formData.lastName,
           billingPhone: formData.phone || undefined,
@@ -444,25 +397,9 @@ export default function MembershipCheckoutPage() {
         }),
       });
 
-<<<<<<< Updated upstream
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to initialize payment');
-=======
-      // For team membership purchases by logged-in users, redirect to create team page
-      if (user && membership.category === MembershipCategory.TEAM) {
-        // Redirect to My MECA dashboard with create team param
-        navigate('/dashboard/mymeca?tab=team&action=create');
-        return;
-      }
-
-      // Proceed to confirmation
-      setStep('confirmation');
-
-      // Show account creation prompt for guests
-      if (!user) {
-        setShowAccountCreation(true);
->>>>>>> Stashed changes
       }
 
       const { clientSecret: secret } = await response.json();

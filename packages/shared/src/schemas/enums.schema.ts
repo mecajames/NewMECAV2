@@ -39,6 +39,8 @@ export enum PaymentStatus {
   PENDING = 'pending',
   PAID = 'paid',
   REFUNDED = 'refunded',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
 }
 
 export enum RegistrationStatus {

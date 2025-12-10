@@ -13,11 +13,7 @@ import {
 import { PaymentsService } from './payments.service';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
-<<<<<<< Updated upstream
-import { PaymentMethod, MembershipType, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from '@newmeca/shared';
-=======
-import { PaymentMethod } from '../types/enums';
->>>>>>> Stashed changes
+import { PaymentMethod, CreatePaymentDto } from '@newmeca/shared';
 
 @Controller('api/payments')
 export class PaymentsController {

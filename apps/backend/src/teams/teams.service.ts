@@ -1,11 +1,10 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { MembershipCategory, PaymentStatus } from '@newmeca/shared';
 import { Team } from './team.entity';
 import { TeamMember, TeamMemberRole, TeamMemberStatus } from './team-member.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Membership } from '../memberships/memberships.entity';
-import { MembershipCategory } from '../membership-type-configs/membership-type-configs.entity';
-import { PaymentStatus } from '../types/enums';
 
 interface MemberWithUser extends TeamMember {
   user?: {
@@ -13,7 +12,7 @@ interface MemberWithUser extends TeamMember {
     first_name?: string;
     last_name?: string;
     meca_id?: string;
-    profile_picture_url?: string;
+    profile_picture_url?: string | null;
     email?: string;
     membership_status?: string;
   };
@@ -71,7 +70,7 @@ export class TeamsService {
         last_name: user.last_name,
         meca_id: user.meca_id,
         // Use profile_picture_url if set, otherwise use first image from profile_images
-        profile_picture_url: user.profile_picture_url || (user.profile_images?.[0] ?? null),
+        profile_picture_url: user.profile_picture_url || user.profile_images?.[0] || undefined,
         email: user.email,
         membership_status: user.membership_status,
       } : undefined,
@@ -102,7 +101,7 @@ export class TeamsService {
             first_name: owner.first_name,
             last_name: owner.last_name,
             meca_id: owner.meca_id,
-            profile_picture_url: owner.profile_picture_url || (owner.profile_images?.[0] ?? null),
+            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
           } : undefined,
           members: membersWithUsers,
         };
@@ -134,7 +133,7 @@ export class TeamsService {
         first_name: owner.first_name,
         last_name: owner.last_name,
         meca_id: owner.meca_id,
-        profile_picture_url: owner.profile_picture_url || (owner.profile_images?.[0] ?? null),
+        profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
         email: owner.email,
       } : undefined,
       members: membersWithUsers,
@@ -665,7 +664,7 @@ export class TeamsService {
       first_name: user.first_name,
       last_name: user.last_name,
       meca_id: user.meca_id,
-      profile_picture_url: user.profile_picture_url || (user.profile_images?.[0] ?? null),
+      profile_picture_url: user.profile_picture_url || user.profile_images?.[0] || undefined,
       membership_status: user.membership_status,
       canInvite,
       reason,

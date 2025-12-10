@@ -1,10 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-<<<<<<< Updated upstream
-import { MembershipType, PaymentStatus } from '@newmeca/shared';
-=======
-import { PaymentStatus } from '../types/enums';
->>>>>>> Stashed changes
+import { PaymentStatus } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 

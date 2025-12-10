@@ -1,42 +1,10 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { PaymentStatus, PaymentMethod, PaymentType, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from '@newmeca/shared';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { Profile } from '../profiles/profiles.entity';
-<<<<<<< Updated upstream
-import { PaymentStatus, PaymentMethod, PaymentType, MembershipType, CreatePaymentDto, ProcessPaymentDto, RefundPaymentDto } from '@newmeca/shared';
-=======
-import { PaymentStatus, PaymentMethod, PaymentType } from '../types/enums';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
-
-export interface CreatePaymentDto {
-  userId: string;
-  membershipId?: string;
-  paymentType: PaymentType;
-  paymentMethod: PaymentMethod;
-  amount: number;
-  currency?: string;
-  transactionId?: string;
-  externalPaymentId?: string;
-  stripePaymentIntentId?: string;
-  stripeCustomerId?: string;
-  wordpressOrderId?: string;
-  wordpressSubscriptionId?: string;
-  description?: string;
-  paymentMetadata?: Record<string, any>;
-}
-
-export interface ProcessPaymentDto {
-  paymentId: string;
-  transactionId?: string;
-  paidAt?: Date;
-}
-
-export interface RefundPaymentDto {
-  paymentId: string;
-  reason: string;
-}
->>>>>>> Stashed changes
 
 @Injectable()
 export class PaymentsService {
