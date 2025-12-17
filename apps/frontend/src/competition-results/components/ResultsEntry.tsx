@@ -19,6 +19,8 @@ interface ResultEntry {
   placement: string;
   points_earned: string;
   vehicle_info: string;
+  wattage: string;
+  frequency: string;
   notes: string;
 }
 
@@ -44,6 +46,8 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
     placement: '',
     points_earned: '',
     vehicle_info: '',
+    wattage: '',
+    frequency: '',
     notes: '',
   });
   const [existingResults, setExistingResults] = useState<ResultEntry[]>([]);
@@ -152,6 +156,8 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
           placement: r.placement != null ? r.placement.toString() : '',
           points_earned: r.points_earned != null ? r.points_earned.toString() : '0',
           vehicle_info: r.vehicle_info || '',
+          wattage: r.wattage != null ? r.wattage.toString() : '',
+          frequency: r.frequency != null ? r.frequency.toString() : '',
           notes: r.notes || '',
         };
       });
@@ -174,6 +180,8 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
       placement: '',
       points_earned: '',
       vehicle_info: '',
+      wattage: '',
+      frequency: '',
       notes: '',
     });
   };
@@ -267,6 +275,8 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
         placement: parseInt(editingResult.placement),
         points_earned: finalPointsEarned,
         vehicle_info: editingResult.vehicle_info || null,
+        wattage: editingResult.wattage ? parseInt(editingResult.wattage) : null,
+        frequency: editingResult.frequency ? parseInt(editingResult.frequency) : null,
         notes: editingResult.notes || null,
         created_by: profile!.id,
       };
@@ -310,6 +320,8 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
         placement: parseInt(currentEntry.placement),
         points_earned: finalPointsEarned,
         vehicle_info: currentEntry.vehicle_info || null,
+        wattage: currentEntry.wattage ? parseInt(currentEntry.wattage) : null,
+        frequency: currentEntry.frequency ? parseInt(currentEntry.frequency) : null,
         notes: currentEntry.notes || null,
         created_by: profile!.id,
       };
@@ -689,15 +701,28 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
                 />
               </div>
 
-              <div className="md:col-span-7">
+              <div className="md:col-span-4">
                 <label className="block text-xs text-gray-400 mb-1">
-                  Power Wattage
+                  Power Wattage (W)
                 </label>
                 <input
-                  type="text"
-                  value={currentEntry.vehicle_info}
-                  onChange={(e) => updateField('vehicle_info', e.target.value)}
-                  placeholder="e.g., Power: 6000W"
+                  type="number"
+                  value={currentEntry.wattage}
+                  onChange={(e) => updateField('wattage', e.target.value)}
+                  placeholder="e.g., 6000"
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-xs text-gray-400 mb-1">
+                  Frequency (Hz)
+                </label>
+                <input
+                  type="number"
+                  value={currentEntry.frequency}
+                  onChange={(e) => updateField('frequency', e.target.value)}
+                  placeholder="e.g., 45"
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
@@ -829,15 +854,28 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
                       />
                     </div>
 
-                    <div className="md:col-span-2">
+                    <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Power Wattage
+                        Power Wattage (W)
                       </label>
                       <input
-                        type="text"
-                        value={editingResult.vehicle_info}
-                        onChange={(e) => setEditingResult({...editingResult, vehicle_info: e.target.value})}
-                        placeholder="e.g., Power: 6000W"
+                        type="number"
+                        value={editingResult.wattage}
+                        onChange={(e) => setEditingResult({...editingResult, wattage: e.target.value})}
+                        placeholder="e.g., 6000"
+                        className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Frequency (Hz)
+                      </label>
+                      <input
+                        type="number"
+                        value={editingResult.frequency}
+                        onChange={(e) => setEditingResult({...editingResult, frequency: e.target.value})}
+                        placeholder="e.g., 45"
                         className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -877,7 +915,8 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Competitor</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Format</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Class</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Power Wattage</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Wattage</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Frequency</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Score</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Place</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Points</th>
@@ -903,7 +942,10 @@ export default function ResultsEntry({ preSelectedEventId }: ResultsEntryProps =
                           {result.competition_class || '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-300">
-                          {result.vehicle_info || '-'}
+                          {result.wattage ? `${result.wattage}W` : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-300">
+                          {result.frequency ? `${result.frequency}Hz` : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-white">
                           {result.score || '-'}

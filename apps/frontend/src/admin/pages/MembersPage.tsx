@@ -158,7 +158,7 @@ export default function MembersPage() {
             </p>
           </div>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/dashboard/admin')}
             className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />

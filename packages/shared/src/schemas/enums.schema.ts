@@ -182,6 +182,46 @@ export enum ManufacturerTier {
 }
 
 // =============================================================================
+// Support Ticket Enums
+// =============================================================================
+
+export enum TicketStatus {
+  OPEN = 'open',
+  IN_PROGRESS = 'in_progress',
+  AWAITING_RESPONSE = 'awaiting_response',
+  RESOLVED = 'resolved',
+  CLOSED = 'closed',
+}
+
+export enum TicketPriority {
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
+  CRITICAL = 'critical',
+}
+
+export enum TicketCategory {
+  GENERAL = 'general',
+  MEMBERSHIP = 'membership',
+  EVENT_REGISTRATION = 'event_registration',
+  PAYMENT = 'payment',
+  TECHNICAL = 'technical',
+  COMPETITION_RESULTS = 'competition_results',
+  EVENT_HOSTING = 'event_hosting',
+  ACCOUNT = 'account',
+  OTHER = 'other',
+}
+
+export enum TicketDepartment {
+  GENERAL_SUPPORT = 'general_support',
+  MEMBERSHIP_SERVICES = 'membership_services',
+  EVENT_OPERATIONS = 'event_operations',
+  TECHNICAL_SUPPORT = 'technical_support',
+  BILLING = 'billing',
+  ADMINISTRATION = 'administration',
+}
+
+// =============================================================================
 // Zod Schemas (using z.nativeEnum for type safety)
 // =============================================================================
 
@@ -209,3 +249,9 @@ export const EntryMethodSchema = z.nativeEnum(EntryMethod);
 export const AuditActionSchema = z.nativeEnum(AuditAction);
 export const MembershipCategorySchema = z.nativeEnum(MembershipCategory);
 export const ManufacturerTierSchema = z.nativeEnum(ManufacturerTier);
+
+// Support Ticket Schemas
+export const TicketStatusSchema = z.nativeEnum(TicketStatus);
+export const TicketPrioritySchema = z.nativeEnum(TicketPriority);
+export const TicketCategorySchema = z.nativeEnum(TicketCategory);
+export const TicketDepartmentSchema = z.nativeEnum(TicketDepartment);

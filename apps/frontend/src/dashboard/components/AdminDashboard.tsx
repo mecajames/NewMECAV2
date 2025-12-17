@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2 } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
 import RulebookManagement from '@/rulebooks/components/RulebookManagement';
@@ -154,6 +154,14 @@ export default function AdminDashboard() {
       color: 'rose',
       navigateTo: undefined,
     },
+    {
+      icon: Ticket,
+      title: 'Support Tickets',
+      description: 'Manage member support tickets and inquiries',
+      action: 'tickets' as AdminView,
+      color: 'sky',
+      navigateTo: '/admin/tickets',
+    },
   ];
 
   const getColorClasses = (color: string) => {
@@ -170,6 +178,7 @@ export default function AdminDashboard() {
       violet: 'bg-violet-500/10 text-violet-500 hover:bg-violet-500/20',
       rose: 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20',
       amber: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
+      sky: 'bg-sky-500/10 text-sky-500 hover:bg-sky-500/20',
     };
     return colors[color] || colors.orange;
   };

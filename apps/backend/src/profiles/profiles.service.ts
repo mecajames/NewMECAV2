@@ -117,4 +117,32 @@ export class ProfilesService {
     }
     return profile;
   }
+
+  /**
+   * Search profiles by name, email, or MECA ID.
+   * Returns up to 20 matching profiles for autocomplete.
+   */
+  async search(query: string, limit: number = 20): Promise<Profile[]> {
+    const em = this.em.fork();
+    const searchTerm = query.toLowerCase().trim();
+
+    if (!searchTerm || searchTerm.length < 2) {
+      return [];
+    }
+
+    // Search by MECA ID (exact match or starts with)
+    // Search by email (contains)
+    // Search by first_name or last_name (contains)
+    return em.find(Profile, {
+      $or: [
+        { meca_id: { $like: `${searchTerm}%` } },
+        { email: { $like: `%${searchTerm}%` } },
+        { first_name: { $ilike: `%${searchTerm}%` } },
+        { last_name: { $ilike: `%${searchTerm}%` } },
+      ],
+    }, {
+      limit,
+      orderBy: { first_name: 'ASC', last_name: 'ASC' },
+    });
+  }
 }

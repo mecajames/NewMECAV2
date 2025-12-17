@@ -141,7 +141,7 @@ export default function FormatManagementPage() {
           <h1 className="text-2xl font-bold text-white mb-4">Access Denied</h1>
           <p className="text-gray-300 mb-4">You must be an admin to access this page.</p>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/dashboard/admin')}
             className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg"
           >
             Return to Dashboard
@@ -161,7 +161,7 @@ export default function FormatManagementPage() {
             <p className="text-gray-400">Manage competition format types</p>
           </div>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/dashboard/admin')}
             className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
