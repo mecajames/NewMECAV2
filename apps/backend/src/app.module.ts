@@ -24,6 +24,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { StripeModule } from './stripe/stripe.module';
 import { QuickBooksModule } from './quickbooks/quickbooks.module';
 import { TeamsModule } from './teams/teams.module';
+import { TicketsModule } from './tickets/tickets.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { TeamsModule } from './teams/teams.module';
     StripeModule,
     QuickBooksModule,
     TeamsModule,
+    TicketsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
