@@ -11,7 +11,7 @@ import {
   Loader2,
   HelpCircle,
 } from 'lucide-react';
-import * as guestApi from '../api-client/ticket-guest.api-client';
+import * as guestApi from '../ticket-guest.api-client';
 
 type TabType = 'new' | 'existing';
 

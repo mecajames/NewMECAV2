@@ -31,8 +31,8 @@ import {
   TicketAttachment,
   TicketStatus,
   TicketPriority,
-} from '../../api-client/tickets.api-client';
-import * as ticketAdminApi from '../../api-client/ticket-admin.api-client';
+} from '../tickets.api-client';
+import * as ticketAdminApi from '../ticket-admin.api-client';
 import { TicketStaffResponse } from '@newmeca/shared';
 
 // Status styling

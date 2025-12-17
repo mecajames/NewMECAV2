@@ -10,7 +10,7 @@ import {
   XCircle,
   User,
 } from 'lucide-react';
-import * as guestApi from '../api-client/ticket-guest.api-client';
+import * as guestApi from '../ticket-guest.api-client';
 
 type TicketCategory = 'general' | 'membership' | 'event_registration' | 'payment' | 'technical' | 'competition_results' | 'event_hosting' | 'account' | 'other';
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';

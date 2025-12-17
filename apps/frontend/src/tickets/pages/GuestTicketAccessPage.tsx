@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Loader2, XCircle } from 'lucide-react';
-import * as guestApi from '../api-client/ticket-guest.api-client';
+import * as guestApi from '../ticket-guest.api-client';
 
 /**
  * This page handles the magic link for accessing existing tickets.

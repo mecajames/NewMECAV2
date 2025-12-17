@@ -16,7 +16,7 @@ import {
   AlertCircle,
   Play,
 } from 'lucide-react';
-import * as ticketAdminApi from '../../../api-client/ticket-admin.api-client';
+import * as ticketAdminApi from '../../ticket-admin.api-client';
 import { TicketRoutingRuleResponse, TicketDepartmentResponse, TicketStaffResponse } from '@newmeca/shared';
 
 const priorityOptions = [

@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
-import { TicketDetail } from '../../components/tickets';
-import { useAuth } from '../../contexts/AuthContext';
+import { TicketDetail } from '../components/TicketDetail';
+import { useAuth } from '@/auth';
 
 export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();

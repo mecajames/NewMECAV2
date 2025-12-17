@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TicketList, CreateTicketForm } from '../../components/tickets';
-import { useAuth } from '../../contexts/AuthContext';
-import { Ticket as TicketType } from '../../api-client/tickets.api-client';
+import { TicketList } from '../components/TicketList';
+import { CreateTicketForm } from '../components/CreateTicketForm';
+import { useAuth } from '@/auth';
+import { Ticket as TicketType } from '../tickets.api-client';
 
 export function TicketsPage() {
   const navigate = useNavigate();

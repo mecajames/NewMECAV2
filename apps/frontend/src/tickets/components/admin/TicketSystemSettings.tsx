@@ -11,7 +11,7 @@ import {
   Tag,
   Mail,
 } from 'lucide-react';
-import * as ticketAdminApi from '../../../api-client/ticket-admin.api-client';
+import * as ticketAdminApi from '../../ticket-admin.api-client';
 import { TicketSettingsMap, TicketDepartmentResponse } from '@newmeca/shared';
 
 export function TicketSystemSettings() {

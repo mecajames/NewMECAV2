@@ -13,7 +13,7 @@ import {
   Headphones,
   ArrowLeft,
 } from 'lucide-react';
-import * as guestApi from '../api-client/ticket-guest.api-client';
+import * as guestApi from '../ticket-guest.api-client';
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   open: { label: 'Open', color: 'bg-blue-500', icon: <Clock className="w-4 h-4" /> },

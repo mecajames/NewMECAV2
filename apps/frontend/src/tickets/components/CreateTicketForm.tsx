@@ -16,8 +16,8 @@ import {
   TicketDepartment,
   TicketPriority,
   CreateTicketData,
-} from '../../api-client/tickets.api-client';
-import { eventsApi } from '../../api-client/events.api-client';
+} from '../tickets.api-client';
+import { eventsApi } from '@/events';
 
 interface Event {
   id: string;

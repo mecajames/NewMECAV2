@@ -24,7 +24,7 @@ import {
   TicketCategory,
   TicketDepartment,
   TicketListQuery,
-} from '../../api-client/tickets.api-client';
+} from '../tickets.api-client';
 
 // Status badge styling
 const statusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {

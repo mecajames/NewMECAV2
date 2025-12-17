@@ -17,7 +17,7 @@ import {
   Search,
   Loader2,
 } from 'lucide-react';
-import * as ticketAdminApi from '../../../api-client/ticket-admin.api-client';
+import * as ticketAdminApi from '../../ticket-admin.api-client';
 import { TicketStaffResponse, TicketDepartmentResponse } from '@newmeca/shared';
 
 // Permission levels (1=Staff, 2=Supervisor, 3=Admin)

@@ -11,7 +11,7 @@ import {
   EyeOff,
   Star,
 } from 'lucide-react';
-import * as ticketAdminApi from '../../../api-client/ticket-admin.api-client';
+import * as ticketAdminApi from '../../ticket-admin.api-client';
 import { TicketDepartmentResponse } from '@newmeca/shared';
 
 export function TicketDepartmentManagement() {
