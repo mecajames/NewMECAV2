@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase, EventRegistration, CompetitionResult } from '../lib/supabase';
 import axios from 'axios';
 import { teamsApi, Team, TeamType, TeamMemberRole, TeamMember, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult } from '../api-client/teams.api-client';
-import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog } from 'lucide-react';
+import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend
@@ -976,7 +976,7 @@ export default function MyMecaDashboardPage() {
       )}
 
       {/* Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <button
           onClick={() => handleTabChange('profile')}
           className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
@@ -1018,6 +1018,21 @@ export default function MyMecaDashboardPage() {
             <div>
               <h3 className="text-white font-semibold text-lg">My Team</h3>
               <p className="text-gray-400 text-sm">View or join a team</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigate('/tickets')}
+          className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-pink-500/10 flex items-center justify-center group-hover:bg-pink-500/20 transition-colors">
+              <Ticket className="h-6 w-6 text-pink-500" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold text-lg">Support Tickets</h3>
+              <p className="text-gray-400 text-sm">Get help or track requests</p>
             </div>
           </div>
         </button>
@@ -1240,6 +1255,21 @@ export default function MyMecaDashboardPage() {
               <div>
                 <h3 className="text-white font-semibold text-lg">Membership</h3>
                 <p className="text-gray-400 text-sm mt-1">View membership options and upgrade your plan</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigate('/tickets')}
+            className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-pink-500/10 flex items-center justify-center group-hover:bg-pink-500/20 transition-colors">
+                <Ticket className="h-7 w-7 text-pink-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Support Tickets</h3>
+                <p className="text-gray-400 text-sm mt-1">View your support tickets or submit a new request</p>
               </div>
             </div>
           </button>
@@ -3089,6 +3119,82 @@ export default function MyMecaDashboardPage() {
                     strokeWidth={2}
                     dot={{ fill: CHART_COLORS.secondary, strokeWidth: 2 }}
                     name="SPL Score (dB)"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Wattage Progress Line Chart */}
+        {results.length > 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <h2 className="text-2xl font-bold text-white mb-6">Wattage Progress</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={results
+                  .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                  .slice(-20)
+                  .map((r, index) => ({
+                    name: `${index + 1}`,
+                    wattage: r.wattage || 0,
+                    event: r.event?.title || `Competition ${index + 1}`,
+                  }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
+                    labelStyle={{ color: '#fff' }}
+                    formatter={(value: number) => [`${value.toLocaleString()} W`, 'Wattage']}
+                    labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="wattage"
+                    stroke={CHART_COLORS.green}
+                    strokeWidth={2}
+                    dot={{ fill: CHART_COLORS.green, strokeWidth: 2 }}
+                    name="Power (Watts)"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Frequency Progress Line Chart */}
+        {results.length > 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <h2 className="text-2xl font-bold text-white mb-6">Frequency Progress</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={results
+                  .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                  .slice(-20)
+                  .map((r, index) => ({
+                    name: `${index + 1}`,
+                    frequency: r.frequency || 0,
+                    event: r.event?.title || `Competition ${index + 1}`,
+                  }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
+                    labelStyle={{ color: '#fff' }}
+                    formatter={(value: number) => [`${value} Hz`, 'Frequency']}
+                    labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="frequency"
+                    stroke={CHART_COLORS.yellow}
+                    strokeWidth={2}
+                    dot={{ fill: CHART_COLORS.yellow, strokeWidth: 2 }}
+                    name="Frequency (Hz)"
                   />
                 </LineChart>
               </ResponsiveContainer>

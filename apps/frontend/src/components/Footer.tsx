@@ -85,14 +85,6 @@ export default function Footer() {
                   Hall of Fame
                 </Link>
               </li>
-              <li>
-                <Link
-                  to="/knowledge-base"
-                  className="text-gray-400 hover:text-orange-500 transition-colors"
-                >
-                  Knowledge Base
-                </Link>
-              </li>
             </ul>
           </div>
 

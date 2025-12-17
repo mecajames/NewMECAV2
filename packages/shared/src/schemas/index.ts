@@ -15,3 +15,5 @@ export * from "./audit.schema";
 export * from "./seasons.schema";
 export * from "./membership-type-configs.schema";
 export * from "./results-import.schema";
+export * from "./tickets.schema";
+export * from "./ticket-admin.schema";
