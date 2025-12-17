@@ -1,8 +1,8 @@
 import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { eventsApi, Event } from '../api-client/events.api-client';
-import { siteSettingsApi, SiteSetting } from '../api-client/site-settings.api-client';
+import { eventsApi, Event } from '@/events';
+import { siteSettingsApi, SiteSetting } from '@/site-settings';
 
 export default function HomePage() {
   const navigate = useNavigate();

@@ -1,8 +1,8 @@
 import { Mail, Phone, MapPin, Send } from 'lucide-react';
 import { useState, useRef } from 'react';
-import { ReCaptchaV2Widget } from '../shared/recaptcha';
-import type { ReCaptchaV2Ref } from '../shared/recaptcha';
-import { recaptchaApi } from '../api-client/recaptcha.api-client';
+import { ReCaptchaV2Widget } from '@/shared';
+import type { ReCaptchaV2Ref } from '@/shared';
+import { recaptchaApi } from '@/recaptcha';
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
