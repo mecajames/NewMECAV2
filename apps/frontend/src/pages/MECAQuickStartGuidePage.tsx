@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, BookOpen, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
-import { rulebooksApi, Rulebook } from '../api-client/rulebooks.api-client';
-import { seasonsApi, Season } from '../api-client/seasons.api-client';
+import { rulebooksApi, Rulebook } from '@/rulebooks';
+import { seasonsApi, Season } from '@/seasons';
 
 interface CollapsibleSectionProps {
   title: string;

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useContext } from 'react';
-import { recaptchaApi } from '../../api-client/recaptcha.api-client';
+import { recaptchaApi } from '@/recaptcha';
 import { ReCaptchaContext } from './ReCaptchaContext';
 
 declare global {

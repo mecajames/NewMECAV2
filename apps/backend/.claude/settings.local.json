@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(where:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m uv:*)",
+      "Bash(claude mcp remove:*)",
+      "Bash(uv tool run:*)",
+      "Bash(python -c \"import shutil; print(shutil.which(''uv''))\")",
+      "Bash(python -m site:*)",
+      "Bash(where.exe:*)",
+      "Bash(pip show:*)",
+      "Bash(powershell -Command \"irm https://astral.sh/uv/install.ps1 | iex\")",
+      "Bash(npm search:*)",
+      "Bash(npx:*)",
+      "Bash(docker version:*)",
+      "Bash(claude mcp get:*)",
+      "WebFetch(domain:opensupports.com)",
+      "Bash(rush build:*)",
+      "Bash(ls -la \"E:\\MECA Oct 2025\\NewMECAV2\\packages\\shared\\src\"\" 2>/dev/null || echo \"Directory structure not found with ls, trying alternative \")",
+      "Bash(rush rebuild:*)",
+      "Bash(cat:*)",
+      "Bash(rushx typecheck:*)",
+      "Bash(rushx migration:up:*)",
+      "Bash(rushx migration:list:*)",
+      "Bash(npx tsc:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(tar:*)"
+    ]
+  }
+}

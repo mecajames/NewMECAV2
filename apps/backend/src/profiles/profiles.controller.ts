@@ -25,6 +25,14 @@ export class ProfilesController {
     return this.profilesService.findAll(page, limit);
   }
 
+  @Get('search')
+  async searchProfiles(
+    @Query('q') query: string,
+    @Query('limit') limit: number = 20,
+  ): Promise<Profile[]> {
+    return this.profilesService.search(query, limit);
+  }
+
   @Get('stats')
   async getStats(): Promise<{ totalUsers: number; totalMembers: number }> {
     return this.profilesService.getStats();

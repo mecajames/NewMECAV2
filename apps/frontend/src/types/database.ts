@@ -142,6 +142,8 @@ export interface CompetitionResult {
   placement: number;
   points_earned: number;
   vehicle_info?: string;
+  wattage?: number;
+  frequency?: number;
   notes?: string;
   created_by: string;
   season_id?: string;
