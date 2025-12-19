@@ -30,8 +30,10 @@ import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwo
 // Check if Stripe is configured without loading the Stripe library
 const isStripeConfigured = !!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 
-// Lazy load Stripe components only when needed
-const StripePaymentWrapper = lazy(() => import('../components/StripePaymentWrapper'));
+// Lazy load Stripe components only when Stripe is actually configured
+const StripePaymentWrapper = isStripeConfigured
+  ? lazy(() => import('../components/StripePaymentWrapper'))
+  : null;
 
 interface FormData {
   // Contact Info
@@ -961,7 +963,7 @@ export default function MembershipCheckoutPage() {
                 </form>
               )}
 
-              {step === 'payment' && clientSecret && isStripeConfigured && (
+              {step === 'payment' && clientSecret && isStripeConfigured && StripePaymentWrapper && (
                 <Suspense
                   fallback={
                     <div className="flex items-center justify-center py-12">

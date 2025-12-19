@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { notificationsApi, Notification } from '@/notifications';
 
+// Feature flag - set to true when notifications backend is ready
+const NOTIFICATIONS_ENABLED = false;
+
 export function useNotifications(userId: string | undefined, limit: number = 10) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = async () => {
-    if (!userId) {
+    if (!NOTIFICATIONS_ENABLED || !userId) {
       setLoading(false);
       return;
     }
@@ -33,10 +36,10 @@ export function useNotifications(userId: string | undefined, limit: number = 10)
 
 export function useUnreadCount(userId: string | undefined) {
   const [count, setCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const fetchCount = async () => {
-    if (!userId) {
+    if (!NOTIFICATIONS_ENABLED || !userId) {
       setLoading(false);
       return;
     }
@@ -46,7 +49,7 @@ export function useUnreadCount(userId: string | undefined) {
       const unreadCount = await notificationsApi.getUnreadCount(userId);
       setCount(unreadCount);
     } catch (err) {
-      console.error('Failed to fetch unread count:', err);
+      // Silently fail
     } finally {
       setLoading(false);
     }
