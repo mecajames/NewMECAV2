@@ -24,7 +24,8 @@
     "react-router-dom": "^7.9.4",
     "recharts": "^3.5.1",
     "xlsx": "^0.18.5",
-    "@newmeca/shared": "workspace:*"
+    "@newmeca/shared": "workspace:*",
+    "@yudiel/react-qr-scanner": "~2.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

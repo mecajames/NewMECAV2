@@ -4,9 +4,10 @@ import { StripeController } from './stripe.controller';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { QuickBooksModule } from '../quickbooks/quickbooks.module';
+import { EventRegistrationsModule } from '../event-registrations/event-registrations.module';
 
 @Module({
-  imports: [MembershipsModule, PaymentsModule, QuickBooksModule],
+  imports: [MembershipsModule, PaymentsModule, QuickBooksModule, EventRegistrationsModule],
   providers: [StripeService],
   controllers: [StripeController],
   exports: [StripeService],

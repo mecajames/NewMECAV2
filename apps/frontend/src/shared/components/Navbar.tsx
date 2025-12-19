@@ -1,4 +1,4 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, ClipboardList } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth';
@@ -324,6 +324,18 @@ export default function Navbar() {
                             My MECA
                           </div>
                         </button>
+                        <button
+                          onClick={() => {
+                            navigate('/my-registrations');
+                            setUserMenuOpen(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <ClipboardList className="h-4 w-4" />
+                            My Registrations
+                          </div>
+                        </button>
                         {profile?.role === 'admin' && (
                           <button
                             onClick={() => {
@@ -431,6 +443,16 @@ export default function Navbar() {
                 >
                   <User className="h-5 w-5" />
                   My MECA
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/my-registrations');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+                >
+                  <ClipboardList className="h-5 w-5" />
+                  My Registrations
                 </button>
                 {profile?.role === 'admin' && (
                   <button

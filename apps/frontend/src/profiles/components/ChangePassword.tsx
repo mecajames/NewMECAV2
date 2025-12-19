@@ -1,13 +1,22 @@
-import { useState } from 'react';
-import { Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Lock, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/auth';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
+import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 
 interface ChangePasswordProps {
   onClose?: () => void;
+  forced?: boolean; // Can be passed as prop or detected from URL
 }
 
-export default function ChangePassword({ onClose }: ChangePasswordProps) {
-  const { updatePassword } = useAuth();
+export default function ChangePassword({ onClose, forced: forcedProp }: ChangePasswordProps) {
+  const { updatePassword, clearForcePasswordChange, forcePasswordChange } = useAuth();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Determine if this is a forced password change
+  const isForced = forcedProp || searchParams.get('forced') === 'true' || forcePasswordChange;
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -29,6 +38,13 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
       return;
     }
 
+    // Check password strength
+    const strength = calculatePasswordStrength(newPassword);
+    if (strength.score < MIN_PASSWORD_STRENGTH) {
+      setError(`Password is not strong enough. Current strength: ${strength.score}. Minimum required: ${MIN_PASSWORD_STRENGTH}`);
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       setError('New passwords do not match');
       return;
@@ -47,18 +63,26 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
       setError(error.message || 'Failed to update password');
       setLoading(false);
     } else {
+      // If this was a forced password change, clear the flag
+      if (isForced) {
+        await clearForcePasswordChange();
+      }
+
       setSuccess(true);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setLoading(false);
 
-      // Auto close after 2 seconds if onClose is provided
-      if (onClose) {
-        setTimeout(() => {
+      // Auto close/redirect after 2 seconds
+      setTimeout(() => {
+        if (isForced) {
+          // Navigate to profile or home page after forced password change
+          navigate('/profile');
+        } else if (onClose) {
           onClose();
-        }, 2000);
-      }
+        }
+      }, 2000);
     }
   };
 
@@ -70,6 +94,21 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
         </div>
         <h2 className="text-2xl font-bold text-white">Change Password</h2>
       </div>
+
+      {/* Forced password change notice */}
+      {isForced && !success && (
+        <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500 rounded-lg flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-amber-500 font-medium">Password Change Required</p>
+            <p className="text-amber-400 text-sm mt-1">
+              For security reasons, you must change your password before continuing.
+              This is typically required when your account was created by an administrator
+              or your password was recently reset.
+            </p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-lg">
@@ -133,6 +172,19 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
               {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           </div>
+          {/* Password Strength Indicator */}
+          {newPassword && (
+            <div className="mt-2">
+              <PasswordStrengthIndicator
+                password={newPassword}
+                showFeedback={true}
+                showScore={true}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Minimum strength required: {MIN_PASSWORD_STRENGTH}
+              </p>
+            </div>
+          )}
         </div>
 
         <div>
@@ -168,7 +220,8 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
           >
             {loading ? 'Updating...' : 'Update Password'}
           </button>
-          {onClose && (
+          {/* Hide Cancel button when password change is forced */}
+          {onClose && !isForced && (
             <button
               type="button"
               onClick={onClose}

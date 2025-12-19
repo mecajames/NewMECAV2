@@ -34,8 +34,33 @@ export interface Profile {
   vehicle_info?: string;
   car_audio_system?: string;
   profile_images?: string[];
+  force_password_change?: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface CreateUserWithPasswordDto {
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  role?: string;
+  forcePasswordChange?: boolean;
+  sendEmail?: boolean;
+}
+
+export interface ResetPasswordDto {
+  newPassword: string;
+  forcePasswordChange?: boolean;
+  sendEmail?: boolean;
+}
+
+export interface PasswordStrength {
+  score: number;
+  strength: string;
+  label: string;
+  feedback: string[];
 }
 
 export const profilesApi = {
@@ -93,6 +118,86 @@ export const profilesApi = {
   getPublicProfileById: async (id: string): Promise<Profile> => {
     const response = await fetch(`${API_BASE_URL}/api/profiles/public/${id}`);
     if (!response.ok) throw new Error('Failed to fetch public profile');
+    return response.json();
+  },
+
+  // ===== Admin Password Management =====
+
+  /**
+   * Creates a new user with password (admin only)
+   */
+  createWithPassword: async (dto: CreateUserWithPasswordDto): Promise<Profile> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/create-with-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dto),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to create user' }));
+      throw new Error(error.message || 'Failed to create user');
+    }
+    return response.json();
+  },
+
+  /**
+   * Generates a secure password
+   */
+  generatePassword: async (): Promise<{ password: string; strength: PasswordStrength }> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/generate-password`);
+    if (!response.ok) throw new Error('Failed to generate password');
+    return response.json();
+  },
+
+  /**
+   * Checks password strength
+   */
+  checkPasswordStrength: async (password: string): Promise<{
+    strength: PasswordStrength;
+    meetsMinimum: boolean;
+    minimumRequired: number;
+  }> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/check-password-strength`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!response.ok) throw new Error('Failed to check password strength');
+    return response.json();
+  },
+
+  /**
+   * Checks if email service is configured
+   */
+  getEmailServiceStatus: async (): Promise<{ configured: boolean }> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/email-service-status`);
+    if (!response.ok) throw new Error('Failed to check email service status');
+    return response.json();
+  },
+
+  /**
+   * Resets a user's password (admin only)
+   */
+  resetPassword: async (userId: string, dto: ResetPasswordDto): Promise<{ success: boolean; emailSent: boolean }> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dto),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to reset password' }));
+      throw new Error(error.message || 'Failed to reset password');
+    }
+    return response.json();
+  },
+
+  /**
+   * Clears the force password change flag
+   */
+  clearForcePasswordChange: async (userId: string): Promise<{ success: boolean }> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/clear-force-password-change`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to clear force password change flag');
     return response.json();
   },
 };

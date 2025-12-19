@@ -25,10 +25,14 @@ import { StripeModule } from './stripe/stripe.module';
 import { QuickBooksModule } from './quickbooks/quickbooks.module';
 import { TeamsModule } from './teams/teams.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { AuthModule } from './auth/auth.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     DatabaseModule,
+    AuthModule,
+    EmailModule,
     ProfilesModule,
     EventsModule,
     MembershipsModule,

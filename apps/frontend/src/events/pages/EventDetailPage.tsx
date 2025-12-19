@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp } from 'lucide-react';
+import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode } from 'lucide-react';
 import { eventsApi, Event } from '@/events';
 import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
-import { useAuth } from '@/auth';
+import { useAuth, usePermissions } from '@/auth';
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -24,6 +24,7 @@ export default function EventDetailPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const { user, profile } = useAuth();
+  const { hasPermission } = usePermissions();
 
   useEffect(() => {
     if (!eventId) {
@@ -309,14 +310,27 @@ export default function EventDetailPage() {
           </div>
 
           {/* Action Buttons */}
-          {event.status === 'upcoming' && (
-            <button
-              onClick={() => setShowRegistrationModal(true)}
-              className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
-            >
-              Pre-Register for This Event
-            </button>
-          )}
+          <div className="space-y-3">
+            {event.status === 'upcoming' && (
+              <button
+                onClick={() => navigate(`/events/${eventId}/register`)}
+                className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
+              >
+                Pre-Register for This Event
+              </button>
+            )}
+
+            {/* Check-In Button for Event Directors/Admins Only */}
+            {(profile?.role === 'admin' || profile?.role === 'event_director') && (event.status === 'upcoming' || event.status === 'ongoing') && (
+              <button
+                onClick={() => navigate(`/events/${eventId}/check-in`)}
+                className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <QrCode className="h-6 w-6" />
+                QR Check-In
+              </button>
+            )}
+          </div>
 
           {event.status === 'completed' && (
             <button

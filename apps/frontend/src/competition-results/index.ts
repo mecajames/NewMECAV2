@@ -7,5 +7,4 @@ export { default as StandingsPage } from './pages/StandingsPage';
 export { default as LeaderboardPage } from './pages/LeaderboardPage';
 
 // Components
-export { default as ResultsEntry } from './components/ResultsEntry';
 export { default as ResultsEntryNew } from './components/ResultsEntryNew';
