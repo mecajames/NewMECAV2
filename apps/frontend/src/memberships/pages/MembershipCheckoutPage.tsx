@@ -1,16 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
-import {
-  Elements,
-  PaymentElement,
-  useStripe,
-  useElements,
-} from '@stripe/react-stripe-js';
 import {
   ArrowLeft,
   Check,
-  CreditCard,
   User,
   Mail,
   Phone,
@@ -28,13 +20,13 @@ import {
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
-import {
-  membershipsApi,
-  Membership,
-} from '@/memberships';
+import { membershipsApi } from '@/memberships';
 
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
+// Check if Stripe is configured without loading the Stripe library
+const isStripeConfigured = !!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+
+// Lazy load Stripe components only when needed
+const StripePaymentWrapper = lazy(() => import('../components/StripePaymentWrapper'));
 
 // US States for dropdown
 const US_STATES = [
@@ -125,113 +117,6 @@ interface OrderData {
 type CheckoutStep = 'info' | 'payment' | 'confirmation';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// Stripe Payment Form Component
-function StripePaymentForm({
-  membership,
-  formData,
-  onSuccess,
-  onBack,
-}: {
-  membership: MembershipTypeConfig;
-  formData: FormData;
-  onSuccess: (paymentIntentId: string) => void;
-  onBack: () => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [submitting, setSubmitting] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setSubmitting(true);
-    setPaymentError(null);
-
-    try {
-      const { error, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: window.location.href,
-          receipt_email: formData.email,
-        },
-        redirect: 'if_required',
-      });
-
-      if (error) {
-        setPaymentError(error.message || 'Payment failed. Please try again.');
-      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        onSuccess(paymentIntent.id);
-      } else {
-        setPaymentError('Payment was not completed. Please try again.');
-      }
-    } catch (err) {
-      console.error('Payment error:', err);
-      setPaymentError('An unexpected error occurred. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      {paymentError && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
-          <p className="text-red-500 text-sm">{paymentError}</p>
-        </div>
-      )}
-
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-          <CreditCard className="h-5 w-5 mr-2 text-orange-500" />
-          Card Information
-        </h3>
-        <div className="bg-slate-700 rounded-lg p-4">
-          <PaymentElement
-            options={{
-              layout: 'tabs',
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center text-sm text-gray-400 mb-6">
-        <Lock className="h-4 w-4 mr-2" />
-        Your payment information is secure and encrypted
-      </div>
-
-      <div className="flex gap-4">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={submitting}
-          className="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-        >
-          Back
-        </button>
-        <button
-          type="submit"
-          disabled={!stripe || !elements || submitting}
-          className="flex-1 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {submitting ? (
-            <span className="flex items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Processing Payment...
-            </span>
-          ) : (
-            `Pay $${membership.price.toFixed(2)}`
-          )}
-        </button>
-      </div>
-    </form>
-  );
-}
 
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
@@ -1046,31 +931,38 @@ export default function MembershipCheckoutPage() {
                 </form>
               )}
 
-              {step === 'payment' && clientSecret && (
-                <Elements
-                  stripe={stripePromise}
-                  options={{
-                    clientSecret,
-                    appearance: {
-                      theme: 'night',
-                      variables: {
-                        colorPrimary: '#f97316',
-                        colorBackground: '#334155',
-                        colorText: '#ffffff',
-                        colorDanger: '#ef4444',
-                        fontFamily: 'system-ui, sans-serif',
-                        borderRadius: '8px',
-                      },
-                    },
-                  }}
+              {step === 'payment' && clientSecret && isStripeConfigured && (
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
+                    </div>
+                  }
                 >
-                  <StripePaymentForm
+                  <StripePaymentWrapper
+                    clientSecret={clientSecret}
                     membership={membership}
                     formData={formData}
                     onSuccess={handlePaymentSuccess}
                     onBack={() => setStep('info')}
                   />
-                </Elements>
+                </Suspense>
+              )}
+
+              {step === 'payment' && !isStripeConfigured && (
+                <div className="text-center py-8">
+                  <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-white mb-2">Payment Not Available</h3>
+                  <p className="text-gray-400 mb-6">
+                    Online payments are not currently configured. Please contact support for alternative payment options.
+                  </p>
+                  <button
+                    onClick={() => setStep('info')}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Go Back
+                  </button>
+                </div>
               )}
             </div>
           </div>
