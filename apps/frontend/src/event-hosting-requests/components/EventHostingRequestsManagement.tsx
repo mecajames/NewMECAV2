@@ -12,6 +12,7 @@ import {
   getStatusColor,
 } from '@/event-hosting-requests';
 import { competitionFormatsApi, CompetitionFormat } from '@/competition-formats';
+import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
 import {
   Search,
   Eye,
@@ -1879,6 +1880,23 @@ export default function EventHostingRequestsManagement() {
                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Country</label>
+                    <select
+                      value={editFormData.country || 'US'}
+                      onChange={(e) => {
+                        handleEditFormChange('country', e.target.value);
+                        handleEditFormChange('state', ''); // Reset state when country changes
+                      }}
+                      className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      {countries.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">City</label>
                     <input
@@ -1889,29 +1907,36 @@ export default function EventHostingRequestsManagement() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">State</label>
-                    <input
-                      type="text"
-                      value={editFormData.state || ''}
-                      onChange={(e) => handleEditFormChange('state', e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
+                    <label className="block text-sm font-medium text-gray-300 mb-1">{getStateLabel(editFormData.country || 'US')}</label>
+                    {getStatesForCountry(editFormData.country || 'US').length > 0 ? (
+                      <select
+                        value={editFormData.state || ''}
+                        onChange={(e) => handleEditFormChange('state', e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      >
+                        <option value="">Select {getStateLabel(editFormData.country || 'US')}</option>
+                        {getStatesForCountry(editFormData.country || 'US').map((state) => (
+                          <option key={state.code} value={state.code}>
+                            {state.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={editFormData.state || ''}
+                        onChange={(e) => handleEditFormChange('state', e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder={getStateLabel(editFormData.country || 'US')}
+                      />
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Postal Code</label>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">{getPostalCodeLabel(editFormData.country || 'US')}</label>
                     <input
                       type="text"
                       value={editFormData.postal_code || ''}
                       onChange={(e) => handleEditFormChange('postal_code', e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Country</label>
-                    <input
-                      type="text"
-                      value={editFormData.country || ''}
-                      onChange={(e) => handleEditFormChange('country', e.target.value)}
                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>

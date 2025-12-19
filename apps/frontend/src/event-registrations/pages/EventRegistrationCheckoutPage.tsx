@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import {
@@ -15,7 +15,7 @@ import {
   Mail,
   Phone,
   MapPin,
-  Building,
+  Car,
   Loader2,
   Lock,
   AlertCircle,
@@ -23,24 +23,26 @@ import {
   UserPlus,
   Eye,
   EyeOff,
+  Calendar,
+  Tag,
+  Gift,
+  QrCode,
 } from 'lucide-react';
 import { useAuth } from '@/auth';
+import { eventsApi, Event } from '@/events/events.api-client';
+import { competitionClassesApi, CompetitionClass } from '@/competition-classes/competition-classes.api-client';
 import {
   membershipTypeConfigsApi,
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
-import {
-  membershipsApi,
-  Membership,
-} from '@/memberships';
+import { eventRegistrationsApi } from '@/event-registrations/event-registrations.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 
 // Initialize Stripe
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-// Check if Stripe is actually configured (not a placeholder)
 const isStripeConfigured = !!stripePublishableKey &&
   !stripePublishableKey.includes('YOUR_STRIPE') &&
   stripePublishableKey.startsWith('pk_');
@@ -49,7 +51,6 @@ const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : nu
 interface FormData {
   // Contact Info
   email: string;
-  // Personal Info
   firstName: string;
   lastName: string;
   phone: string;
@@ -59,36 +60,44 @@ interface FormData {
   state: string;
   postalCode: string;
   country: string;
-  // Team Info (for team memberships)
-  teamName: string;
-  teamDescription: string;
-  // Business Info (for retailer memberships)
-  businessName: string;
-  businessWebsite: string;
+  // Vehicle Info
+  vehicleYear: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleInfo: string;
+  // Notes
+  notes: string;
+}
+
+interface SelectedClass {
+  competitionClassId: string;
+  format: string;
+  className: string;
 }
 
 interface OrderData {
-  membershipId: string;
-  membershipName: string;
-  category: MembershipCategory;
-  price: number;
+  registrationId: string;
+  eventTitle: string;
   email: string;
   firstName: string;
   lastName: string;
+  classes: SelectedClass[];
+  total: number;
+  includedMembership: boolean;
+  checkInCode?: string;
+  qrCodeData?: string;
 }
 
 type CheckoutStep = 'info' | 'payment' | 'confirmation';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 // Stripe Payment Form Component
 function StripePaymentForm({
-  membership,
+  total,
   formData,
   onSuccess,
   onBack,
 }: {
-  membership: MembershipTypeConfig;
+  total: number;
   formData: FormData;
   onSuccess: (paymentIntentId: string) => void;
   onBack: () => void;
@@ -180,7 +189,7 @@ function StripePaymentForm({
               Processing Payment...
             </span>
           ) : (
-            `Pay $${membership.price.toFixed(2)}`
+            `Pay $${total.toFixed(2)}`
           )}
         </button>
       </div>
@@ -188,18 +197,27 @@ function StripePaymentForm({
   );
 }
 
-export default function MembershipCheckoutPage() {
-  const { membershipId } = useParams<{ membershipId: string }>();
+export default function EventRegistrationCheckoutPage() {
+  const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { user, profile, signUp } = useAuth();
 
-  const [membership, setMembership] = useState<MembershipTypeConfig | null>(null);
+  // Data state
+  const [event, setEvent] = useState<Event | null>(null);
+  const [availableClasses, setAvailableClasses] = useState<CompetitionClass[]>([]);
+  const [membershipOptions, setMembershipOptions] = useState<MembershipTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<CheckoutStep>('info');
 
+  // Selection state
+  const [selectedClasses, setSelectedClasses] = useState<SelectedClass[]>([]);
+  const [includeMembership, setIncludeMembership] = useState(false);
+  const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
+
   // Stripe-related state
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [registrationId, setRegistrationId] = useState<string | null>(null);
   const [creatingPaymentIntent, setCreatingPaymentIntent] = useState(false);
 
   // Order data saved after successful payment
@@ -226,24 +244,95 @@ export default function MembershipCheckoutPage() {
     state: '',
     postalCode: '',
     country: 'US',
-    teamName: '',
-    teamDescription: '',
-    businessName: '',
-    businessWebsite: '',
+    vehicleYear: '',
+    vehicleMake: '',
+    vehicleModel: '',
+    vehicleInfo: '',
+    notes: '',
   });
 
+  // Compute member status
+  const isMember = profile?.membership_status === 'active';
+
+  // Get pricing info
+  const memberEntryFee = event?.member_entry_fee ?? 0;
+  const nonMemberEntryFee = event?.non_member_entry_fee ?? 0;
+
+  // Calculate pricing
+  const pricing = useMemo(() => {
+    const selectedMembership = membershipOptions.find(m => m.id === selectedMembershipId);
+    const membershipPrice = selectedMembership?.price ?? 0;
+
+    // Use member pricing if already a member OR if purchasing membership
+    const useMemberPricing = isMember || includeMembership;
+    const perClassFee = useMemberPricing ? memberEntryFee : nonMemberEntryFee;
+    const classesSubtotal = selectedClasses.length * perClassFee;
+    const membershipCost = includeMembership ? membershipPrice : 0;
+    const total = classesSubtotal + membershipCost;
+
+    // Calculate savings from membership
+    const nonMemberTotal = selectedClasses.length * nonMemberEntryFee;
+    const savings = includeMembership && !isMember ? (nonMemberTotal - classesSubtotal) : 0;
+
+    return {
+      perClassFee,
+      classesSubtotal,
+      membershipCost,
+      total,
+      savings,
+      isMemberPricing: useMemberPricing,
+    };
+  }, [selectedClasses.length, isMember, includeMembership, selectedMembershipId, membershipOptions, memberEntryFee, nonMemberEntryFee]);
+
+  // Group classes by format
+  const classesByFormat = useMemo(() => {
+    const grouped: Record<string, CompetitionClass[]> = {};
+    for (const cls of availableClasses) {
+      if (!grouped[cls.format]) {
+        grouped[cls.format] = [];
+      }
+      grouped[cls.format].push(cls);
+    }
+    // Sort each group by display order
+    for (const format of Object.keys(grouped)) {
+      grouped[format].sort((a, b) => a.display_order - b.display_order);
+    }
+    return grouped;
+  }, [availableClasses]);
+
   useEffect(() => {
-    const fetchMembership = async () => {
-      if (!membershipId) {
-        setError('No membership selected');
+    const fetchData = async () => {
+      if (!eventId) {
+        setError('No event selected');
         setLoading(false);
         return;
       }
 
       try {
         setLoading(true);
-        const data = await membershipTypeConfigsApi.getById(membershipId);
-        setMembership(data);
+
+        // Fetch event details
+        const eventData = await eventsApi.getById(eventId);
+        setEvent(eventData);
+
+        // Fetch competition classes for the event's season
+        if (eventData.season_id) {
+          const classes = await competitionClassesApi.getBySeason(eventData.season_id);
+          // Filter to only active classes and those matching event formats
+          const eventFormats = eventData.formats || [];
+          const filteredClasses = classes.filter(c =>
+            c.is_active && (eventFormats.length === 0 || eventFormats.includes(c.format))
+          );
+          setAvailableClasses(filteredClasses);
+        }
+
+        // Fetch competitor membership options for upsell
+        const memberships = await membershipTypeConfigsApi.getByCategory(MembershipCategory.COMPETITOR);
+        const activeMemberships = memberships.filter(m => m.isActive && m.showOnPublicSite);
+        setMembershipOptions(activeMemberships);
+        if (activeMemberships.length > 0) {
+          setSelectedMembershipId(activeMemberships[0].id);
+        }
 
         // Pre-fill form from user profile if logged in
         if (profile) {
@@ -257,19 +346,19 @@ export default function MembershipCheckoutPage() {
             city: profile.city || '',
             state: profile.state || '',
             postalCode: profile.postal_code || '',
-            country: profile.country || 'USA',
+            country: profile.country || 'US',
           }));
         }
       } catch (err) {
-        console.error('Error fetching membership:', err);
-        setError('Failed to load membership details');
+        console.error('Error fetching data:', err);
+        setError('Failed to load event details');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMembership();
-  }, [membershipId, profile]);
+    fetchData();
+  }, [eventId, profile]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -278,20 +367,36 @@ export default function MembershipCheckoutPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const toggleClassSelection = (cls: CompetitionClass) => {
+    setSelectedClasses(prev => {
+      const exists = prev.find(c => c.competitionClassId === cls.id);
+      if (exists) {
+        return prev.filter(c => c.competitionClassId !== cls.id);
+      }
+      return [...prev, {
+        competitionClassId: cls.id,
+        format: cls.format,
+        className: cls.name,
+      }];
+    });
+  };
+
+  const isClassSelected = (classId: string) => {
+    return selectedClasses.some(c => c.competitionClassId === classId);
+  };
+
   const validateInfoStep = (): boolean => {
-    // Email required for guests
-    if (!user && !formData.email) {
+    // Email required
+    if (!formData.email) {
       setError('Email address is required');
       return false;
     }
 
     // Validate email format
-    if (!user && formData.email) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        setError('Please enter a valid email address');
-        return false;
-      }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address');
+      return false;
     }
 
     if (!formData.firstName || !formData.lastName) {
@@ -299,20 +404,8 @@ export default function MembershipCheckoutPage() {
       return false;
     }
 
-    if (!formData.address || !formData.city || !formData.state || !formData.postalCode) {
-      setError('Complete address is required');
-      return false;
-    }
-
-    // Team-specific validation
-    if (membership?.category === MembershipCategory.TEAM && !formData.teamName) {
-      setError('Team name is required');
-      return false;
-    }
-
-    // Retailer-specific validation
-    if (membership?.category === MembershipCategory.RETAIL && !formData.businessName) {
-      setError('Business name is required');
+    if (selectedClasses.length === 0) {
+      setError('Please select at least one class to register for');
       return false;
     }
 
@@ -321,13 +414,7 @@ export default function MembershipCheckoutPage() {
   };
 
   const handleContinueToPayment = async () => {
-    if (!validateInfoStep() || !membership) return;
-
-    // If Stripe is not configured, go directly to payment step (test mode)
-    if (!isStripeConfigured) {
-      setStep('payment');
-      return;
-    }
+    if (!validateInfoStep() || !event) return;
 
     setCreatingPaymentIntent(true);
     setError(null);
@@ -335,38 +422,33 @@ export default function MembershipCheckoutPage() {
     try {
       const email = user ? (profile?.email || formData.email) : formData.email;
 
-      // Create Payment Intent via backend
-      const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          membershipTypeConfigId: membership.id,
-          email,
-          userId: user?.id,
-          billingFirstName: formData.firstName,
-          billingLastName: formData.lastName,
-          billingPhone: formData.phone || undefined,
-          billingAddress: formData.address,
-          billingCity: formData.city,
-          billingState: formData.state,
-          billingPostalCode: formData.postalCode,
-          billingCountry: formData.country || 'USA',
-          teamName: formData.teamName || undefined,
-          teamDescription: formData.teamDescription || undefined,
-          businessName: formData.businessName || undefined,
-          businessWebsite: formData.businessWebsite || undefined,
-        }),
+      // Create Payment Intent via backend (with testMode if Stripe not configured)
+      const result = await eventRegistrationsApi.createPaymentIntent({
+        eventId: event.id,
+        email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone || undefined,
+        address: formData.address || undefined,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
+        postalCode: formData.postalCode || undefined,
+        country: formData.country || 'US',
+        vehicleYear: formData.vehicleYear || undefined,
+        vehicleMake: formData.vehicleMake || undefined,
+        vehicleModel: formData.vehicleModel || undefined,
+        vehicleInfo: formData.vehicleInfo || undefined,
+        notes: formData.notes || undefined,
+        classes: selectedClasses,
+        includeMembership: includeMembership && !isMember,
+        membershipTypeConfigId: includeMembership && !isMember ? selectedMembershipId || undefined : undefined,
+        userId: user?.id,
+        isMember,
+        testMode: !isStripeConfigured,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to initialize payment');
-      }
-
-      const { clientSecret: secret } = await response.json();
-      setClientSecret(secret);
+      setClientSecret(result.clientSecret);
+      setRegistrationId(result.registrationId);
       setStep('payment');
     } catch (err) {
       console.error('Error creating payment intent:', err);
@@ -377,20 +459,41 @@ export default function MembershipCheckoutPage() {
   };
 
   const handlePaymentSuccess = async (_paymentIntentId: string) => {
-    if (!membership) return;
+    if (!event || !registrationId) return;
 
     const email = user ? (profile?.email || formData.email) : formData.email;
 
-    // Save order data for confirmation page
-    setOrderData({
-      membershipId: membership.id,
-      membershipName: membership.name,
-      category: membership.category,
-      price: membership.price,
-      email,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-    });
+    try {
+      // Fetch the QR code data
+      const qrData = await eventRegistrationsApi.getQrCode(registrationId);
+
+      // Save order data for confirmation page
+      setOrderData({
+        registrationId,
+        eventTitle: event.title,
+        email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        classes: selectedClasses,
+        total: pricing.total,
+        includedMembership: includeMembership && !isMember,
+        checkInCode: qrData.checkInCode,
+        qrCodeData: qrData.qrCodeData,
+      });
+    } catch (err) {
+      console.error('Failed to fetch QR code:', err);
+      // Still proceed to confirmation even if QR fetch fails
+      setOrderData({
+        registrationId,
+        eventTitle: event.title,
+        email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        classes: selectedClasses,
+        total: pricing.total,
+        includedMembership: includeMembership && !isMember,
+      });
+    }
 
     // Proceed to confirmation
     setStep('confirmation');
@@ -432,15 +535,12 @@ export default function MembershipCheckoutPage() {
         return;
       }
 
-      // Link the membership to the new user
+      // Link the registration to the new user
       if (signUpData?.user?.id) {
         try {
-          await membershipsApi.linkMembershipsToUser({
-            email: orderData.email,
-            userId: signUpData.user.id,
-          });
+          await eventRegistrationsApi.linkToUser(orderData.email, signUpData.user.id);
         } catch (linkError) {
-          console.error('Failed to link membership:', linkError);
+          console.error('Failed to link registration:', linkError);
           // Don't fail the account creation if linking fails
         }
       }
@@ -459,19 +559,6 @@ export default function MembershipCheckoutPage() {
     setShowAccountCreation(false);
   };
 
-  const getCategoryLabel = (category: MembershipCategory): string => {
-    switch (category) {
-      case MembershipCategory.COMPETITOR:
-        return 'Competitor';
-      case MembershipCategory.TEAM:
-        return 'Team';
-      case MembershipCategory.RETAIL:
-        return 'Retailer';
-      default:
-        return category;
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
@@ -480,7 +567,7 @@ export default function MembershipCheckoutPage() {
     );
   }
 
-  if (error && !membership) {
+  if (error && !event) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center px-4">
         <div className="text-center">
@@ -488,18 +575,18 @@ export default function MembershipCheckoutPage() {
           <h2 className="text-2xl font-bold text-white mb-2">Error</h2>
           <p className="text-gray-400 mb-6">{error}</p>
           <Link
-            to="/membership"
+            to="/events"
             className="inline-flex items-center text-orange-500 hover:text-orange-400"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Memberships
+            Back to Events
           </Link>
         </div>
       </div>
     );
   }
 
-  if (!membership) return null;
+  if (!event) return null;
 
   // Confirmation step
   if (step === 'confirmation') {
@@ -512,34 +599,76 @@ export default function MembershipCheckoutPage() {
               <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle className="h-10 w-10 text-white" />
               </div>
-              <h1 className="text-3xl font-bold text-white mb-4">Payment Successful!</h1>
+              <h1 className="text-3xl font-bold text-white mb-4">Registration Complete!</h1>
               <p className="text-gray-400">
-                Thank you for your purchase. Your {membership.name} is now active.
+                You're registered for {event.title}. Show the QR code below at check-in.
               </p>
             </div>
 
+            {/* QR Code */}
+            {orderData?.qrCodeData && (
+              <div className="bg-white rounded-xl p-6 mb-8 text-center">
+                <img
+                  src={orderData.qrCodeData}
+                  alt="Check-in QR Code"
+                  className="mx-auto mb-4"
+                  style={{ maxWidth: '200px' }}
+                />
+                <div className="flex items-center justify-center text-slate-600">
+                  <QrCode className="h-5 w-5 mr-2" />
+                  <span className="font-mono font-semibold">{orderData.checkInCode}</span>
+                </div>
+              </div>
+            )}
+
             {/* Order Details */}
             <div className="bg-slate-700 rounded-xl p-6 mb-8">
-              <h3 className="text-lg font-semibold text-white mb-4">Order Details</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">Registration Details</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Membership Type</span>
-                  <span className="text-white">{membership.name}</span>
+                  <span className="text-gray-400">Event</span>
+                  <span className="text-white">{event.title}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Category</span>
-                  <span className="text-white">{getCategoryLabel(membership.category)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Amount Paid</span>
-                  <span className="text-white">${membership.price.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Valid Until</span>
+                  <span className="text-gray-400">Date</span>
                   <span className="text-white">
-                    {new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                    {new Date(event.event_date).toLocaleDateString(undefined, {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
                   </span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Location</span>
+                  <span className="text-white text-right">
+                    {event.venue_name}<br />
+                    <span className="text-sm text-gray-400">
+                      {event.venue_city}, {event.venue_state}
+                    </span>
+                  </span>
+                </div>
+                <div className="border-t border-slate-600 pt-3">
+                  <span className="text-gray-400 block mb-2">Classes Registered</span>
+                  <ul className="space-y-1">
+                    {orderData?.classes.map((cls, idx) => (
+                      <li key={idx} className="text-white text-sm">
+                        <span className="text-orange-400">{cls.format}</span> - {cls.className}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="flex justify-between border-t border-slate-600 pt-3">
+                  <span className="text-gray-400">Amount Paid</span>
+                  <span className="text-white">${orderData?.total.toFixed(2)}</span>
+                </div>
+                {orderData?.includedMembership && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Membership</span>
+                    <span className="text-green-400">Included</span>
+                  </div>
+                )}
                 {orderData && (
                   <div className="flex justify-between">
                     <span className="text-gray-400">Email</span>
@@ -557,7 +686,7 @@ export default function MembershipCheckoutPage() {
                   <div>
                     <h3 className="text-lg font-semibold text-white">Create Your Account</h3>
                     <p className="text-gray-400 text-sm mt-1">
-                      Create an account to access your membership, track events, and manage your profile.
+                      Create an account to view your registrations, access your QR code anytime, and manage your profile.
                     </p>
                   </div>
                 </div>
@@ -611,11 +740,6 @@ export default function MembershipCheckoutPage() {
                           Minimum strength required: {MIN_PASSWORD_STRENGTH}
                         </p>
                       </div>
-                    )}
-                    {!accountPassword && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        Use a mix of letters, numbers, and symbols for a strong password
-                      </p>
                     )}
                   </div>
                   <div>
@@ -676,7 +800,7 @@ export default function MembershipCheckoutPage() {
                   <div>
                     <h3 className="text-lg font-semibold text-white">Account Created!</h3>
                     <p className="text-gray-400 text-sm">
-                      Your account has been created and your membership is linked.
+                      Your account has been created and your registration is linked.
                     </p>
                   </div>
                 </div>
@@ -687,8 +811,8 @@ export default function MembershipCheckoutPage() {
             {!showAccountCreation && !accountCreated && !user && (
               <div className="bg-slate-700/50 rounded-xl p-6 mb-8">
                 <p className="text-gray-400 text-sm">
-                  A confirmation email has been sent to <span className="text-white">{orderData?.email}</span>.
-                  You can create an account later using this email to access your membership.
+                  A confirmation email will be sent to <span className="text-white">{orderData?.email}</span>.
+                  You can create an account later using this email to access your registration.
                 </p>
               </div>
             )}
@@ -698,16 +822,16 @@ export default function MembershipCheckoutPage() {
               {(user || accountCreated) ? (
                 <>
                   <button
-                    onClick={() => navigate('/dashboard')}
+                    onClick={() => navigate('/my-registrations')}
                     className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                   >
-                    Go to Dashboard
+                    View My Registrations
                   </button>
                   <button
                     onClick={() => navigate('/events')}
                     className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   >
-                    Browse Events
+                    Browse More Events
                   </button>
                 </>
               ) : (
@@ -716,7 +840,7 @@ export default function MembershipCheckoutPage() {
                     onClick={() => navigate('/events')}
                     className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                   >
-                    Browse Events
+                    Browse More Events
                   </button>
                   <button
                     onClick={() => navigate('/')}
@@ -738,12 +862,33 @@ export default function MembershipCheckoutPage() {
       <div className="max-w-6xl mx-auto px-4">
         {/* Back button */}
         <Link
-          to="/membership"
+          to={`/events/${eventId}`}
           className="inline-flex items-center text-gray-400 hover:text-white mb-8 transition-colors"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Memberships
+          Back to Event
         </Link>
+
+        {/* Member Pricing Banner */}
+        {!isMember && !user && (
+          <div className="bg-gradient-to-r from-orange-600/20 to-red-600/20 border border-orange-500/30 rounded-xl p-4 mb-8">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center">
+                <Tag className="h-5 w-5 text-orange-500 mr-3" />
+                <div>
+                  <span className="text-white font-semibold">Members save ${(nonMemberEntryFee - memberEntryFee).toFixed(2)} per class!</span>
+                  <span className="text-gray-400 ml-2">Log in for member pricing.</span>
+                </div>
+              </div>
+              <Link
+                to="/login"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors text-sm"
+              >
+                Log In
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Progress indicator */}
         <div className="flex items-center justify-center mb-12">
@@ -777,7 +922,7 @@ export default function MembershipCheckoutPage() {
           <div className="lg:col-span-2">
             <div className="bg-slate-800 rounded-2xl p-8">
               <h2 className="text-2xl font-bold text-white mb-6">
-                {step === 'info' ? 'Your Information' : 'Payment Details'}
+                {step === 'info' ? 'Registration Details' : 'Payment Details'}
               </h2>
 
               {step === 'info' && (
@@ -817,7 +962,7 @@ export default function MembershipCheckoutPage() {
                           />
                         </div>
                         <p className="mt-1 text-xs text-gray-400">
-                          We'll send your membership confirmation to this email
+                          We'll send your registration confirmation and QR code to this email
                         </p>
                       </div>
                     </div>
@@ -879,16 +1024,16 @@ export default function MembershipCheckoutPage() {
                     </div>
                   </div>
 
-                  {/* Address */}
+                  {/* Address (Optional) */}
                   <div className="mb-8">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                       <MapPin className="h-5 w-5 mr-2 text-orange-500" />
-                      Address
+                      Address <span className="text-gray-400 text-sm font-normal ml-2">(Optional)</span>
                     </h3>
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Street Address *
+                          Street Address
                         </label>
                         <input
                           type="text"
@@ -897,23 +1042,20 @@ export default function MembershipCheckoutPage() {
                           onChange={handleInputChange}
                           className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
                           placeholder="123 Main Street"
-                          required
                         />
                       </div>
                       <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Country *
+                          Country
                         </label>
                         <select
                           name="country"
                           value={formData.country}
                           onChange={(e) => {
                             handleInputChange(e);
-                            // Clear state when country changes
                             setFormData(prev => ({ ...prev, country: e.target.value, state: '' }));
                           }}
                           className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          required
                         >
                           {countries.map((country) => (
                             <option key={country.code} value={country.code}>
@@ -925,7 +1067,7 @@ export default function MembershipCheckoutPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            City *
+                            City
                           </label>
                           <input
                             type="text"
@@ -934,12 +1076,11 @@ export default function MembershipCheckoutPage() {
                             onChange={handleInputChange}
                             className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
                             placeholder="City"
-                            required
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            {getStateLabel(formData.country)} *
+                            {getStateLabel(formData.country)}
                           </label>
                           {getStatesForCountry(formData.country).length > 0 ? (
                             <select
@@ -947,7 +1088,6 @@ export default function MembershipCheckoutPage() {
                               value={formData.state}
                               onChange={handleInputChange}
                               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                              required
                             >
                               <option value="">Select</option>
                               {getStatesForCountry(formData.country).map((state) => (
@@ -964,13 +1104,12 @@ export default function MembershipCheckoutPage() {
                               onChange={handleInputChange}
                               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
                               placeholder={getStateLabel(formData.country)}
-                              required
                             />
                           )}
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            {getPostalCodeLabel(formData.country)} *
+                            {getPostalCodeLabel(formData.country)}
                           </label>
                           <input
                             type="text"
@@ -979,94 +1118,205 @@ export default function MembershipCheckoutPage() {
                             onChange={handleInputChange}
                             className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
                             placeholder={formData.country === 'US' ? '12345' : 'Postal code'}
-                            required
                           />
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Team Information (for team memberships) */}
-                  {membership.category === MembershipCategory.TEAM && (
-                    <div className="mb-8">
-                      <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                        <Building className="h-5 w-5 mr-2 text-orange-500" />
-                        Team Information
-                      </h3>
-                      <div className="space-y-4">
+                  {/* Vehicle Information */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                      <Car className="h-5 w-5 mr-2 text-orange-500" />
+                      Vehicle Information
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Team Name *
+                            Year
                           </label>
                           <input
                             type="text"
-                            name="teamName"
-                            value={formData.teamName}
+                            name="vehicleYear"
+                            value={formData.vehicleYear}
                             onChange={handleInputChange}
                             className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="Your Team Name"
-                            required
+                            placeholder="2024"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Team Description
+                            Make
                           </label>
-                          <textarea
-                            name="teamDescription"
-                            value={formData.teamDescription}
+                          <input
+                            type="text"
+                            name="vehicleMake"
+                            value={formData.vehicleMake}
                             onChange={handleInputChange}
-                            rows={3}
                             className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="Tell us about your team..."
+                            placeholder="Honda"
                           />
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Model
+                          </label>
+                          <input
+                            type="text"
+                            name="vehicleModel"
+                            value={formData.vehicleModel}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            placeholder="Civic"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Additional Vehicle Info
+                        </label>
+                        <input
+                          type="text"
+                          name="vehicleInfo"
+                          value={formData.vehicleInfo}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="Color, modifications, etc."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Class Selection */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                      <Tag className="h-5 w-5 mr-2 text-orange-500" />
+                      Select Classes *
+                    </h3>
+                    <p className="text-gray-400 text-sm mb-4">
+                      Choose the classes you want to compete in.
+                      {pricing.isMemberPricing ? (
+                        <span className="text-green-400"> Member pricing: ${memberEntryFee.toFixed(2)}/class</span>
+                      ) : (
+                        <span> Non-member: ${nonMemberEntryFee.toFixed(2)}/class</span>
+                      )}
+                    </p>
+
+                    {Object.keys(classesByFormat).length === 0 ? (
+                      <div className="text-center py-8 text-gray-400">
+                        No classes available for this event.
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {Object.entries(classesByFormat).map(([format, classes]) => (
+                          <div key={format}>
+                            <h4 className="text-sm font-semibold text-orange-400 uppercase tracking-wide mb-3">
+                              {format}
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {classes.map((cls) => (
+                                <label
+                                  key={cls.id}
+                                  className={`flex items-center p-3 rounded-lg border cursor-pointer transition-colors ${
+                                    isClassSelected(cls.id)
+                                      ? 'bg-orange-500/20 border-orange-500'
+                                      : 'bg-slate-700 border-slate-600 hover:border-slate-500'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isClassSelected(cls.id)}
+                                    onChange={() => toggleClassSelection(cls)}
+                                    className="sr-only"
+                                  />
+                                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center mr-3 ${
+                                    isClassSelected(cls.id)
+                                      ? 'bg-orange-500 border-orange-500'
+                                      : 'border-slate-500'
+                                  }`}>
+                                    {isClassSelected(cls.id) && (
+                                      <Check className="h-3 w-3 text-white" />
+                                    )}
+                                  </div>
+                                  <span className="text-white">{cls.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Membership Upsell */}
+                  {!isMember && membershipOptions.length > 0 && selectedClasses.length > 0 && (
+                    <div className="mb-8">
+                      <div className="bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl p-6">
+                        <div className="flex items-start mb-4">
+                          <Gift className="h-6 w-6 text-green-500 mr-3 flex-shrink-0 mt-1" />
+                          <div>
+                            <h3 className="text-lg font-semibold text-white">Become a Member & Save!</h3>
+                            <p className="text-gray-400 text-sm mt-1">
+                              Add a membership to your order and get member pricing on this event plus all future events.
+                            </p>
+                          </div>
+                        </div>
+
+                        <label className="flex items-center p-4 bg-slate-800/50 rounded-lg cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={includeMembership}
+                            onChange={(e) => setIncludeMembership(e.target.checked)}
+                            className="sr-only"
+                          />
+                          <div className={`w-6 h-6 rounded border-2 flex items-center justify-center mr-4 ${
+                            includeMembership
+                              ? 'bg-green-500 border-green-500'
+                              : 'border-slate-500'
+                          }`}>
+                            {includeMembership && (
+                              <Check className="h-4 w-4 text-white" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-white font-medium">
+                                Add Annual Membership
+                              </span>
+                              <span className="text-green-400 font-semibold">
+                                +${membershipOptions[0]?.price.toFixed(2)}
+                              </span>
+                            </div>
+                            {includeMembership && pricing.savings > 0 && (
+                              <p className="text-green-400 text-sm mt-1">
+                                You'll save ${pricing.savings.toFixed(2)} on this event alone!
+                              </p>
+                            )}
+                          </div>
+                        </label>
                       </div>
                     </div>
                   )}
 
-                  {/* Business Information (for retailer memberships) */}
-                  {membership.category === MembershipCategory.RETAIL && (
-                    <div className="mb-8">
-                      <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                        <Building className="h-5 w-5 mr-2 text-orange-500" />
-                        Business Information
-                      </h3>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Business Name *
-                          </label>
-                          <input
-                            type="text"
-                            name="businessName"
-                            value={formData.businessName}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="Your Business Name"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Business Website
-                          </label>
-                          <input
-                            type="url"
-                            name="businessWebsite"
-                            value={formData.businessWebsite}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="https://www.yourbusiness.com"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {/* Notes */}
+                  <div className="mb-8">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Notes <span className="text-gray-400 font-normal">(Optional)</span>
+                    </label>
+                    <textarea
+                      name="notes"
+                      value={formData.notes}
+                      onChange={handleInputChange}
+                      rows={3}
+                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Any additional information or special requests..."
+                    />
+                  </div>
 
                   <button
                     type="submit"
-                    disabled={creatingPaymentIntent}
+                    disabled={creatingPaymentIntent || selectedClasses.length === 0}
                     className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {creatingPaymentIntent ? (
@@ -1100,7 +1350,7 @@ export default function MembershipCheckoutPage() {
                   }}
                 >
                   <StripePaymentForm
-                    membership={membership}
+                    total={pricing.total}
                     formData={formData}
                     onSuccess={handlePaymentSuccess}
                     onBack={() => setStep('info')}
@@ -1135,12 +1385,18 @@ export default function MembershipCheckoutPage() {
                         <span className="text-white">{formData.firstName} {formData.lastName}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Membership</span>
-                        <span className="text-white">{membership.name}</span>
+                        <span className="text-gray-400">Classes</span>
+                        <span className="text-white">{selectedClasses.length} selected</span>
                       </div>
+                      {includeMembership && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Membership</span>
+                          <span className="text-green-400">Included</span>
+                        </div>
+                      )}
                       <div className="flex justify-between border-t border-slate-600 pt-2 mt-2">
                         <span className="text-gray-400">Total</span>
-                        <span className="text-orange-500 font-semibold">${membership.price.toFixed(2)}</span>
+                        <span className="text-orange-500 font-semibold">${pricing.total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -1171,56 +1427,83 @@ export default function MembershipCheckoutPage() {
             <div className="bg-slate-800 rounded-2xl p-6 sticky top-6">
               <h3 className="text-lg font-semibold text-white mb-4">Order Summary</h3>
 
+              {/* Event Info */}
               <div className="border-b border-slate-700 pb-4 mb-4">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <span className="text-sm text-orange-400 uppercase tracking-wide">
-                      {getCategoryLabel(membership.category)}
+                      Event Registration
                     </span>
-                    <h4 className="text-white font-semibold">{membership.name}</h4>
+                    <h4 className="text-white font-semibold">{event.title}</h4>
                   </div>
                 </div>
-                <p className="text-gray-400 text-sm">{membership.description}</p>
+                <div className="flex items-center text-gray-400 text-sm">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  {new Date(event.event_date).toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </div>
               </div>
 
-              {membership.benefits && membership.benefits.length > 0 && (
+              {/* Selected Classes */}
+              {selectedClasses.length > 0 && (
                 <div className="border-b border-slate-700 pb-4 mb-4">
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">Includes:</h4>
-                  <ul className="space-y-2">
-                    {membership.benefits.slice(0, 4).map((benefit, index) => (
-                      <li key={index} className="flex items-start text-sm">
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Classes ({selectedClasses.length})</h4>
+                  <ul className="space-y-1">
+                    {selectedClasses.map((cls, idx) => (
+                      <li key={idx} className="flex items-start text-sm">
                         <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                        <span className="text-gray-400">{benefit}</span>
+                        <span className="text-gray-400">
+                          <span className="text-orange-400">{cls.format}</span> - {cls.className}
+                        </span>
                       </li>
                     ))}
-                    {membership.benefits.length > 4 && (
-                      <li className="text-sm text-gray-500">
-                        +{membership.benefits.length - 4} more benefits
-                      </li>
-                    )}
                   </ul>
                 </div>
               )}
 
+              {/* Pricing Breakdown */}
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Membership</span>
-                  <span className="text-white">${membership.price.toFixed(2)}</span>
+                  <span className="text-gray-400">
+                    {selectedClasses.length} {selectedClasses.length === 1 ? 'class' : 'classes'} × ${pricing.perClassFee.toFixed(2)}
+                  </span>
+                  <span className="text-white">${pricing.classesSubtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Duration</span>
-                  <span className="text-white">12 months</span>
-                </div>
+                {pricing.isMemberPricing && !isMember && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-400">Member discount applied</span>
+                    <span className="text-green-400">-${((nonMemberEntryFee - memberEntryFee) * selectedClasses.length).toFixed(2)}</span>
+                  </div>
+                )}
+                {includeMembership && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Annual Membership</span>
+                    <span className="text-white">${pricing.membershipCost.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-slate-700 pt-4">
                 <div className="flex justify-between">
                   <span className="text-lg font-semibold text-white">Total</span>
                   <span className="text-lg font-bold text-orange-500">
-                    ${membership.price.toFixed(2)}
+                    ${pricing.total.toFixed(2)}
                   </span>
                 </div>
               </div>
+
+              {/* Member vs Non-Member Price Comparison */}
+              {!isMember && !includeMembership && selectedClasses.length > 0 && (
+                <div className="mt-4 p-3 bg-slate-700/50 rounded-lg">
+                  <p className="text-sm text-gray-400">
+                    Members pay only <span className="text-green-400">${(selectedClasses.length * memberEntryFee).toFixed(2)}</span> for these classes.
+                  </p>
+                </div>
+              )}
 
               <div className="mt-6 p-4 bg-slate-700/50 rounded-lg">
                 <div className="flex items-center text-sm text-gray-400">

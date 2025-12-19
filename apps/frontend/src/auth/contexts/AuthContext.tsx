@@ -2,18 +2,21 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/lib/supabase';
 import { setAxiosUserId } from '@/lib/axios';
+import { profilesApi } from '@/profiles';
 
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   session: Session | null;
   loading: boolean;
+  forcePasswordChange: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any; data: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<{ error: any }>;
   resetPassword: (email: string) => Promise<{ error: any }>;
+  clearForcePasswordChange: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [forcePasswordChange, setForcePasswordChange] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -39,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Add computed full_name field for backward compatibility
     if (data) {
       data.full_name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+      // Check if user needs to change password
+      setForcePasswordChange(data.force_password_change === true);
     }
 
     return data;
@@ -168,6 +174,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  const clearForcePasswordChange = async () => {
+    if (user) {
+      try {
+        await profilesApi.clearForcePasswordChange(user.id);
+        setForcePasswordChange(false);
+        // Refresh profile to get updated data
+        await refreshProfile();
+      } catch (error) {
+        console.error('Error clearing force password change:', error);
+      }
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -175,12 +194,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         session,
         loading,
+        forcePasswordChange,
         signIn,
         signUp,
         signOut,
         refreshProfile,
         updatePassword,
         resetPassword,
+        clearForcePasswordChange,
       }}
     >
       {children}

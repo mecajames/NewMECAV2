@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Users, Trophy, Plus, CreditCard as Edit } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, Users, Trophy, Plus, CreditCard as Edit, QrCode } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { supabase, Event } from '@/lib/supabase';
 
@@ -8,6 +9,7 @@ interface EventDirectorDashboardProps {
 }
 
 export default function EventDirectorDashboard({ onNavigate }: EventDirectorDashboardProps) {
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const [myEvents, setMyEvents] = useState<Event[]>([]);
   const [stats, setStats] = useState({
@@ -129,7 +131,7 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-white">Quick Actions</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <button className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left">
                   <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center mb-4">
                     <Plus className="h-6 w-6 text-orange-500" />
@@ -147,6 +149,25 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
                   <h3 className="text-lg font-semibold text-white mb-2">Enter Results</h3>
                   <p className="text-gray-400 text-sm">
                     Add competition results for your events
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const activeEvent = myEvents.find(e => e.status === 'ongoing' || e.status === 'upcoming');
+                    if (activeEvent) {
+                      navigate(`/events/${activeEvent.id}/check-in`);
+                    }
+                  }}
+                  disabled={!myEvents.some(e => e.status === 'ongoing' || e.status === 'upcoming')}
+                  className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none"
+                >
+                  <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center mb-4">
+                    <QrCode className="h-6 w-6 text-cyan-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">QR Check-In</h3>
+                  <p className="text-gray-400 text-sm">
+                    Scan competitor QR codes at your event
                   </p>
                 </button>
               </div>
@@ -179,13 +200,27 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
                             })}
                           </p>
                         </div>
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
-                            event.status
-                          )}`}
-                        >
-                          {event.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {(event.status === 'upcoming' || event.status === 'ongoing') && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/events/${event.id}/check-in`);
+                              }}
+                              className="flex items-center gap-1 px-3 py-1 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold rounded-full transition-colors"
+                            >
+                              <QrCode className="h-3 w-3" />
+                              Check-In
+                            </button>
+                          )}
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                              event.status
+                            )}`}
+                          >
+                            {event.status}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-gray-400">
                         <span className="flex items-center gap-1">

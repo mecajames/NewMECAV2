@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from '@/auth';
+import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { Navbar, Footer, ScrollToTop } from '@/shared/components';
 // Static pages
@@ -11,7 +11,7 @@ import TermsAndConditionsPage from '@/pages/TermsAndConditionsPage';
 import CompetitionGuidesPage from '@/pages/CompetitionGuidesPage';
 import MECAQuickStartGuidePage from '@/pages/MECAQuickStartGuidePage';
 // Feature pages
-import { LoginPage } from '@/auth';
+import { LoginPage, ChangePasswordPage } from '@/auth';
 import { EventsPage, EventDetailPage } from '@/events';
 import { ResultsPage, LeaderboardPage, StandingsPage } from '@/competition-results';
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
@@ -22,8 +22,14 @@ import { HostEventPage } from '@/event-hosting-requests';
 import { ClassCalculatorPage, ClassesManagementPage } from '@/competition-classes';
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
 import { BillingPage } from '@/billing';
-import { MembersPage, MemberDetailPage, AdminTicketsPage } from '@/admin';
+import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage } from '@/admin';
 import { SeasonManagementPage } from '@/seasons';
+import {
+  EventRegistrationCheckoutPage,
+  MyRegistrationsPage,
+  EventCheckInPage,
+  CheckInHubPage,
+} from '@/event-registrations';
 import { FormatManagementPage } from '@/competition-formats';
 import { MembershipTypeManagementPage } from '@/membership-type-configs';
 // Ticket pages
@@ -44,13 +50,17 @@ function App() {
           <ScrollToTop />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
+            <ForcePasswordChangeGuard>
             <div className="flex-1">
               <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/change-password" element={<ChangePasswordPage />} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:eventId" element={<EventDetailPage />} />
+              <Route path="/events/:eventId/register" element={<EventRegistrationCheckoutPage />} />
+              <Route path="/events/:eventId/check-in" element={<EventCheckInPage />} />
               <Route path="/results" element={<ResultsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/standings" element={<StandingsPage />} />
@@ -83,6 +93,7 @@ function App() {
               <Route path="/billing" element={<BillingPage />} />
               <Route path="/membership" element={<MembershipPage />} />
               <Route path="/membership/checkout/:membershipId" element={<MembershipCheckoutPage />} />
+              <Route path="/my-registrations" element={<MyRegistrationsPage />} />
 
               {/* Support Ticket Routes (Authenticated) */}
               <Route path="/tickets" element={<TicketsPage />} />
@@ -103,11 +114,14 @@ function App() {
               <Route path="/admin/membership-types" element={<MembershipTypeManagementPage />} />
               <Route path="/admin/tickets" element={<AdminTicketsPage />} />
               <Route path="/admin/tickets/:id" element={<AdminTicketsPage />} />
+              <Route path="/admin/event-registrations" element={<EventRegistrationsPage />} />
+              <Route path="/admin/check-in" element={<CheckInHubPage />} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
+            </ForcePasswordChangeGuard>
           <Footer />
         </div>
         </BrowserRouter>

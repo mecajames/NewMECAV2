@@ -1,5 +1,6 @@
 import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { AccountType } from '@newmeca/shared';
 
 @Entity({ tableName: 'profiles', schema: 'public' })
 export class Profile {
@@ -99,6 +100,13 @@ export class Profile {
 
   @Property({ type: 'json', nullable: true, fieldName: 'profile_images' })
   profile_images?: string[];
+
+  @Property({ type: 'boolean', default: false, fieldName: 'force_password_change' })
+  force_password_change: boolean = false;
+
+  // Account type: 'member' for full members, 'basic' for guest registrations converted to accounts
+  @Property({ type: 'text', default: AccountType.MEMBER, fieldName: 'account_type' })
+  account_type: AccountType = AccountType.MEMBER;
 
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   created_at: Date = new Date();

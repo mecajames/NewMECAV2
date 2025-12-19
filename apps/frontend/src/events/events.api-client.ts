@@ -19,6 +19,12 @@ export interface Event {
   status: string;
   max_participants?: number;
   registration_fee: number;
+  // Entry fees (per class)
+  member_entry_fee?: number;
+  non_member_entry_fee?: number;
+  // Gate fee
+  has_gate_fee?: boolean;
+  gate_fee?: number;
   season_id?: string;
   points_multiplier?: number;
   format?: string;

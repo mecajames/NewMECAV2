@@ -25,6 +25,10 @@ import {
   AlertTriangle,
   Shield,
   ExternalLink,
+  Lock,
+  RefreshCw,
+  Copy,
+  Key,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -36,6 +40,8 @@ import { membershipsApi, Membership } from '@/memberships';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs';
 import { teamsApi, Team } from '@/teams';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
+import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH, getStrengthColorClasses } from '../../utils/passwordUtils';
+import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
 
 type TabType =
   | 'overview'
@@ -61,11 +67,54 @@ export default function MemberDetailPage() {
   const [messageBody, setMessageBody] = useState('');
   const [sending, setSending] = useState(false);
 
+  // Create mode when memberId is 'new'
+  const isCreateMode = memberId === 'new';
+  const [createFormData, setCreateFormData] = useState({
+    email: '',
+    first_name: '',
+    last_name: '',
+    phone: '',
+    role: 'user',
+  });
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  // Password management for create mode
+  const [passwordMode, setPasswordMode] = useState<'manual' | 'generated'>('generated');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [forcePasswordChange, setForcePasswordChange] = useState(true);
+  const [sendPasswordEmail, setSendPasswordEmail] = useState(false);
+  const [emailServiceConfigured, setEmailServiceConfigured] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
+
+  // Password reset modal for edit mode
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [resetPasswordMode, setResetPasswordMode] = useState<'manual' | 'generated'>('generated');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetForceChange, setResetForceChange] = useState(true);
+  const [resetSendEmail, setResetSendEmail] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [resetPasswordCopied, setResetPasswordCopied] = useState(false);
+
   useEffect(() => {
-    if (memberId && !permLoading) {
+    if (memberId && !permLoading && !isCreateMode) {
       fetchMember();
+    } else if (isCreateMode) {
+      setLoading(false);
+      // Generate initial password for create mode
+      setPassword(generatePassword());
+      // Check email service status
+      profilesApi.getEmailServiceStatus().then(({ configured }) => {
+        setEmailServiceConfigured(configured);
+      }).catch(() => {
+        setEmailServiceConfigured(false);
+      });
     }
-  }, [memberId, permLoading]);
+  }, [memberId, permLoading, isCreateMode]);
 
   const fetchMember = async () => {
     try {
@@ -87,6 +136,117 @@ export default function MemberDetailPage() {
     } catch (error) {
       console.error('Error fetching member:', error);
       setLoading(false);
+    }
+  };
+
+  const handleCreateMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateError(null);
+
+    if (!createFormData.email.trim()) {
+      setCreateError('Email is required');
+      return;
+    }
+
+    // Validate password
+    const passwordToUse = passwordMode === 'generated' ? password : password;
+    if (!passwordToUse) {
+      setCreateError('Password is required');
+      return;
+    }
+
+    const strength = calculatePasswordStrength(passwordToUse);
+    if (strength.score < MIN_PASSWORD_STRENGTH) {
+      setCreateError(`Password strength must be at least ${MIN_PASSWORD_STRENGTH}. Current: ${strength.score}`);
+      return;
+    }
+
+    if (passwordMode === 'manual' && password !== confirmPassword) {
+      setCreateError('Passwords do not match');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const newMember = await profilesApi.createWithPassword({
+        email: createFormData.email,
+        password: passwordToUse,
+        firstName: createFormData.first_name || undefined,
+        lastName: createFormData.last_name || undefined,
+        phone: createFormData.phone || undefined,
+        role: createFormData.role,
+        forcePasswordChange: forcePasswordChange,
+        sendEmail: sendPasswordEmail && emailServiceConfigured,
+      });
+
+      // Navigate to the newly created member's detail page
+      navigate(`/admin/members/${newMember.id}`);
+    } catch (error) {
+      console.error('Error creating member:', error);
+      setCreateError(error instanceof Error ? error.message : 'Failed to create member. Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Password helper functions
+  const handleCopyPassword = async (pwd: string, setCopied: (v: boolean) => void) => {
+    try {
+      await navigator.clipboard.writeText(pwd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy password:', err);
+    }
+  };
+
+  const handleRegeneratePassword = () => {
+    setPassword(generatePassword());
+    setPasswordCopied(false);
+  };
+
+  const handleRegenerateResetPassword = () => {
+    setResetPassword(generatePassword());
+    setResetPasswordCopied(false);
+  };
+
+  // Handle password reset for existing member
+  const handlePasswordReset = async () => {
+    const passwordToUse = resetPasswordMode === 'generated' ? resetPassword : resetPassword;
+
+    if (!passwordToUse) {
+      alert('Password is required');
+      return;
+    }
+
+    const strength = calculatePasswordStrength(passwordToUse);
+    if (strength.score < MIN_PASSWORD_STRENGTH) {
+      alert(`Password strength must be at least ${MIN_PASSWORD_STRENGTH}. Current: ${strength.score}`);
+      return;
+    }
+
+    if (resetPasswordMode === 'manual' && resetPassword !== resetConfirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      await profilesApi.resetPassword(memberId!, {
+        newPassword: passwordToUse,
+        forcePasswordChange: resetForceChange,
+        sendEmail: resetSendEmail && emailServiceConfigured,
+      });
+
+      setShowPasswordResetModal(false);
+      setResetPassword('');
+      setResetConfirmPassword('');
+      alert('Password reset successfully!');
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      alert(error instanceof Error ? error.message : 'Failed to reset password');
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -195,6 +355,299 @@ export default function MemberDetailPage() {
     );
   }
 
+  // Show create form when in create mode
+  if (isCreateMode) {
+    if (!hasPermission('create_user')) {
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+          <div className="text-center">
+            <User className="h-16 w-16 text-gray-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+            <p className="text-gray-400">You don't have permission to create members.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Back Button */}
+          <button
+            onClick={() => navigate('/admin/members')}
+            className="mb-6 inline-flex items-center gap-2 text-gray-400 hover:text-white"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Members
+          </button>
+
+          {/* Create Member Form */}
+          <div className="bg-slate-800 rounded-lg shadow-sm p-6">
+            <h1 className="text-2xl font-bold text-white mb-6">Add New Member</h1>
+
+            {createError && (
+              <div className="mb-4 p-3 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+                {createError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateMember} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={createFormData.email}
+                  onChange={(e) => setCreateFormData({ ...createFormData, email: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="member@example.com"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    value={createFormData.first_name}
+                    onChange={(e) => setCreateFormData({ ...createFormData, first_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={createFormData.last_name}
+                    onChange={(e) => setCreateFormData({ ...createFormData, last_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={createFormData.phone}
+                  onChange={(e) => setCreateFormData({ ...createFormData, phone: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Role
+                </label>
+                <select
+                  value={createFormData.role}
+                  onChange={(e) => setCreateFormData({ ...createFormData, role: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="user">User</option>
+                  <option value="event_director">Event Director</option>
+                  <option value="retailer">Retailer</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              {/* Password Section */}
+              <div className="border-t border-slate-700 pt-4 mt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Key className="h-5 w-5 text-orange-500" />
+                  <h3 className="text-lg font-medium text-white">Password Setup</h3>
+                </div>
+
+                {/* Password Mode Selection */}
+                <div className="flex gap-4 mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="passwordMode"
+                      checked={passwordMode === 'generated'}
+                      onChange={() => setPasswordMode('generated')}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600"
+                    />
+                    <span className="text-gray-300">Generate one-time password</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="passwordMode"
+                      checked={passwordMode === 'manual'}
+                      onChange={() => setPasswordMode('manual')}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600"
+                    />
+                    <span className="text-gray-300">Set password manually</span>
+                  </label>
+                </div>
+
+                {passwordMode === 'generated' ? (
+                  /* Generated Password Display */
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Generated Password
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="flex-1 relative">
+                          <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            readOnly
+                            className="w-full pl-10 pr-12 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white font-mono focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                          >
+                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPassword(password, setPasswordCopied)}
+                          className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-1 ${
+                            passwordCopied
+                              ? 'bg-green-600 text-white'
+                              : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                          }`}
+                        >
+                          {passwordCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          {passwordCopied ? 'Copied!' : 'Copy'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRegeneratePassword}
+                          className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                          Regenerate
+                        </button>
+                      </div>
+                    </div>
+                    <PasswordStrengthIndicator password={password} />
+                  </div>
+                ) : (
+                  /* Manual Password Entry */
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full pl-10 pr-12 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="Enter password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                        >
+                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Confirm Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="w-full pl-10 pr-12 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="Confirm password"
+                        />
+                      </div>
+                      {password && confirmPassword && password !== confirmPassword && (
+                        <p className="text-red-400 text-sm mt-1">Passwords do not match</p>
+                      )}
+                    </div>
+                    <PasswordStrengthIndicator password={password} />
+                  </div>
+                )}
+
+                {/* Password Options */}
+                <div className="mt-4 space-y-2">
+                  <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={forcePasswordChange}
+                      onChange={(e) => setForcePasswordChange(e.target.checked)}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500"
+                    />
+                    Force password change on first login
+                  </label>
+                  <label className={`flex items-center gap-2 ${emailServiceConfigured ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-not-allowed'}`}>
+                    <input
+                      type="checkbox"
+                      checked={sendPasswordEmail}
+                      onChange={(e) => setSendPasswordEmail(e.target.checked)}
+                      disabled={!emailServiceConfigured}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 disabled:opacity-50"
+                    />
+                    Send password to user via email
+                    {!emailServiceConfigured && (
+                      <span className="text-xs text-gray-500">(Email service not configured)</span>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/members')}
+                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-600/50 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {creating ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></div>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Create Member
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!member) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
@@ -294,6 +747,27 @@ export default function MemberDetailPage() {
 
             {/* Quick Actions */}
             <div className="flex gap-2">
+              {hasPermission('manage_users') && (
+                <button
+                  onClick={() => {
+                    setResetPassword(generatePassword());
+                    setResetPasswordMode('generated');
+                    setResetForceChange(true);
+                    setResetSendEmail(false);
+                    setShowPasswordResetModal(true);
+                    // Check email service status
+                    profilesApi.getEmailServiceStatus().then(({ configured }) => {
+                      setEmailServiceConfigured(configured);
+                    }).catch(() => {
+                      setEmailServiceConfigured(false);
+                    });
+                  }}
+                  className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2"
+                >
+                  <Key className="h-4 w-4" />
+                  Reset Password
+                </button>
+              )}
               {hasPermission('send_emails') && (
                 <button
                   onClick={() => setShowMessageModal(true)}
@@ -451,6 +925,192 @@ export default function MemberDetailPage() {
                   >
                     <Send className="h-4 w-4" />
                     {sending ? 'Sending...' : 'Send Message'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Password Reset Modal */}
+        {showPasswordResetModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Key className="h-6 w-6 text-orange-500" />
+                <h2 className="text-2xl font-bold text-white">
+                  Reset Password
+                </h2>
+              </div>
+
+              <p className="text-gray-400 mb-4">
+                Reset password for {member.first_name} {member.last_name} ({member.email})
+              </p>
+
+              <div className="space-y-4">
+                {/* Password Mode Selection */}
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="resetPasswordMode"
+                      checked={resetPasswordMode === 'generated'}
+                      onChange={() => setResetPasswordMode('generated')}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600"
+                    />
+                    <span className="text-gray-300">Generate password</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="resetPasswordMode"
+                      checked={resetPasswordMode === 'manual'}
+                      onChange={() => setResetPasswordMode('manual')}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600"
+                    />
+                    <span className="text-gray-300">Set manually</span>
+                  </label>
+                </div>
+
+                {resetPasswordMode === 'generated' ? (
+                  /* Generated Password */
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Generated Password
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="flex-1 relative">
+                          <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <input
+                            type={showResetPassword ? 'text' : 'password'}
+                            value={resetPassword}
+                            readOnly
+                            className="w-full pl-10 pr-12 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white font-mono focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowResetPassword(!showResetPassword)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                          >
+                            {showResetPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPassword(resetPassword, setResetPasswordCopied)}
+                          className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-1 ${
+                            resetPasswordCopied
+                              ? 'bg-green-600 text-white'
+                              : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                          }`}
+                        >
+                          {resetPasswordCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRegenerateResetPassword}
+                          className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg transition-colors"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <PasswordStrengthIndicator password={resetPassword} />
+                  </div>
+                ) : (
+                  /* Manual Password Entry */
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        New Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input
+                          type={showResetPassword ? 'text' : 'password'}
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                          className="w-full pl-10 pr-12 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="Enter new password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowResetPassword(!showResetPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                        >
+                          {showResetPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Confirm Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input
+                          type={showResetPassword ? 'text' : 'password'}
+                          value={resetConfirmPassword}
+                          onChange={(e) => setResetConfirmPassword(e.target.value)}
+                          className="w-full pl-10 pr-12 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="Confirm new password"
+                        />
+                      </div>
+                      {resetPassword && resetConfirmPassword && resetPassword !== resetConfirmPassword && (
+                        <p className="text-red-400 text-sm mt-1">Passwords do not match</p>
+                      )}
+                    </div>
+                    <PasswordStrengthIndicator password={resetPassword} />
+                  </div>
+                )}
+
+                {/* Options */}
+                <div className="space-y-2 pt-2">
+                  <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={resetForceChange}
+                      onChange={(e) => setResetForceChange(e.target.checked)}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500"
+                    />
+                    Force password change on next login
+                  </label>
+                  <label className={`flex items-center gap-2 ${emailServiceConfigured ? 'text-gray-300 cursor-pointer' : 'text-gray-500 cursor-not-allowed'}`}>
+                    <input
+                      type="checkbox"
+                      checked={resetSendEmail}
+                      onChange={(e) => setResetSendEmail(e.target.checked)}
+                      disabled={!emailServiceConfigured}
+                      className="w-4 h-4 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 disabled:opacity-50"
+                    />
+                    Send new password via email
+                    {!emailServiceConfigured && (
+                      <span className="text-xs text-gray-500">(Email not configured)</span>
+                    )}
+                  </label>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 justify-end pt-4">
+                  <button
+                    onClick={() => {
+                      setShowPasswordResetModal(false);
+                      setResetPassword('');
+                      setResetConfirmPassword('');
+                    }}
+                    className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
+                    disabled={resettingPassword}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handlePasswordReset}
+                    disabled={resettingPassword || (resetPasswordMode === 'manual' && (!resetPassword || resetPassword !== resetConfirmPassword))}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  >
+                    <Key className="h-4 w-4" />
+                    {resettingPassword ? 'Resetting...' : 'Reset Password'}
                   </button>
                 </div>
               </div>

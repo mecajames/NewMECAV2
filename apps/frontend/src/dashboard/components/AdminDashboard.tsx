@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
 import RulebookManagement from '@/rulebooks/components/RulebookManagement';
@@ -162,6 +162,22 @@ export default function AdminDashboard() {
       color: 'sky',
       navigateTo: '/admin/tickets',
     },
+    {
+      icon: ClipboardList,
+      title: 'Event Registrations',
+      description: 'Manage event registrations and check-ins',
+      action: 'event-registrations' as AdminView,
+      color: 'emerald',
+      navigateTo: '/admin/event-registrations',
+    },
+    {
+      icon: QrCode,
+      title: 'QR Check-In',
+      description: 'Scan competitor QR codes at events',
+      action: 'qr-checkin' as AdminView,
+      color: 'cyan',
+      navigateTo: '/admin/check-in',
+    },
   ];
 
   const getColorClasses = (color: string) => {
@@ -179,6 +195,7 @@ export default function AdminDashboard() {
       rose: 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20',
       amber: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
       sky: 'bg-sky-500/10 text-sky-500 hover:bg-sky-500/20',
+      emerald: 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20',
     };
     return colors[color] || colors.orange;
   };

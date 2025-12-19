@@ -802,6 +802,24 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   />
                 </div>
 
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Country *
+                  </label>
+                  <select
+                    value={formData.venue_country}
+                    onChange={(e) => setFormData({ ...formData, venue_country: e.target.value, venue_state: '' })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    required
+                  >
+                    {countries.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     City
@@ -842,7 +860,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   )}
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     {getPostalCodeLabel(formData.venue_country)}
                   </label>
@@ -852,24 +870,6 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     onChange={(e) => setFormData({ ...formData, venue_postal_code: e.target.value })}
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Country *
-                  </label>
-                  <select
-                    value={formData.venue_country}
-                    onChange={(e) => setFormData({ ...formData, venue_country: e.target.value, venue_state: '' })}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    required
-                  >
-                    {countries.map((country) => (
-                      <option key={country.code} value={country.code}>
-                        {country.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div>

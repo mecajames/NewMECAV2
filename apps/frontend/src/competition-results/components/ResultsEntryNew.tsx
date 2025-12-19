@@ -90,6 +90,8 @@ export default function ResultsEntryNew() {
     placement: '',
     points_earned: '',
     vehicle_info: '',
+    wattage: '',
+    frequency: '',
     notes: '',
   });
 
@@ -417,6 +419,8 @@ export default function ResultsEntryNew() {
       placement: '',
       points_earned: '',
       vehicle_info: '',
+      wattage: '',
+      frequency: '',
       notes: '',
     });
   };
@@ -488,6 +492,8 @@ export default function ResultsEntryNew() {
         placement: parseInt(currentEntry.placement) || 0,
         points_earned: finalPointsEarned,
         vehicle_info: currentEntry.vehicle_info || null,
+        wattage: currentEntry.wattage ? parseInt(currentEntry.wattage.toString()) : null,
+        frequency: currentEntry.frequency ? parseInt(currentEntry.frequency.toString()) : null,
         notes: currentEntry.notes || null,
         created_by: profile!.id,
       };
@@ -538,6 +544,8 @@ export default function ResultsEntryNew() {
         placement: parseInt(editingResult.placement),
         points_earned: finalPointsEarned,
         vehicle_info: editingResult.vehicle_info || null,
+        wattage: editingResult.wattage ? parseInt(editingResult.wattage.toString()) : null,
+        frequency: editingResult.frequency ? parseInt(editingResult.frequency.toString()) : null,
         notes: editingResult.notes || null,
         created_by: profile!.id,
         updated_by: profile!.id,
@@ -828,7 +836,7 @@ export default function ResultsEntryNew() {
               {/* Manual Entry */}
               {entryMethod === 'manual' && (
                 <div className="bg-slate-800 rounded-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-3">
                     <div>
                       <label className="block text-xs text-gray-400 mb-1">MECA ID</label>
                       <input
@@ -890,12 +898,22 @@ export default function ResultsEntryNew() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Power Wattage</label>
+                      <label className="block text-xs text-gray-400 mb-1">Wattage (W)</label>
                       <input
-                        type="text"
-                        value={currentEntry.vehicle_info}
-                        onChange={(e) => updateField('vehicle_info', e.target.value)}
-                        placeholder="e.g., Power: 6000W"
+                        type="number"
+                        value={currentEntry.wattage}
+                        onChange={(e) => updateField('wattage', e.target.value)}
+                        placeholder="6000"
+                        className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Freq (Hz)</label>
+                      <input
+                        type="number"
+                        value={currentEntry.frequency}
+                        onChange={(e) => updateField('frequency', e.target.value)}
+                        placeholder="45"
                         className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
                       />
                     </div>
@@ -1171,28 +1189,24 @@ export default function ResultsEntryNew() {
                       {renderSortIcon('score')}
                     </div>
                   </th>
-                  {selectedFormat === 'SPL' && (
-                    <>
-                      <th
-                        className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
-                        onClick={() => handleSort('wattage')}
-                      >
-                        <div className="flex items-center">
-                          Wattage
-                          {renderSortIcon('wattage')}
-                        </div>
-                      </th>
-                      <th
-                        className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
-                        onClick={() => handleSort('frequency')}
-                      >
-                        <div className="flex items-center">
-                          Frequency
-                          {renderSortIcon('frequency')}
-                        </div>
-                      </th>
-                    </>
-                  )}
+                  <th
+                    className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
+                    onClick={() => handleSort('wattage')}
+                  >
+                    <div className="flex items-center">
+                      Wattage
+                      {renderSortIcon('wattage')}
+                    </div>
+                  </th>
+                  <th
+                    className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
+                    onClick={() => handleSort('frequency')}
+                  >
+                    <div className="flex items-center">
+                      Freq
+                      {renderSortIcon('frequency')}
+                    </div>
+                  </th>
                   <th
                     className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
                     onClick={() => handleSort('placement')}
@@ -1234,12 +1248,8 @@ export default function ResultsEntryNew() {
                     <td className="px-3 py-2 text-white">{result.format || '-'}</td>
                     <td className="px-3 py-2 text-white">{result.competition_class || '-'}</td>
                     <td className="px-3 py-2 text-white">{result.score || '-'}</td>
-                    {selectedFormat === 'SPL' && (
-                      <>
-                        <td className="px-3 py-2 text-white">{result.wattage || '-'}</td>
-                        <td className="px-3 py-2 text-white">{result.frequency || '-'}</td>
-                      </>
-                    )}
+                    <td className="px-3 py-2 text-white">{result.wattage || '-'}</td>
+                    <td className="px-3 py-2 text-white">{result.frequency || '-'}</td>
                     <td className="px-3 py-2 text-white font-semibold">{result.placement || '-'}</td>
                     <td className="px-3 py-2 text-orange-400 font-semibold">{result.points_earned || '0'}</td>
                     <td className="px-3 py-2 text-gray-400 text-xs">
@@ -1408,12 +1418,22 @@ export default function ResultsEntryNew() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Power Wattage</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Wattage (W)</label>
                   <input
-                    type="text"
-                    value={editingResult.vehicle_info}
-                    onChange={(e) => setEditingResult({...editingResult, vehicle_info: e.target.value})}
-                    placeholder="e.g., Power: 6000W"
+                    type="number"
+                    value={editingResult.wattage}
+                    onChange={(e) => setEditingResult({...editingResult, wattage: e.target.value})}
+                    placeholder="e.g., 6000"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Frequency (Hz)</label>
+                  <input
+                    type="number"
+                    value={editingResult.frequency}
+                    onChange={(e) => setEditingResult({...editingResult, frequency: e.target.value})}
+                    placeholder="e.g., 45"
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
                   />
                 </div>

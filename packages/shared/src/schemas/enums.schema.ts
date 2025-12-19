@@ -181,6 +181,11 @@ export enum ManufacturerTier {
   GOLD = 'gold',
 }
 
+export enum AccountType {
+  BASIC = 'basic',
+  MEMBER = 'member',
+}
+
 // =============================================================================
 // Support Ticket Enums
 // =============================================================================
@@ -249,6 +254,7 @@ export const EntryMethodSchema = z.nativeEnum(EntryMethod);
 export const AuditActionSchema = z.nativeEnum(AuditAction);
 export const MembershipCategorySchema = z.nativeEnum(MembershipCategory);
 export const ManufacturerTierSchema = z.nativeEnum(ManufacturerTier);
+export const AccountTypeSchema = z.nativeEnum(AccountType);
 
 // Support Ticket Schemas
 export const TicketStatusSchema = z.nativeEnum(TicketStatus);
