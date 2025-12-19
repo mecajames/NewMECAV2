@@ -7,10 +7,7 @@ export class StripeService {
   private stripe: Stripe | null = null;
 
   constructor() {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
-    if (!secretKey) {
-      console.warn('STRIPE_SECRET_KEY not configured - Stripe payments will not work');
-    }
+    // Stripe client is lazily initialized when needed
   }
 
   private getStripeClient(): Stripe {
