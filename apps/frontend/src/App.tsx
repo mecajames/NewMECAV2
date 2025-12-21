@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
@@ -17,15 +18,16 @@ import { ResultsPage, LeaderboardPage, StandingsPage } from '@/competition-resul
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
 import { DashboardPage, MyMecaDashboardPage, AdminDashboardPage } from '@/dashboard';
 import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage } from '@/profiles';
-import { MembershipPage, MembershipCheckoutPage } from '@/memberships';
+import { TeamDirectoryPage, TeamPublicProfilePage } from '@/teams';
+import { RetailerDirectoryPage, RetailerProfilePage, ManufacturerDirectoryPage, ManufacturerProfilePage, ManufacturerPartnerInfoPage } from '@/business-listings';
+import { MembershipPage } from '@/memberships';
 import { HostEventPage } from '@/event-hosting-requests';
 import { ClassCalculatorPage, ClassesManagementPage } from '@/competition-classes';
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
 import { BillingPage } from '@/billing';
-import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage } from '@/admin';
+import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage, EventRegistrationDetailPage, BusinessListingsAdminPage } from '@/admin';
 import { SeasonManagementPage } from '@/seasons';
 import {
-  EventRegistrationCheckoutPage,
   MyRegistrationsPage,
   EventCheckInPage,
   CheckInHubPage,
@@ -41,6 +43,17 @@ import {
   GuestTicketViewPage,
   GuestTicketAccessPage,
 } from '@/tickets';
+
+// Lazy load checkout pages to avoid loading Stripe until needed
+const EventRegistrationCheckoutPage = lazy(() => import('@/event-registrations/pages/EventRegistrationCheckoutPage'));
+const MembershipCheckoutPage = lazy(() => import('@/memberships/pages/MembershipCheckoutPage'));
+
+// Loading fallback for lazy-loaded pages
+const PageLoader = () => (
+  <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+    <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+  </div>
+);
 
 function App() {
   return (
@@ -59,7 +72,7 @@ function App() {
               <Route path="/change-password" element={<ChangePasswordPage />} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:eventId" element={<EventDetailPage />} />
-              <Route path="/events/:eventId/register" element={<EventRegistrationCheckoutPage />} />
+              <Route path="/events/:eventId/register" element={<Suspense fallback={<PageLoader />}><EventRegistrationCheckoutPage /></Suspense>} />
               <Route path="/events/:eventId/check-in" element={<EventCheckInPage />} />
               <Route path="/results" element={<ResultsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
@@ -84,6 +97,17 @@ function App() {
               <Route path="/members" element={<MemberDirectoryPage />} />
               <Route path="/members/:id" element={<MemberProfilePage />} />
 
+              {/* Public Team Directory Routes */}
+              <Route path="/teams" element={<TeamDirectoryPage />} />
+              <Route path="/teams/:id" element={<TeamPublicProfilePage />} />
+
+              {/* Public Business Directory Routes */}
+              <Route path="/retailers" element={<RetailerDirectoryPage />} />
+              <Route path="/retailers/:id" element={<RetailerProfilePage />} />
+              <Route path="/manufacturers" element={<ManufacturerDirectoryPage />} />
+              <Route path="/manufacturers/:id" element={<ManufacturerProfilePage />} />
+              <Route path="/manufacturer-membership" element={<ManufacturerPartnerInfoPage />} />
+
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/dashboard/mymeca" element={<MyMecaDashboardPage />} />
@@ -92,7 +116,7 @@ function App() {
               <Route path="/public-profile" element={<PublicProfilePage />} />
               <Route path="/billing" element={<BillingPage />} />
               <Route path="/membership" element={<MembershipPage />} />
-              <Route path="/membership/checkout/:membershipId" element={<MembershipCheckoutPage />} />
+              <Route path="/membership/checkout/:membershipId" element={<Suspense fallback={<PageLoader />}><MembershipCheckoutPage /></Suspense>} />
               <Route path="/my-registrations" element={<MyRegistrationsPage />} />
 
               {/* Support Ticket Routes (Authenticated) */}
@@ -115,7 +139,9 @@ function App() {
               <Route path="/admin/tickets" element={<AdminTicketsPage />} />
               <Route path="/admin/tickets/:id" element={<AdminTicketsPage />} />
               <Route path="/admin/event-registrations" element={<EventRegistrationsPage />} />
+              <Route path="/admin/event-registrations/:id" element={<EventRegistrationDetailPage />} />
               <Route path="/admin/check-in" element={<CheckInHubPage />} />
+              <Route path="/admin/business-listings" element={<BusinessListingsAdminPage />} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />

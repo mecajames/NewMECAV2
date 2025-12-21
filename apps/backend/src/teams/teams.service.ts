@@ -1,10 +1,13 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
-import { MembershipCategory, PaymentStatus } from '@newmeca/shared';
+import { MembershipCategory, PaymentStatus, RegistrationStatus } from '@newmeca/shared';
 import { Team } from './team.entity';
 import { TeamMember, TeamMemberRole, TeamMemberStatus } from './team-member.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Membership } from '../memberships/memberships.entity';
+import { CompetitionResult } from '../competition-results/competition-results.entity';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { Event } from '../events/events.entity';
 
 interface MemberWithUser extends TeamMember {
   user?: {
@@ -369,6 +372,7 @@ export class TeamsService {
       isPublic: data.isPublic !== undefined ? data.isPublic : team.isPublic,
       requiresApproval: data.requiresApproval !== undefined ? data.requiresApproval : team.requiresApproval,
       galleryImages: data.galleryImages !== undefined ? data.galleryImages : team.galleryImages,
+      coverImagePosition: data.coverImagePosition !== undefined ? data.coverImagePosition : team.coverImagePosition,
     });
 
     await em.flush();
@@ -1048,5 +1052,252 @@ export class TeamsService {
 
     // Remove the request
     await em.removeAndFlush(request);
+  }
+
+  // ============================================
+  // PUBLIC TEAM STATS
+  // ============================================
+
+  /**
+   * Get public stats for a team including:
+   * - Top 3 highest SPL scores
+   * - Top 3 highest SQ scores
+   * - Total events attended by team members
+   * - Last 5 events attended by any team member
+   * - Total 1st, 2nd, 3rd place finishes
+   * @param teamId - The team ID
+   * @param seasonId - Optional season ID to filter results by
+   */
+  async getTeamPublicStats(teamId: string, seasonId?: string): Promise<{
+    topSplScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
+    topSqScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
+    totalEventsAttended: number;
+    recentEvents: Array<{ id: string; name: string; date: string; location?: string; membersAttended: number }>;
+    totalFirstPlace: number;
+    totalSecondPlace: number;
+    totalThirdPlace: number;
+    totalCompetitions: number;
+    totalPoints: number;
+  }> {
+    const em = this.em.fork();
+
+    // Verify team exists and is public
+    const team = await em.findOne(Team, { id: teamId });
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${teamId} not found`);
+    }
+
+    // Get all active team member user IDs
+    const members = await em.find(TeamMember, { teamId, status: 'active' });
+    const memberUserIds = members.map(m => m.userId);
+
+    if (memberUserIds.length === 0) {
+      return {
+        topSplScores: [],
+        topSqScores: [],
+        totalEventsAttended: 0,
+        recentEvents: [],
+        totalFirstPlace: 0,
+        totalSecondPlace: 0,
+        totalThirdPlace: 0,
+        totalCompetitions: 0,
+        totalPoints: 0,
+      };
+    }
+
+    // Build competition results query with optional season filter
+    const resultsQuery: any = {
+      competitorId: { $in: memberUserIds },
+    };
+
+    // Get all competition results for team members
+    let allResults = await em.find(CompetitionResult, resultsQuery, {
+      populate: ['event', 'event.season'],
+      orderBy: { score: 'DESC' },
+    });
+
+    // Filter by season if specified
+    if (seasonId) {
+      allResults = allResults.filter(r => {
+        // Handle both Reference and loaded entity cases
+        const eventSeasonId = r.event?.season?.id || (r.event as any)?.season_id;
+        return eventSeasonId === seasonId;
+      });
+    }
+
+    // Separate SPL and SQ results (SPL formats typically have higher scores > 100)
+    // SPL classes often include "SPL", "dB", "Bass" in the name
+    // SQ classes typically include "SQ", "Sound Quality", "Install" in the name
+    const splResults = allResults.filter(r => {
+      const className = r.competitionClass?.toLowerCase() || '';
+      const format = r.format?.toLowerCase() || '';
+      return className.includes('spl') || className.includes('db') || className.includes('bass') ||
+             format.includes('spl') || format.includes('bass') ||
+             (r.score > 100); // SPL scores are typically in dB (100+)
+    });
+
+    const sqResults = allResults.filter(r => {
+      const className = r.competitionClass?.toLowerCase() || '';
+      const format = r.format?.toLowerCase() || '';
+      return className.includes('sq') || className.includes('sound quality') || className.includes('install') ||
+             format.includes('sq') || format.includes('sound quality') ||
+             (r.score <= 100 && !splResults.includes(r)); // SQ scores are typically 0-100
+    });
+
+    // Get top 3 SPL scores
+    const topSplScores = splResults.slice(0, 3).map(r => ({
+      competitorName: r.competitorName,
+      score: Number(r.score),
+      eventName: r.event?.title,
+      date: r.event?.eventDate?.toISOString().split('T')[0],
+      placement: r.placement,
+    }));
+
+    // Get top 3 SQ scores
+    const topSqScores = sqResults.slice(0, 3).map(r => ({
+      competitorName: r.competitorName,
+      score: Number(r.score),
+      eventName: r.event?.title,
+      date: r.event?.eventDate?.toISOString().split('T')[0],
+      placement: r.placement,
+    }));
+
+    // Get event registrations for team members (paid/confirmed only)
+    let registrations = await em.find(EventRegistration, {
+      user: { $in: memberUserIds },
+      paymentStatus: PaymentStatus.PAID,
+    }, {
+      populate: ['event', 'event.season'],
+    });
+
+    // Filter registrations by season if specified
+    if (seasonId) {
+      registrations = registrations.filter(r => {
+        // Handle both Reference and loaded entity cases
+        const eventSeasonId = r.event?.season?.id || (r.event as any)?.season_id;
+        return eventSeasonId === seasonId;
+      });
+    }
+
+    // Count unique events attended
+    const uniqueEventIds = new Set(registrations.map(r => r.event?.id).filter(Boolean));
+    const totalEventsAttended = uniqueEventIds.size;
+
+    // Get last 5 events with member counts
+    const eventMemberCounts = new Map<string, { event: Event; count: number }>();
+    for (const reg of registrations) {
+      if (reg.event) {
+        const existing = eventMemberCounts.get(reg.event.id);
+        if (existing) {
+          existing.count++;
+        } else {
+          eventMemberCounts.set(reg.event.id, { event: reg.event, count: 1 });
+        }
+      }
+    }
+
+    // Sort by event date descending and take last 5
+    const recentEvents = Array.from(eventMemberCounts.values())
+      .filter(e => e.event.eventDate)
+      .sort((a, b) => new Date(b.event.eventDate!).getTime() - new Date(a.event.eventDate!).getTime())
+      .slice(0, 5)
+      .map(e => ({
+        id: e.event.id,
+        name: e.event.title,
+        date: e.event.eventDate!.toISOString().split('T')[0],
+        location: e.event.venueCity && e.event.venueState ? `${e.event.venueCity}, ${e.event.venueState}` : undefined,
+        membersAttended: e.count,
+      }));
+
+    // Count placements
+    const totalFirstPlace = allResults.filter(r => r.placement === 1).length;
+    const totalSecondPlace = allResults.filter(r => r.placement === 2).length;
+    const totalThirdPlace = allResults.filter(r => r.placement === 3).length;
+
+    // Total competitions and points
+    const totalCompetitions = allResults.length;
+    const totalPoints = allResults.reduce((sum, r) => sum + (r.pointsEarned || 0), 0);
+
+    return {
+      topSplScores,
+      topSqScores,
+      totalEventsAttended,
+      recentEvents,
+      totalFirstPlace,
+      totalSecondPlace,
+      totalThirdPlace,
+      totalCompetitions,
+      totalPoints,
+    };
+  }
+
+  /**
+   * Get all public teams with basic info for the directory
+   */
+  async findAllPublicTeams(): Promise<TeamWithMembers[]> {
+    const em = this.em.fork();
+    const teams = await em.find(Team, { isActive: true, isPublic: true }, {
+      orderBy: { name: 'ASC' },
+    });
+
+    // Fetch owners and member counts for each team
+    const teamsWithDetails = await Promise.all(
+      teams.map(async (team) => {
+        const owner = await em.findOne(Profile, { id: team.captainId });
+        const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
+
+        const membersWithUsers = await Promise.all(
+          members.map(m => this.buildMemberWithUser(em, m))
+        );
+
+        return {
+          ...team,
+          owner: owner ? {
+            id: owner.id,
+            first_name: owner.first_name,
+            last_name: owner.last_name,
+            meca_id: owner.meca_id,
+            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+          } : undefined,
+          members: membersWithUsers,
+        };
+      })
+    );
+
+    return teamsWithDetails;
+  }
+
+  /**
+   * Get public team profile by ID
+   */
+  async getPublicTeamById(id: string): Promise<TeamWithMembers | null> {
+    const em = this.em.fork();
+    const team = await em.findOne(Team, { id, isActive: true });
+
+    if (!team) {
+      return null;
+    }
+
+    // For non-public teams, we still return them but with limited info
+    // The frontend can decide how to handle this
+
+    const owner = await em.findOne(Profile, { id: team.captainId });
+    const activeMembers = await em.find(TeamMember, { teamId: team.id, status: 'active' });
+    const membersWithUsers = await Promise.all(
+      activeMembers.map(m => this.buildMemberWithUser(em, m))
+    );
+
+    return {
+      ...team,
+      owner: owner ? {
+        id: owner.id,
+        first_name: owner.first_name,
+        last_name: owner.last_name,
+        meca_id: owner.meca_id,
+        profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+        email: owner.email,
+      } : undefined,
+      members: membersWithUsers,
+    };
   }
 }

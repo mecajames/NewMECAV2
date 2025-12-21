@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { QrCode, Calendar, MapPin, Users, ArrowLeft, Loader2 } from 'lucide-react';
+import { QrCode, Calendar, MapPin, Users, ArrowLeft, Loader2, Search, Filter } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { eventsApi, Event } from '@/events/events.api-client';
+import { seasonsApi, Season } from '@/seasons';
 
 export default function CheckInHubPage() {
   const navigate = useNavigate();
@@ -10,29 +11,62 @@ export default function CheckInHubPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Season filter and search
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Check if user has permission (admin or event_director only)
   const hasPermission = profile?.role === 'admin' || profile?.role === 'event_director';
 
   useEffect(() => {
     if (!authLoading && hasPermission) {
-      fetchEvents();
+      fetchData();
     }
   }, [authLoading, hasPermission]);
 
-  const fetchEvents = async () => {
+  const fetchData = async () => {
     try {
-      const data = await eventsApi.getAll();
+      const [eventsData, seasonsData] = await Promise.all([
+        eventsApi.getAll(),
+        seasonsApi.getAll(),
+      ]);
+
       // Filter to only upcoming and ongoing events
-      const activeEvents = data.filter(
+      const activeEvents = eventsData.filter(
         (e) => e.status === 'upcoming' || e.status === 'ongoing'
       );
       setEvents(activeEvents);
+      setSeasons(seasonsData);
+
+      // Set current season as default
+      const currentSeason = seasonsData.find(s => s.is_current || s.isCurrent);
+      if (currentSeason) {
+        setSelectedSeason(currentSeason.id);
+      }
     } catch (err) {
-      console.error('Error fetching events:', err);
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  // Filter events based on season and search term
+  const filteredEvents = useMemo(() => {
+    return events.filter((event) => {
+      // Season filter
+      const matchesSeason = selectedSeason === 'all' || event.season_id === selectedSeason;
+
+      // Search filter
+      const searchLower = searchTerm.toLowerCase().trim();
+      const matchesSearch = !searchLower ||
+        event.title.toLowerCase().includes(searchLower) ||
+        event.venue_name?.toLowerCase().includes(searchLower) ||
+        event.venue_city?.toLowerCase().includes(searchLower);
+
+      return matchesSeason && matchesSearch;
+    });
+  }, [events, selectedSeason, searchTerm]);
 
   if (authLoading || loading) {
     return (
@@ -80,15 +114,74 @@ export default function CheckInHubPage() {
           <p className="text-gray-400">Select an event to start checking in competitors</p>
         </div>
 
-        {events.length === 0 ? (
+        {/* Filters */}
+        <div className="bg-slate-800 rounded-xl p-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search Field */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search events by name, venue, or city..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+            </div>
+
+            {/* Season Filter */}
+            <div className="sm:w-64">
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <select
+                  value={selectedSeason}
+                  onChange={(e) => setSelectedSeason(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 appearance-none cursor-pointer"
+                >
+                  <option value="all">All Seasons</option>
+                  {seasons.map((season) => (
+                    <option key={season.id} value={season.id}>
+                      {season.name} ({season.year})
+                      {(season.is_current || season.isCurrent) ? ' - Current' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Results count */}
+          <div className="mt-3 text-sm text-gray-400">
+            Showing {filteredEvents.length} of {events.length} active events
+          </div>
+        </div>
+
+        {filteredEvents.length === 0 ? (
           <div className="bg-slate-800 rounded-xl p-12 text-center">
             <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">No Active Events</h3>
-            <p className="text-gray-400">There are no upcoming or ongoing events to check in.</p>
+            <h3 className="text-xl font-semibold text-white mb-2">No Events Found</h3>
+            <p className="text-gray-400">
+              {searchTerm || selectedSeason !== 'all'
+                ? 'No events match your search criteria. Try adjusting your filters.'
+                : 'There are no upcoming or ongoing events to check in.'}
+            </p>
+            {(searchTerm || selectedSeason !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedSeason('all');
+                }}
+                className="mt-4 text-orange-500 hover:text-orange-400 underline"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
-            {events.map((event) => (
+            {filteredEvents.map((event) => (
               <div
                 key={event.id}
                 className="bg-slate-800 rounded-xl p-6 hover:bg-slate-750 transition-colors"

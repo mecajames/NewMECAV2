@@ -1,8 +1,9 @@
-import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight, Store, Factory, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
+import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business-listings';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -29,11 +30,32 @@ export default function HomePage() {
     ],
   });
 
+  const [sponsors, setSponsors] = useState<{
+    retailers: RetailerListing[];
+    manufacturers: ManufacturerListing[];
+  }>({ retailers: [], manufacturers: [] });
+
+  const [sponsorCarouselSpeed, setSponsorCarouselSpeed] = useState(30);
+
   useEffect(() => {
     fetchUpcomingEvents();
     fetchHeroSettings();
     fetchYoutubeSettings();
+    fetchSponsors();
+    fetchSponsorCarouselSpeed();
   }, []);
+
+  const fetchSponsorCarouselSpeed = async () => {
+    try {
+      const settings = await siteSettingsApi.getAll();
+      const speedSetting = settings.find((s: SiteSetting) => s.setting_key === 'sponsor_carousel_speed');
+      if (speedSetting) {
+        setSponsorCarouselSpeed(parseInt(speedSetting.setting_value) || 30);
+      }
+    } catch (error) {
+      console.error('Error fetching sponsor carousel speed:', error);
+    }
+  };
 
   useEffect(() => {
     if (heroSettings.image_urls.length <= 1) return;
@@ -159,6 +181,15 @@ export default function HomePage() {
       console.error('Error fetching upcoming events:', error);
     }
     setLoading(false);
+  };
+
+  const fetchSponsors = async () => {
+    try {
+      const data = await getAllSponsors();
+      setSponsors(data);
+    } catch (error) {
+      console.error('Error fetching sponsors:', error);
+    }
   };
 
   const features = [
@@ -322,6 +353,11 @@ export default function HomePage() {
                               src={event.flyer_url}
                               alt={event.title}
                               className="w-full h-48 object-cover"
+                              style={{
+                                objectPosition: event.flyer_image_position
+                                  ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
+                                  : '50% 50%'
+                              }}
                             />
                           ) : (
                             <div className="w-full h-48 bg-gradient-to-r from-orange-600 to-red-600 flex items-center justify-center">
@@ -524,6 +560,207 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Sponsors & Directory Section */}
+        <div className="mb-16 relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+            {/* Subtle gradient overlays */}
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-600/5 via-transparent to-cyan-600/5" />
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
+
+            <div className="relative z-10 p-8 md:p-10">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500/10 to-cyan-500/10 rounded-full border border-orange-500/20 mb-4">
+                  <Sparkles className="h-4 w-4 text-orange-400" />
+                  <span className="text-sm font-medium text-orange-400">Our Sponsors</span>
+                  <Sparkles className="h-4 w-4 text-cyan-400" />
+                </div>
+                <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
+                  Proudly Supported By Industry Leaders
+                </h2>
+                <p className="text-gray-400 whitespace-nowrap">
+                  Our sponsors are the backbone of the MECA community, supporting events and competitors worldwide
+                </p>
+              </div>
+
+              {/* Infinite Scroll Carousel - Only shows when sponsors exist */}
+              {(sponsors.retailers.length > 0 || sponsors.manufacturers.length > 0) && (
+                <div className="relative mb-6">
+                  <div className="flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,white_10%,white_90%,transparent)]">
+                    <div
+                      className="flex gap-6"
+                      style={{
+                        animation: `scroll ${sponsorCarouselSpeed}s linear infinite`,
+                      }}
+                    >
+                      {[...sponsors.retailers, ...sponsors.manufacturers, ...sponsors.retailers, ...sponsors.manufacturers].map((sponsor, index) => {
+                        const isRetailer = 'storeType' in sponsor;
+                        return (
+                          <div
+                            key={`${sponsor.id}-${index}`}
+                            onClick={() => {
+                              navigate(isRetailer ? `/retailers/${sponsor.id}` : `/manufacturers/${sponsor.id}`);
+                            }}
+                            className="flex-shrink-0 group cursor-pointer"
+                          >
+                            <div className={`w-28 h-28 md:w-32 md:h-32 rounded-xl border p-3 flex items-center justify-center transition-all duration-300 hover:scale-110 ${
+                              isRetailer
+                                ? 'bg-orange-950/40 border-orange-500/20 hover:border-orange-500/50 hover:bg-orange-950/60'
+                                : 'bg-cyan-950/40 border-cyan-500/20 hover:border-cyan-500/50 hover:bg-cyan-950/60'
+                            }`}>
+                              {sponsor.profileImageUrl ? (
+                                <img
+                                  src={sponsor.profileImageUrl}
+                                  alt={sponsor.businessName}
+                                  className="w-20 h-20 md:w-24 md:h-24 object-contain"
+                                />
+                              ) : (
+                                <div className={`w-16 h-16 md:w-20 md:h-20 rounded-lg flex items-center justify-center ${
+                                  isRetailer ? 'bg-orange-500/20' : 'bg-cyan-500/20'
+                                }`}>
+                                  {isRetailer ? (
+                                    <Store className="h-8 w-8 text-orange-400" />
+                                  ) : (
+                                    <Factory className="h-8 w-8 text-cyan-400" />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* View Directories Links - Always visible */}
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <button
+                  onClick={() => navigate('/retailers')}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-white font-medium rounded-lg transition-all hover:scale-105"
+                >
+                  <Store className="h-4 w-4 text-orange-400" />
+                  View Retailer Directory
+                </button>
+                <button
+                  onClick={() => navigate('/manufacturers')}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-white font-medium rounded-lg transition-all hover:scale-105"
+                >
+                  <Factory className="h-4 w-4 text-cyan-400" />
+                  View Manufacturer Directory
+                </button>
+              </div>
+            </div>
+          </div>
+
+        {/* Retailer & Manufacturer Membership Section */}
+        <div className="mb-16">
+          <div className="text-center mb-10">
+            <h2 className="text-4xl font-bold text-white mb-4">Partner With MECA</h2>
+            <p className="text-gray-300 text-lg whitespace-nowrap">
+              Join our network of retailers and manufacturers to grow your business and connect with the car audio community
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Retailer Membership Card */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-8 border border-slate-700 hover:border-orange-500/50 transition-all">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Store className="h-8 w-8 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">Retailer Membership</h3>
+                  <p className="text-orange-400 font-medium">For Shops & Installers</p>
+                </div>
+              </div>
+
+              <p className="text-gray-300 mb-6">
+                Become a MECA Retailer Member and gain exclusive benefits to help grow your shop and connect with competitors in your area.
+              </p>
+
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Host sanctioned MECA events at your location</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Get listed in our official Retailer Directory</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Access to exclusive manufacturer deals and promotions</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Marketing support and promotional materials</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Connect with local competitors and enthusiasts</span>
+                </li>
+              </ul>
+
+              <button
+                onClick={() => navigate('/membership/checkout/9ad7c4ee-f3d8-45f5-94c2-5259d032314b')}
+                className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2"
+              >
+                Become a Retailer Member
+                <ArrowRight className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Manufacturer Membership Card */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-8 border border-slate-700 hover:border-cyan-500/50 transition-all">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                  <Factory className="h-8 w-8 text-cyan-500" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">Manufacturer Membership</h3>
+                  <p className="text-cyan-400 font-medium">For Brands & Suppliers</p>
+                </div>
+              </div>
+
+              <p className="text-gray-300 mb-6">
+                Partner with MECA as a Manufacturer Member and showcase your products to thousands of passionate car audio enthusiasts.
+              </p>
+
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Brand visibility at MECA events nationwide</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Featured listing in the Manufacturer Directory</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Sponsorship and co-branding opportunities</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Direct access to retailers and competitors</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Product testing and feedback from enthusiasts</span>
+                </li>
+              </ul>
+
+              <button
+                onClick={() => navigate('/manufacturer-membership')}
+                className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2"
+              >
+                Become a Manufacturer Partner
+                <ArrowRight className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Feature Cards Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
           {features.map((feature, index) => (
@@ -557,7 +794,7 @@ export default function HomePage() {
                     <iframe
                       src={video.url}
                       title={video.title || `MECA Video ${index + 1}`}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; compute-pressure"
                       allowFullScreen
                       className="w-full h-full"
                     />

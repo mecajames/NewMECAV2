@@ -21,6 +21,7 @@ export default function SiteSettings() {
     hero_button_text: '',
     hero_carousel_speed: '5000',
     hero_carousel_direction: 'left' as 'left' | 'right' | 'top' | 'bottom',
+    sponsor_carousel_speed: '30',
     pdf_viewer_height: '800',
     pdf_viewer_width: '100%',
     social_facebook_url: '',
@@ -84,6 +85,7 @@ export default function SiteSettings() {
         hero_button_text: settingsMap['hero_button_text'] || 'View Events',
         hero_carousel_speed: settingsMap['hero_carousel_speed'] || '5000',
         hero_carousel_direction: settingsMap['hero_carousel_direction'] || 'left',
+        sponsor_carousel_speed: settingsMap['sponsor_carousel_speed'] || '30',
         pdf_viewer_height: settingsMap['pdf_viewer_height'] || '800',
         pdf_viewer_width: settingsMap['pdf_viewer_width'] || '100%',
         social_facebook_url: settingsMap['social_facebook_url'] || '',
@@ -142,8 +144,9 @@ export default function SiteSettings() {
         saveSetting('hero_title', formData.hero_title, 'text', 'Homepage hero title'),
         saveSetting('hero_subtitle', formData.hero_subtitle, 'text', 'Homepage hero subtitle'),
         saveSetting('hero_button_text', formData.hero_button_text, 'text', 'Homepage hero button text'),
-        saveSetting('hero_carousel_speed', formData.hero_carousel_speed, 'number', 'Carousel transition interval in milliseconds'),
-        saveSetting('hero_carousel_direction', formData.hero_carousel_direction, 'text', 'Carousel slide direction: left, right, top, bottom'),
+        saveSetting('hero_carousel_speed', formData.hero_carousel_speed, 'number', 'Hero carousel transition interval in milliseconds'),
+        saveSetting('hero_carousel_direction', formData.hero_carousel_direction, 'text', 'Hero carousel slide direction: left, right, top, bottom'),
+        saveSetting('sponsor_carousel_speed', formData.sponsor_carousel_speed, 'number', 'Sponsor carousel scroll speed in seconds'),
         saveSetting('pdf_viewer_height', formData.pdf_viewer_height, 'text', 'PDF viewer height in pixels'),
         saveSetting('pdf_viewer_width', formData.pdf_viewer_width, 'text', 'PDF viewer width (percentage or pixels)'),
         saveSetting('social_facebook_url', formData.social_facebook_url, 'text', 'Facebook page URL'),
@@ -450,6 +453,43 @@ export default function SiteSettings() {
             onChange={(e) => setFormData({ ...formData, hero_button_text: e.target.value })}
             className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
+        </div>
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          Sponsor Carousel Settings
+        </h3>
+        <p className="text-sm text-gray-400">
+          Configure the sponsor logo carousel that appears on the homepage
+        </p>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Carousel Speed (seconds)
+          </label>
+          <div className="flex items-center gap-4">
+            <input
+              type="range"
+              min="10"
+              max="60"
+              value={formData.sponsor_carousel_speed}
+              onChange={(e) => setFormData({ ...formData, sponsor_carousel_speed: e.target.value })}
+              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+            />
+            <input
+              type="number"
+              min="10"
+              max="60"
+              value={formData.sponsor_carousel_speed}
+              onChange={(e) => setFormData({ ...formData, sponsor_carousel_speed: Math.min(60, Math.max(10, parseInt(e.target.value) || 10)).toString() })}
+              className="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-center"
+            />
+            <span className="text-gray-400 text-sm">seconds</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Time for one complete scroll cycle (10-60 seconds). Lower values = faster scrolling.
+          </p>
         </div>
       </div>
 

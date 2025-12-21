@@ -27,6 +27,7 @@ import { TeamsModule } from './teams/teams.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { AuthModule } from './auth/auth.module';
 import { EmailModule } from './email/email.module';
+import { BusinessListingsModule } from './business-listings/business-listings.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { EmailModule } from './email/email.module';
     QuickBooksModule,
     TeamsModule,
     TicketsModule,
+    BusinessListingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

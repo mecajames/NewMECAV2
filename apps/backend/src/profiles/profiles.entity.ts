@@ -101,6 +101,10 @@ export class Profile {
   @Property({ type: 'json', nullable: true, fieldName: 'profile_images' })
   profile_images?: string[];
 
+  // Cover image position for header display (x, y as percentages 0-100)
+  @Property({ type: 'json', nullable: true, fieldName: 'cover_image_position' })
+  cover_image_position?: { x: number; y: number };
+
   @Property({ type: 'boolean', default: false, fieldName: 'force_password_change' })
   force_password_change: boolean = false;
 

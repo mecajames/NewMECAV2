@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode, Store, Factory } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
 import RulebookManagement from '@/rulebooks/components/RulebookManagement';
@@ -177,6 +177,14 @@ export default function AdminDashboard() {
       action: 'qr-checkin' as AdminView,
       color: 'cyan',
       navigateTo: '/admin/check-in',
+    },
+    {
+      icon: Store,
+      title: 'Business Listings',
+      description: 'Manage retailer and manufacturer listings',
+      action: 'business-listings' as AdminView,
+      color: 'orange',
+      navigateTo: '/admin/business-listings',
     },
   ];
 

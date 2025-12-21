@@ -1,12 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
-import {
-  Elements,
-  PaymentElement,
-  useStripe,
-  useElements,
-} from '@stripe/react-stripe-js';
 import {
   ArrowLeft,
   Check,
@@ -41,12 +34,16 @@ import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } fro
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 
-// Initialize Stripe
+// Check if Stripe is configured (without loading it)
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
 const isStripeConfigured = !!stripePublishableKey &&
   !stripePublishableKey.includes('YOUR_STRIPE') &&
   stripePublishableKey.startsWith('pk_');
-const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
+
+// Lazy load Stripe payment form only when configured
+const LazyStripePaymentForm = isStripeConfigured
+  ? lazy(() => import('@/event-registrations/components/StripePaymentForm'))
+  : null;
 
 interface FormData {
   // Contact Info
@@ -89,113 +86,6 @@ interface OrderData {
 }
 
 type CheckoutStep = 'info' | 'payment' | 'confirmation';
-
-// Stripe Payment Form Component
-function StripePaymentForm({
-  total,
-  formData,
-  onSuccess,
-  onBack,
-}: {
-  total: number;
-  formData: FormData;
-  onSuccess: (paymentIntentId: string) => void;
-  onBack: () => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [submitting, setSubmitting] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setSubmitting(true);
-    setPaymentError(null);
-
-    try {
-      const { error, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: window.location.href,
-          receipt_email: formData.email,
-        },
-        redirect: 'if_required',
-      });
-
-      if (error) {
-        setPaymentError(error.message || 'Payment failed. Please try again.');
-      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        onSuccess(paymentIntent.id);
-      } else {
-        setPaymentError('Payment was not completed. Please try again.');
-      }
-    } catch (err) {
-      console.error('Payment error:', err);
-      setPaymentError('An unexpected error occurred. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      {paymentError && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
-          <p className="text-red-500 text-sm">{paymentError}</p>
-        </div>
-      )}
-
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-          <CreditCard className="h-5 w-5 mr-2 text-orange-500" />
-          Card Information
-        </h3>
-        <div className="bg-slate-700 rounded-lg p-4">
-          <PaymentElement
-            options={{
-              layout: 'tabs',
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center text-sm text-gray-400 mb-6">
-        <Lock className="h-4 w-4 mr-2" />
-        Your payment information is secure and encrypted
-      </div>
-
-      <div className="flex gap-4">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={submitting}
-          className="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-        >
-          Back
-        </button>
-        <button
-          type="submit"
-          disabled={!stripe || !elements || submitting}
-          className="flex-1 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {submitting ? (
-            <span className="flex items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Processing Payment...
-            </span>
-          ) : (
-            `Pay $${total.toFixed(2)}`
-          )}
-        </button>
-      </div>
-    </form>
-  );
-}
 
 export default function EventRegistrationCheckoutPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -1204,8 +1094,14 @@ export default function EventRegistrationCheckoutPage() {
                     </p>
 
                     {Object.keys(classesByFormat).length === 0 ? (
-                      <div className="text-center py-8 text-gray-400">
-                        No classes available for this event.
+                      <div className="text-center py-8 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+                        <p className="text-amber-400 font-medium mb-2">No classes available for this event</p>
+                        <p className="text-gray-400 text-sm">
+                          {!event?.season_id
+                            ? 'This event has not been assigned to a competition season. Please contact the event director.'
+                            : 'No competition classes are configured for this season.'}
+                        </p>
                       </div>
                     ) : (
                       <div className="space-y-6">
@@ -1249,8 +1145,23 @@ export default function EventRegistrationCheckoutPage() {
                     )}
                   </div>
 
+                  {/* Entry Fee Warning */}
+                  {memberEntryFee === 0 && nonMemberEntryFee === 0 && Object.keys(classesByFormat).length > 0 && (
+                    <div className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-amber-400 font-medium">Entry fees not configured</p>
+                          <p className="text-gray-400 text-sm mt-1">
+                            This event does not have entry fees set. Please contact the event director if you believe this is an error.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Membership Upsell */}
-                  {!isMember && membershipOptions.length > 0 && selectedClasses.length > 0 && (
+                  {!isMember && membershipOptions.length > 0 && (
                     <div className="mb-8">
                       <div className="bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl p-6">
                         <div className="flex items-start mb-4">
@@ -1259,6 +1170,9 @@ export default function EventRegistrationCheckoutPage() {
                             <h3 className="text-lg font-semibold text-white">Become a Member & Save!</h3>
                             <p className="text-gray-400 text-sm mt-1">
                               Add a membership to your order and get member pricing on this event plus all future events.
+                              {nonMemberEntryFee > memberEntryFee && (
+                                <span className="text-green-400"> Save ${(nonMemberEntryFee - memberEntryFee).toFixed(2)} per class!</span>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -1288,7 +1202,7 @@ export default function EventRegistrationCheckoutPage() {
                                 +${membershipOptions[0]?.price.toFixed(2)}
                               </span>
                             </div>
-                            {includeMembership && pricing.savings > 0 && (
+                            {includeMembership && selectedClasses.length > 0 && pricing.savings > 0 && (
                               <p className="text-green-400 text-sm mt-1">
                                 You'll save ${pricing.savings.toFixed(2)} on this event alone!
                               </p>
@@ -1331,31 +1245,20 @@ export default function EventRegistrationCheckoutPage() {
                 </form>
               )}
 
-              {step === 'payment' && clientSecret && isStripeConfigured && (
-                <Elements
-                  stripe={stripePromise}
-                  options={{
-                    clientSecret,
-                    appearance: {
-                      theme: 'night',
-                      variables: {
-                        colorPrimary: '#f97316',
-                        colorBackground: '#334155',
-                        colorText: '#ffffff',
-                        colorDanger: '#ef4444',
-                        fontFamily: 'system-ui, sans-serif',
-                        borderRadius: '8px',
-                      },
-                    },
-                  }}
-                >
-                  <StripePaymentForm
+              {step === 'payment' && clientSecret && isStripeConfigured && LazyStripePaymentForm && (
+                <Suspense fallback={
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
+                  </div>
+                }>
+                  <LazyStripePaymentForm
+                    clientSecret={clientSecret}
                     total={pricing.total}
                     formData={formData}
                     onSuccess={handlePaymentSuccess}
                     onBack={() => setStep('info')}
                   />
-                </Elements>
+                </Suspense>
               )}
 
               {/* Test Mode - When Stripe is not configured */}

@@ -61,6 +61,10 @@ export class Team {
   @Property({ type: 'json', fieldName: 'gallery_images', nullable: true })
   galleryImages?: string[];
 
+  // Cover image position for header display (x, y as percentages 0-100)
+  @Property({ type: 'json', nullable: true, fieldName: 'cover_image_position' })
+  coverImagePosition?: { x: number; y: number };
+
   @Property({ type: 'boolean', default: true, fieldName: 'is_active' })
   isActive: boolean = true;
 

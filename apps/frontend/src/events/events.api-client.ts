@@ -15,6 +15,7 @@ export interface Event {
   latitude?: number;
   longitude?: number;
   flyer_url?: string;
+  flyer_image_position?: { x: number; y: number };
   event_director_id?: string;
   status: string;
   max_participants?: number;
@@ -78,6 +79,16 @@ export const eventsApi = {
       body: JSON.stringify(data),
     });
     if (!response.ok) throw new Error('Failed to update event');
+    return response.json();
+  },
+
+  updateFlyerImagePosition: async (id: string, position: { x: number; y: number }): Promise<Event> => {
+    const response = await fetch(`${API_BASE_URL}/api/events/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flyer_image_position: position }),
+    });
+    if (!response.ok) throw new Error('Failed to update flyer image position');
     return response.json();
   },
 

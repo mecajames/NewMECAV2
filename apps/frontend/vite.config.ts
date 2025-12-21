@@ -6,7 +6,7 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['lucide-react'],
+    exclude: ['lucide-react', '@stripe/stripe-js', '@stripe/react-stripe-js'],
   },
   resolve: {
     alias: {
@@ -21,6 +21,10 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+    },
+    headers: {
+      // Allow compute-pressure API for YouTube embeds
+      'Permissions-Policy': 'compute-pressure=*',
     },
   },
 });

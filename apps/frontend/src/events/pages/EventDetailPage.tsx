@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode } from 'lucide-react';
+import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn } from 'lucide-react';
 import { eventsApi, Event } from '@/events';
 import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
 import { useAuth, usePermissions } from '@/auth';
@@ -26,6 +26,19 @@ export default function EventDetailPage() {
   const { user, profile } = useAuth();
   const { hasPermission } = usePermissions();
 
+  // Position editing state
+  const [isEditingPosition, setIsEditingPosition] = useState(false);
+  const [position, setPosition] = useState({ x: 50, y: 50 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [savingPosition, setSavingPosition] = useState(false);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
+  // Flyer lightbox state
+  const [showFlyerLightbox, setShowFlyerLightbox] = useState(false);
+
+  // Check if user is admin
+  const isAdmin = profile?.role === 'admin';
+
   useEffect(() => {
     if (!eventId) {
       navigate('/events');
@@ -46,6 +59,13 @@ export default function EventDetailPage() {
       });
     }
   }, [profile, showRegistrationModal]);
+
+  useEffect(() => {
+    // Initialize position from event data
+    if (event?.flyer_image_position) {
+      setPosition(event.flyer_image_position);
+    }
+  }, [event]);
 
   const fetchEvent = async () => {
     if (!eventId) return;
@@ -68,6 +88,72 @@ export default function EventDetailPage() {
       console.error('Error fetching event:', error);
     }
     setLoading(false);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isEditingPosition) return;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !imageContainerRef.current) return;
+
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+
+    setPosition({ x, y });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isEditingPosition) return;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || !imageContainerRef.current) return;
+
+    const touch = e.touches[0];
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
+
+    setPosition({ x, y });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  const savePosition = async () => {
+    if (!event) return;
+
+    try {
+      setSavingPosition(true);
+      await eventsApi.updateFlyerImagePosition(event.id, position);
+      setEvent({ ...event, flyer_image_position: position });
+      setIsEditingPosition(false);
+    } catch (err) {
+      console.error('Error saving position:', err);
+    } finally {
+      setSavingPosition(false);
+    }
+  };
+
+  const cancelEditing = () => {
+    // Reset to saved position
+    if (event?.flyer_image_position) {
+      setPosition(event.flyer_image_position);
+    } else {
+      setPosition({ x: 50, y: 50 });
+    }
+    setIsEditingPosition(false);
   };
 
   const getFormatColor = (format: string) => {
@@ -167,12 +253,65 @@ export default function EventDetailPage() {
         </button>
 
         {event.flyer_url && (
-          <div className="mb-8 rounded-xl overflow-hidden shadow-2xl">
+          <div
+            ref={imageContainerRef}
+            className={`mb-8 rounded-xl overflow-hidden shadow-2xl relative ${isEditingPosition ? 'cursor-move' : ''}`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
             <img
               src={event.flyer_url}
               alt={event.title}
-              className="w-full max-h-96 object-cover"
+              className="w-full max-h-96 object-cover select-none"
+              style={{ objectPosition: `${position.x}% ${position.y}%` }}
+              draggable={false}
             />
+
+            {/* Position editing overlay */}
+            {isEditingPosition && (
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
+                <div className="bg-black/70 text-white px-4 py-2 rounded-lg text-sm">
+                  Drag to reposition image
+                </div>
+              </div>
+            )}
+
+            {/* Edit position button - only show for admins */}
+            {isAdmin && !isEditingPosition && (
+              <button
+                onClick={() => setIsEditingPosition(true)}
+                className="absolute bottom-3 right-3 bg-black/70 hover:bg-black/90 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+              >
+                <Move className="h-4 w-4" />
+                Adjust Position
+              </button>
+            )}
+
+            {/* Save/Cancel buttons when editing */}
+            {isEditingPosition && (
+              <div className="absolute bottom-3 right-3 flex gap-2">
+                <button
+                  onClick={cancelEditing}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+                <button
+                  onClick={savePosition}
+                  disabled={savingPosition}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" />
+                  {savingPosition ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -294,19 +433,55 @@ export default function EventDetailPage() {
               )}
             </div>
 
-            {event.event_director && (
-              <div className="bg-slate-700 rounded-lg p-6">
-                <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-                  <User className="h-5 w-5 text-orange-500" />
-                  Event Director
-                </h3>
-                <p className="text-white font-medium mb-2">{`${event.event_director.first_name || ''} ${event.event_director.last_name || ''}`.trim()}</p>
-                <p className="text-gray-400 text-sm mb-1">{event.event_director.email}</p>
-                {event.event_director.phone && (
-                  <p className="text-gray-400 text-sm">{event.event_director.phone}</p>
-                )}
-              </div>
-            )}
+            <div className="space-y-4">
+              {/* Flyer Thumbnail */}
+              {event.flyer_url && (
+                <div
+                  className="relative cursor-pointer group"
+                  onClick={() => setShowFlyerLightbox(true)}
+                >
+                  <div className="bg-slate-700 rounded-lg p-2 hover:bg-slate-600 transition-colors">
+                    <p className="text-gray-400 text-sm mb-2 flex items-center gap-2">
+                      <Image className="h-4 w-4" />
+                      Event Flyer
+                    </p>
+                    <div className="relative overflow-hidden rounded-lg">
+                      <img
+                        src={event.flyer_url}
+                        alt={`${event.title} flyer`}
+                        className="w-full h-32 object-cover transition-transform group-hover:scale-105"
+                        style={{
+                          objectPosition: event.flyer_image_position
+                            ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
+                            : '50% 50%'
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="bg-white/20 backdrop-blur-sm rounded-full p-2">
+                          <ZoomIn className="h-6 w-6 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-gray-400 text-xs mt-2 text-center">Click to view full flyer</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Event Director */}
+              {event.event_director && (
+                <div className="bg-slate-700 rounded-lg p-6">
+                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                    <User className="h-5 w-5 text-orange-500" />
+                    Event Director
+                  </h3>
+                  <p className="text-white font-medium mb-2">{`${event.event_director.first_name || ''} ${event.event_director.last_name || ''}`.trim()}</p>
+                  <p className="text-gray-400 text-sm mb-1">{event.event_director.email}</p>
+                  {event.event_director.phone && (
+                    <p className="text-gray-400 text-sm">{event.event_director.phone}</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Action Buttons */}
@@ -503,6 +678,31 @@ export default function EventDetailPage() {
                 {submitting ? 'Submitting...' : 'Complete Registration'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Flyer Lightbox Modal */}
+      {showFlyerLightbox && event?.flyer_url && (
+        <div
+          className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowFlyerLightbox(false)}
+        >
+          <button
+            onClick={() => setShowFlyerLightbox(false)}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors z-10"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          <div
+            className="relative max-w-4xl max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={event.flyer_url}
+              alt={`${event.title} flyer`}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            />
           </div>
         </div>
       )}

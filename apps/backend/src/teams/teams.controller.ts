@@ -7,6 +7,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   Headers,
@@ -43,6 +44,7 @@ interface UpdateTeamDto {
   is_public?: boolean;
   requires_approval?: boolean;
   gallery_images?: string[];
+  cover_image_position?: { x: number; y: number };
 }
 
 interface AddMemberDto {
@@ -91,6 +93,27 @@ export class TeamsController {
   @Get()
   async getAllTeams(): Promise<Team[]> {
     return this.teamsService.findAll();
+  }
+
+  // Public endpoint - get all public teams for directory
+  @Get('public')
+  async getPublicTeams(): Promise<Team[]> {
+    return this.teamsService.findAllPublicTeams();
+  }
+
+  // Public endpoint - get public team by ID
+  @Get('public/:id')
+  async getPublicTeamById(@Param('id') id: string): Promise<Team | null> {
+    return this.teamsService.getPublicTeamById(id);
+  }
+
+  // Public endpoint - get team stats (optionally filtered by season)
+  @Get('public/:id/stats')
+  async getTeamPublicStats(
+    @Param('id') id: string,
+    @Query('seasonId') seasonId?: string,
+  ): Promise<any> {
+    return this.teamsService.getTeamPublicStats(id, seasonId);
   }
 
   @Get('can-create')
@@ -211,6 +234,7 @@ export class TeamsController {
         isPublic: data.is_public,
         requiresApproval: data.requires_approval,
         galleryImages: data.gallery_images,
+        coverImagePosition: data.cover_image_position,
       },
       userId,
     );

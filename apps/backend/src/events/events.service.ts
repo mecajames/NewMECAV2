@@ -356,6 +356,7 @@ export class EventsService {
     if (data.formats !== undefined) transformedData.formats = data.formats;
     if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
     if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
+    if ((data as any).flyer_image_position !== undefined) transformedData.flyerImagePosition = (data as any).flyer_image_position;
 
     console.log('🔍 UPDATE EVENT - Transformed eventDate:', transformedData.eventDate);
 

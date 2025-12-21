@@ -1,4 +1,4 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, ClipboardList } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, ClipboardList, Shield } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth';
@@ -10,6 +10,7 @@ export default function Navbar() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
+  const [membersMenuOpen, setMembersMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
@@ -64,6 +65,7 @@ export default function Navbar() {
     if (path.startsWith('/leaderboard')) return 'leaderboard';
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/members')) return 'members';
+    if (path.startsWith('/teams')) return 'teams';
     if (path.startsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/membership')) return 'membership';
     if (path.startsWith('/login')) return 'login';
@@ -73,13 +75,13 @@ export default function Navbar() {
 
   const currentPage = getCurrentPage();
 
+  // Members dropdown is now handled separately, so removed from navItems
   const navItems = [
     { id: 'home', label: 'Home', icon: null, path: '/' },
     { id: 'events', label: 'Events', icon: Calendar, path: '/events' },
     { id: 'results', label: 'Results', icon: Trophy, path: '/results' },
     { id: 'standings', label: 'Standings', icon: Award, path: '/standings' },
     { id: 'leaderboard', label: 'Top 10', icon: Trophy, path: '/leaderboard' },
-    { id: 'members', label: 'Members', icon: Users, path: '/members' },
   ];
 
   const groupedRulebooks = activeRulebooks.reduce((acc, rulebook) => {
@@ -121,6 +123,52 @@ export default function Navbar() {
               </button>
             ))}
 
+            {/* Members Dropdown */}
+            <div className="relative"
+              onMouseEnter={() => setMembersMenuOpen(true)}
+              onMouseLeave={() => setMembersMenuOpen(false)}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === 'members' || currentPage === 'teams'
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                Members
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {membersMenuOpen && (
+                <div className="absolute top-full left-0 mt-0 pt-2 w-56">
+                  <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                    <button
+                      onClick={() => {
+                        navigate('/members');
+                        setMembersMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Users className="h-4 w-4" />
+                      Members Directory
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/teams');
+                        setMembersMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Shield className="h-4 w-4" />
+                      Teams Directory
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Rulebooks Dropdown */}
             <div className="relative"
               onMouseEnter={() => setRulebooksMenuOpen(true)}
               onMouseLeave={() => setRulebooksMenuOpen(false)}
@@ -427,6 +475,38 @@ export default function Navbar() {
                 {item.label}
               </button>
             ))}
+
+            {/* Members Directory */}
+            <button
+              onClick={() => {
+                navigate('/members');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'members'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Users className="h-5 w-5" />
+              Members Directory
+            </button>
+
+            {/* Teams Directory */}
+            <button
+              onClick={() => {
+                navigate('/teams');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'teams'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Shield className="h-5 w-5" />
+              Teams Directory
+            </button>
 
             {user ? (
               <>

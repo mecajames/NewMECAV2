@@ -43,6 +43,7 @@ export interface Team {
   isPublic: boolean;
   requiresApproval: boolean;
   galleryImages?: string[];
+  coverImagePosition?: { x: number; y: number };
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -138,7 +139,53 @@ export interface CanCreateTeamResponse {
   reason?: string;
 }
 
+export interface TeamPublicStats {
+  topSplScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
+  topSqScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
+  totalEventsAttended: number;
+  recentEvents: Array<{ id: string; name: string; date: string; location?: string; membersAttended: number }>;
+  totalFirstPlace: number;
+  totalSecondPlace: number;
+  totalThirdPlace: number;
+  totalCompetitions: number;
+  totalPoints: number;
+}
+
 export const teamsApi = {
+  // ============================================
+  // PUBLIC ENDPOINTS (No auth required)
+  // ============================================
+
+  // Get all public teams for directory listing
+  getPublicTeams: async (): Promise<Team[]> => {
+    const response = await axios.get('/api/teams/public');
+    return response.data;
+  },
+
+  // Get a public team by ID
+  getPublicTeamById: async (id: string): Promise<Team | null> => {
+    try {
+      const response = await axios.get(`/api/teams/public/${id}`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  // Get public stats for a team (optionally filtered by season)
+  getTeamPublicStats: async (id: string, seasonId?: string): Promise<TeamPublicStats> => {
+    const params = seasonId ? `?seasonId=${seasonId}` : '';
+    const response = await axios.get(`/api/teams/public/${id}/stats${params}`);
+    return response.data;
+  },
+
+  // ============================================
+  // AUTHENTICATED ENDPOINTS
+  // ============================================
+
   // Check if user can create a team (has team membership)
   canCreateTeam: async (): Promise<CanCreateTeamResponse> => {
     try {
@@ -211,6 +258,12 @@ export const teamsApi = {
   // Update a team
   updateTeam: async (id: string, data: UpdateTeamDto): Promise<Team> => {
     const response = await axios.put(`/api/teams/${id}`, data);
+    return response.data;
+  },
+
+  // Update team cover image position
+  updateCoverImagePosition: async (id: string, position: { x: number; y: number }): Promise<Team> => {
+    const response = await axios.put(`/api/teams/${id}`, { cover_image_position: position });
     return response.data;
   },
 

@@ -401,6 +401,11 @@ export default function EventsPage() {
                       src={event.flyer_url}
                       alt={event.title}
                       className="w-full h-full object-cover"
+                      style={{
+                        objectPosition: event.flyer_image_position
+                          ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
+                          : '50% 50%'
+                      }}
                     />
                   </div>
                 ) : (

@@ -92,11 +92,16 @@ export default function MemberDirectoryPage() {
               >
                 {/* Profile Header with Image */}
                 <div className="relative h-48 bg-gradient-to-br from-slate-700 to-slate-800">
-                  {profile.profile_picture_url ? (
+                  {(profile.profile_picture_url || profile.profile_images?.[0]) ? (
                     <img
-                      src={profile.profile_picture_url}
+                      src={profile.profile_picture_url || profile.profile_images?.[0]}
                       alt={`${profile.first_name}'s profile`}
                       className="w-full h-full object-cover"
+                      style={{
+                        objectPosition: profile.cover_image_position
+                          ? `${profile.cover_image_position.x}% ${profile.cover_image_position.y}%`
+                          : '50% 50%'
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">

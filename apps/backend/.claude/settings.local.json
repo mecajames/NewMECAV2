@@ -41,7 +41,19 @@
       "Bash(powershell -Command \"Get-ChildItem ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_16_2025_Backup'' | Select-Object Name, Mode\")",
       "Bash(powershell -Command:*)",
       "Bash(robocopy:*)",
-      "Bash(powershell \"ls ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_18_2025_Backup'' | Format-Table Name, Length\")"
+      "Bash(powershell \"ls ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_18_2025_Backup'' | Format-Table Name, Length\")",
+      "Bash(rushx migration:create:*)",
+      "Bash(rushx dev:*)",
+      "Bash(timeout:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(curl:*)",
+      "Bash(rushx build:*)",
+      "Bash(wsl ls:*)",
+      "Bash(forfiles /P \"E:\\\\MECA Oct 2025\\\\Backups\\\\December_21_2025_Backup\" /M database.sql /C \"cmd /c echo @fsize bytes\")",
+      "Bash(powershell \"ls ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_21_2025_Backup\\\\''\")",
+      "Bash(powershell \"ls ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_21_2025_Backup\\\\'' | Format-Table Name, @{N=''Size \\(MB\\)'';E={[math]::Round\\($_Length/1MB,2\\)}} -AutoSize\")",
+      "Bash(powershell \"Get-ChildItem ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_21_2025_Backup\\\\'' | Select-Object Name, Length\")"
     ]
   },
   "enableAllProjectMcpServers": true,

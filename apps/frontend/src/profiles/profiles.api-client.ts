@@ -34,6 +34,7 @@ export interface Profile {
   vehicle_info?: string;
   car_audio_system?: string;
   profile_images?: string[];
+  cover_image_position?: { x: number; y: number };
   force_password_change?: boolean;
   created_at: string;
   updated_at: string;
@@ -115,9 +116,25 @@ export const profilesApi = {
     return response.json();
   },
 
+  searchProfiles: async (query: string): Promise<Profile[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/search?q=${encodeURIComponent(query)}`);
+    if (!response.ok) throw new Error('Failed to search profiles');
+    return response.json();
+  },
+
   getPublicProfileById: async (id: string): Promise<Profile> => {
     const response = await fetch(`${API_BASE_URL}/api/profiles/public/${id}`);
     if (!response.ok) throw new Error('Failed to fetch public profile');
+    return response.json();
+  },
+
+  updateCoverImagePosition: async (id: string, position: { x: number; y: number }): Promise<Profile> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cover_image_position: position }),
+    });
+    if (!response.ok) throw new Error('Failed to update cover image position');
     return response.json();
   },
 

@@ -1,21 +1,40 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User, Car, Music, ArrowLeft, Award, MapPin, Calendar, X } from 'lucide-react';
+import { User, Car, Music, ArrowLeft, Award, MapPin, Calendar, X, Move, Check } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
+import { useAuth } from '@/auth';
 
 export default function MemberProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  // Position editing state
+  const [isEditingPosition, setIsEditingPosition] = useState(false);
+  const [position, setPosition] = useState({ x: 50, y: 50 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [savingPosition, setSavingPosition] = useState(false);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
+  // Check if logged-in user is viewing their own profile
+  const isOwnProfile = user?.id === id;
 
   useEffect(() => {
     if (id) {
       fetchProfile();
     }
   }, [id]);
+
+  useEffect(() => {
+    // Initialize position from profile data
+    if (profile?.cover_image_position) {
+      setPosition(profile.cover_image_position);
+    }
+  }, [profile]);
 
   const fetchProfile = async () => {
     try {
@@ -28,6 +47,72 @@ export default function MemberProfilePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isEditingPosition) return;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !imageContainerRef.current) return;
+
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+
+    setPosition({ x, y });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isEditingPosition) return;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || !imageContainerRef.current) return;
+
+    const touch = e.touches[0];
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
+
+    setPosition({ x, y });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  const savePosition = async () => {
+    if (!profile) return;
+
+    try {
+      setSavingPosition(true);
+      await profilesApi.updateCoverImagePosition(profile.id, position);
+      setProfile({ ...profile, cover_image_position: position });
+      setIsEditingPosition(false);
+    } catch (err) {
+      console.error('Error saving position:', err);
+    } finally {
+      setSavingPosition(false);
+    }
+  };
+
+  const cancelEditing = () => {
+    // Reset to saved position
+    if (profile?.cover_image_position) {
+      setPosition(profile.cover_image_position);
+    } else {
+      setPosition({ x: 50, y: 50 });
+    }
+    setIsEditingPosition(false);
   };
 
   if (loading) {
@@ -56,6 +141,8 @@ export default function MemberProfilePage() {
     );
   }
 
+  const coverImage = profile.profile_picture_url || profile.profile_images?.[0];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -70,17 +157,70 @@ export default function MemberProfilePage() {
 
         {/* Profile Header */}
         <div className="bg-slate-800 rounded-xl overflow-hidden shadow-lg mb-6">
-          <div className="relative h-64 bg-gradient-to-br from-slate-700 to-slate-800">
-            {profile.profile_picture_url ? (
+          <div
+            ref={imageContainerRef}
+            className={`relative h-64 bg-gradient-to-br from-slate-700 to-slate-800 ${isEditingPosition ? 'cursor-move' : ''}`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {coverImage ? (
               <img
-                src={profile.profile_picture_url}
+                src={coverImage}
                 alt={`${profile.first_name}'s profile`}
-                className="w-full h-full object-cover cursor-pointer"
-                onClick={() => setLightboxImage(profile.profile_picture_url!)}
+                className={`w-full h-full object-cover ${!isEditingPosition ? 'cursor-pointer' : ''} select-none`}
+                style={{ objectPosition: `${position.x}% ${position.y}%` }}
+                onClick={() => !isEditingPosition && setLightboxImage(coverImage)}
+                draggable={false}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <User className="h-32 w-32 text-slate-600" />
+              </div>
+            )}
+
+            {/* Position editing overlay */}
+            {isEditingPosition && coverImage && (
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
+                <div className="bg-black/70 text-white px-4 py-2 rounded-lg text-sm">
+                  Drag to reposition image
+                </div>
+              </div>
+            )}
+
+            {/* Edit position button - only show for own profile with an image */}
+            {isOwnProfile && coverImage && !isEditingPosition && (
+              <button
+                onClick={() => setIsEditingPosition(true)}
+                className="absolute bottom-3 right-3 bg-black/70 hover:bg-black/90 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+              >
+                <Move className="h-4 w-4" />
+                Adjust Position
+              </button>
+            )}
+
+            {/* Save/Cancel buttons when editing */}
+            {isEditingPosition && (
+              <div className="absolute bottom-3 right-3 flex gap-2">
+                <button
+                  onClick={cancelEditing}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+                <button
+                  onClick={savePosition}
+                  disabled={savingPosition}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" />
+                  {savingPosition ? 'Saving...' : 'Save'}
+                </button>
               </div>
             )}
           </div>

@@ -48,6 +48,10 @@ export class Event {
   @Property({ type: 'text', nullable: true, fieldName: 'flyer_url', serializedName: 'flyer_url' })
   flyerUrl?: string;
 
+  // Flyer/cover image position for header display (x, y as percentages 0-100)
+  @Property({ type: 'json', nullable: true, fieldName: 'flyer_image_position', serializedName: 'flyer_image_position' })
+  flyerImagePosition?: { x: number; y: number };
+
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'event_director_id', serializedName: 'event_director_id' })
   eventDirector?: Profile;
 
