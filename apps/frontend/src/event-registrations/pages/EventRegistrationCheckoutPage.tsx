@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
-  CreditCard,
   User,
   Mail,
   Phone,

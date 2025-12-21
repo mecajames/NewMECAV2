@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
-  CreditCard,
   User,
   Mail,
   Phone,
@@ -23,10 +22,7 @@ import {
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
-import {
-  membershipsApi,
-  Membership,
-} from '@/memberships';
+import { membershipsApi } from '@/memberships';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
@@ -986,7 +982,6 @@ export default function MembershipCheckoutPage() {
                 </Suspense>
               )}
 
-              {/* Test Mode - When Stripe is not configured */}
               {step === 'payment' && !isStripeConfigured && (
                 <div className="space-y-6">
                   <div className="p-4 bg-amber-500/10 border border-amber-500 rounded-lg">

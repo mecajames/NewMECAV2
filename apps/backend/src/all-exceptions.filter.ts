@@ -35,14 +35,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
-    console.error('=== EXCEPTION CAUGHT ===');
-    console.error('Path:', request.url);
-    console.error('Method:', request.method);
-    console.error('Status:', status);
-    console.error('Message:', message);
-    console.error('Details:', JSON.stringify(errorDetails, null, 2));
-    console.error('Full exception:', exception);
-    console.error('========================');
+    // Skip logging for expected 404s (socket.io, favicon, etc.)
+    const ignoredPaths = ['/socket.io', '/favicon.ico'];
+    const shouldLog = !ignoredPaths.some((path) => request.url?.startsWith(path));
+
+    if (shouldLog) {
+      console.error('=== EXCEPTION CAUGHT ===');
+      console.error('Path:', request.url);
+      console.error('Method:', request.method);
+      console.error('Status:', status);
+      console.error('Message:', message);
+      console.error('Details:', JSON.stringify(errorDetails, null, 2));
+      console.error('Full exception:', exception);
+      console.error('========================');
+    }
 
     response.status(status).json({
       statusCode: status,

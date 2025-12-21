@@ -27,7 +27,6 @@ export function ReCaptchaProvider({ children, version = 'v2' }: ReCaptchaProvide
       // Script exists, check if grecaptcha is ready
       if (typeof window.grecaptcha !== 'undefined') {
         window.grecaptcha.ready(() => {
-          console.log('reCAPTCHA already loaded and ready');
           setIsReady(true);
         });
       }
@@ -48,10 +47,8 @@ export function ReCaptchaProvider({ children, version = 'v2' }: ReCaptchaProvide
     script.defer = true;
     
     script.onload = () => {
-      console.log(`reCAPTCHA ${version} script loaded`);
       if (typeof window.grecaptcha !== 'undefined') {
         window.grecaptcha.ready(() => {
-          console.log(`reCAPTCHA ${version} ready`);
           setIsReady(true);
         });
       }
