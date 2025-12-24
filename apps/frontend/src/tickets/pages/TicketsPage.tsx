@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TicketList } from '../components/TicketList';
 import { CreateTicketForm } from '../components/CreateTicketForm';
@@ -7,7 +7,7 @@ import { Ticket as TicketType } from '../tickets.api-client';
 
 export function TicketsPage() {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, loading } = useAuth();
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   const handleTicketCreated = (ticket: TicketType) => {
@@ -16,11 +16,29 @@ export function TicketsPage() {
     navigate(`/tickets/${ticket.id}`);
   };
 
+  // Redirect unauthenticated users to guest support (wait for auth to load first)
+  useEffect(() => {
+    if (!loading && !profile) {
+      navigate('/support/guest', { replace: true });
+    }
+  }, [profile, loading, navigate]);
+
+  // Show loading while auth state is being determined
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!profile) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-gray-400">Please log in to view your tickets.</p>
+          <p className="text-gray-400">Redirecting to guest support...</p>
         </div>
       </div>
     );

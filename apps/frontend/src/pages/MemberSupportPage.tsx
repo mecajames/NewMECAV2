@@ -1,7 +1,12 @@
 import { Link } from 'react-router-dom';
 import { Ticket, BookOpen, Calculator, FileText, HelpCircle, MessageSquare, Mail, Phone } from 'lucide-react';
+import { useAuth } from '@/auth';
 
 export default function MemberSupportPage() {
+  const { profile } = useAuth();
+
+  // Route to /tickets if logged in, otherwise to /support/guest
+  const ticketRoute = profile ? '/tickets' : '/support/guest';
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -28,7 +33,7 @@ export default function MemberSupportPage() {
               </div>
             </div>
             <Link
-              to="/tickets"
+              to={ticketRoute}
               className="px-8 py-4 bg-white text-orange-600 font-bold rounded-lg hover:bg-gray-100 transition-colors shadow-lg whitespace-nowrap"
             >
               Open Support Ticket
@@ -118,7 +123,7 @@ export default function MemberSupportPage() {
                 Best for detailed inquiries and tracking your requests
               </p>
               <Link
-                to="/tickets"
+                to={ticketRoute}
                 className="inline-block px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition-colors"
               >
                 Submit Ticket

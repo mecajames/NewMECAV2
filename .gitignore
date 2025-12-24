@@ -123,3 +123,5 @@ December_9_2025_Backup/application/apps/backend/audit-logs/uploads/27b3a33a-81d8
 /December_9_2025_Backup
 docs/BUSINESS_LOGIC_OVERVIEW.md
 docs/BUSINESS_LOGIC_DETAILED.md
+apps/backend/.claude/settings.local.json
+apps/backend/.claude/settings.local.json
