@@ -16,10 +16,13 @@ import { StripeService } from './stripe.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { QuickBooksService } from '../quickbooks/quickbooks.service';
 import { EventRegistrationsService, CreateRegistrationDto } from '../event-registrations/event-registrations.service';
+import { OrdersService } from '../orders/orders.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { MembershipType, PaymentIntentResult } from '@newmeca/shared';
+import { Payment } from '../payments/payments.entity';
+import { MembershipType, PaymentIntentResult, OrderType, OrderItemType } from '@newmeca/shared';
 import Stripe from 'stripe';
 
 interface CreateMembershipPaymentIntentDto {
@@ -81,6 +84,8 @@ export class StripeController {
     private readonly membershipsService: MembershipsService,
     private readonly quickBooksService: QuickBooksService,
     private readonly eventRegistrationsService: EventRegistrationsService,
+    private readonly ordersService: OrdersService,
+    private readonly invoicesService: InvoicesService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -376,6 +381,11 @@ export class StripeController {
 
       console.log('Membership created successfully for:', email);
 
+      // Create Order and Invoice (async, non-blocking)
+      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'membership').catch((error) => {
+        console.error('Order/Invoice creation failed (non-critical):', error);
+      });
+
       // Create QuickBooks sales receipt (async, non-blocking)
       this.createQuickBooksSalesReceipt(paymentIntent, metadata, amountPaid).catch((qbError) => {
         console.error('QuickBooks sales receipt creation failed (non-critical):', qbError);
@@ -450,6 +460,11 @@ export class StripeController {
       );
 
       console.log('Event registration completed successfully for:', email);
+
+      // Create Order and Invoice (async, non-blocking)
+      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'event_registration').catch((error) => {
+        console.error('Order/Invoice creation failed (non-critical):', error);
+      });
     } catch (error) {
       console.error('Error completing event registration after payment:', error);
       // In production, you might want to alert admin or queue for retry
@@ -516,6 +531,120 @@ export class StripeController {
         return MembershipType.RETAILER;
       default:
         return MembershipType.ANNUAL;
+    }
+  }
+
+  /**
+   * Create an Order and Invoice from a successful payment
+   * This is done asynchronously to not block the webhook response
+   */
+  private async createOrderAndInvoice(
+    paymentIntent: Stripe.PaymentIntent,
+    metadata: Stripe.Metadata,
+    amountPaid: number,
+    type: 'membership' | 'event_registration',
+  ): Promise<void> {
+    try {
+      const em = this.em.fork();
+
+      // Look up the payment record
+      const payment = await em.findOne(Payment, {
+        stripePaymentIntentId: paymentIntent.id
+      });
+
+      // Determine order type
+      const orderType = type === 'membership'
+        ? OrderType.MEMBERSHIP
+        : OrderType.EVENT_REGISTRATION;
+
+      // Build order items based on payment type
+      const items: Array<{
+        description: string;
+        quantity: number;
+        unitPrice: string;
+        itemType: OrderItemType;
+        referenceId?: string;
+        metadata?: Record<string, unknown>;
+      }> = [];
+
+      if (type === 'membership') {
+        items.push({
+          description: `MECA Membership: ${metadata.membershipTypeName || metadata.membershipCategory || 'Annual'}`,
+          quantity: 1,
+          unitPrice: amountPaid.toFixed(2),
+          itemType: OrderItemType.MEMBERSHIP,
+          referenceId: metadata.membershipTypeConfigId,
+          metadata: {
+            membershipCategory: metadata.membershipCategory,
+          },
+        });
+      } else if (type === 'event_registration') {
+        // Main event registration item
+        const classCount = parseInt(metadata.classCount || '1', 10);
+        const perClassFee = parseFloat(metadata.perClassFee || '0');
+        const registrationTotal = classCount * perClassFee;
+
+        items.push({
+          description: `Event Registration: ${metadata.eventTitle || 'Event'} (${classCount} class${classCount > 1 ? 'es' : ''})`,
+          quantity: classCount,
+          unitPrice: perClassFee.toFixed(2),
+          itemType: OrderItemType.EVENT_CLASS,
+          referenceId: metadata.eventId,
+          metadata: {
+            registrationId: metadata.registrationId,
+            classCount,
+          },
+        });
+
+        // Add membership item if included
+        if (metadata.includeMembership === 'true' && metadata.membershipPrice) {
+          const membershipPrice = parseFloat(metadata.membershipPrice);
+          if (membershipPrice > 0) {
+            items.push({
+              description: 'MECA Membership (with registration)',
+              quantity: 1,
+              unitPrice: membershipPrice.toFixed(2),
+              itemType: OrderItemType.MEMBERSHIP,
+              referenceId: metadata.membershipTypeConfigId,
+            });
+          }
+        }
+      }
+
+      // Build billing address from metadata
+      const billingAddress = {
+        name: metadata.billingFirstName && metadata.billingLastName
+          ? `${metadata.billingFirstName} ${metadata.billingLastName}`
+          : undefined,
+        address1: metadata.billingAddress,
+        city: metadata.billingCity,
+        state: metadata.billingState,
+        postalCode: metadata.billingPostalCode,
+        country: metadata.billingCountry || 'US',
+      };
+
+      // Create the order
+      const order = await this.ordersService.createFromPayment({
+        paymentId: payment?.id,
+        userId: metadata.userId,
+        orderType,
+        items,
+        billingAddress: billingAddress.name ? billingAddress : undefined,
+        notes: `Stripe Payment: ${paymentIntent.id}`,
+      });
+
+      console.log(`Order ${order.orderNumber} created for payment ${paymentIntent.id}`);
+
+      // Create invoice from order
+      const invoice = await this.invoicesService.createFromOrder(order.id);
+      console.log(`Invoice ${invoice.invoiceNumber} created for order ${order.orderNumber}`);
+
+      // TODO: Send invoice email if configured
+      // await this.emailService.sendInvoice(invoice);
+
+    } catch (error) {
+      console.error('Failed to create order/invoice:', error);
+      throw error;
     }
   }
 }

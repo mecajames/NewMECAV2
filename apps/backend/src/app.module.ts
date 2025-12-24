@@ -28,6 +28,9 @@ import { TicketsModule } from './tickets/tickets.module';
 import { AuthModule } from './auth/auth.module';
 import { EmailModule } from './email/email.module';
 import { BusinessListingsModule } from './business-listings/business-listings.module';
+import { OrdersModule } from './orders/orders.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -58,6 +61,9 @@ import { BusinessListingsModule } from './business-listings/business-listings.mo
     TeamsModule,
     TicketsModule,
     BusinessListingsModule,
+    OrdersModule,
+    InvoicesModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode, Store, Factory } from 'lucide-react';
+import { Users, Calendar, Trophy, Plus, CreditCard, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode, Store, Factory, Receipt } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
 import RulebookManagement from '@/rulebooks/components/RulebookManagement';
@@ -115,6 +115,14 @@ export default function AdminDashboard() {
       navigateTo: '/admin/membership-types',
     },
     {
+      icon: Receipt,
+      title: 'Billing',
+      description: 'Manage orders, invoices, and revenue',
+      action: 'billing' as AdminView,
+      color: 'lime',
+      navigateTo: '/admin/billing',
+    },
+    {
       icon: CalendarCheck,
       title: 'Season Management',
       description: 'Manage competition seasons and dates',
@@ -204,6 +212,7 @@ export default function AdminDashboard() {
       amber: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
       sky: 'bg-sky-500/10 text-sky-500 hover:bg-sky-500/20',
       emerald: 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20',
+      lime: 'bg-lime-500/10 text-lime-500 hover:bg-lime-500/20',
     };
     return colors[color] || colors.orange;
   };

@@ -26,6 +26,7 @@ import { ClassCalculatorPage, ClassesManagementPage } from '@/competition-classe
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
 import { BillingPage } from '@/billing';
 import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage, EventRegistrationDetailPage, BusinessListingsAdminPage } from '@/admin';
+import { BillingDashboardPage, OrdersPage as AdminOrdersPage, InvoicesPage as AdminInvoicesPage, RevenueReportsPage } from '@/admin/billing';
 import { SeasonManagementPage } from '@/seasons';
 import {
   MyRegistrationsPage,
@@ -142,6 +143,12 @@ function App() {
               <Route path="/admin/event-registrations/:id" element={<EventRegistrationDetailPage />} />
               <Route path="/admin/check-in" element={<CheckInHubPage />} />
               <Route path="/admin/business-listings" element={<BusinessListingsAdminPage />} />
+
+              {/* Admin Billing Routes */}
+              <Route path="/admin/billing" element={<BillingDashboardPage />} />
+              <Route path="/admin/billing/orders" element={<AdminOrdersPage />} />
+              <Route path="/admin/billing/invoices" element={<AdminInvoicesPage />} />
+              <Route path="/admin/billing/revenue" element={<RevenueReportsPage />} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
