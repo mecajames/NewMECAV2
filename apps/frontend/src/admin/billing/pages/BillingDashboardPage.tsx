@@ -5,9 +5,9 @@ import {
   ShoppingCart,
   FileText,
   TrendingUp,
-  RefreshCw,
   DollarSign,
   AlertCircle,
+  Zap,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
 import { OrderTable } from '../components/OrderTable';
@@ -19,6 +19,11 @@ export default function BillingDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   const fetchStats = async (showRefresh = false) => {
     try {
@@ -40,6 +45,41 @@ export default function BillingDashboardPage() {
   useEffect(() => {
     fetchStats();
   }, []);
+
+  const handleSync = async () => {
+    try {
+      setSyncing(true);
+      setSyncResult(null);
+      const result = await billingApi.syncRegistrations();
+
+      if (result.synced > 0) {
+        setSyncResult({
+          success: true,
+          message: `Synced ${result.synced} registration(s) to billing`,
+        });
+        // Refresh stats after successful sync
+        await fetchStats(true);
+      } else if (result.toSync === 0) {
+        setSyncResult({
+          success: true,
+          message: 'All registrations are already synced',
+        });
+      } else {
+        setSyncResult({
+          success: false,
+          message: `Failed to sync ${result.failed} registration(s)`,
+        });
+      }
+    } catch (err) {
+      console.error('Sync error:', err);
+      setSyncResult({
+        success: false,
+        message: 'Failed to sync registrations',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -85,14 +125,27 @@ export default function BillingDashboardPage() {
             </div>
           </div>
           <button
-            onClick={() => fetchStats(true)}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
+            <Zap className={`h-4 w-4 ${syncing ? 'animate-pulse' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync Registrations'}
           </button>
         </div>
+
+        {/* Sync Result Message */}
+        {syncResult && (
+          <div
+            className={`mb-6 p-4 rounded-lg ${
+              syncResult.success
+                ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                : 'bg-red-500/10 border border-red-500/20 text-red-400'
+            }`}
+          >
+            {syncResult.message}
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

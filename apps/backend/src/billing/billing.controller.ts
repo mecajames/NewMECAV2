@@ -9,8 +9,10 @@ import {
   HttpStatus,
   Res,
   Header,
+  Inject,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { EntityManager } from '@mikro-orm/core';
 import {
   CreateOrderDto,
   CreateOrderSchema,
@@ -22,10 +24,13 @@ import {
   InvoiceListQuerySchema,
   OrderStatus,
   InvoiceStatus,
+  PaymentStatus,
 } from '@newmeca/shared';
 import { OrdersService } from '../orders/orders.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { InvoicePdfService } from '../invoices/pdf/invoice-pdf.service';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { Order } from '../orders/orders.entity';
 
 /**
  * Billing Controller - Aggregation layer for billing operations
@@ -37,6 +42,8 @@ export class BillingController {
     private readonly ordersService: OrdersService,
     private readonly invoicesService: InvoicesService,
     private readonly pdfService: InvoicePdfService,
+    @Inject('EntityManager')
+    private readonly em: EntityManager,
   ) {}
 
   // ==========================================
@@ -292,6 +299,95 @@ export class BillingController {
       total: {
         revenue: Math.max(orderRevenue, invoiceRevenue).toFixed(2),
         currency: 'USD',
+      },
+    };
+  }
+
+  // ==========================================
+  // SYNC OPERATIONS
+  // ==========================================
+
+  /**
+   * Sync orders and invoices from paid event registrations
+   * This creates orders/invoices for registrations that are missing them
+   */
+  @Post('sync/registrations')
+  @HttpCode(HttpStatus.OK)
+  async syncRegistrationOrders() {
+    const em = this.em.fork();
+
+    // Find all paid registrations
+    const paidRegistrations = await em.find(
+      EventRegistration,
+      { paymentStatus: PaymentStatus.PAID },
+      { populate: ['event'] },
+    );
+
+    // Find all existing orders with registration references
+    const existingOrders = await em.find(Order, {
+      notes: { $like: '%registrationId:%' },
+    });
+
+    // Extract registration IDs that already have orders
+    const registrationIdsWithOrders = new Set<string>();
+    for (const order of existingOrders) {
+      const match = order.notes?.match(/registrationId:([a-f0-9-]+)/);
+      if (match) {
+        registrationIdsWithOrders.add(match[1]);
+      }
+    }
+
+    // Find registrations without orders
+    const registrationsToSync = paidRegistrations.filter(
+      (reg) => !registrationIdsWithOrders.has(reg.id),
+    );
+
+    const results = {
+      totalPaidRegistrations: paidRegistrations.length,
+      existingOrders: registrationIdsWithOrders.size,
+      toSync: registrationsToSync.length,
+      synced: 0,
+      failed: 0,
+      errors: [] as string[],
+    };
+
+    // Create orders and invoices for each registration
+    for (const registration of registrationsToSync) {
+      try {
+        const order = await this.ordersService.createFromEventRegistration(registration.id);
+        await this.invoicesService.createFromOrder(order.id);
+        results.synced++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push(
+          `Registration ${registration.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Sync a single registration to create order/invoice
+   */
+  @Post('sync/registrations/:registrationId')
+  @HttpCode(HttpStatus.OK)
+  async syncSingleRegistration(@Param('registrationId') registrationId: string) {
+    const order = await this.ordersService.createFromEventRegistration(registrationId);
+    const invoice = await this.invoicesService.createFromOrder(order.id);
+
+    return {
+      success: true,
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        total: order.total,
+      },
+      invoice: {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        total: invoice.total,
       },
     };
   }

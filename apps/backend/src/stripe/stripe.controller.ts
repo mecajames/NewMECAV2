@@ -257,6 +257,12 @@ export class StripeController {
     if (data.testMode) {
       const testPaymentId = 'test-payment-' + Date.now();
       await this.eventRegistrationsService.markAsPaid(registration.id, testPaymentId, totalAmount);
+
+      // Create order and invoice for test mode (async, non-blocking)
+      this.createOrderAndInvoiceFromRegistration(registration.id).catch((error) => {
+        console.error('Order/Invoice creation failed for test mode registration (non-critical):', error);
+      });
+
       return {
         clientSecret: 'test-mode-no-stripe',
         paymentIntentId: testPaymentId,
@@ -644,6 +650,26 @@ export class StripeController {
 
     } catch (error) {
       console.error('Failed to create order/invoice:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create an Order and Invoice directly from a registration ID
+   * This is simpler than the payment-based approach and used for test mode
+   * and for syncing existing registrations
+   */
+  private async createOrderAndInvoiceFromRegistration(registrationId: string): Promise<void> {
+    try {
+      // Create order from registration
+      const order = await this.ordersService.createFromEventRegistration(registrationId);
+      console.log(`Order ${order.orderNumber} created for registration ${registrationId}`);
+
+      // Create invoice from order
+      const invoice = await this.invoicesService.createFromOrder(order.id);
+      console.log(`Invoice ${invoice.invoiceNumber} created for order ${order.orderNumber}`);
+    } catch (error) {
+      console.error('Failed to create order/invoice from registration:', error);
       throw error;
     }
   }

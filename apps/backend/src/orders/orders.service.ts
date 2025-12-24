@@ -21,6 +21,7 @@ import { Order } from './orders.entity';
 import { OrderItem } from './order-items.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Payment } from '../payments/payments.entity';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
 
 @Injectable()
 export class OrdersService {
@@ -30,12 +31,25 @@ export class OrdersService {
   ) {}
 
   /**
-   * Generate a unique order number using the database sequence
+   * Generate a unique order number
+   * Uses database sequence if available, falls back to timestamp-based generation
    */
   private async generateOrderNumber(em: EntityManager): Promise<string> {
-    const connection = em.getConnection();
-    const result = await connection.execute('SELECT generate_order_number() as order_number');
-    return result[0].order_number;
+    const year = new Date().getFullYear();
+
+    try {
+      // Try using the database function first
+      const connection = em.getConnection();
+      const result = await connection.execute('SELECT generate_order_number() as order_number');
+      return result[0].order_number;
+    } catch {
+      // Fallback: count existing orders for this year and increment
+      const count = await em.count(Order, {
+        orderNumber: { $like: `ORD-${year}-%` },
+      });
+      const nextNum = count + 1;
+      return `ORD-${year}-${String(nextNum).padStart(5, '0')}`;
+    }
   }
 
   /**
@@ -272,6 +286,121 @@ export class OrdersService {
 
     // Create order items
     for (const itemData of data.items) {
+      const itemTotal = (parseFloat(itemData.unitPrice) * itemData.quantity).toFixed(2);
+      const item = em.create(OrderItem, {
+        order,
+        description: itemData.description,
+        quantity: itemData.quantity,
+        unitPrice: itemData.unitPrice,
+        total: itemTotal,
+        itemType: itemData.itemType,
+        referenceId: itemData.referenceId,
+        metadata: itemData.metadata,
+      });
+      order.items.add(item);
+    }
+
+    await em.persistAndFlush(order);
+
+    return order;
+  }
+
+  /**
+   * Create order from an event registration (for billing sync)
+   */
+  async createFromEventRegistration(registrationId: string): Promise<Order> {
+    const em = this.em.fork();
+
+    // Load registration with all related data
+    const registration = await em.findOne(
+      EventRegistration,
+      { id: registrationId },
+      { populate: ['event', 'user', 'classes'] },
+    );
+
+    if (!registration) {
+      throw new NotFoundException(`Registration with ID ${registrationId} not found`);
+    }
+
+    // Only create orders for paid registrations
+    if (registration.paymentStatus !== 'paid') {
+      throw new BadRequestException(
+        `Cannot create order for registration with payment status: ${registration.paymentStatus}`,
+      );
+    }
+
+    // Check if order already exists for this registration
+    const existingOrder = await em.findOne(Order, {
+      notes: { $like: `%registrationId:${registrationId}%` },
+    });
+
+    if (existingOrder) {
+      return existingOrder;
+    }
+
+    // Generate order number
+    const orderNumber = await this.generateOrderNumber(em);
+
+    // Build order items from registration classes
+    const items: Array<{
+      description: string;
+      quantity: number;
+      unitPrice: string;
+      itemType: OrderItemType;
+      referenceId?: string;
+      metadata?: Record<string, unknown>;
+    }> = [];
+
+    // Add each class as an order item
+    for (const regClass of registration.classes.getItems()) {
+      items.push({
+        description: `${registration.event.title} - ${regClass.className} (${regClass.format})`,
+        quantity: 1,
+        unitPrice: String(regClass.feeCharged || 0),
+        itemType: OrderItemType.EVENT_CLASS,
+        referenceId: registration.event.id,
+        metadata: {
+          registrationId: registration.id,
+          competitionClassId: regClass.competitionClassId,
+          format: regClass.format,
+        },
+      });
+    }
+
+    // Build billing address from registration
+    const billingAddress: BillingAddress | undefined = registration.firstName
+      ? {
+          name: `${registration.firstName} ${registration.lastName || ''}`.trim(),
+          email: registration.email,
+          phone: registration.phone,
+          address1: registration.address,
+          city: registration.city,
+          state: registration.state,
+          postalCode: registration.postalCode,
+          country: registration.country || 'US',
+        }
+      : undefined;
+
+    // Calculate totals
+    const { subtotal, total } = this.calculateTotals(items);
+
+    // Create order
+    const order = em.create(Order, {
+      orderNumber,
+      user: registration.user,
+      status: OrderStatus.COMPLETED,
+      orderType: OrderType.EVENT_REGISTRATION,
+      subtotal,
+      tax: '0.00',
+      discount: '0.00',
+      total,
+      currency: 'USD',
+      notes: `Event Registration - registrationId:${registration.id}`,
+      billingAddress,
+    });
+
+    // Create order items
+    for (const itemData of items) {
       const itemTotal = (parseFloat(itemData.unitPrice) * itemData.quantity).toFixed(2);
       const item = em.create(OrderItem, {
         order,

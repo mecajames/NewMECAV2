@@ -42,12 +42,25 @@ export class InvoicesService {
   ) {}
 
   /**
-   * Generate a unique invoice number using the database sequence
+   * Generate a unique invoice number
+   * Uses database sequence if available, falls back to timestamp-based generation
    */
   private async generateInvoiceNumber(em: EntityManager): Promise<string> {
-    const connection = em.getConnection();
-    const result = await connection.execute('SELECT generate_invoice_number() as invoice_number');
-    return result[0].invoice_number;
+    const year = new Date().getFullYear();
+
+    try {
+      // Try using the database function first
+      const connection = em.getConnection();
+      const result = await connection.execute('SELECT generate_invoice_number() as invoice_number');
+      return result[0].invoice_number;
+    } catch {
+      // Fallback: count existing invoices for this year and increment
+      const count = await em.count(Invoice, {
+        invoiceNumber: { $like: `INV-${year}-%` },
+      });
+      const nextNum = count + 1;
+      return `INV-${year}-${String(nextNum).padStart(5, '0')}`;
+    }
   }
 
   /**

@@ -374,6 +374,37 @@ export const billingApi = {
     });
     return response.data;
   },
+
+  // ==========================================
+  // SYNC OPERATIONS
+  // ==========================================
+
+  /**
+   * Sync all paid registrations to create missing orders/invoices
+   */
+  syncRegistrations: async (): Promise<{
+    totalPaidRegistrations: number;
+    existingOrders: number;
+    toSync: number;
+    synced: number;
+    failed: number;
+    errors: string[];
+  }> => {
+    const response = await axios.post('/api/billing/sync/registrations');
+    return response.data;
+  },
+
+  /**
+   * Sync a single registration to create order/invoice
+   */
+  syncSingleRegistration: async (registrationId: string): Promise<{
+    success: boolean;
+    order: { id: string; orderNumber: string; total: string };
+    invoice: { id: string; invoiceNumber: string; total: string };
+  }> => {
+    const response = await axios.post(`/api/billing/sync/registrations/${registrationId}`);
+    return response.data;
+  },
 };
 
 // ==========================================
