@@ -27,6 +27,7 @@ export interface EventRegistration {
   transactionId?: string;
   stripePaymentIntentId?: string;
   membershipPurchasedDuringRegistration?: boolean;
+  mecaId?: number;
   checkInCode?: string;
   qrCodeData?: string;
   checkedIn?: boolean;
@@ -126,6 +127,7 @@ export interface CreateCheckoutData {
   membershipTypeConfigId?: string;
   userId?: string;
   isMember: boolean;
+  mecaId?: number;
   testMode?: boolean;
 }
 

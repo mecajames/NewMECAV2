@@ -2,6 +2,7 @@ import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { InvoiceItemType } from '@newmeca/shared';
 import { Invoice } from './invoices.entity';
+import { Membership } from '../memberships/memberships.entity';
 
 @Entity({ tableName: 'invoice_items', schema: 'public' })
 export class InvoiceItem {
@@ -32,6 +33,11 @@ export class InvoiceItem {
 
   @Property({ type: 'jsonb', nullable: true })
   metadata?: Record<string, unknown>;
+
+  // For consolidated invoices: the secondary membership this line item is for
+  // Null for master membership line items or non-consolidated invoices
+  @ManyToOne(() => Membership, { nullable: true, fieldName: 'secondary_membership_id' })
+  secondaryMembership?: Membership;
 
   @Property({ type: 'timestamptz', onCreate: () => new Date(), fieldName: 'created_at', defaultRaw: 'now()' })
   createdAt?: Date;

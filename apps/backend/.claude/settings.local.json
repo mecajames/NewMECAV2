@@ -54,7 +54,19 @@
       "Bash(powershell \"ls ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_21_2025_Backup\\\\''\")",
       "Bash(powershell \"ls ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_21_2025_Backup\\\\'' | Format-Table Name, @{N=''Size \\(MB\\)'';E={[math]::Round\\($_Length/1MB,2\\)}} -AutoSize\")",
       "Bash(powershell \"Get-ChildItem ''E:\\\\MECA Oct 2025\\\\Backups\\\\December_21_2025_Backup\\\\'' | Select-Object Name, Length\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(cd:*)",
+      "Bash(cmd /c:*)",
+      "Bash(psql:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker volume ls:*)",
+      "Bash(docker volume inspect:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker restart:*)",
+      "Bash(docker logs:*)",
+      "Bash(head:*)",
+      "Bash(tasklist:*)",
+      "Bash(git checkout:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

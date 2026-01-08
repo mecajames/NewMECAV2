@@ -12,9 +12,9 @@ import {
   Lock,
   AlertCircle,
   CheckCircle,
-  UserPlus,
-  Eye,
-  EyeOff,
+  Car,
+  Users,
+  LogIn,
 } from 'lucide-react';
 import { useAuth } from '@/auth';
 import {
@@ -22,10 +22,7 @@ import {
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
-import { membershipsApi } from '@/memberships';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
-import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
-import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 
 // Check if Stripe is configured (without loading it)
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
@@ -51,10 +48,18 @@ interface FormData {
   state: string;
   postalCode: string;
   country: string;
-  // Team Info (for team memberships)
+  // Competitor Info (for competitor memberships)
+  competitorName: string;
+  vehicleLicensePlate: string;
+  vehicleColor: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  // Team Add-on (for competitor memberships)
+  hasTeamAddon: boolean;
+  // Team Info (for team memberships or competitor with team add-on)
   teamName: string;
   teamDescription: string;
-  // Business Info (for retailer memberships)
+  // Business Info (for retailer/manufacturer memberships)
   businessName: string;
   businessWebsite: string;
 }
@@ -76,7 +81,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
   const navigate = useNavigate();
-  const { user, profile, signUp } = useAuth();
+  const { user, profile } = useAuth();
 
   const [membership, setMembership] = useState<MembershipTypeConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,16 +95,6 @@ export default function MembershipCheckoutPage() {
   // Order data saved after successful payment
   const [orderData, setOrderData] = useState<OrderData | null>(null);
 
-  // Account creation state (shown after payment for guests)
-  const [showAccountCreation, setShowAccountCreation] = useState(false);
-  const [accountPassword, setAccountPassword] = useState('');
-  const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [accountError, setAccountError] = useState<string | null>(null);
-  const [creatingAccount, setCreatingAccount] = useState(false);
-  const [accountCreated, setAccountCreated] = useState(false);
-
   // Form state
   const [formData, setFormData] = useState<FormData>({
     email: '',
@@ -111,6 +106,14 @@ export default function MembershipCheckoutPage() {
     state: '',
     postalCode: '',
     country: 'US',
+    // Competitor info
+    competitorName: '',
+    vehicleLicensePlate: '',
+    vehicleColor: '',
+    vehicleMake: '',
+    vehicleModel: '',
+    // Team add-on
+    hasTeamAddon: false,
     teamName: '',
     teamDescription: '',
     businessName: '',
@@ -132,6 +135,7 @@ export default function MembershipCheckoutPage() {
 
         // Pre-fill form from user profile if logged in
         if (profile) {
+          const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
           setFormData((prev) => ({
             ...prev,
             email: profile.email || '',
@@ -143,6 +147,8 @@ export default function MembershipCheckoutPage() {
             state: profile.state || '',
             postalCode: profile.postal_code || '',
             country: profile.country || 'USA',
+            // Default competitor name to user's full name
+            competitorName: fullName,
           }));
         }
       } catch (err) {
@@ -352,6 +358,8 @@ export default function MembershipCheckoutPage() {
         return 'Team';
       case MembershipCategory.RETAIL:
         return 'Retailer';
+      case MembershipCategory.MANUFACTURER:
+        return 'Manufacturer';
       default:
         return category;
     }
@@ -374,9 +382,9 @@ export default function MembershipCheckoutPage() {
           <p className="text-gray-400 mb-6">{error}</p>
           <Link
             to="/membership"
-            className="inline-flex items-center text-orange-500 hover:text-orange-400"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Memberships
           </Link>
         </div>
@@ -621,14 +629,17 @@ export default function MembershipCheckoutPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-6xl mx-auto px-4">
-        {/* Back button */}
-        <Link
-          to="/membership"
-          className="inline-flex items-center text-gray-400 hover:text-white mb-8 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Memberships
-        </Link>
+        {/* Header with Back button on right */}
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold text-white">Membership Checkout</h1>
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Go Back
+          </button>
+        </div>
 
         {/* Progress indicator */}
         <div className="flex items-center justify-center mb-12">

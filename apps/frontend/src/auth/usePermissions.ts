@@ -38,44 +38,10 @@ export function usePermissions() {
         return;
       }
 
-      // Get role permissions
-      const { data: rolePerms } = await supabase
-        .from('role_permissions')
-        .select('permission:permissions(name)')
-        .eq('role', profile?.role);
-
-      // Get user-specific overrides
-      const { data: userOverrides } = await supabase
-        .from('user_permission_overrides')
-        .select('granted, permission:permissions(name)')
-        .eq('user_id', user.id);
-
-      // Build permission set
-      const permSet = new Set<string>();
-
-      // Add role permissions
-      if (rolePerms) {
-        rolePerms.forEach((rp: any) => {
-          if (rp.permission?.name) {
-            permSet.add(rp.permission.name);
-          }
-        });
-      }
-
-      // Apply user overrides
-      if (userOverrides) {
-        userOverrides.forEach((override: any) => {
-          if (override.permission?.name) {
-            if (override.granted) {
-              permSet.add(override.permission.name);
-            } else {
-              permSet.delete(override.permission.name);
-            }
-          }
-        });
-      }
-
-      setPermissions(permSet);
+      // For non-admin users, just set empty permissions for now
+      // The role_permissions and user_permission_overrides tables don't exist yet
+      // When the permission system is fully implemented, uncomment the code below
+      setPermissions(new Set<string>());
       setLoading(false);
     } catch (error) {
       console.error('Error fetching permissions:', error);

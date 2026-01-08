@@ -6,11 +6,14 @@ import {
   ShoppingCart,
   ArrowLeft,
   Download,
-  RefreshCw,
   ChevronRight,
+  Users,
+  AlertCircle,
+  UserPlus,
 } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { billingApi, Order, Invoice } from '../../api-client/billing.api-client';
+import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal } from '@/memberships';
 
 export default function BillingPage() {
   const navigate = useNavigate();
@@ -19,6 +22,9 @@ export default function BillingPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'invoices'>('overview');
+  const [membership, setMembership] = useState<Membership | null>(null);
+  const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
+  const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
 
   useEffect(() => {
     if (profile?.id) {
@@ -31,12 +37,25 @@ export default function BillingPage() {
 
     try {
       setLoading(true);
-      const [ordersRes, invoicesRes] = await Promise.all([
+      const [ordersRes, invoicesRes, membershipRes] = await Promise.all([
         billingApi.getMyOrders(profile.id, { limit: 10 }),
         billingApi.getMyInvoices(profile.id, { limit: 10 }),
+        membershipsApi.getUserActiveMembership(profile.id),
       ]);
       setOrders(ordersRes.data || []);
       setInvoices(invoicesRes.data || []);
+      setMembership(membershipRes);
+
+      // If this is a master membership, fetch secondaries
+      if (membershipRes?.id) {
+        try {
+          const secondaries = await membershipsApi.getSecondaryMemberships(membershipRes.id);
+          setSecondaryMemberships(secondaries);
+        } catch (err) {
+          // Not a master or no secondaries - that's ok
+          console.log('No secondary memberships found');
+        }
+      }
     } catch (error) {
       console.error('Error fetching billing data:', error);
     } finally {
@@ -93,15 +112,6 @@ export default function BillingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Dashboard
-        </button>
-
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -112,49 +122,158 @@ export default function BillingPage() {
             <p className="text-gray-400">Manage your payments and view invoices</p>
           </div>
           <button
-            onClick={fetchBillingData}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <ArrowLeft className="h-4 w-4" />
+            Go Back
           </button>
         </div>
 
         {/* Membership Status Card */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
           <h2 className="text-xl font-bold text-white mb-4">Current Membership</h2>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-400 text-sm">Status</p>
-              <p
-                className={`text-lg font-semibold capitalize ${
-                  profile.membership_status === 'active' ? 'text-green-400' : 'text-gray-400'
-                }`}
-              >
-                {profile.membership_status || 'None'}
-              </p>
-            </div>
-            {profile.membership_expiry && (
-              <div className="text-right">
-                <p className="text-gray-400 text-sm">Expires</p>
-                <p className="text-lg font-semibold text-white">
-                  {new Date(profile.membership_expiry).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </p>
+          {membership ? (
+            <div className="space-y-4">
+              {/* Main membership info */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-gray-400 text-sm">Membership Type</p>
+                    <p className="text-lg font-semibold text-white">
+                      {membership.membershipTypeConfig?.name || 'Unknown'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-sm">MECA ID</p>
+                    <p className="text-lg font-semibold text-orange-400">
+                      {membership.mecaId || 'Pending'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-sm">Status</p>
+                    <p
+                      className={`text-lg font-semibold capitalize ${
+                        membership.paymentStatus === 'paid' ? 'text-green-400' : 'text-yellow-400'
+                      }`}
+                    >
+                      {membership.paymentStatus === 'paid' ? 'Active' : 'Pending Payment'}
+                    </p>
+                  </div>
+                  {membership.endDate && (
+                    <div>
+                      <p className="text-gray-400 text-sm">Expires</p>
+                      <p className="text-lg font-semibold text-white">
+                        {new Date(membership.endDate).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => navigate(`/membership/checkout/${membership.membershipTypeConfig?.id}?renew=true`)}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+                >
+                  Renew
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
-            )}
-            <button
-              onClick={() => navigate('/membership')}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-            >
-              {profile.membership_status === 'active' ? 'Renew' : 'Get Membership'}
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+
+              {/* Secondary memberships section */}
+              <div className="border-t border-slate-700 pt-4 mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-md font-semibold text-white flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-400" />
+                    Secondary Memberships ({secondaryMemberships.length})
+                  </h3>
+                  <button
+                    onClick={() => setShowAddSecondaryModal(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Add Secondary Member
+                  </button>
+                </div>
+                {secondaryMemberships.length > 0 && (
+                  <div className="space-y-2">
+                    {secondaryMemberships.map((secondary) => (
+                      <div
+                        key={secondary.id}
+                        className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p className="text-white font-medium">{secondary.competitorName}</p>
+                            <p className="text-gray-400 text-sm">
+                              {secondary.membershipType?.name || 'Membership'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 text-sm">MECA ID</p>
+                            <p className="text-orange-400 font-medium">
+                              {secondary.mecaId || 'Pending'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`px-2 py-1 text-xs rounded-full ${
+                              secondary.paymentStatus === 'paid'
+                                ? 'bg-green-900/50 text-green-400'
+                                : 'bg-yellow-900/50 text-yellow-400'
+                            }`}
+                          >
+                            {secondary.paymentStatus === 'paid' ? 'Active' : 'Payment Pending'}
+                          </span>
+                          {secondary.paymentStatus !== 'paid' && (
+                            <button
+                              onClick={() => {
+                                // Find the invoice for this secondary membership
+                                const secondaryInvoice = invoices.find(inv =>
+                                  (inv.status === 'sent' || inv.status === 'draft' || inv.status === 'overdue') &&
+                                  inv.items?.some(item =>
+                                    item.description?.toLowerCase().includes(secondary.competitorName.toLowerCase()) ||
+                                    item.referenceId === secondary.id
+                                  )
+                                );
+                                if (secondaryInvoice) {
+                                  navigate(`/pay/invoice/${secondaryInvoice.id}`);
+                                } else {
+                                  // Fallback: switch to invoices tab if we can't find it
+                                  setActiveTab('invoices');
+                                }
+                              }}
+                              className="flex items-center gap-1 px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition-colors"
+                            >
+                              <AlertCircle className="h-3 w-3" />
+                              View Invoice
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Status</p>
+                <p className="text-lg font-semibold text-gray-400">No Active Membership</p>
+              </div>
+              <button
+                onClick={() => navigate('/membership')}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+              >
+                Get Membership
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -282,6 +401,15 @@ export default function BillingPage() {
                             {invoice.status}
                           </span>
                         </div>
+                        {/* Show Pay Now button for unpaid invoices */}
+                        {(invoice.status === 'sent' || invoice.status === 'overdue' || invoice.status === 'draft') && (
+                          <button
+                            onClick={() => navigate(`/pay/invoice/${invoice.id}`)}
+                            className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors"
+                          >
+                            Pay Now
+                          </button>
+                        )}
                         <button
                           onClick={() => billingApi.viewMyInvoicePdf(invoice.id)}
                           className="p-2 text-gray-400 hover:text-white transition-colors"
@@ -406,13 +534,24 @@ export default function BillingPage() {
                         {formatDate(invoice.dueDate)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => billingApi.viewMyInvoicePdf(invoice.id)}
-                          className="flex items-center gap-1 text-orange-400 hover:text-orange-300"
-                        >
-                          <Download className="h-4 w-4" />
-                          Download PDF
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {/* Show Pay Now button for unpaid invoices */}
+                          {(invoice.status === 'sent' || invoice.status === 'overdue' || invoice.status === 'draft') && (
+                            <button
+                              onClick={() => navigate(`/pay/invoice/${invoice.id}`)}
+                              className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            >
+                              Pay Now
+                            </button>
+                          )}
+                          <button
+                            onClick={() => billingApi.viewMyInvoicePdf(invoice.id)}
+                            className="flex items-center gap-1 text-orange-400 hover:text-orange-300"
+                          >
+                            <Download className="h-4 w-4" />
+                            PDF
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -422,6 +561,19 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      {/* Add Secondary Modal */}
+      {membership && (
+        <AddSecondaryModal
+          isOpen={showAddSecondaryModal}
+          onClose={() => setShowAddSecondaryModal(false)}
+          masterMembershipId={membership.id}
+          onSuccess={() => {
+            // Refresh data to get the latest secondaries from the server
+            fetchBillingData();
+          }}
+        />
+      )}
     </div>
   );
 }

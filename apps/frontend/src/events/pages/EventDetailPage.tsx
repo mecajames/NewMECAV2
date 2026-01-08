@@ -1,9 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn } from 'lucide-react';
-import { eventsApi, Event } from '@/events';
+import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn, ArrowLeft, Star } from 'lucide-react';
+import { eventsApi, Event, EventAssignmentManager } from '@/events';
 import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
 import { useAuth, usePermissions } from '@/auth';
+import { EventRatingsPanel } from '@/ratings';
+import { ratingsApi } from '@/api-client/ratings.api-client';
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -39,6 +41,9 @@ export default function EventDetailPage() {
   // Check if user is admin
   const isAdmin = profile?.role === 'admin';
 
+  // Track if user participated in this event (for ratings)
+  const [userParticipated, setUserParticipated] = useState(false);
+
   useEffect(() => {
     if (!eventId) {
       navigate('/events');
@@ -46,6 +51,20 @@ export default function EventDetailPage() {
     }
     fetchEvent();
   }, [eventId]);
+
+  // Check if user competed at this event (has results under their MECA ID)
+  useEffect(() => {
+    const checkCompetition = async () => {
+      if (!user || !eventId) return;
+      try {
+        const competed = await ratingsApi.hasUserCompetedAtEvent(eventId);
+        setUserParticipated(competed);
+      } catch (err) {
+        console.error('Error checking competition participation:', err);
+      }
+    };
+    checkCompetition();
+  }, [user, eventId]);
 
   useEffect(() => {
     if (profile && showRegistrationModal) {
@@ -245,12 +264,17 @@ export default function EventDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <button
-          onClick={() => navigate('/events')}
-          className="mb-6 text-gray-400 hover:text-white transition-colors"
-        >
-          ← Back to Events
-        </button>
+        {/* Header with Back button */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-400">Event Details</h2>
+          <button
+            onClick={() => navigate('/events')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Events
+          </button>
+        </div>
 
         {event.flyer_url && (
           <div
@@ -484,6 +508,13 @@ export default function EventDetailPage() {
             </div>
           </div>
 
+          {/* Admin: Event Staff Assignments */}
+          {isAdmin && eventId && (
+            <div className="mb-8">
+              <EventAssignmentManager eventId={eventId} eventTitle={event.title} />
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="space-y-3">
             {event.status === 'upcoming' && (
@@ -517,6 +548,23 @@ export default function EventDetailPage() {
             </button>
           )}
         </div>
+
+        {/* Ratings Section - Show for completed events where user has competition results */}
+        {event.status === 'completed' && userParticipated && (
+          <div className="mt-8 bg-slate-700 rounded-xl p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Star className="h-6 w-6 text-yellow-500" />
+              Rate Event Staff
+            </h3>
+            <p className="text-gray-400 text-sm mb-4">
+              Help us improve by rating the judges and event directors from this event.
+            </p>
+            <EventRatingsPanel
+              eventId={event.id}
+              eventName={event.title}
+            />
+          </div>
+        )}
 
         <div className="bg-slate-800 rounded-xl shadow-2xl p-8">
           <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">

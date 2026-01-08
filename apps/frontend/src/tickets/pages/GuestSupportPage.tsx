@@ -297,8 +297,8 @@ export function GuestSupportPage() {
         <div className="mt-6 text-center">
           <p className="text-gray-500 text-sm">
             Have a quick question?{' '}
-            <Link to="/faq" className="text-orange-400 hover:text-orange-300">
-              Check our FAQ
+            <Link to="/member-support" className="text-orange-400 hover:text-orange-300">
+              Check our Member Support
             </Link>
           </p>
         </div>

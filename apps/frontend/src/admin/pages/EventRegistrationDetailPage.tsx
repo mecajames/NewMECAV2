@@ -154,28 +154,26 @@ export default function EventRegistrationDetailPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <button
-            onClick={() => navigate('/admin/event-registrations')}
-            className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Back to Registrations
-          </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-white">
-                Registration Details
-              </h1>
-              <p className="text-gray-400 mt-1">
-                {registration.firstName} {registration.lastName}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white">
+              Registration Details
+            </h1>
+            <p className="text-gray-400 mt-1">
+              {registration.firstName} {registration.lastName}
+            </p>
+            <div className="flex items-center gap-3 mt-2">
               {getStatusBadge(registration.registrationStatus)}
               {getPaymentBadge(registration.paymentStatus)}
             </div>
           </div>
+          <button
+            onClick={() => navigate('/admin/event-registrations')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Registrations
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

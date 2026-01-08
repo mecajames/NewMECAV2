@@ -306,7 +306,9 @@ export default function Navbar() {
                               onClick={() => {
                                 handleMarkNotificationRead(notification.id);
                                 if (notification.link) {
-                                  navigate(`/${notification.link}`);
+                                  // If link is "dashboard", navigate to mymeca dashboard overview tab instead of letting it redirect
+                                  const targetPath = notification.link === 'dashboard' ? '/dashboard/mymeca?tab=overview' : `/${notification.link}`;
+                                  navigate(targetPath);
                                   setNotificationsOpen(false);
                                 }
                               }}

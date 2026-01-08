@@ -30,15 +30,18 @@ import {
   Copy,
   ShoppingCart,
   Key,
+  Pencil,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
-import { profilesApi } from '@/profiles';
+import { profilesApi, MemberStats, ActivityItem, UpcomingEvent } from '@/profiles';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
-import { membershipsApi, Membership } from '@/memberships';
+import { membershipsApi, Membership, AdminCreateMembershipResult, AddSecondaryModal } from '@/memberships';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs';
+import AdminMembershipWizard from '../components/AdminMembershipWizard';
+import { UserPlus } from 'lucide-react';
 import { teamsApi, Team } from '@/teams';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH, getStrengthColorClasses } from '../../utils/passwordUtils';
@@ -101,9 +104,15 @@ export default function MemberDetailPage() {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [resetPasswordCopied, setResetPasswordCopied] = useState(false);
 
+  // Derived membership status and type from actual memberships (not profile field)
+  const [derivedMembershipStatus, setDerivedMembershipStatus] = useState<string>('none');
+  const [derivedMembershipType, setDerivedMembershipType] = useState<string | null>(null);
+
   useEffect(() => {
     if (memberId && !permLoading && !isCreateMode) {
       fetchMember();
+      // Fetch memberships to compute derived status
+      fetchMembershipStatusForHeader();
     } else if (isCreateMode) {
       setLoading(false);
       // Generate initial password for create mode
@@ -137,6 +146,88 @@ export default function MemberDetailPage() {
     } catch (error) {
       console.error('Error fetching member:', error);
       setLoading(false);
+    }
+  };
+
+  // Fetch memberships and compute the derived status and type for header display
+  // This prioritizes master/independent memberships over secondary ones
+  const fetchMembershipStatusForHeader = async () => {
+    try {
+      const { data: membershipsData } = await supabase
+        .from('memberships')
+        .select(`
+          payment_status,
+          end_date,
+          account_type,
+          has_team_addon,
+          membership_type_configs (category)
+        `)
+        .eq('user_id', memberId)
+        .in('payment_status', ['paid', 'pending'])
+        .order('created_at', { ascending: false });
+
+      if (!membershipsData || membershipsData.length === 0) {
+        setDerivedMembershipStatus('none');
+        setDerivedMembershipType(null);
+        return;
+      }
+
+      // Find best membership status and type
+      // Priority: paid non-secondary > pending non-secondary > paid secondary > pending secondary
+      let bestStatus = 'none';
+      let bestPriority = 999;
+      let bestMembershipType: string | null = null;
+      let bestHasTeamAddon = false;
+
+      for (const m of membershipsData) {
+        const isSecondary = m.account_type === 'secondary';
+        const isPaid = m.payment_status === 'paid';
+        const isExpired = m.end_date && new Date(m.end_date) < new Date();
+
+        // Skip expired memberships for active status calculation
+        let status: string;
+        if (isPaid && !isExpired) {
+          status = 'active';
+        } else if (isPaid && isExpired) {
+          status = 'expired';
+        } else {
+          status = 'pending';
+        }
+
+        // Calculate priority (lower is better)
+        // Non-secondary active = 0, secondary active = 1, non-secondary pending = 2, etc.
+        const priority = (isSecondary ? 3 : 0) + (status === 'active' ? 0 : status === 'pending' ? 1 : 2);
+
+        if (priority < bestPriority) {
+          bestPriority = priority;
+          bestStatus = status;
+          // Get membership type from config
+          const config = Array.isArray(m.membership_type_configs)
+            ? m.membership_type_configs[0]
+            : m.membership_type_configs;
+          bestMembershipType = config?.category || null;
+          bestHasTeamAddon = m.has_team_addon || false;
+        }
+      }
+
+      setDerivedMembershipStatus(bestStatus);
+
+      // Format membership type for display
+      if (bestMembershipType) {
+        const typeMap: Record<string, string> = {
+          competitor: bestHasTeamAddon ? 'Competitor + Team' : 'Competitor',
+          retail: 'Retailer',
+          manufacturer: 'Manufacturer',
+          team: 'Team',
+        };
+        setDerivedMembershipType(typeMap[bestMembershipType] || bestMembershipType);
+      } else {
+        setDerivedMembershipType(null);
+      }
+    } catch (error) {
+      console.error('Error fetching membership status for header:', error);
+      setDerivedMembershipStatus('none');
+      setDerivedMembershipType(null);
     }
   };
 
@@ -374,13 +465,15 @@ export default function MemberDetailPage() {
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Back Button */}
-          <button
-            onClick={() => navigate('/admin/members')}
-            className="mb-6 inline-flex items-center gap-2 text-gray-400 hover:text-white"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Back to Members
-          </button>
+          <div className="mb-6 flex justify-end">
+            <button
+              onClick={() => navigate('/admin/members')}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Members
+            </button>
+          </div>
 
           {/* Create Member Form */}
           <div className="bg-slate-800 rounded-lg shadow-sm p-6">
@@ -658,8 +751,9 @@ export default function MemberDetailPage() {
           <p className="text-gray-400 mb-4">The member you're looking for doesn't exist.</p>
           <button
             onClick={() => navigate('/admin/members')}
-            className="text-orange-500 hover:text-orange-400 font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
+            <ArrowLeft className="h-5 w-5" />
             Back to Members
           </button>
         </div>
@@ -671,13 +765,15 @@ export default function MemberDetailPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Back Button */}
-        <button
-          onClick={() => navigate('/admin/members')}
-          className="mb-6 inline-flex items-center gap-2 text-gray-400 hover:text-white"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Members
-        </button>
+        <div className="mb-6 flex justify-end">
+          <button
+            onClick={() => navigate('/admin/members')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Members
+          </button>
+        </div>
 
         {/* Member Header Card */}
         <div className="bg-slate-800 rounded-lg shadow-sm p-6 mb-6">
@@ -719,28 +815,56 @@ export default function MemberDetailPage() {
                     <span className="font-mono">{member.meca_id || 'N/A'}</span>
                   </div>
                 </div>
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {/* Membership Type Badge - show for all members */}
+                  {derivedMembershipType ? (
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        derivedMembershipType.includes('Competitor')
+                          ? derivedMembershipType.includes('Team')
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-blue-100 text-blue-800'
+                          : derivedMembershipType === 'Retailer'
+                          ? 'bg-purple-100 text-purple-800'
+                          : derivedMembershipType === 'Manufacturer'
+                          ? 'bg-amber-100 text-amber-800'
+                          : derivedMembershipType === 'Team'
+                          ? 'bg-teal-100 text-teal-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}
+                    >
+                      {derivedMembershipType}
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                      No Membership
+                    </span>
+                  )}
+                  {/* Staff Role Badge - only show for admin/event_director */}
+                  {(member.role === 'admin' || member.role === 'event_director') && (
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        member.role === 'admin'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      {member.role.replace('_', ' ')}
+                    </span>
+                  )}
+                  {/* Status Badge */}
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      member.role === 'admin'
-                        ? 'bg-red-100 text-red-800'
-                        : member.role === 'event_director'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {member.role.replace('_', ' ')}
-                  </span>
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      member.membership_status === 'active'
+                      derivedMembershipStatus === 'active'
                         ? 'bg-green-100 text-green-800'
-                        : member.membership_status === 'pending'
+                        : derivedMembershipStatus === 'pending'
                         ? 'bg-yellow-100 text-yellow-800'
+                        : derivedMembershipStatus === 'expired'
+                        ? 'bg-red-100 text-red-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {member.membership_status}
+                    {derivedMembershipStatus}
                   </span>
                 </div>
               </div>
@@ -860,7 +984,7 @@ export default function MemberDetailPage() {
 
         {/* Tab Content */}
         <div className="bg-slate-800 rounded-lg shadow-sm p-6">
-          {activeTab === 'overview' && <OverviewTab member={member} />}
+          {activeTab === 'overview' && <OverviewTab member={member} derivedMembershipStatus={derivedMembershipStatus} />}
           {activeTab === 'personal' && <PersonalInfoTab member={member} onUpdate={fetchMember} />}
           {activeTab === 'media' && <MediaGalleryTab member={member} />}
           {activeTab === 'teams' && <TeamsTab member={member} />}
@@ -1124,7 +1248,7 @@ export default function MemberDetailPage() {
 }
 
 // Tab Components (Placeholders - will be built in separate files)
-function OverviewTab({ member }: { member: Profile }) {
+function OverviewTab({ member, derivedMembershipStatus }: { member: Profile; derivedMembershipStatus: string }) {
   const [stats, setStats] = useState({
     totalOrders: 0,
     eventsAttended: 0,
@@ -1133,32 +1257,58 @@ function OverviewTab({ member }: { member: Profile }) {
     teamName: null as string | null,
     lastLogin: null as string | null,
   });
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOverviewData();
   }, [member.id]);
 
   const fetchOverviewData = async () => {
-    // TODO: Replace with backend API calls once endpoints are created
-    // Currently commented out to prevent architectural violations
+    setStatsLoading(true);
+    setStatsError(null);
 
-    setStats({
-      totalOrders: 0, // TODO: Implement via backend API
-      eventsAttended: 0, // TODO: Implement via backend API
-      trophiesWon: 0, // TODO: Implement via backend API
-      totalSpent: 0, // TODO: Implement via backend API
-      teamName: null, // TODO: Implement via backend API
-      lastLogin: member.updated_at,
-    });
+    try {
+      // Get auth token for the API call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Not authenticated');
+      }
 
-    // TODO: Fetch recent activity via backend API
-    const activity: any[] = [];
-    setRecentActivity(activity);
+      // Fetch member stats from the backend API
+      const memberStats = await profilesApi.getMemberStats(member.id, session.access_token);
 
-    // TODO: Fetch upcoming events via backend API
-    setUpcomingEvents([]);
+      setStats({
+        totalOrders: memberStats.totalOrders,
+        eventsAttended: memberStats.eventsAttended,
+        trophiesWon: memberStats.trophiesWon,
+        totalSpent: memberStats.totalSpent,
+        teamName: memberStats.teamName,
+        lastLogin: member.updated_at,
+      });
+
+      setRecentActivity(memberStats.recentActivity);
+      setUpcomingEvents(memberStats.upcomingEvents);
+    } catch (error) {
+      console.error('Failed to fetch member stats:', error);
+      setStatsError(error instanceof Error ? error.message : 'Failed to load statistics');
+      // Keep default values on error
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const getActivityIcon = (type: ActivityItem['type']) => {
+    switch (type) {
+      case 'registration': return '📅';
+      case 'payment': return '💳';
+      case 'membership': return '🎫';
+      case 'result': return '🏆';
+      case 'team': return '👥';
+      default: return '📌';
+    }
   };
 
   const getOrdinalSuffix = (num: number) => {
@@ -1171,7 +1321,7 @@ function OverviewTab({ member }: { member: Profile }) {
   };
 
   const getMembershipColor = () => {
-    switch (member.membership_status) {
+    switch (derivedMembershipStatus) {
       case 'active': return 'bg-green-600';
       case 'pending': return 'bg-yellow-600';
       case 'expired': return 'bg-red-600';
@@ -1195,13 +1345,13 @@ function OverviewTab({ member }: { member: Profile }) {
   return (
     <div>
       {/* Membership Status Banner */}
-      {member.membership_status !== 'none' && (
+      {derivedMembershipStatus !== 'none' && (
         <div className={`${getMembershipColor()} rounded-lg p-4 mb-6 flex items-center justify-between`}>
           <div className="flex items-center gap-4">
             <CreditCard className="h-8 w-8 text-white" />
             <div>
               <h3 className="text-white font-bold text-lg">
-                {member.membership_status.charAt(0).toUpperCase() + member.membership_status.slice(1)} Member
+                {derivedMembershipStatus.charAt(0).toUpperCase() + derivedMembershipStatus.slice(1)} Member
               </h3>
               {expiryInfo && (
                 <p className={`text-sm ${expiryInfo.warning ? 'text-yellow-200' : 'text-white'}`}>
@@ -1220,6 +1370,14 @@ function OverviewTab({ member }: { member: Profile }) {
 
       <h2 className="text-2xl font-bold text-white mb-6">Overview</h2>
 
+      {/* Stats Error */}
+      {statsError && (
+        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4 mb-6 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-400" />
+          <p className="text-red-300">{statsError}</p>
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-slate-700 rounded-lg p-4">
@@ -1230,19 +1388,27 @@ function OverviewTab({ member }: { member: Profile }) {
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
           <div className="text-sm text-gray-400 mb-1">Total Orders</div>
-          <div className="text-xl font-bold text-white">{stats.totalOrders}</div>
+          <div className="text-xl font-bold text-white">
+            {statsLoading ? <span className="animate-pulse">...</span> : stats.totalOrders}
+          </div>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
           <div className="text-sm text-gray-400 mb-1">Events Attended</div>
-          <div className="text-xl font-bold text-white">{stats.eventsAttended}</div>
+          <div className="text-xl font-bold text-white">
+            {statsLoading ? <span className="animate-pulse">...</span> : stats.eventsAttended}
+          </div>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
           <div className="text-sm text-gray-400 mb-1">Trophies Won</div>
-          <div className="text-xl font-bold text-white">{stats.trophiesWon}</div>
+          <div className="text-xl font-bold text-white">
+            {statsLoading ? <span className="animate-pulse">...</span> : stats.trophiesWon}
+          </div>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
           <div className="text-sm text-gray-400 mb-1">Lifetime Value</div>
-          <div className="text-xl font-bold text-white">${stats.totalSpent.toFixed(2)}</div>
+          <div className="text-xl font-bold text-white">
+            {statsLoading ? <span className="animate-pulse">...</span> : `$${stats.totalSpent.toFixed(2)}`}
+          </div>
         </div>
       </div>
 
@@ -1252,18 +1418,23 @@ function OverviewTab({ member }: { member: Profile }) {
         <div>
           <h3 className="text-lg font-semibold text-white mb-4">Recent Activity</h3>
           <div className="space-y-3">
-            {recentActivity.length === 0 ? (
+            {statsLoading ? (
+              <div className="text-gray-400 text-center py-8 bg-slate-700 rounded-lg">
+                <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
+                Loading activity...
+              </div>
+            ) : recentActivity.length === 0 ? (
               <div className="text-gray-400 text-center py-8 bg-slate-700 rounded-lg">
                 No recent activity
               </div>
             ) : (
-              recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
-                  <span className="text-2xl">{activity.icon}</span>
+              recentActivity.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
+                  <span className="text-2xl">{getActivityIcon(activity.type)}</span>
                   <div className="flex-1">
                     <p className="text-white text-sm">{activity.description}</p>
                     <p className="text-gray-400 text-xs mt-1">
-                      {new Date(activity.date).toLocaleDateString()} at {new Date(activity.date).toLocaleTimeString()}
+                      {new Date(activity.timestamp).toLocaleDateString()} at {new Date(activity.timestamp).toLocaleTimeString()}
                     </p>
                   </div>
                 </div>
@@ -1276,18 +1447,23 @@ function OverviewTab({ member }: { member: Profile }) {
         <div>
           <h3 className="text-lg font-semibold text-white mb-4">Upcoming Events</h3>
           <div className="space-y-3">
-            {upcomingEvents.length === 0 ? (
+            {statsLoading ? (
+              <div className="text-gray-400 text-center py-8 bg-slate-700 rounded-lg">
+                <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
+                Loading events...
+              </div>
+            ) : upcomingEvents.length === 0 ? (
               <div className="text-gray-400 text-center py-8 bg-slate-700 rounded-lg">
                 No upcoming events
               </div>
             ) : (
-              upcomingEvents.map((event, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
+              upcomingEvents.map((event) => (
+                <div key={event.id} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
                   <Calendar className="h-5 w-5 text-orange-500 mt-1" />
                   <div className="flex-1">
-                    <p className="text-white text-sm font-medium">{event.events?.title || 'Event'}</p>
+                    <p className="text-white text-sm font-medium">{event.name}</p>
                     <p className="text-gray-400 text-xs mt-1">
-                      {event.events?.event_date ? new Date(event.events.event_date).toLocaleDateString() : 'TBD'}
+                      {new Date(event.eventDate).toLocaleDateString()} - {event.location}
                     </p>
                   </div>
                 </div>
@@ -2318,13 +2494,936 @@ function ImageCard({
 }
 
 function TeamsTab({ member }: { member: Profile }) {
-  return (
-    <div>
-      <h2 className="text-2xl font-bold text-white mb-6">Teams</h2>
-      <div className="text-center py-12 text-gray-400">
-        <UsersIcon className="h-16 w-16 mx-auto mb-4 text-gray-500" />
-        <p>No team memberships</p>
+  const [team, setTeam] = useState<Team | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  // Edit mode states
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    bio: '',
+    location: '',
+    website: '',
+    maxMembers: 50,
+    teamType: 'competitive' as 'competitive' | 'casual' | 'shop' | 'club',
+    isPublic: true,
+    requiresApproval: true,
+  });
+
+  // Member management states
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [mecaIdSearch, setMecaIdSearch] = useState('');
+  const [memberLookupResult, setMemberLookupResult] = useState<any>(null);
+  const [lookingUpMember, setLookingUpMember] = useState(false);
+  const [addingMember, setAddingMember] = useState(false);
+
+  // Transfer ownership state
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState('');
+  const [transferring, setTransferring] = useState(false);
+
+  // Delete team state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Role change state
+  const [changingRoleFor, setChangingRoleFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchTeam();
+  }, [member.id]);
+
+  const fetchTeam = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const teamData = await teamsApi.getTeamByUserId(member.id);
+      setTeam(teamData);
+      if (teamData) {
+        setEditForm({
+          name: teamData.name || '',
+          description: teamData.description || '',
+          bio: teamData.bio || '',
+          location: teamData.location || '',
+          website: teamData.website || '',
+          maxMembers: teamData.maxMembers || 50,
+          teamType: teamData.teamType || 'competitive',
+          isPublic: teamData.isPublic ?? true,
+          requiresApproval: teamData.requiresApproval ?? true,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching team:', err);
+      setError('Failed to load team data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const showSuccessMessage = (message: string) => {
+    setSuccess(message);
+    setTimeout(() => setSuccess(null), 3000);
+  };
+
+  // Save team details
+  const handleSaveDetails = async () => {
+    if (!team) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await teamsApi.updateTeam(team.id, {
+        name: editForm.name,
+        description: editForm.description,
+        bio: editForm.bio,
+        location: editForm.location,
+        website: editForm.website,
+        max_members: editForm.maxMembers,
+        team_type: editForm.teamType,
+        is_public: editForm.isPublic,
+        requires_approval: editForm.requiresApproval,
+      });
+      await fetchTeam();
+      setIsEditingDetails(false);
+      showSuccessMessage('Team details updated successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to update team');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Lookup member by MECA ID
+  const handleLookupMember = async () => {
+    if (!mecaIdSearch.trim()) return;
+    try {
+      setLookingUpMember(true);
+      setMemberLookupResult(null);
+      const result = await teamsApi.lookupMemberByMecaId(mecaIdSearch.trim());
+      setMemberLookupResult(result);
+    } catch (err) {
+      setMemberLookupResult({ found: false, message: 'Failed to lookup member' });
+    } finally {
+      setLookingUpMember(false);
+    }
+  };
+
+  // Add member to team
+  const handleAddMember = async (userId: string) => {
+    if (!team) return;
+    try {
+      setAddingMember(true);
+      setError(null);
+      await teamsApi.addMember(team.id, userId);
+      await fetchTeam();
+      setShowAddMemberModal(false);
+      setMecaIdSearch('');
+      setMemberLookupResult(null);
+      showSuccessMessage('Member added successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to add member');
+    } finally {
+      setAddingMember(false);
+    }
+  };
+
+  // Remove member from team
+  const handleRemoveMember = async (userId: string) => {
+    if (!team) return;
+    if (!confirm('Are you sure you want to remove this member from the team?')) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await teamsApi.removeMember(team.id, userId);
+      await fetchTeam();
+      showSuccessMessage('Member removed successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to remove member');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Change member role
+  const handleChangeRole = async (userId: string, newRole: 'owner' | 'co_owner' | 'moderator' | 'member') => {
+    if (!team) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await teamsApi.updateMemberRole(team.id, userId, newRole);
+      await fetchTeam();
+      setChangingRoleFor(null);
+      showSuccessMessage('Member role updated successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to update role');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Approve join request
+  const handleApproveRequest = async (userId: string) => {
+    if (!team) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await teamsApi.approveJoinRequest(team.id, userId);
+      await fetchTeam();
+      showSuccessMessage('Join request approved');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to approve request');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Reject join request
+  const handleRejectRequest = async (userId: string) => {
+    if (!team) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await teamsApi.rejectJoinRequest(team.id, userId);
+      await fetchTeam();
+      showSuccessMessage('Join request rejected');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to reject request');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Cancel invite
+  const handleCancelInvite = async (userId: string) => {
+    if (!team) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await teamsApi.cancelInvite(team.id, userId);
+      await fetchTeam();
+      showSuccessMessage('Invite cancelled');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to cancel invite');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Transfer ownership
+  const handleTransferOwnership = async () => {
+    if (!team || !transferTargetId) return;
+    try {
+      setTransferring(true);
+      setError(null);
+      await teamsApi.transferOwnership(team.id, transferTargetId);
+      await fetchTeam();
+      setShowTransferModal(false);
+      setTransferTargetId('');
+      showSuccessMessage('Ownership transferred successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to transfer ownership');
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  // Delete team
+  const handleDeleteTeam = async () => {
+    if (!team) return;
+    try {
+      setDeleting(true);
+      setError(null);
+      await teamsApi.deleteTeam(team.id);
+      setTeam(null);
+      setShowDeleteConfirm(false);
+      showSuccessMessage('Team deleted successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to delete team');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const TEAM_TYPE_OPTIONS = [
+    { value: 'competitive', label: 'Competitive Team' },
+    { value: 'casual', label: 'Casual Team' },
+    { value: 'shop', label: 'Shop Team' },
+    { value: 'club', label: 'Club' },
+  ];
+
+  const ROLE_OPTIONS = [
+    { value: 'owner', label: 'Owner', color: 'bg-orange-500/20 text-orange-400' },
+    { value: 'co_owner', label: 'Co-Owner', color: 'bg-yellow-500/20 text-yellow-400' },
+    { value: 'moderator', label: 'Moderator', color: 'bg-blue-500/20 text-blue-400' },
+    { value: 'member', label: 'Member', color: 'bg-slate-500/20 text-slate-400' },
+  ];
+
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-6">Team Management</h2>
+        <div className="text-center py-12 text-gray-400">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
+          <p className="mt-4">Loading team data...</p>
+        </div>
       </div>
+    );
+  }
+
+  if (!team) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-6">Team Management</h2>
+        <div className="bg-slate-700 rounded-lg p-8 text-center">
+          <UsersIcon className="h-16 w-16 mx-auto mb-4 text-gray-500" />
+          <p className="text-gray-400 mb-2">This member does not have a team</p>
+          <p className="text-sm text-gray-500">
+            To create a team, assign a membership with the Team Add-on from the Memberships tab.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Find member's role in the team
+  const memberRecord = team.members?.find((m) => m.userId === member.id);
+  const isOwner = team.captainId === member.id;
+  const activeMembers = team.members?.filter((m) => m.status === 'active') || [];
+  const pendingRequests = team.pendingRequests || team.members?.filter((m) => m.status === 'pending_approval') || [];
+  const pendingInvites = team.pendingInvites || team.members?.filter((m) => m.status === 'pending_invite') || [];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-white">Team Management</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(`/teams/${team.id}`)}
+            className="px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors inline-flex items-center gap-2 text-sm"
+          >
+            <ExternalLink className="h-4 w-4" />
+            View Public Profile
+          </button>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors inline-flex items-center gap-2 text-sm"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Team
+          </button>
+        </div>
+      </div>
+
+      {/* Success/Error Messages */}
+      {success && (
+        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 text-green-400">
+          {success}
+        </div>
+      )}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Team Details Section */}
+      <div className="bg-slate-700 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white">Team Details</h3>
+          {!isEditingDetails ? (
+            <button
+              onClick={() => setIsEditingDetails(true)}
+              className="px-3 py-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors inline-flex items-center gap-2 text-sm"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEditingDetails(false)}
+                className="px-3 py-1.5 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDetails}
+                disabled={saving}
+                className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2 text-sm disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!isEditingDetails ? (
+          // Display mode
+          <div className="space-y-4">
+            <div className="flex items-start gap-4">
+              {team.logoUrl ? (
+                <img src={team.logoUrl} alt={team.name} className="w-20 h-20 rounded-lg object-cover" />
+              ) : (
+                <div className="w-20 h-20 rounded-lg bg-slate-600 flex items-center justify-center">
+                  <UsersIcon className="h-10 w-10 text-gray-400" />
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <h4 className="text-xl font-semibold text-white">{team.name}</h4>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    team.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                  }`}>
+                    {team.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 capitalize">
+                    {team.teamType?.replace('_', ' ')}
+                  </span>
+                </div>
+                {team.description && <p className="text-gray-400">{team.description}</p>}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-gray-500">Location</span>
+                <p className="text-white">{team.location || '-'}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Website</span>
+                <p className="text-white">{team.website || '-'}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Max Members</span>
+                <p className="text-white">{team.maxMembers}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Created</span>
+                <p className="text-white">{formatDate(team.createdAt)}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Public</span>
+                <p className="text-white">{team.isPublic ? 'Yes' : 'No'}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Requires Approval</span>
+                <p className="text-white">{team.requiresApproval ? 'Yes' : 'No'}</p>
+              </div>
+            </div>
+            {team.bio && (
+              <div>
+                <span className="text-gray-500 text-sm">Bio</span>
+                <p className="text-gray-300 whitespace-pre-wrap mt-1">{team.bio}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          // Edit mode
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Team Name</label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Team Type</label>
+              <select
+                value={editForm.teamType}
+                onChange={(e) => setEditForm({ ...editForm, teamType: e.target.value as any })}
+                className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+              >
+                {TEAM_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm text-gray-400 mb-1">Description</label>
+              <input
+                type="text"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+                placeholder="Short description"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm text-gray-400 mb-1">Bio</label>
+              <textarea
+                value={editForm.bio}
+                onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+                placeholder="Detailed bio/about section"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Location</label>
+              <input
+                type="text"
+                value={editForm.location}
+                onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Website</label>
+              <input
+                type="url"
+                value={editForm.website}
+                onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+                placeholder="https://"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Max Members</label>
+              <input
+                type="number"
+                value={editForm.maxMembers}
+                onChange={(e) => setEditForm({ ...editForm, maxMembers: parseInt(e.target.value) || 50 })}
+                min={1}
+                max={100}
+                className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editForm.isPublic}
+                  onChange={(e) => setEditForm({ ...editForm, isPublic: e.target.checked })}
+                  className="w-4 h-4 rounded border-slate-500 bg-slate-600 text-orange-500 focus:ring-orange-500"
+                />
+                <span className="text-sm text-gray-300">Public Team</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editForm.requiresApproval}
+                  onChange={(e) => setEditForm({ ...editForm, requiresApproval: e.target.checked })}
+                  className="w-4 h-4 rounded border-slate-500 bg-slate-600 text-orange-500 focus:ring-orange-500"
+                />
+                <span className="text-sm text-gray-300">Requires Approval</span>
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Member's Role in Team */}
+      <div className="bg-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">
+          {member.first_name}'s Role in Team
+        </h3>
+        <div className="flex items-center gap-4">
+          <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+            isOwner ? 'bg-orange-500/20 text-orange-400' :
+            memberRecord?.role === 'co_owner' ? 'bg-yellow-500/20 text-yellow-400' :
+            memberRecord?.role === 'moderator' ? 'bg-blue-500/20 text-blue-400' :
+            'bg-slate-500/20 text-slate-400'
+          }`}>
+            {isOwner ? 'Owner' : memberRecord?.role?.replace('_', ' ') || 'Member'}
+          </span>
+          <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+            memberRecord?.status === 'active' ? 'bg-green-500/20 text-green-400' :
+            memberRecord?.status === 'pending_approval' ? 'bg-yellow-500/20 text-yellow-400' :
+            'bg-gray-500/20 text-gray-400'
+          }`}>
+            {memberRecord?.status?.replace('_', ' ') || 'Unknown'}
+          </span>
+          {memberRecord?.joinedAt && (
+            <span className="text-sm text-gray-400">
+              Joined {formatDate(memberRecord.joinedAt)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Team Members Section */}
+      <div className="bg-slate-700 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white">
+            Team Members ({activeMembers.length}/{team.maxMembers})
+          </h3>
+          <button
+            onClick={() => setShowAddMemberModal(true)}
+            className="px-3 py-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors inline-flex items-center gap-2 text-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Add Member
+          </button>
+        </div>
+
+        {activeMembers.length === 0 ? (
+          <p className="text-gray-400 text-center py-4">No active members</p>
+        ) : (
+          <div className="space-y-2">
+            {activeMembers.map((teamMember) => (
+              <div
+                key={teamMember.id}
+                className="flex items-center justify-between p-3 bg-slate-600/50 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  {teamMember.user?.profile_picture_url ? (
+                    <img
+                      src={teamMember.user.profile_picture_url}
+                      alt={teamMember.user.first_name || 'Member'}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-500 flex items-center justify-center">
+                      <User className="h-5 w-5 text-gray-400" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-white font-medium">
+                      {teamMember.user?.first_name} {teamMember.user?.last_name}
+                      {teamMember.user?.meca_id && (
+                        <span className="text-orange-400 ml-2">#{teamMember.user.meca_id}</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-400">{teamMember.user?.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {changingRoleFor === teamMember.userId ? (
+                    <select
+                      value={teamMember.role}
+                      onChange={(e) => handleChangeRole(teamMember.userId, e.target.value as any)}
+                      onBlur={() => setChangingRoleFor(null)}
+                      autoFocus
+                      className="px-2 py-1 bg-slate-600 border border-slate-500 rounded text-sm text-white focus:border-orange-500 focus:outline-none"
+                    >
+                      {ROLE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <button
+                      onClick={() => setChangingRoleFor(teamMember.userId)}
+                      className={`px-2 py-1 rounded text-xs font-medium ${
+                        ROLE_OPTIONS.find((r) => r.value === teamMember.role)?.color || 'bg-slate-500/20 text-slate-400'
+                      } hover:opacity-80 transition-opacity`}
+                    >
+                      {teamMember.role.replace('_', ' ')}
+                    </button>
+                  )}
+                  {teamMember.role !== 'owner' && (
+                    <button
+                      onClick={() => handleRemoveMember(teamMember.userId)}
+                      className="p-1.5 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                      title="Remove member"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Pending Requests Section */}
+      {pendingRequests.length > 0 && (
+        <div className="bg-slate-700 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">
+            Pending Join Requests ({pendingRequests.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingRequests.map((request) => (
+              <div
+                key={request.id}
+                className="flex items-center justify-between p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  {request.user?.profile_picture_url ? (
+                    <img
+                      src={request.user.profile_picture_url}
+                      alt={request.user.first_name || 'Member'}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-500 flex items-center justify-center">
+                      <User className="h-5 w-5 text-gray-400" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-white font-medium">
+                      {request.user?.first_name} {request.user?.last_name}
+                    </p>
+                    {request.requestMessage && (
+                      <p className="text-xs text-gray-400 italic">"{request.requestMessage}"</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleApproveRequest(request.userId)}
+                    className="px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition-colors"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleRejectRequest(request.userId)}
+                    className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition-colors"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pending Invites Section */}
+      {pendingInvites.length > 0 && (
+        <div className="bg-slate-700 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">
+            Pending Invites ({pendingInvites.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingInvites.map((invite) => (
+              <div
+                key={invite.id}
+                className="flex items-center justify-between p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  {invite.user?.profile_picture_url ? (
+                    <img
+                      src={invite.user.profile_picture_url}
+                      alt={invite.user.first_name || 'Member'}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-500 flex items-center justify-center">
+                      <User className="h-5 w-5 text-gray-400" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-white font-medium">
+                      {invite.user?.first_name} {invite.user?.last_name}
+                    </p>
+                    <p className="text-xs text-gray-400">Invite sent</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleCancelInvite(invite.userId)}
+                  className="px-3 py-1.5 bg-slate-600 text-white rounded text-sm hover:bg-slate-500 transition-colors"
+                >
+                  Cancel Invite
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Ownership Section */}
+      <div className="bg-slate-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Transfer Ownership</h3>
+        <p className="text-gray-400 text-sm mb-4">
+          Transfer team ownership to another active member. The current owner will become a co-owner.
+        </p>
+        <button
+          onClick={() => setShowTransferModal(true)}
+          className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors inline-flex items-center gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Transfer Ownership
+        </button>
+      </div>
+
+      {/* Add Member Modal */}
+      {showAddMemberModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-white mb-4">Add Team Member</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Search by MECA ID</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={mecaIdSearch}
+                    onChange={(e) => setMecaIdSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLookupMember()}
+                    placeholder="Enter MECA ID"
+                    className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleLookupMember}
+                    disabled={lookingUpMember || !mecaIdSearch.trim()}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
+                  >
+                    {lookingUpMember ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+              </div>
+
+              {memberLookupResult && (
+                <div className={`p-4 rounded-lg ${
+                  memberLookupResult.found && memberLookupResult.member?.canInvite
+                    ? 'bg-green-500/10 border border-green-500/20'
+                    : 'bg-red-500/10 border border-red-500/20'
+                }`}>
+                  {memberLookupResult.found && memberLookupResult.member ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {memberLookupResult.member.profile_picture_url ? (
+                          <img
+                            src={memberLookupResult.member.profile_picture_url}
+                            alt="Member"
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center">
+                            <User className="h-5 w-5 text-gray-400" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-white font-medium">
+                            {memberLookupResult.member.first_name} {memberLookupResult.member.last_name}
+                          </p>
+                          <p className="text-xs text-gray-400">MECA #{memberLookupResult.member.meca_id}</p>
+                        </div>
+                      </div>
+                      {memberLookupResult.member.canInvite ? (
+                        <button
+                          onClick={() => handleAddMember(memberLookupResult.member.id)}
+                          disabled={addingMember}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {addingMember ? 'Adding...' : 'Add to Team'}
+                        </button>
+                      ) : (
+                        <span className="text-sm text-red-400">{memberLookupResult.member.reason}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-red-400">{memberLookupResult.message || 'Member not found'}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddMemberModal(false);
+                  setMecaIdSearch('');
+                  setMemberLookupResult(null);
+                }}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Ownership Modal */}
+      {showTransferModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-white mb-4">Transfer Team Ownership</h3>
+            <div className="space-y-4">
+              <p className="text-gray-400 text-sm">
+                Select a member to become the new team owner. The current owner will be demoted to co-owner.
+              </p>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">New Owner</label>
+                <select
+                  value={transferTargetId}
+                  onChange={(e) => setTransferTargetId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-orange-500 focus:outline-none"
+                >
+                  <option value="">Select a member</option>
+                  {activeMembers
+                    .filter((m) => m.role !== 'owner')
+                    .map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.user?.first_name} {m.user?.last_name} ({m.role.replace('_', ' ')})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowTransferModal(false);
+                  setTransferTargetId('');
+                }}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTransferOwnership}
+                disabled={!transferTargetId || transferring}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50"
+              >
+                {transferring ? 'Transferring...' : 'Transfer Ownership'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Team Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="h-6 w-6 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Delete Team</h3>
+                <p className="text-sm text-gray-400">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete <strong>{team.name}</strong>? This will remove all team members
+              and permanently delete the team.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteTeam}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete Team'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2335,12 +3434,48 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [membershipTypes, setMembershipTypes] = useState<MembershipTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-  const [selectedTypeId, setSelectedTypeId] = useState('');
-  const [durationMonths, setDurationMonths] = useState(12);
-  const [notes, setNotes] = useState('');
+  const [showMembershipWizard, setShowMembershipWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Team name editing state
+  const [showTeamNameModal, setShowTeamNameModal] = useState(false);
+  const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [savingTeamName, setSavingTeamName] = useState(false);
+  // Full edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState<{
+    paymentStatus: string;
+    startDate: string;
+    endDate: string;
+    competitorName: string;
+    vehicleMake: string;
+    vehicleModel: string;
+    vehicleColor: string;
+    vehicleLicensePlate: string;
+    hasTeamAddon: boolean;
+    teamName: string;
+    teamDescription: string;
+    businessName: string;
+    businessWebsite: string;
+  }>({
+    paymentStatus: 'paid',
+    startDate: '',
+    endDate: '',
+    competitorName: '',
+    vehicleMake: '',
+    vehicleModel: '',
+    vehicleColor: '',
+    vehicleLicensePlate: '',
+    hasTeamAddon: false,
+    teamName: '',
+    teamDescription: '',
+    businessName: '',
+    businessWebsite: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+  // Secondary membership modal state
+  const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
+  const [selectedMasterMembership, setSelectedMasterMembership] = useState<Membership | null>(null);
 
   useEffect(() => {
     fetchMemberships();
@@ -2368,33 +3503,10 @@ function MembershipsTab({ member }: { member: Profile }) {
     }
   };
 
-  const handleAssignMembership = async () => {
-    if (!selectedTypeId) {
-      alert('Please select a membership type');
-      return;
-    }
-
-    setAssigning(true);
-    try {
-      await membershipsApi.adminAssign({
-        userId: member.id,
-        membershipTypeConfigId: selectedTypeId,
-        durationMonths,
-        notes: notes || undefined,
-      });
-
-      setShowAssignModal(false);
-      setSelectedTypeId('');
-      setDurationMonths(12);
-      setNotes('');
-      fetchMemberships();
-      alert('Membership assigned successfully!');
-    } catch (error) {
-      console.error('Error assigning membership:', error);
-      alert('Failed to assign membership');
-    } finally {
-      setAssigning(false);
-    }
+  // Handler for when a membership is created via the wizard
+  const handleMembershipCreated = (result: AdminCreateMembershipResult) => {
+    fetchMemberships();
+    alert(result.message);
   };
 
   const handleDeleteMembership = async (membershipId: string) => {
@@ -2412,6 +3524,112 @@ function MembershipsTab({ member }: { member: Profile }) {
       alert('Failed to delete membership');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleEditTeamName = (membership: Membership) => {
+    setEditingMembership(membership);
+    setNewTeamName(membership.teamName || '');
+    setShowTeamNameModal(true);
+  };
+
+  const handleSaveTeamName = async () => {
+    if (!editingMembership || !newTeamName.trim()) {
+      alert('Please enter a team name');
+      return;
+    }
+
+    setSavingTeamName(true);
+    try {
+      // Pass isAdmin=true to bypass the 30-day edit window
+      await membershipsApi.updateTeamName(editingMembership.id, newTeamName.trim(), true);
+      setShowTeamNameModal(false);
+      setEditingMembership(null);
+      setNewTeamName('');
+      fetchMemberships();
+      alert('Team name updated successfully!');
+    } catch (error) {
+      console.error('Error updating team name:', error);
+      alert('Failed to update team name');
+    } finally {
+      setSavingTeamName(false);
+    }
+  };
+
+  const handleOpenEditModal = (membership: Membership) => {
+    setEditingMembership(membership);
+    // Format dates for input[type="date"]
+    const formatForInput = (dateStr: string | undefined) => {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      return date.toISOString().split('T')[0];
+    };
+    setEditFormData({
+      paymentStatus: membership.paymentStatus || 'paid',
+      startDate: formatForInput(membership.startDate),
+      endDate: formatForInput(membership.endDate),
+      competitorName: membership.competitorName || '',
+      vehicleMake: membership.vehicleMake || '',
+      vehicleModel: membership.vehicleModel || '',
+      vehicleColor: membership.vehicleColor || '',
+      vehicleLicensePlate: membership.vehicleLicensePlate || '',
+      hasTeamAddon: membership.hasTeamAddon || false,
+      teamName: membership.teamName || '',
+      teamDescription: membership.teamDescription || '',
+      businessName: membership.businessName || '',
+      businessWebsite: membership.businessWebsite || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleAddSecondary = (membership: Membership) => {
+    setSelectedMasterMembership(membership);
+    setShowAddSecondaryModal(true);
+  };
+
+  const handleSecondaryCreated = () => {
+    fetchMemberships();
+    setShowAddSecondaryModal(false);
+    setSelectedMasterMembership(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMembership) return;
+
+    setSavingEdit(true);
+    try {
+      const updateData: any = {
+        paymentStatus: editFormData.paymentStatus,
+        competitorName: editFormData.competitorName || undefined,
+        vehicleMake: editFormData.vehicleMake || undefined,
+        vehicleModel: editFormData.vehicleModel || undefined,
+        vehicleColor: editFormData.vehicleColor || undefined,
+        vehicleLicensePlate: editFormData.vehicleLicensePlate || undefined,
+        hasTeamAddon: editFormData.hasTeamAddon,
+        teamName: editFormData.teamName || undefined,
+        teamDescription: editFormData.teamDescription || undefined,
+        businessName: editFormData.businessName || undefined,
+        businessWebsite: editFormData.businessWebsite || undefined,
+      };
+
+      // Only include dates if they're valid
+      if (editFormData.startDate) {
+        updateData.startDate = new Date(editFormData.startDate).toISOString();
+      }
+      if (editFormData.endDate) {
+        updateData.endDate = new Date(editFormData.endDate).toISOString();
+      }
+
+      await membershipsApi.update(editingMembership.id, updateData);
+      setShowEditModal(false);
+      setEditingMembership(null);
+      fetchMemberships();
+      alert('Membership updated successfully!');
+    } catch (error) {
+      console.error('Error updating membership:', error);
+      alert('Failed to update membership');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -2467,7 +3685,7 @@ function MembershipsTab({ member }: { member: Profile }) {
         <h2 className="text-2xl font-bold text-white">Memberships & Subscriptions</h2>
         {canEdit && (
           <button
-            onClick={() => setShowAssignModal(true)}
+            onClick={() => setShowMembershipWizard(true)}
             className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -2482,7 +3700,7 @@ function MembershipsTab({ member }: { member: Profile }) {
           <p>No memberships found</p>
           {canEdit && (
             <button
-              onClick={() => setShowAssignModal(true)}
+              onClick={() => setShowMembershipWizard(true)}
               className="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -2508,6 +3726,15 @@ function MembershipsTab({ member }: { member: Profile }) {
                     {getStatusBadge(membership)}
                   </div>
                   <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                    {/* MECA ID - prominently displayed */}
+                    {membership.mecaId && (
+                      <div className="col-span-2 mb-2">
+                        <span className="text-gray-400">MECA ID: </span>
+                        <span className="text-orange-400 font-mono font-semibold text-lg">
+                          #{membership.mecaId}
+                        </span>
+                      </div>
+                    )}
                     <div>
                       <span className="text-gray-400">Category: </span>
                       <span className="text-gray-200">
@@ -2520,6 +3747,68 @@ function MembershipsTab({ member }: { member: Profile }) {
                         ${membership.amountPaid?.toFixed(2) || '0.00'}
                       </span>
                     </div>
+                    {/* Competitor Name */}
+                    {membership.competitorName && (
+                      <div>
+                        <span className="text-gray-400">Competitor: </span>
+                        <span className="text-gray-200">{membership.competitorName}</span>
+                      </div>
+                    )}
+                    {/* Vehicle Info */}
+                    {(membership.vehicleMake || membership.vehicleModel) && (
+                      <div>
+                        <span className="text-gray-400">Vehicle: </span>
+                        <span className="text-gray-200">
+                          {[membership.vehicleMake, membership.vehicleModel].filter(Boolean).join(' ')}
+                          {membership.vehicleColor && ` (${membership.vehicleColor})`}
+                        </span>
+                      </div>
+                    )}
+                    {membership.vehicleLicensePlate && (
+                      <div>
+                        <span className="text-gray-400">License Plate: </span>
+                        <span className="text-gray-200 font-mono">{membership.vehicleLicensePlate}</span>
+                      </div>
+                    )}
+                    {/* Team Info */}
+                    {membership.hasTeamAddon && (
+                      <div>
+                        <span className="text-gray-400">Team Add-on: </span>
+                        <span className="text-green-400">Yes</span>
+                      </div>
+                    )}
+                    {membership.teamName && (
+                      <div className="col-span-2">
+                        <span className="text-gray-400">Team Name: </span>
+                        <span className="text-gray-200">{membership.teamName}</span>
+                        {canEdit && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditTeamName(membership);
+                            }}
+                            className="ml-2 text-orange-400 hover:text-orange-300 text-xs"
+                          >
+                            (Edit)
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {/* Business Info */}
+                    {membership.businessName && (
+                      <div>
+                        <span className="text-gray-400">Business: </span>
+                        <span className="text-gray-200">{membership.businessName}</span>
+                      </div>
+                    )}
+                    {membership.businessWebsite && (
+                      <div>
+                        <span className="text-gray-400">Website: </span>
+                        <a href={membership.businessWebsite} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
+                          {membership.businessWebsite}
+                        </a>
+                      </div>
+                    )}
                     <div>
                       <span className="text-gray-400">Start Date: </span>
                       <span className="text-gray-200">
@@ -2544,6 +3833,23 @@ function MembershipsTab({ member }: { member: Profile }) {
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-2 ml-4">
+                    {/* Add Secondary button - only for non-secondary memberships with paid status */}
+                    {membership.accountType !== 'secondary' && membership.paymentStatus === 'paid' && (
+                      <button
+                        onClick={() => handleAddSecondary(membership)}
+                        className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                        title="Add secondary member"
+                      >
+                        <UserPlus className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleOpenEditModal(membership)}
+                      className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
+                      title="Edit membership"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => handleDeleteMembership(membership.id)}
                       disabled={deletingId === membership.id}
@@ -2564,94 +3870,328 @@ function MembershipsTab({ member }: { member: Profile }) {
         </div>
       )}
 
-      {/* Assign Membership Modal */}
-      {showAssignModal && (
+      {/* Create Membership Wizard */}
+      <AdminMembershipWizard
+        userId={member.id}
+        userEmail={member.email}
+        userFirstName={member.first_name}
+        userLastName={member.last_name}
+        userPhone={member.phone}
+        isOpen={showMembershipWizard}
+        onClose={() => setShowMembershipWizard(false)}
+        onSuccess={handleMembershipCreated}
+      />
+
+      {/* Edit Team Name Modal */}
+      {showTeamNameModal && editingMembership && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4">
             <h2 className="text-2xl font-bold text-white mb-4">
-              Assign Membership to {member.first_name} {member.last_name}
+              Edit Team Name
             </h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Membership Type *
-                </label>
-                <select
-                  value={selectedTypeId}
-                  onChange={(e) => setSelectedTypeId(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="">Select a membership type</option>
-                  {membershipTypes.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name} - ${type.price} ({type.category})
-                    </option>
-                  ))}
-                </select>
+              <div className="bg-slate-700 rounded-lg p-3 text-sm">
+                <p className="text-gray-400">Membership:</p>
+                <p className="text-white font-medium">
+                  {editingMembership.membershipTypeConfig?.name}
+                  {editingMembership.mecaId && (
+                    <span className="ml-2 text-orange-400 font-mono">
+                      (MECA #{editingMembership.mecaId})
+                    </span>
+                  )}
+                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Duration (months)
+                  Team Name
                 </label>
-                <select
-                  value={durationMonths}
-                  onChange={(e) => setDurationMonths(parseInt(e.target.value))}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value={1}>1 month</option>
-                  <option value={3}>3 months</option>
-                  <option value={6}>6 months</option>
-                  <option value={12}>12 months (1 year)</option>
-                  <option value={24}>24 months (2 years)</option>
-                  <option value={36}>36 months (3 years)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Notes (optional)
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g., Comp membership for event director"
-                  rows={3}
+                <input
+                  type="text"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  placeholder="Enter team name"
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
                 />
               </div>
 
-              <div className="bg-slate-700 rounded-lg p-3 text-sm text-gray-300">
-                <p className="font-medium text-white mb-1">Note:</p>
-                <p>This will create a paid membership for this user without requiring payment. The transaction will be marked as an admin assignment.</p>
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-400">
+                <p className="font-medium mb-1">Admin Override</p>
+                <p>As an admin, you can edit the team name at any time. Regular users can only edit within 30 days of purchase/renewal.</p>
               </div>
 
               <div className="flex gap-3 justify-end pt-2">
                 <button
                   onClick={() => {
-                    setShowAssignModal(false);
-                    setSelectedTypeId('');
-                    setDurationMonths(12);
-                    setNotes('');
+                    setShowTeamNameModal(false);
+                    setEditingMembership(null);
+                    setNewTeamName('');
                   }}
                   className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
-                  disabled={assigning}
+                  disabled={savingTeamName}
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleAssignMembership}
-                  disabled={assigning || !selectedTypeId}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  onClick={handleSaveTeamName}
+                  disabled={savingTeamName || !newTeamName.trim()}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Plus className="h-4 w-4" />
-                  {assigning ? 'Assigning...' : 'Assign Membership'}
+                  {savingTeamName ? 'Saving...' : 'Save Team Name'}
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Membership Modal */}
+      {showEditModal && editingMembership && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto py-4">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-white mb-4">
+              Edit Membership
+            </h2>
+
+            <div className="bg-slate-700 rounded-lg p-3 mb-4">
+              <p className="text-gray-400 text-sm">Membership Type:</p>
+              <p className="text-white font-medium">
+                {editingMembership.membershipTypeConfig?.name}
+                {editingMembership.mecaId && (
+                  <span className="ml-2 text-orange-400 font-mono">
+                    (MECA #{editingMembership.mecaId})
+                  </span>
+                )}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Status & Dates Section */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Payment Status
+                  </label>
+                  <select
+                    value={editFormData.paymentStatus}
+                    onChange={(e) => setEditFormData({ ...editFormData, paymentStatus: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.startDate}
+                    onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.endDate}
+                    onChange={(e) => setEditFormData({ ...editFormData, endDate: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+
+              {/* Competitor Info Section */}
+              <div className="border-t border-slate-600 pt-4">
+                <h3 className="text-lg font-medium text-white mb-3">Competitor Info</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Competitor Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.competitorName}
+                      onChange={(e) => setEditFormData({ ...editFormData, competitorName: e.target.value })}
+                      placeholder="Competitor name"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Vehicle Info Section */}
+              <div className="border-t border-slate-600 pt-4">
+                <h3 className="text-lg font-medium text-white mb-3">Vehicle Info</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Make
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.vehicleMake}
+                      onChange={(e) => setEditFormData({ ...editFormData, vehicleMake: e.target.value })}
+                      placeholder="e.g., Toyota"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Model
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.vehicleModel}
+                      onChange={(e) => setEditFormData({ ...editFormData, vehicleModel: e.target.value })}
+                      placeholder="e.g., Camry"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Color
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.vehicleColor}
+                      onChange={(e) => setEditFormData({ ...editFormData, vehicleColor: e.target.value })}
+                      placeholder="e.g., Black"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      License Plate
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.vehicleLicensePlate}
+                      onChange={(e) => setEditFormData({ ...editFormData, vehicleLicensePlate: e.target.value })}
+                      placeholder="License plate"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Team Info Section */}
+              <div className="border-t border-slate-600 pt-4">
+                <h3 className="text-lg font-medium text-white mb-3">Team Info</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="hasTeamAddon"
+                      checked={editFormData.hasTeamAddon}
+                      onChange={(e) => setEditFormData({ ...editFormData, hasTeamAddon: e.target.checked })}
+                      className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                    />
+                    <label htmlFor="hasTeamAddon" className="text-gray-300">
+                      Has Team Add-on
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Team Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.teamName}
+                        onChange={(e) => setEditFormData({ ...editFormData, teamName: e.target.value })}
+                        placeholder="Team name"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Team Description
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.teamDescription}
+                        onChange={(e) => setEditFormData({ ...editFormData, teamDescription: e.target.value })}
+                        placeholder="Team description"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Business Info Section */}
+              <div className="border-t border-slate-600 pt-4">
+                <h3 className="text-lg font-medium text-white mb-3">Business Info</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Business Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.businessName}
+                      onChange={(e) => setEditFormData({ ...editFormData, businessName: e.target.value })}
+                      placeholder="Business name"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Business Website
+                    </label>
+                    <input
+                      type="url"
+                      value={editFormData.businessWebsite}
+                      onChange={(e) => setEditFormData({ ...editFormData, businessWebsite: e.target.value })}
+                      placeholder="https://..."
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-slate-600">
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingMembership(null);
+                  }}
+                  className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
+                  disabled={savingEdit}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Secondary Modal */}
+      {selectedMasterMembership && (
+        <AddSecondaryModal
+          isOpen={showAddSecondaryModal}
+          onClose={() => {
+            setShowAddSecondaryModal(false);
+            setSelectedMasterMembership(null);
+          }}
+          masterMembershipId={selectedMasterMembership.id}
+          onSuccess={handleSecondaryCreated}
+        />
       )}
     </div>
   );

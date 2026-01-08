@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { notificationsApi, Notification } from '@/notifications';
 
-// Feature flag - set to true when notifications backend is ready
-const NOTIFICATIONS_ENABLED = false;
+// Feature flag - notifications backend is ready
+const NOTIFICATIONS_ENABLED = true;
 
 export function useNotifications(userId: string | undefined, limit: number = 10) {
   const [notifications, setNotifications] = useState<Notification[]>([]);

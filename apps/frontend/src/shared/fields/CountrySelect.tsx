@@ -48,7 +48,7 @@ const countries: Country[] = [
   { code: 'GB', name: 'United Kingdom' },
   // Separator
   { code: '---', name: '────────────────' },
-  // All countries alphabetically
+  // All countries alphabetically (excluding those already in common section)
   { code: 'AF', name: 'Afghanistan' },
   { code: 'AL', name: 'Albania' },
   { code: 'DZ', name: 'Algeria' },
@@ -57,7 +57,6 @@ const countries: Country[] = [
   { code: 'AT', name: 'Austria' },
   { code: 'BE', name: 'Belgium' },
   { code: 'BR', name: 'Brazil' },
-  { code: 'CA', name: 'Canada' },
   { code: 'CL', name: 'Chile' },
   { code: 'CN', name: 'China' },
   { code: 'CO', name: 'Colombia' },
@@ -79,7 +78,6 @@ const countries: Country[] = [
   { code: 'IT', name: 'Italy' },
   { code: 'JP', name: 'Japan' },
   { code: 'KR', name: 'South Korea' },
-  { code: 'MX', name: 'Mexico' },
   { code: 'NL', name: 'Netherlands' },
   { code: 'NZ', name: 'New Zealand' },
   { code: 'NO', name: 'Norway' },
@@ -98,8 +96,6 @@ const countries: Country[] = [
   { code: 'TR', name: 'Turkey' },
   { code: 'UA', name: 'Ukraine' },
   { code: 'AE', name: 'United Arab Emirates' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'US', name: 'United States' },
   { code: 'VN', name: 'Vietnam' },
 ];
 

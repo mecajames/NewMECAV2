@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
-import { Navbar, Footer, ScrollToTop } from '@/shared/components';
+import { Navbar, Footer, ScrollToTop, ImpersonationBanner } from '@/shared/components';
 // Static pages
 import HomePage from '@/pages/HomePage';
 import ContactPage from '@/pages/ContactPage';
@@ -24,9 +24,12 @@ import { MembershipPage } from '@/memberships';
 import { HostEventPage } from '@/event-hosting-requests';
 import { ClassCalculatorPage, ClassesManagementPage } from '@/competition-classes';
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
-import { BillingPage } from '@/billing';
-import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage, EventRegistrationDetailPage, BusinessListingsAdminPage } from '@/admin';
-import { BillingDashboardPage, OrdersPage as AdminOrdersPage, InvoicesPage as AdminInvoicesPage, RevenueReportsPage } from '@/admin/billing';
+import { BillingPage, InvoicePaymentPage } from '@/billing';
+import { JudgeApplicationPage, JudgesDirectoryPage, JudgeProfilePage, JudgeAssignmentsPage } from '@/judges';
+import { EventDirectorApplicationPage, EventDirectorsDirectoryPage, EventDirectorProfilePage, EventDirectorAssignmentsPage } from '@/event-directors';
+import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage, EventRegistrationDetailPage, BusinessListingsAdminPage, JudgeApplicationsAdminPage, JudgeApplicationDetailPage, EventDirectorApplicationsAdminPage, EventDirectorApplicationDetailPage, JudgesAdminPage, AdminJudgeDetailPage, EventDirectorsAdminPage, AdminEventDirectorDetailPage, RatingsAdminPage, NotificationsAdminPage, WorldFinalsAdminPage } from '@/admin';
+import { AchievementsAdminPage } from '@/achievements';
+import { BillingDashboardPage, OrdersPage as AdminOrdersPage, InvoicesPage as AdminInvoicesPage, RevenueReportsPage, OrderDetailPage, InvoiceDetailPage } from '@/admin/billing';
 import { SeasonManagementPage } from '@/seasons';
 import {
   MyRegistrationsPage,
@@ -62,6 +65,7 @@ function App() {
       <ReCaptchaProvider version="v2">
         <BrowserRouter>
           <ScrollToTop />
+          <ImpersonationBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
             <ForcePasswordChangeGuard>
@@ -94,6 +98,9 @@ function App() {
               <Route path="/competition-guides" element={<CompetitionGuidesPage />} />
               <Route path="/competition-guides/quick-start" element={<MECAQuickStartGuidePage />} />
 
+              {/* Public Invoice Payment Route */}
+              <Route path="/pay/invoice/:invoiceId" element={<InvoicePaymentPage />} />
+
               {/* Public Member Directory Routes */}
               <Route path="/members" element={<MemberDirectoryPage />} />
               <Route path="/members/:id" element={<MemberProfilePage />} />
@@ -109,6 +116,18 @@ function App() {
               <Route path="/manufacturers/:id" element={<ManufacturerProfilePage />} />
               <Route path="/manufacturer-membership" element={<ManufacturerPartnerInfoPage />} />
 
+              {/* Public Judges Directory Routes */}
+              <Route path="/judges" element={<JudgesDirectoryPage />} />
+              <Route path="/judges/apply" element={<JudgeApplicationPage />} />
+              <Route path="/judges/assignments" element={<JudgeAssignmentsPage />} />
+              <Route path="/judges/:id" element={<JudgeProfilePage />} />
+
+              {/* Public Event Directors Directory Routes */}
+              <Route path="/event-directors" element={<EventDirectorsDirectoryPage />} />
+              <Route path="/event-directors/apply" element={<EventDirectorApplicationPage />} />
+              <Route path="/event-directors/assignments" element={<EventDirectorAssignmentsPage />} />
+              <Route path="/event-directors/:id" element={<EventDirectorProfilePage />} />
+
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/dashboard/mymeca" element={<MyMecaDashboardPage />} />
@@ -118,6 +137,8 @@ function App() {
               <Route path="/billing" element={<BillingPage />} />
               <Route path="/membership" element={<MembershipPage />} />
               <Route path="/membership/checkout/:membershipId" element={<Suspense fallback={<PageLoader />}><MembershipCheckoutPage /></Suspense>} />
+              <Route path="/apply/judge" element={<JudgeApplicationPage />} />
+              <Route path="/apply/event-director" element={<EventDirectorApplicationPage />} />
               <Route path="/my-registrations" element={<MyRegistrationsPage />} />
 
               {/* Support Ticket Routes (Authenticated) */}
@@ -143,11 +164,25 @@ function App() {
               <Route path="/admin/event-registrations/:id" element={<EventRegistrationDetailPage />} />
               <Route path="/admin/check-in" element={<CheckInHubPage />} />
               <Route path="/admin/business-listings" element={<BusinessListingsAdminPage />} />
+              <Route path="/admin/judge-applications" element={<JudgeApplicationsAdminPage />} />
+              <Route path="/admin/judge-applications/:id" element={<JudgeApplicationDetailPage />} />
+              <Route path="/admin/event-director-applications" element={<EventDirectorApplicationsAdminPage />} />
+              <Route path="/admin/event-director-applications/:id" element={<EventDirectorApplicationDetailPage />} />
+              <Route path="/admin/judges" element={<JudgesAdminPage />} />
+              <Route path="/admin/judges/:id" element={<AdminJudgeDetailPage />} />
+              <Route path="/admin/event-directors" element={<EventDirectorsAdminPage />} />
+              <Route path="/admin/event-directors/:id" element={<AdminEventDirectorDetailPage />} />
+              <Route path="/admin/ratings" element={<RatingsAdminPage />} />
+              <Route path="/admin/notifications" element={<NotificationsAdminPage />} />
+              <Route path="/admin/world-finals" element={<WorldFinalsAdminPage />} />
+              <Route path="/admin/achievements" element={<AchievementsAdminPage />} />
 
               {/* Admin Billing Routes */}
               <Route path="/admin/billing" element={<BillingDashboardPage />} />
               <Route path="/admin/billing/orders" element={<AdminOrdersPage />} />
+              <Route path="/admin/billing/orders/:id" element={<OrderDetailPage />} />
               <Route path="/admin/billing/invoices" element={<AdminInvoicesPage />} />
+              <Route path="/admin/billing/invoices/:id" element={<InvoiceDetailPage />} />
               <Route path="/admin/billing/revenue" element={<RevenueReportsPage />} />
 
               {/* Catch all - redirect to home */}

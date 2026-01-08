@@ -12,6 +12,35 @@ import { billingApi, BillingDashboardStats } from '../../../api-client/billing.a
 
 type DateRange = 'week' | 'month' | 'quarter' | 'year' | 'all';
 
+// Helper to get date range params for export
+const getDateRangeFromSelection = (range: DateRange): { startDate?: string; endDate?: string } => {
+  const now = new Date();
+  const endDate = now.toISOString().split('T')[0];
+
+  let startDate: string | undefined;
+
+  switch (range) {
+    case 'week':
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      break;
+    case 'month':
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      break;
+    case 'quarter':
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      break;
+    case 'year':
+      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      break;
+    case 'all':
+    default:
+      // No date filters for 'all'
+      return {};
+  }
+
+  return { startDate, endDate };
+};
+
 export default function RevenueReportsPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<BillingDashboardStats | null>(null);
@@ -19,6 +48,9 @@ export default function RevenueReportsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>('month');
+
+  // Get date range params for current selection
+  const getDateRangeParams = () => getDateRangeFromSelection(dateRange);
 
   const fetchStats = async (showRefresh = false) => {
     try {
@@ -69,19 +101,11 @@ export default function RevenueReportsPage() {
       <div className="border-b border-slate-700 bg-slate-800">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/admin/billing')}
-                className="rounded-full p-2 text-gray-400 hover:bg-slate-700 hover:text-white"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-white">Revenue Reports</h1>
-                <p className="text-sm text-gray-400">
-                  View detailed revenue analytics and trends
-                </p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Revenue Reports</h1>
+              <p className="text-sm text-gray-400">
+                View detailed revenue analytics and trends
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -92,11 +116,43 @@ export default function RevenueReportsPage() {
                 <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
+              <div className="relative group">
+                <button
+                  className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+                >
+                  <Download className="h-4 w-4" />
+                  Export
+                </button>
+                {/* Export dropdown menu */}
+                <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-md shadow-lg border border-slate-600 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                  <div className="py-1">
+                    <button
+                      onClick={() => billingApi.downloadRevenueExport(getDateRangeParams())}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700"
+                    >
+                      Revenue Report (CSV)
+                    </button>
+                    <button
+                      onClick={() => billingApi.downloadOrdersExport(getDateRangeParams())}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700"
+                    >
+                      All Orders (CSV)
+                    </button>
+                    <button
+                      onClick={() => billingApi.downloadInvoicesExport(getDateRangeParams())}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700"
+                    >
+                      All Invoices (CSV)
+                    </button>
+                  </div>
+                </div>
+              </div>
               <button
-                className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+                onClick={() => navigate('/admin/billing')}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
               >
-                <Download className="h-4 w-4" />
-                Export
+                <ArrowLeft className="h-5 w-5" />
+                Back to Billing
               </button>
             </div>
           </div>

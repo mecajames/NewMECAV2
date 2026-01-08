@@ -7,6 +7,7 @@ import { z } from 'zod';
 export enum UserRole {
   USER = 'user',
   EVENT_DIRECTOR = 'event_director',
+  JUDGE = 'judge',
   RETAILER = 'retailer',
   ADMIN = 'admin',
 }
@@ -186,6 +187,16 @@ export enum AccountType {
   MEMBER = 'member',
 }
 
+// Master/Secondary Membership Account Type
+// - INDEPENDENT: Default standalone membership with own billing
+// - MASTER: Primary account that controls billing for linked secondaries
+// - SECONDARY: Linked to a master, billing managed by master
+export enum MembershipAccountType {
+  INDEPENDENT = 'independent',
+  MASTER = 'master',
+  SECONDARY = 'secondary',
+}
+
 // =============================================================================
 // Support Ticket Enums
 // =============================================================================
@@ -227,6 +238,81 @@ export enum TicketDepartment {
 }
 
 // =============================================================================
+// Judge & Event Director System Enums
+// =============================================================================
+
+export enum ApplicationStatus {
+  PENDING = 'pending',
+  UNDER_REVIEW = 'under_review',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+}
+
+export enum JudgeLevel {
+  IN_TRAINING = 'in_training',
+  CERTIFIED = 'certified',
+  HEAD_JUDGE = 'head_judge',
+  MASTER_JUDGE = 'master_judge',
+}
+
+export enum JudgeSpecialty {
+  SQL = 'sql',
+  SPL = 'spl',
+  BOTH = 'both',
+}
+
+export enum SeasonQualificationStatus {
+  QUALIFIED = 'qualified',
+  PENDING = 'pending',
+  INACTIVE = 'inactive',
+  SUSPENDED = 'suspended',
+}
+
+export enum EventAssignmentRole {
+  PRIMARY = 'primary',
+  SUPPORTING = 'supporting',
+  TRAINEE = 'trainee',
+}
+
+export enum EventAssignmentStatus {
+  REQUESTED = 'requested',
+  ACCEPTED = 'accepted',
+  DECLINED = 'declined',
+  CONFIRMED = 'confirmed',
+  COMPLETED = 'completed',
+  NO_SHOW = 'no_show',
+}
+
+export enum AssignmentRequestType {
+  ED_REQUEST = 'ed_request',
+  JUDGE_VOLUNTEER = 'judge_volunteer',
+  ADMIN_ASSIGN = 'admin_assign',
+}
+
+export enum RatingEntityType {
+  JUDGE = 'judge',
+  EVENT_DIRECTOR = 'event_director',
+}
+
+export enum ApplicationEntryMethod {
+  SELF = 'self',
+  ADMIN_APPLICATION = 'admin_application',
+  ADMIN_DIRECT = 'admin_direct',
+}
+
+export enum VerificationPurpose {
+  JUDGE_APPLICATION = 'judge_application',
+  ED_APPLICATION = 'ed_application',
+  OTHER = 'other',
+}
+
+export enum WeekendAvailability {
+  SATURDAY = 'saturday',
+  SUNDAY = 'sunday',
+  BOTH = 'both',
+}
+
+// =============================================================================
 // Zod Schemas (using z.nativeEnum for type safety)
 // =============================================================================
 
@@ -255,9 +341,23 @@ export const AuditActionSchema = z.nativeEnum(AuditAction);
 export const MembershipCategorySchema = z.nativeEnum(MembershipCategory);
 export const ManufacturerTierSchema = z.nativeEnum(ManufacturerTier);
 export const AccountTypeSchema = z.nativeEnum(AccountType);
+export const MembershipAccountTypeSchema = z.nativeEnum(MembershipAccountType);
 
 // Support Ticket Schemas
 export const TicketStatusSchema = z.nativeEnum(TicketStatus);
 export const TicketPrioritySchema = z.nativeEnum(TicketPriority);
 export const TicketCategorySchema = z.nativeEnum(TicketCategory);
 export const TicketDepartmentSchema = z.nativeEnum(TicketDepartment);
+
+// Judge & Event Director Schemas
+export const ApplicationStatusSchema = z.nativeEnum(ApplicationStatus);
+export const JudgeLevelSchema = z.nativeEnum(JudgeLevel);
+export const JudgeSpecialtySchema = z.nativeEnum(JudgeSpecialty);
+export const SeasonQualificationStatusSchema = z.nativeEnum(SeasonQualificationStatus);
+export const EventAssignmentRoleSchema = z.nativeEnum(EventAssignmentRole);
+export const EventAssignmentStatusSchema = z.nativeEnum(EventAssignmentStatus);
+export const AssignmentRequestTypeSchema = z.nativeEnum(AssignmentRequestType);
+export const RatingEntityTypeSchema = z.nativeEnum(RatingEntityType);
+export const ApplicationEntryMethodSchema = z.nativeEnum(ApplicationEntryMethod);
+export const VerificationPurposeSchema = z.nativeEnum(VerificationPurpose);
+export const WeekendAvailabilitySchema = z.nativeEnum(WeekendAvailability);

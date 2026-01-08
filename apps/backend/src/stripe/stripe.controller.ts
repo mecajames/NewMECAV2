@@ -22,7 +22,7 @@ import { MembershipTypeConfig } from '../membership-type-configs/membership-type
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Payment } from '../payments/payments.entity';
-import { MembershipType, PaymentIntentResult, OrderType, OrderItemType } from '@newmeca/shared';
+import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus } from '@newmeca/shared';
 import Stripe from 'stripe';
 
 interface CreateMembershipPaymentIntentDto {
@@ -73,8 +73,21 @@ interface CreateEventRegistrationPaymentIntentDto {
   membershipTypeConfigId?: string;
   // User info (if logged in)
   userId?: string;
+  // MECA ID (for users with active memberships)
+  mecaId?: number;
   // Test mode - skip Stripe and mark as paid
   testMode?: boolean;
+}
+
+interface CreateTeamUpgradePaymentIntentDto {
+  membershipId: string;
+  userId: string;
+  teamName: string;
+  teamDescription?: string;
+}
+
+interface CreateInvoicePaymentIntentDto {
+  invoiceId: string;
 }
 
 @Controller('api/stripe')
@@ -229,6 +242,7 @@ export class StripeController {
       classes: data.classes,
       includeMembership: data.includeMembership,
       membershipTypeConfigId: data.membershipTypeConfigId,
+      mecaId: data.mecaId,
     }, isMember);
 
     // Convert price to cents for Stripe
@@ -247,6 +261,7 @@ export class StripeController {
     };
 
     if (data.userId) metadata.userId = data.userId;
+    if (data.mecaId) metadata.mecaId = String(data.mecaId);
     if (data.includeMembership) {
       metadata.includeMembership = 'true';
       metadata.membershipTypeConfigId = data.membershipTypeConfigId || '';
@@ -284,6 +299,130 @@ export class StripeController {
       ...paymentIntent,
       registrationId: registration.id,
     };
+  }
+
+  @Post('create-team-upgrade-payment-intent')
+  @HttpCode(HttpStatus.OK)
+  async createTeamUpgradePaymentIntent(
+    @Body() data: CreateTeamUpgradePaymentIntentDto,
+  ): Promise<PaymentIntentResult> {
+    // Validate required fields
+    if (!data.membershipId) {
+      throw new BadRequestException('Membership ID is required');
+    }
+    if (!data.userId) {
+      throw new BadRequestException('User ID is required');
+    }
+    if (!data.teamName) {
+      throw new BadRequestException('Team name is required');
+    }
+
+    // Get upgrade details (validates eligibility and calculates pro-rated price)
+    const upgradeDetails = await this.membershipsService.getTeamUpgradeDetails(data.membershipId);
+
+    if (!upgradeDetails) {
+      throw new BadRequestException('Membership not found');
+    }
+
+    if (!upgradeDetails.eligible) {
+      throw new BadRequestException(upgradeDetails.reason || 'Not eligible for team upgrade');
+    }
+
+    // Get user email
+    const em = this.em.fork();
+    const user = await em.findOne(Profile, { id: data.userId });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+    if (!user.email) {
+      throw new BadRequestException('User does not have an email address');
+    }
+
+    // Convert pro-rated price to cents for Stripe
+    const amountInCents = Math.round(upgradeDetails.proRatedPrice * 100);
+
+    // Create metadata
+    const metadata: Record<string, string> = {
+      paymentType: 'team_upgrade',
+      membershipId: data.membershipId,
+      userId: data.userId,
+      email: user.email,
+      teamName: data.teamName,
+      originalPrice: upgradeDetails.originalPrice.toString(),
+      proRatedPrice: upgradeDetails.proRatedPrice.toString(),
+      daysRemaining: upgradeDetails.daysRemaining.toString(),
+    };
+
+    if (data.teamDescription) {
+      metadata.teamDescription = data.teamDescription;
+    }
+
+    // Create the payment intent
+    return this.stripeService.createPaymentIntent({
+      amount: amountInCents,
+      currency: 'usd',
+      membershipTypeConfigId: 'team-upgrade',
+      membershipTypeName: 'Team Add-on Upgrade',
+      email: user.email,
+      metadata,
+    });
+  }
+
+  @Post('create-invoice-payment-intent')
+  @HttpCode(HttpStatus.OK)
+  async createInvoicePaymentIntent(
+    @Body() data: CreateInvoicePaymentIntentDto,
+  ): Promise<PaymentIntentResult> {
+    // Validate required fields
+    if (!data.invoiceId) {
+      throw new BadRequestException('Invoice ID is required');
+    }
+
+    // Get the invoice
+    const invoice = await this.invoicesService.findById(data.invoiceId);
+
+    if (!invoice) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    // Check invoice status
+    if (invoice.status === 'paid') {
+      throw new BadRequestException('Invoice has already been paid');
+    }
+    if (invoice.status === 'cancelled') {
+      throw new BadRequestException('Invoice has been cancelled');
+    }
+    if (invoice.status === 'refunded') {
+      throw new BadRequestException('Invoice has been refunded');
+    }
+
+    // Get user email
+    const user = invoice.user;
+    if (!user?.email) {
+      throw new BadRequestException('Invoice has no associated user email');
+    }
+
+    // Convert price to cents for Stripe
+    const amountInCents = Math.round(parseFloat(invoice.total) * 100);
+
+    // Create metadata
+    const metadata: Record<string, string> = {
+      paymentType: 'invoice_payment',
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      userId: user.id,
+      email: user.email,
+    };
+
+    // Create the payment intent
+    return this.stripeService.createPaymentIntent({
+      amount: amountInCents,
+      currency: invoice.currency || 'usd',
+      membershipTypeConfigId: 'invoice-payment',
+      membershipTypeName: `Invoice ${invoice.invoiceNumber}`,
+      email: user.email,
+      metadata,
+    });
   }
 
   @Post('webhook')
@@ -328,8 +467,66 @@ export class StripeController {
     // Route to appropriate handler based on payment type
     if (paymentType === 'event_registration') {
       await this.handleEventRegistrationPayment(paymentIntent);
+    } else if (paymentType === 'team_upgrade') {
+      await this.handleTeamUpgradePayment(paymentIntent);
+    } else if (paymentType === 'invoice_payment') {
+      await this.handleInvoicePayment(paymentIntent);
     } else {
       await this.handleMembershipPayment(paymentIntent);
+    }
+  }
+
+  private async handleTeamUpgradePayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    const metadata = paymentIntent.metadata;
+    const membershipId = metadata.membershipId;
+    const teamName = metadata.teamName;
+    const teamDescription = metadata.teamDescription;
+
+    if (!membershipId || !teamName) {
+      console.error('Missing required metadata for team upgrade:', paymentIntent.id);
+      return;
+    }
+
+    try {
+      // Apply the team upgrade
+      const membership = await this.membershipsService.applyTeamUpgrade(
+        membershipId,
+        teamName,
+        teamDescription,
+      );
+
+      console.log(`Team upgrade applied to membership ${membershipId}:`, {
+        teamName,
+        paymentIntentId: paymentIntent.id,
+        amount: paymentIntent.amount / 100,
+      });
+
+      // Create order for the upgrade
+      const amountPaid = (paymentIntent.amount / 100).toFixed(2);
+      const order = await this.ordersService.createFromPayment({
+        userId: metadata.userId,
+        orderType: OrderType.MEMBERSHIP,
+        items: [{
+          itemType: OrderItemType.TEAM_ADDON,
+          description: `Team Add-on Upgrade: ${teamName}`,
+          quantity: 1,
+          unitPrice: amountPaid,
+          metadata: {
+            membershipId,
+            teamName,
+            originalPrice: metadata.originalPrice,
+            proRatedPrice: metadata.proRatedPrice,
+            daysRemaining: metadata.daysRemaining,
+          },
+        }],
+        notes: `Stripe Payment Intent: ${paymentIntent.id}`,
+      });
+
+      console.log(`Created order ${order.id} for team upgrade`);
+
+    } catch (error) {
+      console.error('Error applying team upgrade:', error);
+      throw error;
     }
   }
 
@@ -339,51 +536,48 @@ export class StripeController {
     const membershipTypeConfigId = metadata.membershipTypeConfigId;
     const userId = metadata.userId;
 
-    if (!email || !membershipTypeConfigId) {
+    if (!email || !membershipTypeConfigId || !userId) {
       console.error('Missing required metadata in payment intent:', paymentIntent.id);
+      if (!userId) {
+        console.error('Guest memberships are no longer supported - userId is required');
+      }
       return;
     }
 
     try {
-      // Determine the membership type based on category
-      const membershipType = this.getMembershipTypeFromCategory(metadata.membershipCategory);
-
       // Amount is in cents, convert to dollars
       const amountPaid = paymentIntent.amount / 100;
 
-      if (userId) {
-        // Create membership for logged-in user
-        await this.membershipsService.createUserMembership({
-          userId,
-          membershipTypeConfigId,
-          membershipType,
-          amountPaid,
-          stripePaymentIntentId: paymentIntent.id,
-          transactionId: paymentIntent.id,
-        });
-      } else {
-        // Create guest membership
-        await this.membershipsService.createGuestMembership({
-          email,
-          membershipTypeConfigId,
-          membershipType,
-          amountPaid,
-          stripePaymentIntentId: paymentIntent.id,
-          transactionId: paymentIntent.id,
-          billingFirstName: metadata.billingFirstName || '',
-          billingLastName: metadata.billingLastName || '',
-          billingPhone: metadata.billingPhone,
-          billingAddress: metadata.billingAddress || '',
-          billingCity: metadata.billingCity || '',
-          billingState: metadata.billingState || '',
-          billingPostalCode: metadata.billingPostalCode || '',
-          billingCountry: metadata.billingCountry || 'USA',
-          teamName: metadata.teamName,
-          teamDescription: metadata.teamDescription,
-          businessName: metadata.businessName,
-          businessWebsite: metadata.businessWebsite,
-        });
-      }
+      // Create membership for logged-in user using the new MECA ID-based system
+      await this.membershipsService.createMembership({
+        userId,
+        membershipTypeConfigId,
+        amountPaid,
+        stripePaymentIntentId: paymentIntent.id,
+        transactionId: paymentIntent.id,
+        // Competitor info
+        competitorName: metadata.competitorName,
+        vehicleLicensePlate: metadata.vehicleLicensePlate,
+        vehicleColor: metadata.vehicleColor,
+        vehicleMake: metadata.vehicleMake,
+        vehicleModel: metadata.vehicleModel,
+        // Team info
+        hasTeamAddon: metadata.hasTeamAddon === 'true',
+        teamName: metadata.teamName,
+        teamDescription: metadata.teamDescription,
+        // Business info
+        businessName: metadata.businessName,
+        businessWebsite: metadata.businessWebsite,
+        // Billing info
+        billingFirstName: metadata.billingFirstName,
+        billingLastName: metadata.billingLastName,
+        billingPhone: metadata.billingPhone,
+        billingAddress: metadata.billingAddress,
+        billingCity: metadata.billingCity,
+        billingState: metadata.billingState,
+        billingPostalCode: metadata.billingPostalCode,
+        billingCountry: metadata.billingCountry || 'USA',
+      });
 
       console.log('Membership created successfully for:', email);
 
@@ -419,42 +613,29 @@ export class StripeController {
       let membershipId: string | undefined;
 
       // If membership was included in the purchase, create it first
-      if (metadata.includeMembership === 'true' && metadata.membershipTypeConfigId) {
-        const membershipType = MembershipType.DOMESTIC; // Default to domestic for competition registrations
+      // Note: Membership purchase during event registration now requires a logged-in user
+      if (metadata.includeMembership === 'true' && metadata.membershipTypeConfigId && metadata.userId) {
         const membershipPrice = parseFloat(metadata.membershipPrice || '0');
 
-        if (metadata.userId) {
-          // Create membership for logged-in user
-          const membership = await this.membershipsService.createUserMembership({
-            userId: metadata.userId,
-            membershipTypeConfigId: metadata.membershipTypeConfigId,
-            membershipType,
-            amountPaid: membershipPrice,
-            stripePaymentIntentId: paymentIntent.id,
-            transactionId: paymentIntent.id,
-          });
-          membershipId = membership.id;
-        } else {
-          // Create guest membership (will be linked to account later)
-          const membership = await this.membershipsService.createGuestMembership({
-            email,
-            membershipTypeConfigId: metadata.membershipTypeConfigId,
-            membershipType,
-            amountPaid: membershipPrice,
-            stripePaymentIntentId: paymentIntent.id,
-            transactionId: paymentIntent.id,
-            billingFirstName: '',
-            billingLastName: '',
-            billingAddress: '',
-            billingCity: '',
-            billingState: '',
-            billingPostalCode: '',
-            billingCountry: 'USA',
-          });
-          membershipId = membership.id;
-        }
+        // Create membership for logged-in user using the new MECA ID-based system
+        const membership = await this.membershipsService.createMembership({
+          userId: metadata.userId,
+          membershipTypeConfigId: metadata.membershipTypeConfigId,
+          amountPaid: membershipPrice,
+          stripePaymentIntentId: paymentIntent.id,
+          transactionId: paymentIntent.id,
+          // Use provided competitor info or defaults
+          competitorName: metadata.competitorName,
+          vehicleLicensePlate: metadata.vehicleLicensePlate,
+          vehicleColor: metadata.vehicleColor,
+          vehicleMake: metadata.vehicleMake,
+          vehicleModel: metadata.vehicleModel,
+        });
+        membershipId = membership.id;
 
         console.log('Membership created as part of event registration for:', email);
+      } else if (metadata.includeMembership === 'true' && !metadata.userId) {
+        console.error('Cannot create membership without userId - user must be logged in');
       }
 
       // Complete the event registration
@@ -474,6 +655,82 @@ export class StripeController {
     } catch (error) {
       console.error('Error completing event registration after payment:', error);
       // In production, you might want to alert admin or queue for retry
+    }
+  }
+
+  private async handleInvoicePayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    const metadata = paymentIntent.metadata;
+    const invoiceId = metadata.invoiceId;
+
+    if (!invoiceId) {
+      console.error('Missing invoiceId in invoice payment:', paymentIntent.id);
+      return;
+    }
+
+    try {
+      // Mark the invoice as paid
+      const invoice = await this.invoicesService.markAsPaid(invoiceId);
+      console.log(`Invoice ${invoice.invoiceNumber} marked as paid via Stripe payment ${paymentIntent.id}`);
+
+      // Check if there's an associated order that needs to be marked complete
+      if (invoice.order?.id) {
+        try {
+          await this.ordersService.updateStatus(invoice.order.id, {
+            status: OrderStatus.COMPLETED,
+            notes: `Paid via Stripe: ${paymentIntent.id}`,
+          });
+          console.log(`Order ${invoice.order.id} marked as completed`);
+        } catch (orderError) {
+          console.error('Error updating order status:', orderError);
+        }
+      }
+
+      // Try to activate any pending membership associated with this invoice
+      // The membership would be linked through the order that was created during admin assignment
+      await this.activatePendingMembershipForInvoice(invoiceId, metadata.userId, invoice.total);
+
+      console.log(`Invoice payment processed successfully for ${invoiceId}`);
+    } catch (error) {
+      console.error('Error handling invoice payment:', error);
+      throw error;
+    }
+  }
+
+  private async activatePendingMembershipForInvoice(
+    invoiceId: string,
+    userId: string,
+    amountPaid: string,
+  ): Promise<void> {
+    if (!userId) {
+      console.log('No userId provided, skipping membership activation');
+      return;
+    }
+
+    try {
+      // Import Membership entity and PaymentStatus enum
+      const { Membership } = await import('../memberships/memberships.entity');
+      const { PaymentStatus } = await import('@newmeca/shared');
+      const em = this.em.fork();
+
+      // Find the most recent pending membership for this user
+      // (created when admin assigned the membership with invoice payment)
+      const pendingMembership = await em.findOne(Membership, {
+        user: userId,
+        paymentStatus: PaymentStatus.PENDING,
+      });
+
+      if (pendingMembership) {
+        // Update payment status to paid
+        pendingMembership.paymentStatus = PaymentStatus.PAID;
+        pendingMembership.amountPaid = parseFloat(amountPaid);
+        await em.flush();
+        console.log(`Membership ${pendingMembership.id} activated after invoice payment`);
+      } else {
+        console.log(`No pending membership found for user ${userId} to activate`);
+      }
+    } catch (error) {
+      console.error('Error activating pending membership:', error);
+      // Don't throw - this is non-critical
     }
   }
 

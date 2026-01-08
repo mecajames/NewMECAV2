@@ -69,6 +69,10 @@ export default function RetailerProfilePage() {
       setLoading(true);
       const data = await getRetailerById(id!);
       setRetailer(data);
+      // Immediately set position from fetched data to avoid race condition
+      if (data?.coverImagePosition) {
+        setPosition(data.coverImagePosition);
+      }
     } catch (err: any) {
       console.error('Error fetching retailer:', err);
       setError('Retailer not found');
@@ -191,14 +195,17 @@ export default function RetailerProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/retailers')}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Retailer Directory
-        </button>
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-400">Retailer Profile</h2>
+          <button
+            onClick={() => navigate('/retailers')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Retailer Directory
+          </button>
+        </div>
 
         {/* Retailer Header */}
         <div className="bg-slate-800 rounded-xl overflow-hidden shadow-lg mb-6">

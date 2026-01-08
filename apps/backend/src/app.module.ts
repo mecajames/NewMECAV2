@@ -31,6 +31,12 @@ import { BusinessListingsModule } from './business-listings/business-listings.mo
 import { OrdersModule } from './orders/orders.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { BillingModule } from './billing/billing.module';
+import { JudgesModule } from './judges/judges.module';
+import { EventDirectorsModule } from './event-directors/event-directors.module';
+import { RatingsModule } from './ratings/ratings.module';
+import { ContactModule } from './contact/contact.module';
+import { WorldFinalsModule } from './world-finals/world-finals.module';
+import { AchievementsModule } from './achievements/achievements.module';
 
 @Module({
   imports: [
@@ -64,6 +70,12 @@ import { BillingModule } from './billing/billing.module';
     OrdersModule,
     InvoicesModule,
     BillingModule,
+    JudgesModule,
+    EventDirectorsModule,
+    RatingsModule,
+    ContactModule,
+    WorldFinalsModule,
+    AchievementsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

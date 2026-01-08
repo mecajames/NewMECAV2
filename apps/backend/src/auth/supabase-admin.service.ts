@@ -50,6 +50,13 @@ export class SupabaseAdminService {
   }
 
   /**
+   * Get the raw Supabase client for advanced operations
+   */
+  getClient(): SupabaseClient {
+    return this.supabaseAdmin;
+  }
+
+  /**
    * Creates a new user in Supabase Auth with a password
    */
   async createUserWithPassword(dto: CreateUserWithPasswordDto): Promise<CreateUserResult> {
@@ -215,6 +222,112 @@ export class SupabaseAdminService {
       return { success: true };
     } catch (error) {
       this.logger.error(`Error deleting user: ${error}`);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Finds a user by email in Supabase Auth
+   */
+  async findUserByEmail(email: string): Promise<{ userId: string | null; error?: string }> {
+    try {
+      const { data, error } = await this.supabaseAdmin.auth.admin.listUsers();
+
+      if (error) {
+        this.logger.error(`Failed to list users: ${error.message}`);
+        return { userId: null, error: error.message };
+      }
+
+      const user = data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      return { userId: user?.id || null };
+    } catch (error) {
+      this.logger.error(`Error finding user by email: ${error}`);
+      return {
+        userId: null,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Deletes a user by email from Supabase Auth (for cleanup of orphaned users)
+   */
+  async deleteUserByEmail(email: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { userId, error: findError } = await this.findUserByEmail(email);
+
+      if (findError) {
+        return { success: false, error: findError };
+      }
+
+      if (!userId) {
+        return { success: false, error: 'User not found in auth system' };
+      }
+
+      return this.deleteUser(userId);
+    } catch (error) {
+      this.logger.error(`Error deleting user by email: ${error}`);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Generates an impersonation link for admin to sign in as another user.
+   * This creates a magic link that allows the admin to view the app as the target user.
+   */
+  async generateImpersonationLink(
+    targetUserId: string,
+    redirectTo: string,
+  ): Promise<{ success: boolean; link?: string; error?: string }> {
+    try {
+      // Get the target user's email
+      const { data: userData, error: userError } = await this.supabaseAdmin.auth.admin.getUserById(targetUserId);
+
+      if (userError || !userData.user) {
+        return {
+          success: false,
+          error: userError?.message || 'User not found',
+        };
+      }
+
+      const email = userData.user.email;
+      if (!email) {
+        return {
+          success: false,
+          error: 'User has no email address',
+        };
+      }
+
+      // Generate a magic link for the user
+      const { data, error } = await this.supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
+        email,
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (error) {
+        this.logger.error(`Failed to generate impersonation link: ${error.message}`);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      this.logger.log(`Generated impersonation link for user: ${email}`);
+      return {
+        success: true,
+        link: data.properties?.action_link,
+      };
+    } catch (error) {
+      this.logger.error(`Error generating impersonation link: ${error}`);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

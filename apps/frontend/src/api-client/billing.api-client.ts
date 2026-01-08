@@ -29,6 +29,7 @@ export interface Order {
     email: string;
     first_name?: string;
     last_name?: string;
+    meca_id?: string;
   };
   status: OrderStatus;
   orderType: OrderType;
@@ -68,6 +69,7 @@ export interface Invoice {
     email: string;
     first_name?: string;
     last_name?: string;
+    meca_id?: string;
   };
   order?: {
     id: string;
@@ -405,6 +407,88 @@ export const billingApi = {
     const response = await axios.post(`/api/billing/sync/registrations/${registrationId}`);
     return response.data;
   },
+
+  // ==========================================
+  // EXPORT OPERATIONS
+  // ==========================================
+
+  /**
+   * Export orders as CSV - returns download URL
+   */
+  getOrdersExportUrl: (params: {
+    startDate?: string;
+    endDate?: string;
+    status?: OrderStatus;
+  } = {}): string => {
+    const searchParams = new URLSearchParams();
+    if (params.startDate) searchParams.set('startDate', params.startDate);
+    if (params.endDate) searchParams.set('endDate', params.endDate);
+    if (params.status) searchParams.set('status', params.status);
+    const query = searchParams.toString();
+    return `/api/billing/export/orders${query ? `?${query}` : ''}`;
+  },
+
+  /**
+   * Export invoices as CSV - returns download URL
+   */
+  getInvoicesExportUrl: (params: {
+    startDate?: string;
+    endDate?: string;
+    status?: InvoiceStatus;
+  } = {}): string => {
+    const searchParams = new URLSearchParams();
+    if (params.startDate) searchParams.set('startDate', params.startDate);
+    if (params.endDate) searchParams.set('endDate', params.endDate);
+    if (params.status) searchParams.set('status', params.status);
+    const query = searchParams.toString();
+    return `/api/billing/export/invoices${query ? `?${query}` : ''}`;
+  },
+
+  /**
+   * Export revenue report as CSV - returns download URL
+   */
+  getRevenueExportUrl: (params: {
+    startDate?: string;
+    endDate?: string;
+  } = {}): string => {
+    const searchParams = new URLSearchParams();
+    if (params.startDate) searchParams.set('startDate', params.startDate);
+    if (params.endDate) searchParams.set('endDate', params.endDate);
+    const query = searchParams.toString();
+    return `/api/billing/export/revenue${query ? `?${query}` : ''}`;
+  },
+
+  /**
+   * Download orders export
+   */
+  downloadOrdersExport: (params: {
+    startDate?: string;
+    endDate?: string;
+    status?: OrderStatus;
+  } = {}): void => {
+    window.location.href = billingApi.getOrdersExportUrl(params);
+  },
+
+  /**
+   * Download invoices export
+   */
+  downloadInvoicesExport: (params: {
+    startDate?: string;
+    endDate?: string;
+    status?: InvoiceStatus;
+  } = {}): void => {
+    window.location.href = billingApi.getInvoicesExportUrl(params);
+  },
+
+  /**
+   * Download revenue export
+   */
+  downloadRevenueExport: (params: {
+    startDate?: string;
+    endDate?: string;
+  } = {}): void => {
+    window.location.href = billingApi.getRevenueExportUrl(params);
+  },
 };
 
 // ==========================================
@@ -475,7 +559,51 @@ export const ordersApi = {
   },
 };
 
+// Type for public invoice payment response
+export interface InvoiceForPayment {
+  id: string;
+  invoiceNumber: string;
+  status: InvoiceStatus;
+  subtotal: string;
+  tax: string;
+  discount: string;
+  total: string;
+  currency: string;
+  dueDate: string;
+  items: InvoiceItem[];
+  billingAddress?: BillingAddress;
+  companyInfo?: {
+    name: string;
+    email?: string;
+    phone?: string;
+    website?: string;
+  };
+  user?: {
+    email: string;
+    firstName?: string;
+    lastName?: string;
+  } | null;
+}
+
 export const invoicesApi = {
+  /**
+   * Get invoice for public payment page (no auth required)
+   */
+  getForPayment: async (id: string): Promise<InvoiceForPayment> => {
+    const response = await axios.get(`/api/invoices/pay/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Create payment intent for invoice
+   */
+  createPaymentIntent: async (invoiceId: string): Promise<{ clientSecret: string }> => {
+    const response = await axios.post(`/api/stripe/create-invoice-payment-intent`, {
+      invoiceId,
+    });
+    return response.data;
+  },
+
   /**
    * Get all invoices with filters
    */
@@ -515,10 +643,18 @@ export const invoicesApi = {
   },
 
   /**
-   * Mark invoice as sent
+   * Mark invoice as sent (sends email)
    */
-  markAsSent: async (id: string): Promise<Invoice> => {
+  markAsSent: async (id: string): Promise<{ success: boolean; invoice: Invoice; error?: string }> => {
     const response = await axios.post(`/api/invoices/${id}/send`);
+    return response.data;
+  },
+
+  /**
+   * Resend invoice email (for already sent invoices)
+   */
+  resend: async (id: string): Promise<{ success: boolean; invoice: Invoice; error?: string }> => {
+    const response = await axios.post(`/api/invoices/${id}/resend`);
     return response.data;
   },
 

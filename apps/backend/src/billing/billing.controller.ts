@@ -391,4 +391,196 @@ export class BillingController {
       },
     };
   }
+
+  // ==========================================
+  // EXPORT OPERATIONS
+  // ==========================================
+
+  /**
+   * Export orders as CSV
+   */
+  @Get('export/orders')
+  @Header('Content-Type', 'text/csv')
+  async exportOrders(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('status') status?: OrderStatus,
+    @Res() res?: Response,
+  ) {
+    const query: OrderListQuery = {
+      page: 1,
+      limit: 10000, // Get all orders
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      status,
+    };
+
+    const result = await this.ordersService.findAll(query);
+
+    // Build CSV content
+    const headers = [
+      'Order Number',
+      'Date',
+      'Customer Email',
+      'Customer Name',
+      'MECA ID',
+      'Order Type',
+      'Status',
+      'Subtotal',
+      'Tax',
+      'Discount',
+      'Total',
+      'Currency',
+      'Items',
+    ];
+
+    const rows = result.data.map(order => [
+      order.orderNumber,
+      order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : '',
+      order.user?.email || '',
+      order.user ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim() : '',
+      order.user?.meca_id || '',
+      order.orderType,
+      order.status,
+      order.subtotal,
+      order.tax,
+      order.discount,
+      order.total,
+      order.currency,
+      order.items.getItems().map(i => i.description).join('; '),
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    const filename = `orders-export-${new Date().toISOString().split('T')[0]}.csv`;
+    res?.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res?.send(csv);
+  }
+
+  /**
+   * Export invoices as CSV
+   */
+  @Get('export/invoices')
+  @Header('Content-Type', 'text/csv')
+  async exportInvoices(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('status') status?: InvoiceStatus,
+    @Res() res?: Response,
+  ) {
+    const query: InvoiceListQuery = {
+      page: 1,
+      limit: 10000, // Get all invoices
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      status,
+    };
+
+    const result = await this.invoicesService.findAll(query);
+
+    // Build CSV content
+    const headers = [
+      'Invoice Number',
+      'Created Date',
+      'Due Date',
+      'Paid Date',
+      'Customer Email',
+      'Customer Name',
+      'MECA ID',
+      'Status',
+      'Subtotal',
+      'Tax',
+      'Discount',
+      'Total',
+      'Currency',
+      'Items',
+    ];
+
+    const rows = result.data.map(invoice => [
+      invoice.invoiceNumber,
+      invoice.createdAt ? new Date(invoice.createdAt).toISOString().split('T')[0] : '',
+      invoice.dueDate ? new Date(invoice.dueDate).toISOString().split('T')[0] : '',
+      invoice.paidAt ? new Date(invoice.paidAt).toISOString().split('T')[0] : '',
+      invoice.user?.email || '',
+      invoice.user ? `${invoice.user.first_name || ''} ${invoice.user.last_name || ''}`.trim() : '',
+      invoice.user?.meca_id || '',
+      invoice.status,
+      invoice.subtotal,
+      invoice.tax,
+      invoice.discount,
+      invoice.total,
+      invoice.currency,
+      invoice.items.getItems().map(i => i.description).join('; '),
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    const filename = `invoices-export-${new Date().toISOString().split('T')[0]}.csv`;
+    res?.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res?.send(csv);
+  }
+
+  /**
+   * Export revenue report as CSV
+   */
+  @Get('export/revenue')
+  @Header('Content-Type', 'text/csv')
+  async exportRevenue(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Res() res?: Response,
+  ) {
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    // Get completed orders and paid invoices
+    const completedOrders = await this.ordersService.findCompletedSince(start);
+    const filteredOrders = completedOrders.filter(o => o.createdAt && new Date(o.createdAt) <= end);
+
+    // Group by month
+    const monthlyRevenue: Record<string, { orders: number; revenue: number }> = {};
+
+    for (const order of filteredOrders) {
+      if (!order.createdAt) continue;
+      const date = new Date(order.createdAt);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      if (!monthlyRevenue[monthKey]) {
+        monthlyRevenue[monthKey] = { orders: 0, revenue: 0 };
+      }
+
+      monthlyRevenue[monthKey].orders++;
+      monthlyRevenue[monthKey].revenue += parseFloat(order.total);
+    }
+
+    // Build CSV content
+    const headers = ['Month', 'Orders', 'Revenue'];
+
+    const sortedMonths = Object.keys(monthlyRevenue).sort();
+    const rows = sortedMonths.map(month => [
+      month,
+      monthlyRevenue[month].orders,
+      monthlyRevenue[month].revenue.toFixed(2),
+    ]);
+
+    // Add totals row
+    const totalOrders = Object.values(monthlyRevenue).reduce((sum, m) => sum + m.orders, 0);
+    const totalRevenue = Object.values(monthlyRevenue).reduce((sum, m) => sum + m.revenue, 0);
+    rows.push(['TOTAL', totalOrders, totalRevenue.toFixed(2)]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    const filename = `revenue-report-${new Date().toISOString().split('T')[0]}.csv`;
+    res?.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res?.send(csv);
+  }
 }

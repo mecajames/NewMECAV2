@@ -18,6 +18,8 @@ import {
   TrendingUp,
   Move,
   Check,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 import { teamsApi, Team, TeamPublicStats } from '../teams.api-client';
 import { seasonsApi, Season } from '@/seasons';
@@ -65,6 +67,10 @@ export default function TeamPublicProfilePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [savingPosition, setSavingPosition] = useState(false);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+
+  // Cover image upload state
+  const [uploadingCoverImage, setUploadingCoverImage] = useState(false);
+  const coverImageInputRef = useRef<HTMLInputElement>(null);
 
   // Check if logged-in user is the team owner
   const isTeamOwner = user?.id === team?.captainId;
@@ -204,6 +210,38 @@ export default function TeamPublicProfilePage() {
     setIsEditingPosition(false);
   };
 
+  const handleCoverImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !team) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingCoverImage(true);
+      const updatedTeam = await teamsApi.updateTeamLogo(team.id, file);
+      setTeam(updatedTeam);
+    } catch (err) {
+      console.error('Error uploading cover image:', err);
+      alert('Failed to upload cover image. Please try again.');
+    } finally {
+      setUploadingCoverImage(false);
+      // Clear the input so the same file can be selected again
+      if (coverImageInputRef.current) {
+        coverImageInputRef.current.value = '';
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
@@ -239,14 +277,26 @@ export default function TeamPublicProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/teams')}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Team Directory
-        </button>
+        {/* Hidden file input for cover image upload */}
+        <input
+          type="file"
+          ref={coverImageInputRef}
+          className="hidden"
+          accept="image/*"
+          onChange={handleCoverImageUpload}
+        />
+
+        {/* Page Header with Back Button */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-white">Team Profile</h1>
+          <button
+            onClick={() => navigate('/teams')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Team Directory
+          </button>
+        </div>
 
         {/* Team Header */}
         <div className="bg-slate-800 rounded-xl overflow-hidden shadow-lg mb-6">
@@ -271,8 +321,25 @@ export default function TeamPublicProfilePage() {
                 draggable={false}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center relative group">
                 <Shield className="h-32 w-32 text-slate-600" />
+                {/* Upload prompt for team owners when no image */}
+                {isTeamOwner && (
+                  <button
+                    onClick={() => coverImageInputRef.current?.click()}
+                    disabled={uploadingCoverImage}
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    {uploadingCoverImage ? (
+                      <Loader2 className="h-8 w-8 text-white animate-spin" />
+                    ) : (
+                      <>
+                        <Camera className="h-8 w-8 text-white mb-2" />
+                        <span className="text-white text-sm font-medium">Upload Cover Image</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             )}
 
@@ -285,15 +352,29 @@ export default function TeamPublicProfilePage() {
               </div>
             )}
 
-            {/* Edit position button - only show for team owner with an image */}
+            {/* Edit buttons - only show for team owner with an image */}
             {isTeamOwner && team.logoUrl && !isEditingPosition && (
-              <button
-                onClick={() => setIsEditingPosition(true)}
-                className="absolute bottom-3 right-3 bg-black/70 hover:bg-black/90 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
-              >
-                <Move className="h-4 w-4" />
-                Adjust Position
-              </button>
+              <div className="absolute bottom-3 right-3 flex gap-2">
+                <button
+                  onClick={() => coverImageInputRef.current?.click()}
+                  disabled={uploadingCoverImage}
+                  className="bg-black/70 hover:bg-black/90 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  {uploadingCoverImage ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4" />
+                  )}
+                  Change Image
+                </button>
+                <button
+                  onClick={() => setIsEditingPosition(true)}
+                  className="bg-black/70 hover:bg-black/90 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                >
+                  <Move className="h-4 w-4" />
+                  Adjust Position
+                </button>
+              </div>
             )}
 
             {/* Save/Cancel buttons when editing */}

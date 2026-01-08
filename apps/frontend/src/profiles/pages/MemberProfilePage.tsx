@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User, Car, Music, ArrowLeft, Award, MapPin, Calendar, X, Move, Check } from 'lucide-react';
+import { User, Car, Music, ArrowLeft, Award, MapPin, Calendar, X, Move, Check, Trophy } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
 import { useAuth } from '@/auth';
+import { AchievementsGallery } from '@/achievements';
 
 export default function MemberProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -146,14 +147,17 @@ export default function MemberProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/members')}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Member Directory
-        </button>
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-400">Member Profile</h2>
+          <button
+            onClick={() => navigate('/members')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Member Directory
+          </button>
+        </div>
 
         {/* Profile Header */}
         <div className="bg-slate-800 rounded-xl overflow-hidden shadow-lg mb-6">
@@ -324,6 +328,20 @@ export default function MemberProfilePage() {
             </div>
           </div>
         )}
+
+        {/* Achievements */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-lg mt-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+              <Trophy className="h-5 w-5 text-orange-500" />
+            </div>
+            <h2 className="text-xl font-bold text-white">Achievements</h2>
+          </div>
+          <AchievementsGallery
+            profileId={profile.id}
+            showEmpty={false}
+          />
+        </div>
       </div>
 
       {/* Lightbox */}

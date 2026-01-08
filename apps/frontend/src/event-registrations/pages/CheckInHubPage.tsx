@@ -85,12 +85,12 @@ export default function CheckInHubPage() {
         <div className="text-center">
           <QrCode className="h-16 w-16 text-gray-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-gray-400">Only Admins and Event Directors can access check-in.</p>
+          <p className="text-gray-400 mb-6">Only Admins and Event Directors can access check-in.</p>
           <Link
             to="/dashboard"
-            className="inline-flex items-center text-orange-500 hover:text-orange-400 mt-4"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
           </Link>
         </div>
@@ -101,17 +101,18 @@ export default function CheckInHubPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4">
-        <div className="mb-8">
-          <Link
-            to="/dashboard/admin"
-            className="inline-flex items-center text-gray-400 hover:text-white mb-4 transition-colors"
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">QR Check-In</h1>
+            <p className="text-gray-400">Select an event to start checking in competitors</p>
+          </div>
+          <button
+            onClick={() => navigate('/dashboard/admin')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
-          </Link>
-
-          <h1 className="text-3xl font-bold text-white mb-2">QR Check-In</h1>
-          <p className="text-gray-400">Select an event to start checking in competitors</p>
+          </button>
         </div>
 
         {/* Filters */}

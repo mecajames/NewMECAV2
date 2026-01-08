@@ -190,6 +190,27 @@
           "scale": 2,
           "mappedType": "decimal"
         },
+        "team_addon_price": {
+          "name": "team_addon_price",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "includes_team": {
+          "name": "includes_team",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "false",
+          "mappedType": "boolean"
+        },
         "currency": {
           "name": "currency",
           "type": "varchar(3)",
@@ -397,6 +418,15 @@
           "autoincrement": false,
           "primary": false,
           "nullable": true,
+          "mappedType": "text"
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
           "mappedType": "text"
         },
         "phone": {
@@ -675,6 +705,35 @@
           "default": "'member'",
           "mappedType": "text"
         },
+        "is_secondary_account": {
+          "name": "is_secondary_account",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "can_login": {
+          "name": "can_login",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "default": "true",
+          "mappedType": "boolean"
+        },
+        "master_profile_id": {
+          "name": "master_profile_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamptz",
@@ -721,7 +780,21 @@
         }
       ],
       "checks": [],
-      "foreignKeys": {},
+      "foreignKeys": {
+        "profiles_master_profile_id_foreign": {
+          "constraintName": "profiles_master_profile_id_foreign",
+          "columnNames": [
+            "master_profile_id"
+          ],
+          "localTableName": "public.profiles",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
       "nativeEnums": {}
     },
     {
@@ -882,11 +955,56 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": true,
+          "nullable": false,
           "mappedType": "uuid"
         },
-        "email": {
-          "name": "email",
+        "meca_id": {
+          "name": "meca_id",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "integer"
+        },
+        "competitor_name": {
+          "name": "competitor_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "vehicle_license_plate": {
+          "name": "vehicle_license_plate",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "vehicle_color": {
+          "name": "vehicle_color",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "vehicle_make": {
+          "name": "vehicle_make",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "vehicle_model": {
+          "name": "vehicle_model",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -969,6 +1087,62 @@
           "nullable": true,
           "mappedType": "text"
         },
+        "has_team_addon": {
+          "name": "has_team_addon",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "team_name_last_edited": {
+          "name": "team_name_last_edited",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "team_name": {
+          "name": "team_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "team_description": {
+          "name": "team_description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "business_name": {
+          "name": "business_name",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "business_website": {
+          "name": "business_website",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
         "billing_first_name": {
           "name": "billing_first_name",
           "type": "text",
@@ -1041,41 +1215,58 @@
           "nullable": true,
           "mappedType": "text"
         },
-        "team_name": {
-          "name": "team_name",
+        "account_type": {
+          "name": "account_type",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": true,
-          "mappedType": "text"
+          "nullable": false,
+          "default": "'independent'",
+          "enumItems": [
+            "independent",
+            "master",
+            "secondary"
+          ],
+          "mappedType": "enum"
         },
-        "team_description": {
-          "name": "team_description",
-          "type": "text",
+        "master_membership_id": {
+          "name": "master_membership_id",
+          "type": "uuid",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": true,
-          "mappedType": "text"
+          "mappedType": "uuid"
         },
-        "business_name": {
-          "name": "business_name",
-          "type": "text",
+        "has_own_login": {
+          "name": "has_own_login",
+          "type": "boolean",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": true,
-          "mappedType": "text"
+          "default": "false",
+          "mappedType": "boolean"
         },
-        "business_website": {
-          "name": "business_website",
-          "type": "text",
+        "master_billing_profile_id": {
+          "name": "master_billing_profile_id",
+          "type": "uuid",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": true,
-          "mappedType": "text"
+          "mappedType": "uuid"
+        },
+        "linked_at": {
+          "name": "linked_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
         },
         "created_at": {
           "name": "created_at",
@@ -1102,6 +1293,16 @@
       "schema": "public",
       "indexes": [
         {
+          "columnNames": [
+            "meca_id"
+          ],
+          "composite": false,
+          "keyName": "memberships_meca_id_unique",
+          "constraint": true,
+          "primary": false,
+          "unique": true
+        },
+        {
           "keyName": "memberships_pkey",
           "columnNames": [
             "id"
@@ -1124,7 +1325,6 @@
             "id"
           ],
           "referencedTableName": "public.profiles",
-          "deleteRule": "set null",
           "updateRule": "cascade"
         },
         "memberships_membership_type_config_id_foreign": {
@@ -1137,6 +1337,32 @@
             "id"
           ],
           "referencedTableName": "public.membership_type_configs",
+          "updateRule": "cascade"
+        },
+        "memberships_master_membership_id_foreign": {
+          "constraintName": "memberships_master_membership_id_foreign",
+          "columnNames": [
+            "master_membership_id"
+          ],
+          "localTableName": "public.memberships",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.memberships",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "memberships_master_billing_profile_id_foreign": {
+          "constraintName": "memberships_master_billing_profile_id_foreign",
+          "columnNames": [
+            "master_billing_profile_id"
+          ],
+          "localTableName": "public.memberships",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
           "updateRule": "cascade"
         }
       },
@@ -1425,6 +1651,408 @@
           "nullable": false,
           "mappedType": "uuid"
         },
+        "order_number": {
+          "name": "order_number",
+          "type": "varchar(50)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 50,
+          "mappedType": "string"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "'pending'",
+          "enumItems": [
+            "pending",
+            "processing",
+            "completed",
+            "cancelled",
+            "refunded"
+          ],
+          "mappedType": "enum"
+        },
+        "order_type": {
+          "name": "order_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "membership",
+            "event_registration",
+            "manual"
+          ],
+          "mappedType": "enum"
+        },
+        "subtotal": {
+          "name": "subtotal",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "tax": {
+          "name": "tax",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "default": "'0.00'",
+          "mappedType": "decimal"
+        },
+        "discount": {
+          "name": "discount",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "default": "'0.00'",
+          "mappedType": "decimal"
+        },
+        "total": {
+          "name": "total",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 3,
+          "default": "'USD'",
+          "mappedType": "string"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_address": {
+          "name": "billing_address",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "payment_id": {
+          "name": "payment_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        }
+      },
+      "name": "orders",
+      "schema": "public",
+      "indexes": [
+        {
+          "columnNames": [
+            "order_number"
+          ],
+          "composite": false,
+          "keyName": "orders_order_number_unique",
+          "constraint": true,
+          "primary": false,
+          "unique": true
+        },
+        {
+          "keyName": "orders_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "orders_user_id_foreign": {
+          "constraintName": "orders_user_id_foreign",
+          "columnNames": [
+            "user_id"
+          ],
+          "localTableName": "public.orders",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "orders_member_id_foreign": {
+          "constraintName": "orders_member_id_foreign",
+          "columnNames": [
+            "member_id"
+          ],
+          "localTableName": "public.orders",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "updateRule": "cascade"
+        },
+        "orders_payment_id_foreign": {
+          "constraintName": "orders_payment_id_foreign",
+          "columnNames": [
+            "payment_id"
+          ],
+          "localTableName": "public.orders",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.payments",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "1",
+          "mappedType": "integer"
+        },
+        "unit_price": {
+          "name": "unit_price",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "total": {
+          "name": "total",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "item_type": {
+          "name": "item_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "membership",
+            "team_addon",
+            "event_class",
+            "processing_fee",
+            "discount",
+            "tax",
+            "other"
+          ],
+          "mappedType": "enum"
+        },
+        "reference_id": {
+          "name": "reference_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        }
+      },
+      "name": "order_items",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "order_items_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "order_items_order_id_foreign": {
+          "constraintName": "order_items_order_id_foreign",
+          "columnNames": [
+            "order_id"
+          ],
+          "localTableName": "public.order_items",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.orders",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
         "title": {
           "name": "title",
           "type": "text",
@@ -1560,6 +2188,159 @@
             "created_by"
           ],
           "localTableName": "public.media_files",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "meca_id": {
+          "name": "meca_id",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "integer"
+        },
+        "membership_id": {
+          "name": "membership_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "profile_id": {
+          "name": "profile_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "assigned_at": {
+          "name": "assigned_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "expired_at": {
+          "name": "expired_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "reactivated_at": {
+          "name": "reactivated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "previous_end_date": {
+          "name": "previous_end_date",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "meca_id_history",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "meca_id_history_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "meca_id_history_membership_id_foreign": {
+          "constraintName": "meca_id_history_membership_id_foreign",
+          "columnNames": [
+            "membership_id"
+          ],
+          "localTableName": "public.meca_id_history",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.memberships",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "meca_id_history_profile_id_foreign": {
+          "constraintName": "meca_id_history_profile_id_foreign",
+          "columnNames": [
+            "profile_id"
+          ],
+          "localTableName": "public.meca_id_history",
           "referencedColumnNames": [
             "id"
           ],
@@ -1828,6 +2609,476 @@
             "id"
           ],
           "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "invoice_number": {
+          "name": "invoice_number",
+          "type": "varchar(50)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 50,
+          "mappedType": "string"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "'draft'",
+          "enumItems": [
+            "draft",
+            "sent",
+            "paid",
+            "overdue",
+            "cancelled",
+            "refunded"
+          ],
+          "mappedType": "enum"
+        },
+        "subtotal": {
+          "name": "subtotal",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "tax": {
+          "name": "tax",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "default": "'0.00'",
+          "mappedType": "decimal"
+        },
+        "discount": {
+          "name": "discount",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "default": "'0.00'",
+          "mappedType": "decimal"
+        },
+        "total": {
+          "name": "total",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 3,
+          "default": "'USD'",
+          "mappedType": "string"
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "date",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 0,
+          "mappedType": "date"
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        },
+        "pdf_url": {
+          "name": "pdf_url",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "text"
+        },
+        "billing_address": {
+          "name": "billing_address",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "company_info": {
+          "name": "company_info",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "is_master_invoice": {
+          "name": "is_master_invoice",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "default": "false",
+          "mappedType": "boolean"
+        },
+        "master_membership_id": {
+          "name": "master_membership_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        }
+      },
+      "name": "invoices",
+      "schema": "public",
+      "indexes": [
+        {
+          "columnNames": [
+            "invoice_number"
+          ],
+          "composite": false,
+          "keyName": "invoices_invoice_number_unique",
+          "constraint": true,
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "order_id"
+          ],
+          "composite": false,
+          "keyName": "invoices_order_id_unique",
+          "constraint": true,
+          "primary": false,
+          "unique": true
+        },
+        {
+          "keyName": "invoices_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "invoices_user_id_foreign": {
+          "constraintName": "invoices_user_id_foreign",
+          "columnNames": [
+            "user_id"
+          ],
+          "localTableName": "public.invoices",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.profiles",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "invoices_order_id_foreign": {
+          "constraintName": "invoices_order_id_foreign",
+          "columnNames": [
+            "order_id"
+          ],
+          "localTableName": "public.invoices",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.orders",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        },
+        "invoices_master_membership_id_foreign": {
+          "constraintName": "invoices_master_membership_id_foreign",
+          "columnNames": [
+            "master_membership_id"
+          ],
+          "localTableName": "public.invoices",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.memberships",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "uuid"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "1",
+          "mappedType": "integer"
+        },
+        "unit_price": {
+          "name": "unit_price",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "total": {
+          "name": "total",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "precision": 10,
+          "scale": 2,
+          "mappedType": "decimal"
+        },
+        "item_type": {
+          "name": "item_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "enumItems": [
+            "membership",
+            "event_class",
+            "processing_fee",
+            "discount",
+            "tax",
+            "other"
+          ],
+          "mappedType": "enum"
+        },
+        "reference_id": {
+          "name": "reference_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "json"
+        },
+        "secondary_membership_id": {
+          "name": "secondary_membership_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        }
+      },
+      "name": "invoice_items",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "invoice_items_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "invoice_items_invoice_id_foreign": {
+          "constraintName": "invoice_items_invoice_id_foreign",
+          "columnNames": [
+            "invoice_id"
+          ],
+          "localTableName": "public.invoice_items",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.invoices",
+          "updateRule": "cascade"
+        },
+        "invoice_items_secondary_membership_id_foreign": {
+          "constraintName": "invoice_items_secondary_membership_id_foreign",
+          "columnNames": [
+            "secondary_membership_id"
+          ],
+          "localTableName": "public.invoice_items",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.memberships",
           "deleteRule": "set null",
           "updateRule": "cascade"
         }
@@ -3223,6 +4474,15 @@
           "primary": false,
           "nullable": true,
           "mappedType": "uuid"
+        },
+        "meca_id": {
+          "name": "meca_id",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "integer"
         },
         "check_in_code": {
           "name": "check_in_code",
@@ -5400,6 +6660,15 @@
           "nullable": true,
           "mappedType": "text"
         },
+        "membership_id": {
+          "name": "membership_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "mappedType": "uuid"
+        },
         "captain_id": {
           "name": "captain_id",
           "type": "uuid",
@@ -5543,7 +6812,21 @@
         }
       ],
       "checks": [],
-      "foreignKeys": {},
+      "foreignKeys": {
+        "teams_membership_id_foreign": {
+          "constraintName": "teams_membership_id_foreign",
+          "columnNames": [
+            "membership_id"
+          ],
+          "localTableName": "public.teams",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.memberships",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
       "nativeEnums": {}
     },
     {
@@ -5573,6 +6856,15 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
+          "mappedType": "uuid"
+        },
+        "membership_id": {
+          "name": "membership_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
           "mappedType": "uuid"
         },
         "role": {
@@ -5640,7 +6932,21 @@
         }
       ],
       "checks": [],
-      "foreignKeys": {},
+      "foreignKeys": {
+        "team_members_membership_id_foreign": {
+          "constraintName": "team_members_membership_id_foreign",
+          "columnNames": [
+            "membership_id"
+          ],
+          "localTableName": "public.team_members",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.memberships",
+          "deleteRule": "set null",
+          "updateRule": "cascade"
+        }
+      },
       "nativeEnums": {}
     },
     {

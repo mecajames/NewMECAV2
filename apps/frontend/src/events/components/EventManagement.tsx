@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users, Search, Filter, TrendingUp } from 'lucide-react';
+import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users, Search, Filter, TrendingUp, Mail, Loader2 } from 'lucide-react';
 import { eventsApi, Event } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
@@ -28,6 +28,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [quickFilter, setQuickFilter] = useState<string>('all');
   const [eventResults, setEventResults] = useState<{[key: string]: number}>({});
+  const [sendingRatingEmails, setSendingRatingEmails] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -350,6 +351,29 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     });
   };
 
+  const handleSendRatingEmails = async (eventId: string, eventTitle: string) => {
+    if (!confirm(`Send rating request emails to all participants of "${eventTitle}"?`)) {
+      return;
+    }
+
+    setSendingRatingEmails(eventId);
+    try {
+      const result = await eventsApi.sendRatingEmails(eventId);
+      if (result.sent > 0) {
+        alert(`Rating emails sent successfully!\n\nSent: ${result.sent}\nFailed: ${result.failed}${result.errors.length > 0 ? `\n\nErrors:\n${result.errors.slice(0, 5).join('\n')}` : ''}`);
+      } else if (result.errors.length > 0) {
+        alert(`No emails sent.\n\n${result.errors[0]}`);
+      } else {
+        alert('No emails were sent. There may be no eligible participants.');
+      }
+    } catch (error) {
+      console.error('Error sending rating emails:', error);
+      alert(`Error sending rating emails: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setSendingRatingEmails(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -618,7 +642,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
 
                   {/* Actions */}
                   <td className="px-4 py-3 align-top">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => handleEdit(event)}
                         className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs transition-colors"
@@ -633,6 +657,21 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                       >
                         Delete
                       </button>
+                      {event.status === 'completed' && (
+                        <button
+                          onClick={() => handleSendRatingEmails(event.id, event.title)}
+                          disabled={sendingRatingEmails === event.id}
+                          className="flex items-center gap-1 px-3 py-1 bg-orange-600 hover:bg-orange-500 disabled:bg-orange-800 disabled:cursor-wait text-white rounded text-xs transition-colors"
+                          title="Send Rating Request Emails"
+                        >
+                          {sendingRatingEmails === event.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Mail className="h-3 w-3" />
+                          )}
+                          Ratings
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

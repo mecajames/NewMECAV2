@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save } from 'lucide-react';
+import { User, Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { profilesApi } from '@/profiles';
 import { supabase } from '@/lib/supabase';
@@ -149,6 +149,18 @@ export default function PublicProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-400">Profile Settings</h2>
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Go Back
+          </button>
+        </div>
+
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Public Profile</h1>
           <p className="text-gray-400">Manage how other MECA members see your profile</p>

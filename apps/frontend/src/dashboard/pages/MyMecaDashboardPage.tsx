@@ -1,19 +1,26 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle,
   Eye, MessageSquare, Settings, Users, FileText, Image, BarChart3, UserPlus, Crown, LogOut, Trash2, Plus, X, Loader2,
-  TrendingUp, TrendingDown, Minus
+  TrendingUp, TrendingDown, Minus, Star, ArrowLeft, Bell, Check
 } from 'lucide-react';
+import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth';
 import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
 import axios from 'axios';
 import { teamsApi, Team, TeamType, TeamMemberRole, TeamMember, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult } from '@/teams';
-import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket } from 'lucide-react';
+import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter } from 'lucide-react';
+import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
+import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
+import type { Judge } from '@newmeca/shared';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts';
+import { EventRatingsPanel } from '@/ratings';
+import { seasonsApi, Season } from '@/seasons/seasons.api-client';
+import { AchievementsGallery } from '@/achievements';
 
 interface EventHostingRequest {
   id: string;
@@ -46,6 +53,7 @@ export default function MyMecaDashboardPage() {
     bestPlacement: null as number | null,
   });
   const [loading, setLoading] = useState(true);
+  const [expandedRatingEventId, setExpandedRatingEventId] = useState<string | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [teamLoading, setTeamLoading] = useState(true);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
@@ -55,6 +63,39 @@ export default function MyMecaDashboardPage() {
   const [canCreateTeam, setCanCreateTeam] = useState(false);
   const [canCreateReason, setCanCreateReason] = useState('');
   const [upgradeEligibility, setUpgradeEligibility] = useState<UpgradeEligibilityResponse | null>(null);
+
+  // Judge and Event Director state
+  const [judgeProfile, setJudgeProfile] = useState<Judge | null>(null);
+  const [edProfile, setEdProfile] = useState<EventDirector | null>(null);
+  const [judgeAssignments, setJudgeAssignments] = useState<EventJudgeAssignment[]>([]);
+  const [edAssignments, setEdAssignments] = useState<EventDirectorAssignment[]>([]);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [deletingNotificationId, setDeletingNotificationId] = useState<string | null>(null);
+  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+
+  // Event Registrations filter state
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [registrationFilters, setRegistrationFilters] = useState({
+    search: '',
+    seasonId: '',
+    country: '',
+    state: '',
+  });
+
+  // Analytics filter state
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    seasonId: '',
+    state: '',
+  });
+
+  // Results filter state
+  const [resultsFilters, setResultsFilters] = useState({
+    seasonId: '',
+    state: '',
+  });
 
   // Team image upload state
   const teamLogoInputRef = useRef<HTMLInputElement>(null);
@@ -125,8 +166,106 @@ export default function MyMecaDashboardPage() {
     if (profile && !authLoading) {
       fetchUserData();
       fetchTeamData();
+      fetchJudgeEDData();
+      fetchNotifications();
     }
   }, [profile, authLoading]);
+
+  // Fetch seasons for filtering
+  useEffect(() => {
+    const fetchSeasons = async () => {
+      try {
+        const seasonsData = await seasonsApi.getAll();
+        setSeasons(seasonsData);
+
+        // Default filters to current season
+        const currentSeason = seasonsData.find(s => s.is_current);
+        if (currentSeason) {
+          setResultsFilters(prev => ({ ...prev, seasonId: currentSeason.id }));
+          setAnalyticsFilters(prev => ({ ...prev, seasonId: currentSeason.id }));
+        }
+      } catch (error) {
+        console.error('Error fetching seasons:', error);
+      }
+    };
+    fetchSeasons();
+  }, []);
+
+  // Fetch judge and event director data
+  const fetchJudgeEDData = async () => {
+    try {
+      const [judge, ed] = await Promise.all([
+        getMyJudgeProfile(),
+        getMyEventDirectorProfile(),
+      ]);
+      setJudgeProfile(judge);
+      setEdProfile(ed);
+
+      // If user is a judge or ED, fetch their assignments
+      if (judge) {
+        const assignments = await getMyJudgeAssignments({ upcoming: true });
+        setJudgeAssignments(assignments);
+      }
+      if (ed) {
+        const assignments = await getMyEDAssignments({ upcoming: true });
+        setEdAssignments(assignments);
+      }
+    } catch (error) {
+      console.error('Error fetching judge/ED data:', error);
+    }
+  };
+
+  // Fetch user notifications
+  const fetchNotifications = async () => {
+    if (!profile?.id) return;
+    try {
+      setNotificationsLoading(true);
+      const data = await notificationsApi.getUserNotifications(profile.id, 50);
+      setNotifications(data);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const handleMarkNotificationRead = async (notificationId: string) => {
+    if (!profile?.id) return;
+    try {
+      setMarkingReadId(notificationId);
+      await notificationsApi.markAsRead(notificationId, profile.id);
+      setNotifications(prev => prev.map(n =>
+        n.id === notificationId ? { ...n, read: true } : n
+      ));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    } finally {
+      setMarkingReadId(null);
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    if (!profile?.id) return;
+    try {
+      await notificationsApi.markAllAsRead(profile.id);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    if (!profile?.id) return;
+    try {
+      setDeletingNotificationId(notificationId);
+      await notificationsApi.deleteNotification(notificationId, profile.id);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    } finally {
+      setDeletingNotificationId(null);
+    }
+  };
 
   // Initialize team gallery images when team data loads
   useEffect(() => {
@@ -869,7 +1008,7 @@ export default function MyMecaDashboardPage() {
     { id: 'profile', label: 'Profile', icon: Settings },
     { id: 'gallery', label: 'Gallery', icon: Image },
     { id: 'team', label: 'Team', icon: Users },
-    { id: 'events', label: 'My Events', icon: Calendar },
+    { id: 'events', label: 'Event Registrations', icon: Calendar },
     { id: 'results', label: 'Results', icon: Trophy },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   ];
@@ -1036,6 +1175,80 @@ export default function MyMecaDashboardPage() {
             </div>
           </div>
         </button>
+
+        {/* Judge Card */}
+        {judgeProfile ? (
+          <button
+            onClick={() => navigate('/judges/assignments')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                <Gavel className="h-6 w-6 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">My Judging</h3>
+                <p className="text-gray-400 text-sm">
+                  {judgeAssignments.length > 0
+                    ? `${judgeAssignments.length} upcoming assignment${judgeAssignments.length > 1 ? 's' : ''}`
+                    : 'View assignments'}
+                </p>
+              </div>
+            </div>
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate('/judges/apply')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                <Gavel className="h-6 w-6 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Become a Judge</h3>
+                <p className="text-gray-400 text-sm">Apply to judge MECA events</p>
+              </div>
+            </div>
+          </button>
+        )}
+
+        {/* Event Director Card */}
+        {edProfile ? (
+          <button
+            onClick={() => navigate('/event-directors/assignments')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                <ClipboardList className="h-6 w-6 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">My Event Directing</h3>
+                <p className="text-gray-400 text-sm">
+                  {edAssignments.length > 0
+                    ? `${edAssignments.length} upcoming event${edAssignments.length > 1 ? 's' : ''}`
+                    : 'View assignments'}
+                </p>
+              </div>
+            </div>
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate('/event-directors/apply')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                <ClipboardList className="h-6 w-6 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Become an Event Director</h3>
+                <p className="text-gray-400 text-sm">Apply to direct MECA events</p>
+              </div>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Event Hosting Requests */}
@@ -1189,6 +1402,120 @@ export default function MyMecaDashboardPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Achievements Section */}
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg mt-8">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <Award className="h-5 w-5 text-orange-500" />
+          My Achievements
+        </h2>
+        <AchievementsGallery
+          profileId={profile?.id}
+          maxItems={6}
+          showEmpty={true}
+        />
+      </div>
+
+      {/* Notifications Section */}
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg mt-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Bell className="h-5 w-5 text-orange-500" />
+            My Notifications
+            {notifications.filter(n => !n.read).length > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded-full">
+                {notifications.filter(n => !n.read).length}
+              </span>
+            )}
+          </h2>
+          {notifications.some(n => !n.read) && (
+            <button
+              onClick={handleMarkAllNotificationsRead}
+              className="text-orange-500 hover:text-orange-400 text-sm font-medium"
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
+
+        {notificationsLoading ? (
+          <div className="text-center py-8">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
+        ) : notifications.length > 0 ? (
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className={`rounded-lg p-4 transition-colors ${
+                  notification.read ? 'bg-slate-700/50' : 'bg-slate-700 border-l-4 border-orange-500'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className={`font-medium text-sm ${notification.read ? 'text-gray-300' : 'text-white'}`}>
+                        {notification.title}
+                      </h4>
+                      {!notification.read && (
+                        <span className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></span>
+                      )}
+                    </div>
+                    <p className={`text-sm ${notification.read ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {notification.message}
+                    </p>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                      {notification.fromUser && (
+                        <span>
+                          From: {notification.fromUser.first_name} {notification.fromUser.last_name}
+                        </span>
+                      )}
+                      <span>
+                        {new Date(notification.createdAt).toLocaleDateString()} at{' '}
+                        {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {!notification.read && (
+                      <button
+                        onClick={() => handleMarkNotificationRead(notification.id)}
+                        disabled={markingReadId === notification.id}
+                        className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-green-500/10 rounded transition-colors disabled:opacity-50"
+                        title="Mark as read"
+                      >
+                        {markingReadId === notification.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteNotification(notification.id)}
+                      disabled={deletingNotificationId === notification.id}
+                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50"
+                      title="Delete notification"
+                    >
+                      {deletingNotificationId === notification.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Bell className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-400 text-sm">No notifications yet</p>
+            <p className="text-gray-500 text-xs mt-1">You'll see important updates here</p>
+          </div>
+        )}
       </div>
     </>
   );
@@ -2543,132 +2870,449 @@ export default function MyMecaDashboardPage() {
     );
   };
 
-  const renderEvents = () => (
-    <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-        <Calendar className="h-6 w-6 text-orange-500" />
-        My Event History
-      </h2>
+  const renderEvents = () => {
+    // Get unique countries and states from registrations for filter dropdowns
+    const uniqueCountries = [...new Set(
+      registrations
+        .map(reg => reg.event?.venue_country)
+        .filter(Boolean)
+    )].sort();
 
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-        </div>
-      ) : registrations.length > 0 ? (
-        <div className="space-y-4">
-          {registrations.map((reg) => (
-            <div
-              key={reg.id}
-              className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
-              onClick={() => reg.event && navigate(`/events/${reg.event.id}`)}
+    const uniqueStates = [...new Set(
+      registrations
+        .filter(reg => !registrationFilters.country || reg.event?.venue_country === registrationFilters.country)
+        .map(reg => reg.event?.venue_state)
+        .filter(Boolean)
+    )].sort();
+
+    // Filter registrations based on current filters
+    const filteredRegistrations = registrations.filter(reg => {
+      const event = reg.event;
+      if (!event) return false;
+
+      // Search filter - search in event title, venue name, city
+      if (registrationFilters.search) {
+        const searchLower = registrationFilters.search.toLowerCase();
+        const matchesSearch =
+          event.title?.toLowerCase().includes(searchLower) ||
+          event.venue_name?.toLowerCase().includes(searchLower) ||
+          event.venue_city?.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
+
+      // Season filter
+      if (registrationFilters.seasonId && event.season_id !== registrationFilters.seasonId) {
+        return false;
+      }
+
+      // Country filter
+      if (registrationFilters.country && event.venue_country !== registrationFilters.country) {
+        return false;
+      }
+
+      // State filter
+      if (registrationFilters.state && event.venue_state !== registrationFilters.state) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const clearFilters = () => {
+      setRegistrationFilters({
+        search: '',
+        seasonId: '',
+        country: '',
+        state: '',
+      });
+    };
+
+    const hasActiveFilters = registrationFilters.search || registrationFilters.seasonId ||
+                             registrationFilters.country || registrationFilters.state;
+
+    return (
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Calendar className="h-6 w-6 text-orange-500" />
+            Event Registrations
+          </h2>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="font-semibold text-white mb-1">
-                    {reg.event?.title}
-                  </h4>
-                  <div className="space-y-1 text-sm text-gray-400">
-                    <p>{reg.event?.venue}</p>
-                    <p>{reg.event && new Date(reg.event.event_date).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}</p>
-                  </div>
-                </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    reg.status === 'confirmed'
-                      ? 'bg-green-500/10 text-green-400'
-                      : reg.status === 'pending'
-                      ? 'bg-yellow-500/10 text-yellow-400'
-                      : 'bg-red-500/10 text-red-400'
-                  }`}
-                >
-                  {reg.status}
-                </span>
-              </div>
-            </div>
-          ))}
+              <X className="h-4 w-4" />
+              Clear Filters
+            </button>
+          )}
         </div>
-      ) : (
-        <div className="text-center py-12">
-          <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400 mb-4">No event registrations yet</p>
-          <button
-            onClick={() => navigate('/events')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
-          >
-            Browse Events
-          </button>
-        </div>
-      )}
-    </div>
-  );
 
-  const renderResults = () => (
-    <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-        <Trophy className="h-6 w-6 text-orange-500" />
-        My Competition Results
-      </h2>
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search events..."
+              value={registrationFilters.search}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, search: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            />
+          </div>
 
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-        </div>
-      ) : results.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Event</th>
-                <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Class</th>
-                <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Score</th>
-                <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Place</th>
-                <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">Points</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((result) => (
-                <tr key={result.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                  <td className="py-3 px-4">
-                    <div>
-                      <p className="text-white font-medium">{result.event?.title}</p>
-                      <p className="text-gray-400 text-sm">{result.event && new Date(result.event.event_date).toLocaleDateString()}</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-gray-300">{result.competition_class}</td>
-                  <td className="py-3 px-4 text-gray-300">{result.score}</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                      result.placement === 1 ? 'bg-yellow-500/20 text-yellow-400' :
-                      result.placement === 2 ? 'bg-gray-400/20 text-gray-300' :
-                      result.placement === 3 ? 'bg-orange-500/20 text-orange-400' :
-                      'bg-slate-600 text-gray-300'
-                    }`}>
-                      {result.placement}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <span className="text-orange-500 font-semibold">{result.points_earned}</span>
-                  </td>
-                </tr>
+          {/* Season Filter */}
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={registrationFilters.seasonId}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, seasonId: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map(season => (
+                <option key={season.id} value={season.id}>
+                  {season.name} {season.is_current && '(Current)'}
+                </option>
               ))}
-            </tbody>
-          </table>
+            </select>
+          </div>
+
+          {/* Country Filter */}
+          <div className="relative">
+            <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={registrationFilters.country}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, country: e.target.value, state: '' }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+            >
+              <option value="">All Countries</option>
+              {uniqueCountries.map(country => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* State Filter */}
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={registrationFilters.state}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, state: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+              disabled={!registrationFilters.country && uniqueStates.length === 0}
+            >
+              <option value="">All States</option>
+              {uniqueStates.map(state => (
+                <option key={state} value={state}>{state}</option>
+              ))}
+            </select>
+          </div>
         </div>
-      ) : (
-        <div className="text-center py-12">
-          <Trophy className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400">No competition results yet</p>
+
+        {/* Results count */}
+        {registrations.length > 0 && (
+          <div className="text-sm text-gray-400 mb-4">
+            Showing {filteredRegistrations.length} of {registrations.length} registration{registrations.length !== 1 ? 's' : ''}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
+        ) : filteredRegistrations.length > 0 ? (
+          <div className="space-y-4">
+            {filteredRegistrations.map((reg) => (
+              <div
+                key={reg.id}
+                className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
+                onClick={() => reg.event && navigate(`/events/${reg.event.id}`)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-white mb-1">
+                      {reg.event?.title}
+                    </h4>
+                    <div className="space-y-1 text-sm text-gray-400">
+                      <p className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {reg.event?.venue_name}
+                        {reg.event?.venue_city && `, ${reg.event.venue_city}`}
+                        {reg.event?.venue_state && `, ${reg.event.venue_state}`}
+                        {reg.event?.venue_country && reg.event.venue_country !== 'USA' && `, ${reg.event.venue_country}`}
+                      </p>
+                      <p className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {reg.event && new Date(reg.event.event_date).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </p>
+                      {reg.event?.season_id && (
+                        <p className="text-xs text-gray-500">
+                          Season: {seasons.find(s => s.id === reg.event?.season_id)?.name || 'Unknown'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                      reg.status === 'confirmed'
+                        ? 'bg-green-500/10 text-green-400'
+                        : reg.status === 'pending'
+                        ? 'bg-yellow-500/10 text-yellow-400'
+                        : 'bg-red-500/10 text-red-400'
+                    }`}
+                  >
+                    {reg.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : registrations.length > 0 ? (
+          <div className="text-center py-12">
+            <Search className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 mb-4">No registrations match your filters</p>
+            <button
+              onClick={clearFilters}
+              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 mb-4">No event registrations yet</p>
+            <button
+              onClick={() => navigate('/events')}
+              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Browse Events
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderResults = () => {
+    // Get unique states from results for filter dropdown
+    const availableResultsStates = [...new Set(
+      results
+        .map(r => r.event?.venue_state)
+        .filter((s): s is string => !!s)
+    )].sort();
+
+    // Apply filters to results
+    const filteredResultsData = results.filter(r => {
+      // Season filter
+      if (resultsFilters.seasonId && r.season_id !== resultsFilters.seasonId) {
+        return false;
+      }
+      // State filter
+      if (resultsFilters.state && r.event?.venue_state !== resultsFilters.state) {
+        return false;
+      }
+      return true;
+    });
+
+    // Group results by event to avoid duplicate rating panels
+    const eventIds = [...new Set(filteredResultsData.map(r => r.event?.id).filter(Boolean))] as string[];
+
+    return (
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+          <Trophy className="h-6 w-6 text-orange-500" />
+          My Competition Results
+        </h2>
+
+        {/* Results Filters */}
+        <div className="bg-slate-700/50 rounded-lg p-4 mb-6">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-gray-400" />
+              <span className="text-gray-300 font-medium">Filters:</span>
+            </div>
+            <select
+              value={resultsFilters.seasonId}
+              onChange={(e) => setResultsFilters({ ...resultsFilters, seasonId: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={resultsFilters.state}
+              onChange={(e) => setResultsFilters({ ...resultsFilters, state: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All States</option>
+              {availableResultsStates.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+            {(resultsFilters.seasonId || resultsFilters.state) && (
+              <button
+                onClick={() => setResultsFilters({ seasonId: '', state: '' })}
+                className="text-orange-400 hover:text-orange-300 text-sm flex items-center gap-1"
+              >
+                <X className="h-4 w-4" />
+                Clear Filters
+              </button>
+            )}
+            <span className="text-gray-500 text-sm ml-auto">
+              {filteredResultsData.length} of {results.length} results
+            </span>
+          </div>
         </div>
-      )}
-    </div>
-  );
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
+        ) : filteredResultsData.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Event</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Class</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Score</th>
+                  <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Place</th>
+                  <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">Points</th>
+                  <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Rate Staff</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredResultsData.map((result) => (
+                  <React.Fragment key={result.id}>
+                    <tr className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="text-white font-medium">{result.event?.title}</p>
+                          <p className="text-gray-400 text-sm">{result.event && new Date(result.event.event_date).toLocaleDateString()}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-gray-300">{result.competition_class}</td>
+                      <td className="py-3 px-4 text-gray-300">{result.score}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                          result.placement === 1 ? 'bg-yellow-500/20 text-yellow-400' :
+                          result.placement === 2 ? 'bg-gray-400/20 text-gray-300' :
+                          result.placement === 3 ? 'bg-orange-500/20 text-orange-400' :
+                          'bg-slate-600 text-gray-300'
+                        }`}>
+                          {result.placement}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="text-orange-500 font-semibold">{result.points_earned}</span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {result.event?.id && (
+                          <button
+                            onClick={() => setExpandedRatingEventId(
+                              expandedRatingEventId === result.event?.id ? null : result.event?.id || null
+                            )}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                              expandedRatingEventId === result.event?.id
+                                ? 'bg-yellow-500/20 text-yellow-400'
+                                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                            }`}
+                          >
+                            <Star className="h-4 w-4" />
+                            Rate
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {/* Expanded Rating Panel */}
+                    {expandedRatingEventId === result.event?.id && result.event && (
+                      <tr>
+                        <td colSpan={6} className="p-0">
+                          <div className="bg-slate-700/50 p-4 border-b border-slate-600">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-white font-semibold flex items-center gap-2">
+                                <Star className="h-5 w-5 text-yellow-500" />
+                                Rate Staff for {result.event.title}
+                              </h4>
+                              <button
+                                onClick={() => setExpandedRatingEventId(null)}
+                                className="text-gray-400 hover:text-white"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            </div>
+                            <EventRatingsPanel
+                              eventId={result.event.id}
+                              eventName={result.event.title}
+                              onRatingSubmitted={() => {
+                                // Optionally refresh or show success message
+                              }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : results.length > 0 ? (
+          <div className="text-center py-12">
+            <Filter className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No results match the selected filters</p>
+            <button
+              onClick={() => setResultsFilters({ seasonId: '', state: '' })}
+              className="mt-4 text-orange-400 hover:text-orange-300"
+            >
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Trophy className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No competition results yet</p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderAnalytics = () => {
+    // Get unique states from results for filter dropdown
+    const availableStates = [...new Set(
+      results
+        .map(r => r.event?.venue_state)
+        .filter((s): s is string => !!s)
+    )].sort();
+
+    // Apply filters to results
+    const filteredResults = results.filter(r => {
+      // Season filter
+      if (analyticsFilters.seasonId && r.season_id !== analyticsFilters.seasonId) {
+        return false;
+      }
+      // State filter
+      if (analyticsFilters.state && r.event?.venue_state !== analyticsFilters.state) {
+        return false;
+      }
+      return true;
+    });
+
     // Helper to detect format from result - checks multiple fields
     const getResultFormat = (r: CompetitionResult): string => {
       // Check direct format field first
@@ -2691,8 +3335,8 @@ export default function MyMecaDashboardPage() {
       return 'SPL';
     };
 
-    // Calculate format/category stats from actual results data
-    const formatStats = results.reduce((acc, r) => {
+    // Calculate format/category stats from filtered results data
+    const formatStats = filteredResults.reduce((acc, r) => {
       const format = getResultFormat(r);
       if (!acc[format]) {
         acc[format] = { count: 0, points: 0, totalPoints: 0, scores: [] as number[], pointsHistory: [] as number[], bestScore: 0, wins: 0 };
@@ -2708,10 +3352,10 @@ export default function MyMecaDashboardPage() {
     }, {} as Record<string, { count: number; points: number; totalPoints: number; scores: number[]; pointsHistory: number[]; bestScore: number; wins: number }>);
 
     const placementBreakdown = {
-      first: results.filter(r => r.placement === 1).length,
-      second: results.filter(r => r.placement === 2).length,
-      third: results.filter(r => r.placement === 3).length,
-      other: results.filter(r => r.placement > 3).length,
+      first: filteredResults.filter(r => r.placement === 1).length,
+      second: filteredResults.filter(r => r.placement === 2).length,
+      third: filteredResults.filter(r => r.placement === 3).length,
+      other: filteredResults.filter(r => r.placement > 3).length,
     };
 
     // Chart colors
@@ -2729,7 +3373,7 @@ export default function MyMecaDashboardPage() {
 
     // Get results by format for charts (only formats with actual data)
     const getFormatChartData = (formatName: string) => {
-      const formatResults = results
+      const formatResults = filteredResults
         .filter(r => getResultFormat(r) === formatName)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         .slice(-12);
@@ -2785,14 +3429,62 @@ export default function MyMecaDashboardPage() {
 
     return (
       <div className="space-y-6">
-        {/* Original Summary Stats */}
+        {/* Analytics Filters */}
+        <div className="bg-slate-800 rounded-xl p-4 shadow-lg">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-gray-400" />
+              <span className="text-gray-300 font-medium">Filters:</span>
+            </div>
+            <select
+              value={analyticsFilters.seasonId}
+              onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, seasonId: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={analyticsFilters.state}
+              onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, state: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All States</option>
+              {availableStates.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+            {(analyticsFilters.seasonId || analyticsFilters.state) && (
+              <button
+                onClick={() => setAnalyticsFilters({ seasonId: '', state: '' })}
+                className="text-orange-400 hover:text-orange-300 text-sm flex items-center gap-1"
+              >
+                <X className="h-4 w-4" />
+                Clear Filters
+              </button>
+            )}
+            <span className="text-gray-500 text-sm ml-auto">
+              {filteredResults.length} of {results.length} results
+            </span>
+          </div>
+        </div>
+
+        {/* Summary Stats (filtered) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
-            <p className="text-3xl font-bold text-white mb-1">{stats.totalEvents}</p>
-            <p className="text-gray-400 text-sm">Events Competed</p>
+            <p className="text-3xl font-bold text-white mb-1">{filteredResults.length}</p>
+            <p className="text-gray-400 text-sm">Results</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
-            <p className="text-3xl font-bold text-orange-500 mb-1">{stats.totalPoints}</p>
+            <p className="text-3xl font-bold text-orange-500 mb-1">
+              {filteredResults.reduce((sum, r) => sum + (r.points_earned || 0), 0)}
+            </p>
             <p className="text-gray-400 text-sm">Total Points</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
@@ -2801,7 +3493,9 @@ export default function MyMecaDashboardPage() {
           </div>
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
             <p className="text-3xl font-bold text-green-400 mb-1">
-              {stats.bestPlacement ? `#${stats.bestPlacement}` : 'N/A'}
+              {filteredResults.length > 0
+                ? `#${Math.min(...filteredResults.map(r => r.placement).filter(p => p > 0))}`
+                : 'N/A'}
             </p>
             <p className="text-gray-400 text-sm">Best Placement</p>
           </div>
@@ -3053,12 +3747,12 @@ export default function MyMecaDashboardPage() {
         )}
 
         {/* NEW: Points Progress Line Chart - Only show if there are enough results */}
-        {results.length > 2 && (
+        {filteredResults.length > 2 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Points Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
                   .map((r, index) => ({
@@ -3066,13 +3760,12 @@ export default function MyMecaDashboardPage() {
                     points: r.points_earned || 0,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
                     labelStyle={{ color: '#fff' }}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="points"
@@ -3093,7 +3786,7 @@ export default function MyMecaDashboardPage() {
             <h2 className="text-2xl font-bold text-white mb-6">SPL Score Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .filter(r => getResultFormat(r) === 'SPL')
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
@@ -3103,7 +3796,7 @@ export default function MyMecaDashboardPage() {
                     event: r.event?.title || `Competition ${index + 1}`,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} domain={['auto', 'auto']} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
@@ -3111,7 +3804,6 @@ export default function MyMecaDashboardPage() {
                     formatter={(value: number) => [`${value.toFixed(1)} dB`, 'Score']}
                     labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="score"
@@ -3127,12 +3819,12 @@ export default function MyMecaDashboardPage() {
         )}
 
         {/* Wattage Progress Line Chart */}
-        {results.length > 0 && (
+        {filteredResults.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Wattage Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
                   .map((r, index) => ({
@@ -3141,7 +3833,7 @@ export default function MyMecaDashboardPage() {
                     event: r.event?.title || `Competition ${index + 1}`,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
@@ -3149,7 +3841,6 @@ export default function MyMecaDashboardPage() {
                     formatter={(value: number) => [`${value.toLocaleString()} W`, 'Wattage']}
                     labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="wattage"
@@ -3165,12 +3856,12 @@ export default function MyMecaDashboardPage() {
         )}
 
         {/* Frequency Progress Line Chart */}
-        {results.length > 0 && (
+        {filteredResults.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Frequency Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
                   .map((r, index) => ({
@@ -3179,7 +3870,7 @@ export default function MyMecaDashboardPage() {
                     event: r.event?.title || `Competition ${index + 1}`,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
@@ -3187,7 +3878,6 @@ export default function MyMecaDashboardPage() {
                     formatter={(value: number) => [`${value} Hz`, 'Frequency']}
                     labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="frequency"
@@ -3206,6 +3896,19 @@ export default function MyMecaDashboardPage() {
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center py-12">
             <BarChart3 className="h-16 w-16 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400">Analytics will appear once you have competition results</p>
+          </div>
+        )}
+
+        {results.length > 0 && filteredResults.length === 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center py-12">
+            <Filter className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No results match the selected filters</p>
+            <button
+              onClick={() => setAnalyticsFilters({ seasonId: '', state: '' })}
+              className="mt-4 text-orange-400 hover:text-orange-300"
+            >
+              Clear Filters
+            </button>
           </div>
         )}
       </div>

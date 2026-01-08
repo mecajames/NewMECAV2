@@ -1,5 +1,6 @@
-import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { Membership } from '../memberships/memberships.entity';
 
 // Team types for categorization
 export enum TeamType {
@@ -26,6 +27,10 @@ export class Team {
 
   @Property({ type: 'text', nullable: true, fieldName: 'logo_url' })
   logoUrl?: string;
+
+  // The membership that owns this team (for competitor teams with add-on, or retailer/manufacturer teams)
+  @ManyToOne(() => Membership, { nullable: true, fieldName: 'membership_id' })
+  membership?: Membership;
 
   @Property({ type: 'uuid', fieldName: 'captain_id' })
   captainId!: string;

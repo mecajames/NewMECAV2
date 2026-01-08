@@ -1,23 +1,18 @@
 import { Module, Global } from '@nestjs/common';
-import { MikroORM } from '@mikro-orm/core';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { EntityManager } from '@mikro-orm/postgresql';
 import mikroOrmConfig from './mikro-orm.config';
 
 @Global()
 @Module({
+  imports: [MikroOrmModule.forRoot(mikroOrmConfig)],
   providers: [
-    {
-      provide: MikroORM,
-      useFactory: async () => {
-        const orm = await MikroORM.init(mikroOrmConfig);
-        return orm;
-      },
-    },
+    // Provide EntityManager with string token for legacy services that use @Inject('EntityManager')
     {
       provide: 'EntityManager',
-      useFactory: (orm: MikroORM) => orm.em,
-      inject: [MikroORM],
+      useExisting: EntityManager,
     },
   ],
-  exports: [MikroORM, 'EntityManager'],
+  exports: ['EntityManager'],
 })
 export class DatabaseModule {}

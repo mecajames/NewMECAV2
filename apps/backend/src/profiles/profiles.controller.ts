@@ -8,15 +8,48 @@ import {
   Param,
   Query,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { ProfilesService, CreateUserWithPasswordDto, ResetPasswordDto } from './profiles.service';
+import { MemberStatsService } from './member-stats.service';
 import { Profile } from './profiles.entity';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { UserRole } from '@newmeca/shared';
 
 @Controller('api/profiles')
 export class ProfilesController {
-  constructor(private readonly profilesService: ProfilesService) {}
+  constructor(
+    private readonly profilesService: ProfilesService,
+    private readonly memberStatsService: MemberStatsService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
+  ) {}
+
+  // Helper to require admin authentication
+  private async requireAdmin(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return { user, profile };
+  }
 
   @Get()
   async listProfiles(
@@ -138,5 +171,68 @@ export class ProfilesController {
   async clearForcePasswordChange(@Param('id') id: string): Promise<{ success: boolean }> {
     await this.profilesService.clearForcePasswordChange(id);
     return { success: true };
+  }
+
+  /**
+   * Cleans up an orphaned auth user (user exists in Supabase Auth but not in profiles table)
+   * Admin only - use when user creation fails partway through
+   */
+  @Delete('admin/cleanup-auth-user')
+  @HttpCode(HttpStatus.OK)
+  async cleanupOrphanedAuthUser(@Body() body: { email: string }): Promise<{ success: boolean; message: string }> {
+    return this.profilesService.cleanupOrphanedAuthUser(body.email);
+  }
+
+  /**
+   * Fully deletes a user from both profiles table AND Supabase Auth
+   * Admin only - use for complete user removal
+   */
+  @Delete('admin/delete-user-completely')
+  @HttpCode(HttpStatus.OK)
+  async deleteUserCompletely(@Body() body: { email: string }): Promise<{ success: boolean; message: string }> {
+    return this.profilesService.deleteUserCompletelyByEmail(body.email);
+  }
+
+  /**
+   * Fully deletes a user by ID from profiles, memberships, and Supabase Auth
+   * Admin only - comprehensive delete
+   */
+  @Delete('admin/delete-user/:id')
+  @HttpCode(HttpStatus.OK)
+  async deleteUserById(@Param('id') id: string): Promise<{
+    success: boolean;
+    message: string;
+    deletedMemberships?: number;
+  }> {
+    return this.profilesService.deleteUserCompletelyById(id);
+  }
+
+  /**
+   * Generates an impersonation link for admin to view the app as another user
+   * Admin only - returns a magic link URL
+   */
+  @Post('admin/impersonate/:id')
+  @HttpCode(HttpStatus.OK)
+  async impersonateUser(
+    @Param('id') id: string,
+    @Body() body: { redirectTo?: string },
+  ): Promise<{ success: boolean; link?: string; error?: string }> {
+    const redirectTo = body.redirectTo || process.env.FRONTEND_URL || 'http://localhost:5173';
+    return this.profilesService.generateImpersonationLink(id, redirectTo);
+  }
+
+  // ===== Member Statistics Endpoints =====
+
+  /**
+   * Get member statistics (admin only)
+   * Returns order count, events attended, trophies, total spent, recent activity, etc.
+   */
+  @Get(':id/stats')
+  async getMemberStats(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.memberStatsService.getMemberStats(id);
   }
 }

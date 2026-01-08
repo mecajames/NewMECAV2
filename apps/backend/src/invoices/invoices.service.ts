@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { EntityManager, wrap } from '@mikro-orm/core';
 import {
@@ -18,6 +19,7 @@ import { Invoice } from './invoices.entity';
 import { InvoiceItem } from './invoice-items.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Order } from '../orders/orders.entity';
+import { EmailService } from '../email/email.service';
 
 // Default MECA company info
 const DEFAULT_COMPANY_INFO = {
@@ -29,16 +31,19 @@ const DEFAULT_COMPANY_INFO = {
     postalCode: '',
     country: 'US',
   },
-  email: 'billing@maboroshi.com',
+  email: 'billing@mecacaraudio.com',
   phone: '',
-  website: 'https://maboroshi.com',
+  website: 'https://mecacaraudio.com',
 };
 
 @Injectable()
 export class InvoicesService {
+  private readonly logger = new Logger(InvoicesService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -518,5 +523,174 @@ export class InvoicesService {
         orderBy: { paidAt: 'ASC' },
       },
     );
+  }
+
+  /**
+   * Generate payment URL for an invoice
+   */
+  generatePaymentUrl(invoiceId: string): string {
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    return `${baseUrl}/pay/invoice/${invoiceId}`;
+  }
+
+  /**
+   * Send invoice email to user and update status
+   */
+  async sendInvoice(invoiceId: string): Promise<{
+    success: boolean;
+    invoice: Invoice;
+    error?: string;
+  }> {
+    const em = this.em.fork();
+
+    // Get invoice with user and items
+    const invoice = await em.findOne(
+      Invoice,
+      { id: invoiceId },
+      { populate: ['user', 'items'] },
+    );
+
+    if (!invoice) {
+      throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+    }
+
+    // Check if invoice can be sent
+    if (invoice.status === InvoiceStatus.PAID) {
+      throw new BadRequestException('Cannot send a paid invoice');
+    }
+
+    if (invoice.status === InvoiceStatus.CANCELLED) {
+      throw new BadRequestException('Cannot send a cancelled invoice');
+    }
+
+    if (invoice.status === InvoiceStatus.REFUNDED) {
+      throw new BadRequestException('Cannot send a refunded invoice');
+    }
+
+    // Get user email
+    const user = invoice.user;
+    if (!user?.email) {
+      throw new BadRequestException('Invoice has no associated user email');
+    }
+
+    // Generate payment URL
+    const paymentUrl = this.generatePaymentUrl(invoice.id);
+
+    // Prepare items for email
+    const items = invoice.items.getItems().map(item => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    }));
+
+    // Use due date or default to 30 days from now
+    const dueDate = invoice.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    // Send email
+    const emailResult = await this.emailService.sendInvoiceEmail({
+      to: user.email,
+      firstName: user.first_name || undefined,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceTotal: invoice.total,
+      dueDate,
+      paymentUrl,
+      items,
+    });
+
+    if (!emailResult.success) {
+      this.logger.error(`Failed to send invoice email: ${emailResult.error}`);
+      return {
+        success: false,
+        invoice,
+        error: emailResult.error,
+      };
+    }
+
+    // Update invoice status to SENT
+    wrap(invoice).assign({
+      status: InvoiceStatus.SENT,
+      sentAt: new Date(),
+    });
+
+    await em.flush();
+
+    this.logger.log(`Invoice ${invoice.invoiceNumber} sent to ${user.email}`);
+
+    return {
+      success: true,
+      invoice,
+    };
+  }
+
+  /**
+   * Resend invoice email (for already sent invoices)
+   */
+  async resendInvoice(invoiceId: string): Promise<{
+    success: boolean;
+    invoice: Invoice;
+    error?: string;
+  }> {
+    const em = this.em.fork();
+
+    const invoice = await em.findOne(
+      Invoice,
+      { id: invoiceId },
+      { populate: ['user', 'items'] },
+    );
+
+    if (!invoice) {
+      throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+    }
+
+    // Can only resend if status is SENT or OVERDUE
+    if (![InvoiceStatus.SENT, InvoiceStatus.OVERDUE].includes(invoice.status)) {
+      throw new BadRequestException(
+        `Cannot resend invoice with status ${invoice.status}`,
+      );
+    }
+
+    const user = invoice.user;
+    if (!user?.email) {
+      throw new BadRequestException('Invoice has no associated user email');
+    }
+
+    const paymentUrl = this.generatePaymentUrl(invoice.id);
+
+    const items = invoice.items.getItems().map(item => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    }));
+
+    // Use due date or default to 30 days from now
+    const dueDate = invoice.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const emailResult = await this.emailService.sendInvoiceEmail({
+      to: user.email,
+      firstName: user.first_name || undefined,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceTotal: invoice.total,
+      dueDate,
+      paymentUrl,
+      items,
+    });
+
+    if (!emailResult.success) {
+      this.logger.error(`Failed to resend invoice email: ${emailResult.error}`);
+      return {
+        success: false,
+        invoice,
+        error: emailResult.error,
+      };
+    }
+
+    this.logger.log(`Invoice ${invoice.invoiceNumber} resent to ${user.email}`);
+
+    return {
+      success: true,
+      invoice,
+    };
   }
 }

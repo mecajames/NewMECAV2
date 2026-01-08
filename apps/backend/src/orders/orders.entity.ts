@@ -25,6 +25,10 @@ export class Order {
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'user_id' })
   user?: Profile;
 
+  // Legacy member_id field - kept for backwards compatibility with RLS policies
+  @ManyToOne(() => Profile, { fieldName: 'member_id' })
+  member!: Profile;
+
   @Enum(() => OrderStatus)
   @Property({ fieldName: 'status' })
   status: OrderStatus = OrderStatus.PENDING;

@@ -211,12 +211,12 @@ export default function EventCheckInPage() {
         <div className="text-center">
           <QrCode className="h-16 w-16 text-gray-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-gray-400">Only Admins and Event Directors can check in competitors.</p>
+          <p className="text-gray-400 mb-6">Only Admins and Event Directors can check in competitors.</p>
           <Link
             to="/events"
-            className="inline-flex items-center text-orange-500 hover:text-orange-400 mt-4"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Events
           </Link>
         </div>
@@ -233,9 +233,9 @@ export default function EventCheckInPage() {
           <p className="text-gray-400 mb-6">{error || 'Event not found'}</p>
           <Link
             to="/events"
-            className="inline-flex items-center text-orange-500 hover:text-orange-400"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Events
           </Link>
         </div>
@@ -248,13 +248,16 @@ export default function EventCheckInPage() {
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
         <div className="mb-6">
-          <Link
-            to={`/events/${eventId}`}
-            className="inline-flex items-center text-gray-400 hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Event
-          </Link>
+          <div className="flex items-start justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-400">Check-In System</h2>
+            <Link
+              to={`/events/${eventId}`}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Event
+            </Link>
+          </div>
 
           <div className="flex items-start justify-between">
             <div>

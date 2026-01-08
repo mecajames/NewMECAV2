@@ -128,4 +128,16 @@ export const eventsApi = {
     if (!response.ok) throw new Error('Failed to fetch events by multi-day group');
     return response.json();
   },
+
+  sendRatingEmails: async (eventId: string): Promise<{ sent: number; failed: number; errors: string[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/events/${eventId}/send-rating-emails`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to send rating emails: ${errorBody}`);
+    }
+    return response.json();
+  },
 };

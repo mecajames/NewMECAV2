@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { MembershipCategory, PaymentStatus, RegistrationStatus } from '@newmeca/shared';
 import { Team } from './team.entity';
@@ -8,6 +8,7 @@ import { Membership } from '../memberships/memberships.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
 import { Event } from '../events/events.entity';
+import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 
 interface MemberWithUser extends TeamMember {
   user?: {
@@ -57,10 +58,173 @@ function sanitizeTeamName(name: string): string {
 
 @Injectable()
 export class TeamsService {
+  private readonly logger = new Logger(TeamsService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
+
+  /**
+   * Create a team for a membership.
+   * This is called automatically when:
+   * 1. A competitor membership with team add-on is purchased
+   * 2. A retailer or manufacturer membership is purchased (team is included)
+   *
+   * @param membership The membership to create a team for
+   * @returns The created team
+   */
+  async createTeamForMembership(membership: Membership): Promise<Team> {
+    const em = this.em.fork();
+
+    // Load the membership with user if not already loaded
+    const fullMembership = await em.findOne(Membership, { id: membership.id }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!fullMembership) {
+      throw new NotFoundException('Membership not found');
+    }
+
+    if (!fullMembership.user) {
+      throw new BadRequestException('Cannot create a team for a membership without a user');
+    }
+
+    const userId = fullMembership.user.id;
+    const category = fullMembership.membershipTypeConfig.category;
+
+    // Check if team creation is appropriate for this membership type
+    // Also check if membership config includesTeam (for "Competitor w/Team" type)
+    const shouldHaveTeam =
+      category === MembershipCategory.RETAIL ||
+      category === MembershipCategory.MANUFACTURER ||
+      category === MembershipCategory.TEAM ||
+      fullMembership.membershipTypeConfig.includesTeam ||
+      (category === MembershipCategory.COMPETITOR && fullMembership.hasTeamAddon);
+
+    if (!shouldHaveTeam) {
+      throw new BadRequestException('This membership type does not include a team');
+    }
+
+    // Generate team name if not provided
+    let teamName = fullMembership.teamName;
+    if (!teamName) {
+      if (category === MembershipCategory.RETAIL || category === MembershipCategory.MANUFACTURER) {
+        teamName = fullMembership.businessName || `${fullMembership.user.first_name || 'New'}'s Team`;
+      } else {
+        teamName = `${fullMembership.user.first_name || 'New'}'s Team`;
+      }
+    }
+
+    // Sanitize team name
+    const sanitizedName = sanitizeTeamName(teamName);
+    if (!sanitizedName) {
+      throw new BadRequestException('Team name cannot be empty');
+    }
+
+    // Check if user already has a team from this membership
+    const existingTeam = await em.findOne(Team, { membership: fullMembership.id });
+    if (existingTeam) {
+      this.logger.warn(`Team already exists for membership ${fullMembership.id}`);
+      return existingTeam;
+    }
+
+    // Check if user is already an owner of another team
+    const existingTeamAsOwner = await em.findOne(Team, { captainId: userId, isActive: true });
+    if (existingTeamAsOwner) {
+      // Link existing team to this membership instead of creating new
+      existingTeamAsOwner.membership = fullMembership;
+      await em.flush();
+      this.logger.log(`Linked existing team ${existingTeamAsOwner.id} to membership ${fullMembership.id}`);
+      return existingTeamAsOwner;
+    }
+
+    // Determine team type based on membership category
+    let teamType = 'competitive';
+    if (category === MembershipCategory.RETAIL) {
+      teamType = 'shop';
+    } else if (category === MembershipCategory.MANUFACTURER) {
+      teamType = 'club';
+    }
+
+    // Create the team
+    const team = em.create(Team, {
+      name: sanitizedName,
+      description: fullMembership.teamDescription,
+      captainId: userId,
+      membership: fullMembership,
+      teamType,
+      maxMembers: 50, // Default max members for teams
+      isPublic: true,
+      requiresApproval: true,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await em.persistAndFlush(team);
+
+    // Add owner as a team member
+    const ownerMember = em.create(TeamMember, {
+      teamId: team.id,
+      userId,
+      membership: fullMembership,
+      role: 'owner',
+      status: 'active',
+      joinedAt: new Date(),
+    });
+
+    await em.persistAndFlush(ownerMember);
+
+    this.logger.log(`Created team ${team.id} (${sanitizedName}) for membership ${fullMembership.id}`);
+
+    return team;
+  }
+
+  /**
+   * Get the team associated with a membership
+   */
+  async getTeamByMembership(membershipId: string): Promise<Team | null> {
+    const em = this.em.fork();
+    return em.findOne(Team, { membership: membershipId });
+  }
+
+  /**
+   * Check if a membership should have a team and if one exists
+   */
+  async checkMembershipTeamStatus(membershipId: string): Promise<{
+    shouldHaveTeam: boolean;
+    hasTeam: boolean;
+    team?: Team;
+    category?: MembershipCategory;
+  }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      return { shouldHaveTeam: false, hasTeam: false };
+    }
+
+    const category = membership.membershipTypeConfig.category;
+    const shouldHaveTeam =
+      category === MembershipCategory.RETAIL ||
+      category === MembershipCategory.MANUFACTURER ||
+      category === MembershipCategory.TEAM ||
+      membership.membershipTypeConfig.includesTeam ||
+      (category === MembershipCategory.COMPETITOR && membership.hasTeamAddon);
+
+    const team = await em.findOne(Team, { membership: membershipId });
+
+    return {
+      shouldHaveTeam,
+      hasTeam: !!team,
+      team: team || undefined,
+      category,
+    };
+  }
 
   // Helper to build member with user data
   private async buildMemberWithUser(em: EntityManager, member: TeamMember): Promise<MemberWithUser> {
@@ -210,12 +374,54 @@ export class TeamsService {
   }
 
   // Check if a user has an active team membership (required to create a team)
+  // Team eligibility comes from:
+  // 1. Retailer or Manufacturer membership (always includes team)
+  // 2. Competitor membership with hasTeamAddon: true
+  // 3. Any membership with membershipTypeConfig.includesTeam: true
+  // 4. Legacy TEAM category membership
   async hasTeamMembership(userId: string): Promise<boolean> {
     const em = this.em.fork();
 
     // Check for active team membership - NO admin bypass here
     // Admins must also have a team membership to create teams
     const now = new Date();
+
+    // First check for Retailer/Manufacturer memberships (always include team)
+    const retailerOrManufacturerMembership = await em.findOne(Membership, {
+      user: userId,
+      paymentStatus: PaymentStatus.PAID,
+      membershipTypeConfig: { category: { $in: [MembershipCategory.RETAIL, MembershipCategory.MANUFACTURER] } },
+      $and: [
+        { startDate: { $lte: now } },
+        { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+      ],
+    }, { populate: ['membershipTypeConfig'] });
+
+    if (retailerOrManufacturerMembership) {
+      return true;
+    }
+
+    // Check for Competitor with team add-on OR membership config that includes team
+    const competitorWithTeam = await em.findOne(Membership, {
+      user: userId,
+      paymentStatus: PaymentStatus.PAID,
+      $and: [
+        { startDate: { $lte: now } },
+        { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+        {
+          $or: [
+            { hasTeamAddon: true },
+            { membershipTypeConfig: { includesTeam: true } },
+          ],
+        },
+      ],
+    }, { populate: ['membershipTypeConfig'] });
+
+    if (competitorWithTeam) {
+      return true;
+    }
+
+    // Check for legacy TEAM category membership
     const teamMembership = await em.findOne(Membership, {
       user: userId,
       paymentStatus: PaymentStatus.PAID,

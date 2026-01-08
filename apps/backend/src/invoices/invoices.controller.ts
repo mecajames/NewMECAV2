@@ -31,6 +31,40 @@ export class InvoicesController {
   ) {}
 
   /**
+   * Get invoice for public payment page (no auth required)
+   * Returns limited info for security
+   */
+  @Get('pay/:id')
+  async getInvoiceForPayment(@Param('id') id: string) {
+    const invoice = await this.invoicesService.findById(id);
+    // Return only info needed for payment
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      status: invoice.status,
+      subtotal: invoice.subtotal,
+      tax: invoice.tax,
+      discount: invoice.discount,
+      total: invoice.total,
+      currency: invoice.currency,
+      dueDate: invoice.dueDate,
+      items: invoice.items.getItems().map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      })),
+      billingAddress: invoice.billingAddress,
+      companyInfo: invoice.companyInfo,
+      user: invoice.user ? {
+        email: invoice.user.email,
+        firstName: invoice.user.first_name,
+        lastName: invoice.user.last_name,
+      } : null,
+    };
+  }
+
+  /**
    * Get all invoices with filters (admin)
    */
   @Get()
@@ -117,12 +151,21 @@ export class InvoicesController {
   }
 
   /**
-   * Mark invoice as sent
+   * Send invoice email to user
    */
   @Post(':id/send')
   @HttpCode(HttpStatus.OK)
-  async markAsSent(@Param('id') id: string) {
-    return this.invoicesService.markAsSent(id);
+  async sendInvoice(@Param('id') id: string) {
+    return this.invoicesService.sendInvoice(id);
+  }
+
+  /**
+   * Resend invoice email (for already sent invoices)
+   */
+  @Post(':id/resend')
+  @HttpCode(HttpStatus.OK)
+  async resendInvoice(@Param('id') id: string) {
+    return this.invoicesService.resendInvoice(id);
   }
 
   /**

@@ -6,7 +6,8 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['lucide-react', '@stripe/stripe-js', '@stripe/react-stripe-js'],
+    exclude: ['lucide-react'],
+    include: ['@stripe/stripe-js', '@stripe/react-stripe-js', '@newmeca/shared'],
   },
   resolve: {
     alias: {

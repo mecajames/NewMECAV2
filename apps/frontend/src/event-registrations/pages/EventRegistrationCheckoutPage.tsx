@@ -29,6 +29,7 @@ import {
   MembershipCategory,
 } from '@/membership-type-configs';
 import { eventRegistrationsApi } from '@/event-registrations/event-registrations.api-client';
+import { membershipsApi, UserMecaId } from '@/memberships/memberships.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
@@ -80,6 +81,7 @@ interface OrderData {
   classes: SelectedClass[];
   total: number;
   includedMembership: boolean;
+  mecaId?: number;
   checkInCode?: string;
   qrCodeData?: string;
 }
@@ -103,6 +105,11 @@ export default function EventRegistrationCheckoutPage() {
   const [selectedClasses, setSelectedClasses] = useState<SelectedClass[]>([]);
   const [includeMembership, setIncludeMembership] = useState(false);
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
+
+  // MECA ID selection state (for users with memberships)
+  const [userMecaIds, setUserMecaIds] = useState<UserMecaId[]>([]);
+  const [selectedMecaId, setSelectedMecaId] = useState<number | null>(null);
+  const [loadingMecaIds, setLoadingMecaIds] = useState(false);
 
   // Stripe-related state
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -238,6 +245,26 @@ export default function EventRegistrationCheckoutPage() {
             country: profile.country || 'US',
           }));
         }
+
+        // Fetch user's MECA IDs if logged in
+        if (user?.id) {
+          setLoadingMecaIds(true);
+          try {
+            const mecaIds = await membershipsApi.getUserMecaIds(user.id);
+            // Show all active MECA IDs (Competitor, Retailer, Manufacturer can all compete)
+            const activeMecaIds = mecaIds.filter(m => m.isActive);
+            setUserMecaIds(activeMecaIds);
+            // Auto-select if only one
+            if (activeMecaIds.length === 1) {
+              setSelectedMecaId(activeMecaIds[0].mecaId);
+            }
+          } catch (err) {
+            console.error('Error fetching MECA IDs:', err);
+            // Not critical - user may not have memberships
+          } finally {
+            setLoadingMecaIds(false);
+          }
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load event details');
@@ -247,7 +274,7 @@ export default function EventRegistrationCheckoutPage() {
     };
 
     fetchData();
-  }, [eventId, profile]);
+  }, [eventId, profile, user?.id]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -298,6 +325,12 @@ export default function EventRegistrationCheckoutPage() {
       return false;
     }
 
+    // If user has multiple MECA IDs, they must select one
+    if (userMecaIds.length > 1 && !selectedMecaId) {
+      setError('Please select which MECA ID you want to compete under');
+      return false;
+    }
+
     setError(null);
     return true;
   };
@@ -310,6 +343,9 @@ export default function EventRegistrationCheckoutPage() {
 
     try {
       const email = user ? (profile?.email || formData.email) : formData.email;
+
+      // Determine which MECA ID to use
+      const mecaIdToUse = selectedMecaId || (userMecaIds.length === 1 ? userMecaIds[0].mecaId : undefined);
 
       // Create Payment Intent via backend (with testMode if Stripe not configured)
       const result = await eventRegistrationsApi.createPaymentIntent({
@@ -333,6 +369,7 @@ export default function EventRegistrationCheckoutPage() {
         membershipTypeConfigId: includeMembership && !isMember ? selectedMembershipId || undefined : undefined,
         userId: user?.id,
         isMember,
+        mecaId: mecaIdToUse,
         testMode: !isStripeConfigured,
       });
 
@@ -357,6 +394,9 @@ export default function EventRegistrationCheckoutPage() {
       const qrData = await eventRegistrationsApi.getQrCode(registrationId);
 
       // Save order data for confirmation page
+      // Determine which MECA ID was used
+      const mecaIdUsed = selectedMecaId || (userMecaIds.length === 1 ? userMecaIds[0].mecaId : undefined);
+
       setOrderData({
         registrationId,
         eventTitle: event.title,
@@ -366,12 +406,15 @@ export default function EventRegistrationCheckoutPage() {
         classes: selectedClasses,
         total: pricing.total,
         includedMembership: includeMembership && !isMember,
+        mecaId: mecaIdUsed,
         checkInCode: qrData.checkInCode,
         qrCodeData: qrData.qrCodeData,
       });
     } catch (err) {
       console.error('Failed to fetch QR code:', err);
       // Still proceed to confirmation even if QR fetch fails
+      const mecaIdUsed = selectedMecaId || (userMecaIds.length === 1 ? userMecaIds[0].mecaId : undefined);
+
       setOrderData({
         registrationId,
         eventTitle: event.title,
@@ -381,6 +424,7 @@ export default function EventRegistrationCheckoutPage() {
         classes: selectedClasses,
         total: pricing.total,
         includedMembership: includeMembership && !isMember,
+        mecaId: mecaIdUsed,
       });
     }
 
@@ -465,9 +509,9 @@ export default function EventRegistrationCheckoutPage() {
           <p className="text-gray-400 mb-6">{error}</p>
           <Link
             to="/events"
-            className="inline-flex items-center text-orange-500 hover:text-orange-400"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Events
           </Link>
         </div>
@@ -552,6 +596,12 @@ export default function EventRegistrationCheckoutPage() {
                   <span className="text-gray-400">Amount Paid</span>
                   <span className="text-white">${orderData?.total.toFixed(2)}</span>
                 </div>
+                {orderData?.mecaId && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">MECA ID</span>
+                    <span className="text-orange-400 font-mono font-semibold">#{orderData.mecaId}</span>
+                  </div>
+                )}
                 {orderData?.includedMembership && (
                   <div className="flex justify-between">
                     <span className="text-gray-400">Membership</span>
@@ -749,14 +799,16 @@ export default function EventRegistrationCheckoutPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-6xl mx-auto px-4">
-        {/* Back button */}
-        <Link
-          to={`/events/${eventId}`}
-          className="inline-flex items-center text-gray-400 hover:text-white mb-8 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Event
-        </Link>
+        {/* Header with back button */}
+        <div className="flex items-center justify-end mb-8">
+          <button
+            onClick={() => navigate(`/events/${eventId}`)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Event
+          </button>
+        </div>
 
         {/* Member Pricing Banner */}
         {!isMember && !user && (
@@ -1076,6 +1128,80 @@ export default function EventRegistrationCheckoutPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* MECA ID Selection (for members with multiple memberships) */}
+                  {user && userMecaIds.length > 0 && (
+                    <div className="mb-8">
+                      <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                        <Tag className="h-5 w-5 mr-2 text-orange-500" />
+                        {userMecaIds.length > 1 ? 'Select MECA ID *' : 'Your MECA ID'}
+                      </h3>
+                      {loadingMecaIds ? (
+                        <div className="flex items-center text-gray-400">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Loading your memberships...
+                        </div>
+                      ) : userMecaIds.length === 1 ? (
+                        <div className="p-4 bg-slate-700 rounded-lg border border-slate-600">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-orange-400 font-mono font-semibold text-lg">
+                                MECA #{userMecaIds[0].mecaId}
+                              </span>
+                              <p className="text-gray-400 text-sm mt-1">
+                                {userMecaIds[0].competitorName || `${formData.firstName} ${formData.lastName}`}
+                                {userMecaIds[0].category && <span className="text-slate-500 ml-2">({userMecaIds[0].category})</span>}
+                              </p>
+                            </div>
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-gray-400 text-sm mb-3">
+                            You have multiple active memberships. Select which MECA ID you want to compete under for this event.
+                          </p>
+                          {userMecaIds.map((mecaId) => (
+                            <label
+                              key={mecaId.mecaId}
+                              className={`flex items-center p-4 rounded-lg border cursor-pointer transition-colors ${
+                                selectedMecaId === mecaId.mecaId
+                                  ? 'bg-orange-500/20 border-orange-500'
+                                  : 'bg-slate-700 border-slate-600 hover:border-slate-500'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="mecaId"
+                                value={mecaId.mecaId}
+                                checked={selectedMecaId === mecaId.mecaId}
+                                onChange={() => setSelectedMecaId(mecaId.mecaId)}
+                                className="sr-only"
+                              />
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mr-4 ${
+                                selectedMecaId === mecaId.mecaId
+                                  ? 'bg-orange-500 border-orange-500'
+                                  : 'border-slate-500'
+                              }`}>
+                                {selectedMecaId === mecaId.mecaId && (
+                                  <div className="w-2 h-2 bg-white rounded-full" />
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <span className="text-orange-400 font-mono font-semibold">
+                                  MECA #{mecaId.mecaId}
+                                </span>
+                                <p className="text-gray-400 text-sm">
+                                  {mecaId.competitorName || 'No competitor name set'}
+                                  {mecaId.category && <span className="text-slate-500 ml-2">({mecaId.category})</span>}
+                                </p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Class Selection */}
                   <div className="mb-8">

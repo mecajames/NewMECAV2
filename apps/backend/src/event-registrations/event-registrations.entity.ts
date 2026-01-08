@@ -88,6 +88,10 @@ export class EventRegistration {
   @ManyToOne(() => Membership, { fieldName: 'membership_id', nullable: true })
   membership?: Membership;
 
+  // MECA ID used for this registration (from membership)
+  @Property({ type: 'integer', nullable: true, fieldName: 'meca_id' })
+  mecaId?: number;
+
   // QR Code / Check-in
   @Property({ type: 'text', nullable: true, unique: true, fieldName: 'check_in_code' })
   checkInCode?: string;

@@ -1,8 +1,8 @@
-import { Mail, Phone, MapPin, Send } from 'lucide-react';
+import { Mail, Phone, MapPin, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { ReCaptchaV2Widget } from '@/shared';
 import type { ReCaptchaV2Ref } from '@/shared';
-import { recaptchaApi } from '@/recaptcha';
+import { contactApi } from '@/api-client/contact.api-client';
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
@@ -12,40 +12,45 @@ export default function ContactPage() {
     message: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const recaptchaRef = useRef<ReCaptchaV2Ref>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSubmitStatus(null);
 
     try {
       // Get reCAPTCHA token from widget
       const token = recaptchaRef.current?.getToken();
-      
+
       if (!token) {
-        alert('Please complete the reCAPTCHA verification.');
+        setSubmitStatus({ type: 'error', message: 'Please complete the reCAPTCHA verification.' });
         setIsSubmitting(false);
         return;
       }
 
-      // Verify token with backend
-      const verification = await recaptchaApi.verify(token);
-      
-      if (!verification.success) {
-        alert('reCAPTCHA verification failed. Please try again.');
+      // Submit form to backend (includes reCAPTCHA verification)
+      const result = await contactApi.submit({
+        ...formData,
+        recaptcha_token: token,
+      });
+
+      if (result.success) {
+        setSubmitStatus({ type: 'success', message: result.message });
+        setFormData({ name: '', email: '', subject: '', message: '' });
         recaptchaRef.current?.reset();
-        setIsSubmitting(false);
-        return;
+      } else {
+        setSubmitStatus({ type: 'error', message: result.message || 'Failed to submit form.' });
+        recaptchaRef.current?.reset();
       }
-
-      // TODO: Implement contact form submission
-      console.log('Contact form submitted:', formData);
-      alert('Thank you for your message! We will get back to you soon.');
-      setFormData({ name: '', email: '', subject: '', message: '' });
-      recaptchaRef.current?.reset();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Form submission error:', error);
-      alert('An error occurred. Please try again.');
+      const axiosError = error as { response?: { data?: { message?: string } } };
+      setSubmitStatus({
+        type: 'error',
+        message: axiosError.response?.data?.message || 'An error occurred. Please try again.',
+      });
       recaptchaRef.current?.reset();
     } finally {
       setIsSubmitting(false);
@@ -130,6 +135,27 @@ export default function ContactPage() {
           {/* Contact Form */}
           <div className="bg-slate-800 p-8 rounded-xl shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Send us a Message</h2>
+
+            {/* Status Message */}
+            {submitStatus && (
+              <div
+                className={`flex items-center gap-3 p-4 rounded-lg mb-6 ${
+                  submitStatus.type === 'success'
+                    ? 'bg-green-500/20 border border-green-500/30'
+                    : 'bg-red-500/20 border border-red-500/30'
+                }`}
+              >
+                {submitStatus.type === 'success' ? (
+                  <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+                )}
+                <p className={submitStatus.type === 'success' ? 'text-green-300' : 'text-red-300'}>
+                  {submitStatus.message}
+                </p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">

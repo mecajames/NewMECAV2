@@ -13,6 +13,7 @@ import { InvoiceStatus } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { Order } from '../orders/orders.entity';
 import { InvoiceItem } from './invoice-items.entity';
+import { Membership } from '../memberships/memberships.entity';
 
 @Entity({ tableName: 'invoices', schema: 'public' })
 export class Invoice {
@@ -96,6 +97,18 @@ export class Invoice {
 
   @OneToMany(() => InvoiceItem, (item) => item.invoice)
   items = new Collection<InvoiceItem>(this);
+
+  // =============================================================================
+  // Master/Secondary Invoice Consolidation
+  // =============================================================================
+
+  // Whether this invoice is a consolidated master invoice (includes secondary memberships)
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'is_master_invoice' })
+  isMasterInvoice?: boolean = false;
+
+  // For secondary membership invoices: the master membership this invoice is billed to
+  @ManyToOne(() => Membership, { nullable: true, fieldName: 'master_membership_id' })
+  masterMembership?: Membership;
 
   @Property({ type: 'timestamptz', onCreate: () => new Date(), fieldName: 'created_at', defaultRaw: 'now()' })
   createdAt?: Date;

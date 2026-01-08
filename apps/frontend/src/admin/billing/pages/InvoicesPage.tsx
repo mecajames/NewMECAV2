@@ -102,27 +102,28 @@ export default function InvoicesPage() {
       <div className="border-b border-slate-700 bg-slate-800">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Invoices</h1>
+              <p className="text-sm text-gray-400">
+                Manage and track all invoices
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/admin/billing/invoices/new')}
+                className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+              >
+                <Plus className="h-4 w-4" />
+                Create Invoice
+              </button>
               <button
                 onClick={() => navigate('/admin/billing')}
-                className="rounded-full p-2 text-gray-400 hover:bg-slate-700 hover:text-white"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
               >
                 <ArrowLeft className="h-5 w-5" />
+                Back to Billing
               </button>
-              <div>
-                <h1 className="text-2xl font-bold text-white">Invoices</h1>
-                <p className="text-sm text-gray-400">
-                  Manage and track all invoices
-                </p>
-              </div>
             </div>
-            <button
-              onClick={() => navigate('/admin/billing/invoices/new')}
-              className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-            >
-              <Plus className="h-4 w-4" />
-              Create Invoice
-            </button>
           </div>
         </div>
       </div>

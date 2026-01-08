@@ -86,6 +86,11 @@ export function InvoiceTable({
                 Customer
               </th>
             )}
+            {!compact && (
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+                Items
+              </th>
+            )}
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Status
             </th>
@@ -128,7 +133,33 @@ export function InvoiceTable({
                       : 'Guest'}
                   </div>
                   {invoice.user && (
-                    <div className="text-xs text-gray-500">{invoice.user.email}</div>
+                    <div className="text-xs text-gray-500">
+                      {invoice.user.email}
+                      {invoice.user.meca_id && (
+                        <span className="ml-2 text-orange-400">#{invoice.user.meca_id}</span>
+                      )}
+                    </div>
+                  )}
+                </td>
+              )}
+              {!compact && (
+                <td className="px-4 py-3">
+                  {invoice.items.length > 0 ? (
+                    <div className="max-w-xs">
+                      <div
+                        className="text-sm text-gray-300 truncate"
+                        title={invoice.items[0].description}
+                      >
+                        {invoice.items[0].description}
+                      </div>
+                      {invoice.items.length > 1 && (
+                        <div className="text-xs text-gray-500">
+                          +{invoice.items.length - 1} more item{invoice.items.length > 2 ? 's' : ''}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-500">-</span>
                   )}
                 </td>
               )}

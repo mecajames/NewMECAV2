@@ -1,11 +1,19 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CompetitionResultsController } from './competition-results.controller';
 import { CompetitionResultsService } from './competition-results.service';
 import { ResultsImportService } from './results-import.service';
 import { AuditModule } from '../audit/audit.module';
+import { MembershipsModule } from '../memberships/memberships.module';
+import { WorldFinalsModule } from '../world-finals/world-finals.module';
+import { AchievementsModule } from '../achievements/achievements.module';
 
 @Module({
-  imports: [AuditModule],
+  imports: [
+    AuditModule,
+    forwardRef(() => MembershipsModule),
+    forwardRef(() => WorldFinalsModule),
+    forwardRef(() => AchievementsModule),
+  ],
   controllers: [CompetitionResultsController],
   providers: [CompetitionResultsService, ResultsImportService],
   exports: [CompetitionResultsService],

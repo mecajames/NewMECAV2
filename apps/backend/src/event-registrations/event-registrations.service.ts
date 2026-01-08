@@ -32,6 +32,7 @@ export interface CreateRegistrationDto {
   }>;
   includeMembership?: boolean;
   membershipTypeConfigId?: string;
+  mecaId?: number;
 }
 
 export interface RegistrationPricing {
@@ -200,6 +201,9 @@ export class EventRegistrationsService {
     if (dto.userId) {
       registration.user = Reference.createFromPK(Profile, dto.userId) as any;
     }
+    if (dto.mecaId) {
+      registration.mecaId = dto.mecaId;
+    }
 
     await em.persistAndFlush(registration);
 
@@ -332,13 +336,17 @@ export class EventRegistrationsService {
 
     // Get user info for member status
     let isMember = false;
-    let mecaId: string | undefined;
+    // Use the registration's mecaId first (what user selected for this event), fallback to profile
+    let mecaId: string | undefined = registration.mecaId ? String(registration.mecaId) : undefined;
 
     if (registration.user) {
       const user = await em.findOne(Profile, { id: (registration.user as any).id || registration.user });
       if (user) {
         isMember = user.membership_status === 'active';
-        mecaId = user.meca_id;
+        // Only use profile meca_id as fallback if registration doesn't have one
+        if (!mecaId && user.meca_id) {
+          mecaId = user.meca_id;
+        }
       }
     }
 
@@ -404,13 +412,17 @@ export class EventRegistrationsService {
 
     // Get user info for member status
     let isMember = false;
-    let mecaId: string | undefined;
+    // Use the registration's mecaId first (what user selected for this event), fallback to profile
+    let mecaId: string | undefined = registration.mecaId ? String(registration.mecaId) : undefined;
 
     if (registration.user) {
       const user = await em.findOne(Profile, { id: (registration.user as any).id || registration.user });
       if (user) {
         isMember = user.membership_status === 'active';
-        mecaId = user.meca_id;
+        // Only use profile meca_id as fallback if registration doesn't have one
+        if (!mecaId && user.meca_id) {
+          mecaId = user.meca_id;
+        }
       }
     }
 

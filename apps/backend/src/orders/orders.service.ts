@@ -207,10 +207,15 @@ export class OrdersService {
     // Calculate totals
     const { subtotal, total } = this.calculateTotals(data.items);
 
-    // Create order
+    // Create order (member is required for RLS policies)
+    if (!user) {
+      throw new BadRequestException('User is required to create an order');
+    }
+
     const order = em.create(Order, {
       orderNumber,
       user,
+      member: user,
       status: OrderStatus.PENDING,
       orderType: data.orderType,
       subtotal,
@@ -268,10 +273,15 @@ export class OrdersService {
     // Calculate totals
     const { subtotal, total } = this.calculateTotals(data.items);
 
-    // Create order
+    // Create order (member is required for RLS policies)
+    if (!user) {
+      throw new BadRequestException('User is required to create an order');
+    }
+
     const order = em.create(Order, {
       orderNumber,
       user,
+      member: user,
       status: OrderStatus.COMPLETED,
       orderType: data.orderType,
       subtotal,
@@ -326,6 +336,13 @@ export class OrdersService {
     if (registration.paymentStatus !== 'paid') {
       throw new BadRequestException(
         `Cannot create order for registration with payment status: ${registration.paymentStatus}`,
+      );
+    }
+
+    // Verify user exists (required for order creation)
+    if (!registration.user) {
+      throw new BadRequestException(
+        `Registration ${registrationId} does not have an associated user`,
       );
     }
 
@@ -388,6 +405,7 @@ export class OrdersService {
     const order = em.create(Order, {
       orderNumber,
       user: registration.user,
+      member: registration.user,
       status: OrderStatus.COMPLETED,
       orderType: OrderType.EVENT_REGISTRATION,
       subtotal,

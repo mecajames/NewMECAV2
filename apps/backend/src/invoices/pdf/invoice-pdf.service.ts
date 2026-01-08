@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Invoice } from '../invoices.entity';
 import { InvoiceStatus, CompanyInfo, BillingAddress } from '@newmeca/shared';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Service for generating invoice PDFs
@@ -9,6 +11,39 @@ import { InvoiceStatus, CompanyInfo, BillingAddress } from '@newmeca/shared';
  */
 @Injectable()
 export class InvoicePdfService {
+  private logoBase64: string | null = null;
+
+  constructor() {
+    this.loadLogo();
+  }
+
+  /**
+   * Load MECA logo as base64 for embedding in PDFs
+   */
+  private loadLogo(): void {
+    try {
+      // Try multiple possible paths for the logo
+      const possiblePaths = [
+        path.join(__dirname, '../../../../frontend/public/meca-logo-transparent.png'),
+        path.join(__dirname, '../../../../../apps/frontend/public/meca-logo-transparent.png'),
+        path.join(process.cwd(), '../frontend/public/meca-logo-transparent.png'),
+        path.join(process.cwd(), 'apps/frontend/public/meca-logo-transparent.png'),
+      ];
+
+      for (const logoPath of possiblePaths) {
+        if (fs.existsSync(logoPath)) {
+          const logoBuffer = fs.readFileSync(logoPath);
+          this.logoBase64 = logoBuffer.toString('base64');
+          console.log('MECA logo loaded successfully from:', logoPath);
+          return;
+        }
+      }
+
+      console.warn('MECA logo not found in any expected location');
+    } catch (error) {
+      console.error('Failed to load MECA logo:', error);
+    }
+  }
   /**
    * Generate PDF content for an invoice
    * Returns HTML that can be converted to PDF
@@ -54,14 +89,26 @@ export class InvoicePdfService {
       border-bottom: 2px solid #e0e0e0;
     }
 
-    .company-info h1 {
+    .company-info {
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .company-logo {
+      width: 150px;
+      height: auto;
+      flex-shrink: 0;
+    }
+
+    .company-details h1 {
       font-size: 24px;
       font-weight: 700;
       color: #1a1a1a;
       margin-bottom: 8px;
     }
 
-    .company-info p {
+    .company-details p {
       color: #666;
       font-size: 11px;
     }
@@ -262,16 +309,19 @@ export class InvoicePdfService {
     <!-- Header -->
     <div class="header">
       <div class="company-info">
-        <h1>${this.escapeHtml(companyInfo?.name || 'MECA')}</h1>
-        ${companyInfo?.address ? `
-        <p>
-          ${this.escapeHtml(companyInfo.address.street || '')}<br>
-          ${this.escapeHtml(companyInfo.address.city || '')}, ${this.escapeHtml(companyInfo.address.state || '')} ${this.escapeHtml(companyInfo.address.postalCode || '')}<br>
-          ${this.escapeHtml(companyInfo.address.country || 'US')}
-        </p>
-        ` : ''}
-        ${companyInfo?.email ? `<p>${this.escapeHtml(companyInfo.email)}</p>` : ''}
-        ${companyInfo?.phone ? `<p>${this.escapeHtml(companyInfo.phone)}</p>` : ''}
+        ${this.logoBase64 ? `<img src="data:image/png;base64,${this.logoBase64}" alt="MECA Logo" class="company-logo" />` : ''}
+        <div class="company-details">
+          <h1>${this.escapeHtml(companyInfo?.name || 'MECA')}</h1>
+          ${companyInfo?.address ? `
+          <p>
+            ${this.escapeHtml(companyInfo.address.street || '')}<br>
+            ${this.escapeHtml(companyInfo.address.city || '')}, ${this.escapeHtml(companyInfo.address.state || '')} ${this.escapeHtml(companyInfo.address.postalCode || '')}<br>
+            ${this.escapeHtml(companyInfo.address.country || 'US')}
+          </p>
+          ` : ''}
+          ${companyInfo?.email ? `<p>${this.escapeHtml(companyInfo.email)}</p>` : ''}
+          ${companyInfo?.phone ? `<p>${this.escapeHtml(companyInfo.phone)}</p>` : ''}
+        </div>
       </div>
       <div class="invoice-title">
         <h2>Invoice</h2>

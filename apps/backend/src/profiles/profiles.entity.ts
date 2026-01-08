@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { AccountType } from '@newmeca/shared';
 
@@ -18,6 +18,9 @@ export class Profile {
 
   @Property({ type: 'text', nullable: true, fieldName: 'last_name' })
   last_name?: string;
+
+  @Property({ type: 'text', fieldName: 'full_name' })
+  full_name!: string;
 
   @Property({ type: 'text', nullable: true })
   phone?: string;
@@ -111,6 +114,28 @@ export class Profile {
   // Account type: 'member' for full members, 'basic' for guest registrations converted to accounts
   @Property({ type: 'text', default: AccountType.MEMBER, fieldName: 'account_type' })
   account_type: AccountType = AccountType.MEMBER;
+
+  // =============================================================================
+  // Master/Secondary Account Hierarchy
+  // =============================================================================
+
+  // Whether this profile is a secondary account (managed by a master)
+  // Secondary accounts have restricted access (no billing, limited management)
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'is_secondary_account' })
+  isSecondaryAccount?: boolean = false;
+
+  // Whether this profile can log in (false for secondaries without their own login)
+  // All profiles exist for MECA ID and competition tracking, but not all can log in
+  @Property({ type: 'boolean', nullable: true, default: true, fieldName: 'can_login' })
+  canLogin?: boolean = true;
+
+  // For secondary accounts: the master profile that controls this account
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'master_profile_id' })
+  masterProfile?: Profile;
+
+  // For master profiles: collection of secondary profiles they control
+  @OneToMany(() => Profile, profile => profile.masterProfile)
+  secondaryProfiles = new Collection<Profile>(this);
 
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   created_at: Date = new Date();

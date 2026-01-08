@@ -24,3 +24,14 @@ export * from "./orders.schema";
 export * from "./invoices.schema";
 export * from "./tax.schema";
 export * from "./billing-stats.schema";
+
+// Judge & Event Director Schemas
+export * from "./judges.schema";
+export * from "./event-directors.schema";
+export * from "./ratings.schema";
+
+// Contact Form
+export * from "./contact.schema";
+
+// Achievements
+export * from "./achievements.schema";

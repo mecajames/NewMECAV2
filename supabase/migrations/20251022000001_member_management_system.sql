@@ -640,9 +640,11 @@ CREATE POLICY "Admins can manage invoices" ON invoices FOR ALL
   USING (check_user_permission(auth.uid(), 'manage_invoices'));
 
 -- Memberships - users can view own, admins can manage
+DROP POLICY IF EXISTS "Users can view own memberships" ON memberships;
 CREATE POLICY "Users can view own memberships" ON memberships FOR SELECT
   USING (member_id = auth.uid() OR check_user_permission(auth.uid(), 'view_users'));
 
+DROP POLICY IF EXISTS "Admins can manage memberships" ON memberships;
 CREATE POLICY "Admins can manage memberships" ON memberships FOR ALL
   USING (check_user_permission(auth.uid(), 'manage_subscriptions'));
 

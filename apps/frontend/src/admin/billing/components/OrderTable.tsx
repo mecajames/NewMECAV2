@@ -81,6 +81,11 @@ export function OrderTable({
                 Customer
               </th>
             )}
+            {!compact && (
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+                Items
+              </th>
+            )}
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Type
             </th>
@@ -126,7 +131,33 @@ export function OrderTable({
                       : 'Guest'}
                   </div>
                   {order.user && (
-                    <div className="text-xs text-gray-500">{order.user.email}</div>
+                    <div className="text-xs text-gray-500">
+                      {order.user.email}
+                      {order.user.meca_id && (
+                        <span className="ml-2 text-orange-400">#{order.user.meca_id}</span>
+                      )}
+                    </div>
+                  )}
+                </td>
+              )}
+              {!compact && (
+                <td className="px-4 py-3">
+                  {order.items.length > 0 ? (
+                    <div className="max-w-xs">
+                      <div
+                        className="text-sm text-gray-300 truncate"
+                        title={order.items[0].description}
+                      >
+                        {order.items[0].description}
+                      </div>
+                      {order.items.length > 1 && (
+                        <div className="text-xs text-gray-500">
+                          +{order.items.length - 1} more item{order.items.length > 2 ? 's' : ''}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-500">-</span>
                   )}
                 </td>
               )}

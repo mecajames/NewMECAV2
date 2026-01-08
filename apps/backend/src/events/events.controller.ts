@@ -76,4 +76,11 @@ export class EventsController {
   async deleteEvent(@Param('id') id: string): Promise<void> {
     return this.eventsService.delete(id);
   }
+
+  @Post(':id/send-rating-emails')
+  async sendRatingEmails(
+    @Param('id') id: string,
+  ): Promise<{ sent: number; failed: number; errors: string[] }> {
+    return this.eventsService.sendRatingRequestEmails(id);
+  }
 }

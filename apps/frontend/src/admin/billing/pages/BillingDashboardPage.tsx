@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -8,10 +8,12 @@ import {
   DollarSign,
   AlertCircle,
   Zap,
+  Search,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
 import { OrderTable } from '../components/OrderTable';
 import { InvoiceTable } from '../components/InvoiceTable';
+import { OrderStatus, OrderType, InvoiceStatus } from '../billing.types';
 
 export default function BillingDashboardPage() {
   const navigate = useNavigate();
@@ -23,7 +25,50 @@ export default function BillingDashboardPage() {
   const [syncResult, setSyncResult] = useState<{
     success: boolean;
     message: string;
+    errors?: string[];
   } | null>(null);
+
+  // Filter state for orders
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | ''>('');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderType | ''>('');
+
+  // Filter state for invoices
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<InvoiceStatus | ''>('');
+
+  // Filtered orders
+  const filteredOrders = useMemo(() => {
+    if (!stats?.recent.orders) return [];
+    return stats.recent.orders.filter((order) => {
+      const matchesSearch =
+        !orderSearch ||
+        order.orderNumber.toLowerCase().includes(orderSearch.toLowerCase()) ||
+        order.user?.email?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+        order.user?.first_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+        order.user?.last_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+        order.items.some((item) => item.description.toLowerCase().includes(orderSearch.toLowerCase()));
+      const matchesStatus = !orderStatusFilter || order.status === orderStatusFilter;
+      const matchesType = !orderTypeFilter || order.orderType === orderTypeFilter;
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [stats?.recent.orders, orderSearch, orderStatusFilter, orderTypeFilter]);
+
+  // Filtered invoices
+  const filteredInvoices = useMemo(() => {
+    if (!stats?.recent.invoices) return [];
+    return stats.recent.invoices.filter((invoice) => {
+      const matchesSearch =
+        !invoiceSearch ||
+        invoice.invoiceNumber.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+        invoice.user?.email?.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+        invoice.user?.first_name?.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+        invoice.user?.last_name?.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+        invoice.items.some((item) => item.description.toLowerCase().includes(invoiceSearch.toLowerCase()));
+      const matchesStatus = !invoiceStatusFilter || invoice.status === invoiceStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [stats?.recent.invoices, invoiceSearch, invoiceStatusFilter]);
 
   const fetchStats = async (showRefresh = false) => {
     try {
@@ -68,6 +113,7 @@ export default function BillingDashboardPage() {
         setSyncResult({
           success: false,
           message: `Failed to sync ${result.failed} registration(s)`,
+          errors: result.errors,
         });
       }
     } catch (err) {
@@ -108,30 +154,31 @@ export default function BillingDashboardPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Billing Dashboard
+            </h1>
+            <p className="text-gray-400">
+              Overview of orders, invoices, and revenue
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Zap className={`h-4 w-4 ${syncing ? 'animate-pulse' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync Registrations'}
+            </button>
             <button
               onClick={() => navigate('/dashboard/admin')}
-              className="rounded-full p-2 text-gray-400 hover:bg-slate-700 hover:text-white transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
             </button>
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">
-                Billing Dashboard
-              </h1>
-              <p className="text-gray-400">
-                Overview of orders, invoices, and revenue
-              </p>
-            </div>
           </div>
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-          >
-            <Zap className={`h-4 w-4 ${syncing ? 'animate-pulse' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync Registrations'}
-          </button>
         </div>
 
         {/* Sync Result Message */}
@@ -143,7 +190,14 @@ export default function BillingDashboardPage() {
                 : 'bg-red-500/10 border border-red-500/20 text-red-400'
             }`}
           >
-            {syncResult.message}
+            <p>{syncResult.message}</p>
+            {syncResult.errors && syncResult.errors.length > 0 && (
+              <ul className="mt-2 text-sm list-disc list-inside">
+                {syncResult.errors.map((err, idx) => (
+                  <li key={idx}>{err}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
@@ -258,7 +312,46 @@ export default function BillingDashboardPage() {
                 View all →
               </button>
             </div>
-            <OrderTable orders={stats?.recent.orders || []} compact />
+            {/* Order Filters */}
+            <div className="mb-4 flex flex-col gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search orders..."
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value as OrderStatus | '')}
+                  className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                >
+                  <option value="">All Statuses</option>
+                  {Object.values(OrderStatus).map((status) => (
+                    <option key={status} value={status}>
+                      {status.charAt(0) + status.slice(1).toLowerCase()}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={orderTypeFilter}
+                  onChange={(e) => setOrderTypeFilter(e.target.value as OrderType | '')}
+                  className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                >
+                  <option value="">All Types</option>
+                  {Object.values(OrderType).map((type) => (
+                    <option key={type} value={type}>
+                      {type.replace('_', ' ').charAt(0) + type.replace('_', ' ').slice(1).toLowerCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <OrderTable orders={filteredOrders} compact />
           </div>
 
           {/* Recent Invoices */}
@@ -272,7 +365,32 @@ export default function BillingDashboardPage() {
                 View all →
               </button>
             </div>
-            <InvoiceTable invoices={stats?.recent.invoices || []} compact />
+            {/* Invoice Filters */}
+            <div className="mb-4 flex flex-col gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search invoices..."
+                  value={invoiceSearch}
+                  onChange={(e) => setInvoiceSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                />
+              </div>
+              <select
+                value={invoiceStatusFilter}
+                onChange={(e) => setInvoiceStatusFilter(e.target.value as InvoiceStatus | '')}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+              >
+                <option value="">All Statuses</option>
+                {Object.values(InvoiceStatus).map((status) => (
+                  <option key={status} value={status}>
+                    {status.charAt(0) + status.slice(1).toLowerCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <InvoiceTable invoices={filteredInvoices} compact />
           </div>
         </div>
       </div>

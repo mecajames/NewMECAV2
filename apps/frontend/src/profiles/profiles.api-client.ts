@@ -49,12 +49,39 @@ export interface CreateUserWithPasswordDto {
   role?: string;
   forcePasswordChange?: boolean;
   sendEmail?: boolean;
+  mecaId?: string; // Optional - use existing MECA ID for migrated users from old system
 }
 
 export interface ResetPasswordDto {
   newPassword: string;
   forcePasswordChange?: boolean;
   sendEmail?: boolean;
+}
+
+export interface ActivityItem {
+  id: string;
+  type: 'registration' | 'payment' | 'membership' | 'result' | 'team';
+  description: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpcomingEvent {
+  id: string;
+  name: string;
+  eventDate: string;
+  location: string;
+  registrationStatus: string;
+}
+
+export interface MemberStats {
+  totalOrders: number;
+  eventsAttended: number;
+  trophiesWon: number;
+  totalSpent: number;
+  teamName: string | null;
+  recentActivity: ActivityItem[];
+  upcomingEvents: UpcomingEvent[];
 }
 
 export interface PasswordStrength {
@@ -215,6 +242,22 @@ export const profilesApi = {
       method: 'POST',
     });
     if (!response.ok) throw new Error('Failed to clear force password change flag');
+    return response.json();
+  },
+
+  /**
+   * Gets member statistics including orders, events, trophies, and activity (admin only)
+   */
+  getMemberStats: async (userId: string, authToken: string): Promise<MemberStats> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/stats`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to fetch member stats' }));
+      throw new Error(error.message || 'Failed to fetch member stats');
+    }
     return response.json();
   },
 };
