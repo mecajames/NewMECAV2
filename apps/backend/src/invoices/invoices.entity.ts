@@ -95,6 +95,10 @@ export class Invoice {
   @Property({ type: 'jsonb', nullable: true })
   metadata?: Record<string, unknown>;
 
+  // Guest checkout support (for invoices without a user account)
+  @Property({ type: 'varchar', length: 255, nullable: true, fieldName: 'guest_email' })
+  guestEmail?: string;
+
   @OneToMany(() => InvoiceItem, (item) => item.invoice)
   items = new Collection<InvoiceItem>(this);
 

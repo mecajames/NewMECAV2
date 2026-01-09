@@ -71,6 +71,20 @@ export class Order {
   @Property({ type: 'jsonb', nullable: true })
   metadata?: Record<string, unknown>;
 
+  // Guest checkout support (for orders without a user account)
+  @Property({ type: 'varchar', length: 255, nullable: true, fieldName: 'guest_email' })
+  guestEmail?: string;
+
+  @Property({ type: 'varchar', length: 255, nullable: true, fieldName: 'guest_name' })
+  guestName?: string;
+
+  // Cross-reference to shop order (for SHOP type orders)
+  @Property({ type: 'jsonb', nullable: true, fieldName: 'shop_order_reference' })
+  shopOrderReference?: {
+    shopOrderId: string;
+    shopOrderNumber: string;
+  };
+
   @OneToMany(() => OrderItem, (item) => item.order)
   items = new Collection<OrderItem>(this);
 

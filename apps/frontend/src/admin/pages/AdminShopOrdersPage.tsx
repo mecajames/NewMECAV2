@@ -10,6 +10,8 @@ import {
   Eye,
   MessageSquare,
   X,
+  RotateCcw,
+  ExternalLink,
 } from 'lucide-react';
 import { ShopOrder, ShopOrderStatus } from '@newmeca/shared';
 import { shopApi, ShopStats } from '@/shop/shop.api-client';
@@ -54,6 +56,12 @@ export function AdminShopOrdersPage() {
   const [notesOrderId, setNotesOrderId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Refund modal
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundOrderId, setRefundOrderId] = useState<string | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [processingRefund, setProcessingRefund] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -148,6 +156,31 @@ export function AdminShopOrdersPage() {
     } finally {
       setSavingNotes(false);
     }
+  };
+
+  const openRefundModal = (order: ShopOrder) => {
+    setRefundOrderId(order.id);
+    setRefundReason('');
+    setShowRefundModal(true);
+  };
+
+  const processRefund = async () => {
+    if (!refundOrderId) return;
+    setProcessingRefund(true);
+    try {
+      await shopApi.adminRefundOrder(refundOrderId, refundReason || undefined);
+      setShowRefundModal(false);
+      setRefundOrderId(null);
+      loadData();
+    } catch (err) {
+      console.error('Error processing refund:', err);
+    } finally {
+      setProcessingRefund(false);
+    }
+  };
+
+  const canRefund = (order: ShopOrder) => {
+    return order.status === ShopOrderStatus.PAID || order.status === ShopOrderStatus.PROCESSING;
   };
 
   return (
@@ -315,6 +348,24 @@ export function AdminShopOrdersPage() {
                           >
                             <MessageSquare className="h-4 w-4" />
                           </button>
+                          {canRefund(order) && (
+                            <button
+                              onClick={() => openRefundModal(order)}
+                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
+                              title="Refund Order"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </button>
+                          )}
+                          {(order as any).billingOrderId && (
+                            <a
+                              href={`/dashboard/admin/billing/orders/${(order as any).billingOrderId}`}
+                              className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded-lg transition-colors"
+                              title="View Billing Order"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -516,6 +567,40 @@ export function AdminShopOrdersPage() {
                   className="flex-1 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
                 >
                   {savingNotes ? 'Saving...' : 'Save Notes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Refund Modal */}
+        {showRefundModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold text-white mb-4">Refund Order</h3>
+              <p className="text-gray-400 mb-4">
+                This will mark the order as refunded and restore inventory. The refund in Stripe must be processed separately.
+              </p>
+              <textarea
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Reason for refund (optional)..."
+                rows={3}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white mb-6 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowRefundModal(false)}
+                  className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={processRefund}
+                  disabled={processingRefund}
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {processingRefund ? 'Processing...' : 'Process Refund'}
                 </button>
               </div>
             </div>

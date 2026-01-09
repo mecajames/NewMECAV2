@@ -15,10 +15,11 @@ import {
   Package,
   ShoppingCart,
   MapPin,
+  Truck,
 } from 'lucide-react';
 import { ShopAddress } from '@newmeca/shared';
 import { useCart } from '../context/CartContext';
-import { shopApi } from '../shop.api-client';
+import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
@@ -162,6 +163,22 @@ function AddressForm({
       </h3>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Country first */}
+        <div className="sm:col-span-2">
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Country *
+          </label>
+          <select
+            value={address.country}
+            onChange={(e) => handleChange('country', e.target.value)}
+            required
+            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          >
+            <option value="US">United States</option>
+            <option value="CA">Canada</option>
+          </select>
+        </div>
+
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-gray-300 mb-1">
             Full Name *
@@ -244,21 +261,6 @@ function AddressForm({
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">
-            Country *
-          </label>
-          <select
-            value={address.country}
-            onChange={(e) => handleChange('country', e.target.value)}
-            required
-            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          >
-            <option value="US">United States</option>
-            <option value="CA">Canada</option>
-          </select>
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">
             Phone Number
           </label>
           <input
@@ -284,6 +286,12 @@ export function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Shipping state
+  const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
+  const [selectedShippingMethod, setSelectedShippingMethod] = useState<'standard' | 'priority'>('standard');
+  const [loadingRates, setLoadingRates] = useState(false);
+  const [lastZipChecked, setLastZipChecked] = useState('');
+
   const [formData, setFormData] = useState<CheckoutFormData>({
     email: user?.email || '',
     shippingAddress: initialAddress,
@@ -291,25 +299,86 @@ export function CheckoutPage() {
     sameAsShipping: true,
   });
 
-  // Pre-fill email from user
+  // Get the selected shipping rate
+  const selectedRate = shippingRates.find((r) => r.method === selectedShippingMethod);
+  const shippingCost = selectedRate?.price || 0;
+  const orderTotal = subtotal + shippingCost;
+
+  // Pre-fill address from user profile
   useEffect(() => {
     if (user?.email) {
       setFormData((prev) => ({ ...prev, email: user.email || '' }));
     }
     if (profile) {
+      const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+
+      // Pre-populate shipping address (prefer shipping_* fields, fallback to main address)
+      const shippingAddress: ShopAddress = {
+        name: fullName,
+        line1: profile.shipping_street || profile.address || '',
+        line2: '',
+        city: profile.shipping_city || profile.city || '',
+        state: profile.shipping_state || profile.state || '',
+        postalCode: profile.shipping_zip || profile.postal_code || '',
+        country: profile.shipping_country || profile.country || 'US',
+        phone: profile.phone || '',
+      };
+
+      // Pre-populate billing address (prefer billing_* fields, fallback to main address)
+      const billingAddress: ShopAddress = {
+        name: fullName,
+        line1: profile.billing_street || profile.address || '',
+        line2: '',
+        city: profile.billing_city || profile.city || '',
+        state: profile.billing_state || profile.state || '',
+        postalCode: profile.billing_zip || profile.postal_code || '',
+        country: profile.billing_country || profile.country || 'US',
+        phone: profile.phone || '',
+      };
+
       setFormData((prev) => ({
         ...prev,
-        shippingAddress: {
-          ...prev.shippingAddress,
-          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-          city: profile.city || '',
-          state: profile.state || '',
-          country: profile.country || 'US',
-          phone: profile.phone || '',
-        },
+        shippingAddress,
+        billingAddress,
       }));
     }
   }, [user, profile]);
+
+  // Fetch shipping rates when zip code changes
+  useEffect(() => {
+    const zip = formData.shippingAddress.postalCode;
+    const country = formData.shippingAddress.country;
+
+    // Only fetch if we have a valid 5-digit zip and it's different from last checked
+    if (zip && zip.length >= 5 && zip !== lastZipChecked && items.length > 0) {
+      const fetchRates = async () => {
+        setLoadingRates(true);
+        try {
+          const rates = await shopApi.getShippingRates({
+            items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+            destinationZip: zip,
+            destinationCountry: country,
+          });
+          setShippingRates(rates);
+          setLastZipChecked(zip);
+          // Default to standard if not already set
+          if (rates.length > 0 && !rates.find((r) => r.method === selectedShippingMethod)) {
+            setSelectedShippingMethod(rates[0].method as 'standard' | 'priority');
+          }
+        } catch (err) {
+          console.error('Error fetching shipping rates:', err);
+          // Use default rates if API fails
+          setShippingRates([
+            { method: 'standard', name: 'USPS Ground Advantage', description: '2-5 business days', price: 6.50, estimatedDays: '2-5 business days' },
+            { method: 'priority', name: 'USPS Priority Mail', description: '1-3 business days', price: 10.50, estimatedDays: '1-3 business days' },
+          ]);
+        } finally {
+          setLoadingRates(false);
+        }
+      };
+      fetchRates();
+    }
+  }, [formData.shippingAddress.postalCode, formData.shippingAddress.country, items, lastZipChecked, selectedShippingMethod]);
 
   // Redirect if cart is empty
   useEffect(() => {
@@ -338,13 +407,15 @@ export function CheckoutPage() {
         return;
       }
 
-      // Create payment intent
+      // Create payment intent with shipping
       const result = await shopApi.createPaymentIntent({
         items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         email: formData.email,
         shippingAddress: formData.shippingAddress,
         billingAddress: formData.sameAsShipping ? formData.shippingAddress : formData.billingAddress,
         userId: user?.id,
+        shippingMethod: selectedShippingMethod,
+        shippingAmount: shippingCost,
       });
 
       setClientSecret(result.clientSecret);
@@ -467,6 +538,54 @@ export function CheckoutPage() {
                   )}
                 </div>
 
+                {/* Shipping Method Selection */}
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    <Truck className="h-5 w-5 mr-2 text-orange-500" />
+                    Shipping Method
+                  </h3>
+
+                  {loadingRates ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+                      <span className="ml-2 text-gray-400">Calculating shipping rates...</span>
+                    </div>
+                  ) : shippingRates.length === 0 ? (
+                    <p className="text-gray-400 text-sm">
+                      Enter your ZIP code above to see shipping options
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {shippingRates.map((rate) => (
+                        <label
+                          key={rate.method}
+                          className={`flex items-center p-4 rounded-lg border cursor-pointer transition-colors ${
+                            selectedShippingMethod === rate.method
+                              ? 'border-orange-500 bg-orange-500/10'
+                              : 'border-slate-600 hover:border-slate-500'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="shippingMethod"
+                            value={rate.method}
+                            checked={selectedShippingMethod === rate.method}
+                            onChange={() => setSelectedShippingMethod(rate.method)}
+                            className="w-4 h-4 text-orange-500 border-slate-600 focus:ring-orange-500 bg-slate-700"
+                          />
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-white font-medium">{rate.name}</span>
+                              <span className="text-white font-semibold">${rate.price.toFixed(2)}</span>
+                            </div>
+                            <p className="text-gray-400 text-sm">{rate.estimatedDays}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -505,7 +624,7 @@ export function CheckoutPage() {
                     <PaymentForm
                       onSuccess={handlePaymentSuccess}
                       onBack={() => setStep('address')}
-                      total={subtotal}
+                      total={orderTotal}
                     />
                   </Elements>
                 </div>
@@ -556,8 +675,20 @@ export function CheckoutPage() {
                 </div>
                 <div className="flex justify-between text-gray-400">
                   <span>Shipping</span>
-                  <span className="text-green-400">Free</span>
+                  {loadingRates ? (
+                    <span className="text-gray-500">Calculating...</span>
+                  ) : shippingCost > 0 ? (
+                    <span>${shippingCost.toFixed(2)}</span>
+                  ) : (
+                    <span className="text-gray-500">Select address</span>
+                  )}
                 </div>
+                {selectedRate && (
+                  <div className="flex justify-between text-gray-500 text-sm">
+                    <span>{selectedRate.name}</span>
+                    <span>{selectedRate.estimatedDays}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-400">
                   <span>Tax</span>
                   <span>$0.00</span>
@@ -567,7 +698,7 @@ export function CheckoutPage() {
               <div className="border-t border-slate-700 mt-4 pt-4">
                 <div className="flex justify-between text-white">
                   <span className="text-lg font-semibold">Total</span>
-                  <span className="text-2xl font-bold">${subtotal.toFixed(2)}</span>
+                  <span className="text-2xl font-bold">${orderTotal.toFixed(2)}</span>
                 </div>
               </div>
             </div>

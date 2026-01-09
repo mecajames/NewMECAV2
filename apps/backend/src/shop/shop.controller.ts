@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { ShopService } from './shop.service';
+import { ShippingService } from './shipping.service';
 import {
   ShopProductCategory,
   ShopOrderStatus,
@@ -30,6 +31,7 @@ import { Profile } from '../profiles/profiles.entity';
 export class ShopController {
   constructor(
     private readonly shopService: ShopService,
+    private readonly shippingService: ShippingService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -100,6 +102,22 @@ export class ShopController {
     return this.shopService.checkStockAvailability(body.items);
   }
 
+  @Post('shipping-rates')
+  @HttpCode(HttpStatus.OK)
+  async getShippingRates(
+    @Body() body: {
+      items: Array<{ productId: string; quantity: number }>;
+      destinationZip: string;
+      destinationCountry?: string;
+    },
+  ) {
+    return this.shippingService.calculateRates({
+      items: body.items,
+      destinationZip: body.destinationZip,
+      destinationCountry: body.destinationCountry || 'US',
+    });
+  }
+
   // =============================================================================
   // AUTHENTICATED ENDPOINTS
   // =============================================================================
@@ -137,6 +155,8 @@ export class ShopController {
       billingAddress?: ShopAddress;
       notes?: string;
       stripePaymentIntentId?: string;
+      shippingMethod?: 'standard' | 'priority';
+      shippingAmount?: number;
     },
     @Headers('authorization') authHeader?: string,
   ) {
@@ -152,6 +172,8 @@ export class ShopController {
       billingAddress: body.billingAddress,
       notes: body.notes,
       stripePaymentIntentId: body.stripePaymentIntentId,
+      shippingMethod: body.shippingMethod,
+      shippingAmount: body.shippingAmount,
     });
   }
 
@@ -262,5 +284,15 @@ export class ShopController {
   async getStats(@Headers('authorization') authHeader: string) {
     await this.requireAdmin(authHeader);
     return this.shopService.getStats();
+  }
+
+  @Put('admin/orders/:id/refund')
+  async refundOrder(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.processRefund(id, body.reason);
   }
 }

@@ -250,8 +250,13 @@ export class OrdersService {
 
   /**
    * Create order from a successful payment (automated)
+   * Supports both authenticated users and guest checkout
    */
-  async createFromPayment(data: CreateOrderFromPaymentDto): Promise<Order> {
+  async createFromPayment(data: CreateOrderFromPaymentDto & {
+    guestEmail?: string;
+    guestName?: string;
+    shopOrderReference?: { shopOrderId: string; shopOrderNumber: string };
+  }): Promise<Order> {
     const em = this.em.fork();
 
     // Look up payment if paymentId is provided
@@ -267,21 +272,20 @@ export class OrdersService {
       user = foundUser || undefined;
     }
 
+    // For guest orders, we need either a user or guest email
+    if (!user && !data.guestEmail) {
+      throw new BadRequestException('Either userId or guestEmail is required to create an order');
+    }
+
     // Generate order number
     const orderNumber = await this.generateOrderNumber(em);
 
     // Calculate totals
     const { subtotal, total } = this.calculateTotals(data.items);
 
-    // Create order (member is required for RLS policies)
-    if (!user) {
-      throw new BadRequestException('User is required to create an order');
-    }
-
-    const order = em.create(Order, {
+    // Create order - for guest orders, member can be null but we set guestEmail
+    const orderData: Partial<Order> = {
       orderNumber,
-      user,
-      member: user,
       status: OrderStatus.COMPLETED,
       orderType: data.orderType,
       subtotal,
@@ -292,7 +296,28 @@ export class OrdersService {
       notes: data.notes,
       billingAddress: data.billingAddress,
       payment,
-    });
+    };
+
+    // Set user/member if we have one
+    if (user) {
+      orderData.user = user;
+      orderData.member = user;
+    }
+
+    // Set guest fields if provided
+    if (data.guestEmail) {
+      orderData.guestEmail = data.guestEmail;
+    }
+    if (data.guestName) {
+      orderData.guestName = data.guestName;
+    }
+
+    // Set shop order reference if provided
+    if (data.shopOrderReference) {
+      orderData.shopOrderReference = data.shopOrderReference;
+    }
+
+    const order = em.create(Order, orderData as Order);
 
     // Create order items
     for (const itemData of data.items) {

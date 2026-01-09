@@ -31,6 +31,9 @@ export class ShopOrder {
   @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'shipping_amount', default: 0 })
   shippingAmount: number = 0;
 
+  @Property({ type: 'text', nullable: true, fieldName: 'shipping_method' })
+  shippingMethod?: string; // 'standard' or 'priority'
+
   @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'tax_amount', default: 0 })
   taxAmount: number = 0;
 
@@ -42,6 +45,10 @@ export class ShopOrder {
 
   @Property({ type: 'text', nullable: true, fieldName: 'stripe_charge_id' })
   stripeChargeId?: string;
+
+  // Cross-reference to billing Order (created after payment for financial records)
+  @Property({ type: 'uuid', nullable: true, fieldName: 'billing_order_id' })
+  billingOrderId?: string;
 
   @OneToMany(() => ShopOrderItem, (item) => item.order)
   items = new Collection<ShopOrderItem>(this);

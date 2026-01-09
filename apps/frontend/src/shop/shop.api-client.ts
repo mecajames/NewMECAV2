@@ -34,6 +34,22 @@ export interface CreatePaymentIntentDto {
   shippingAddress?: ShopAddress;
   billingAddress?: ShopAddress;
   userId?: string;
+  shippingMethod?: 'standard' | 'priority';
+  shippingAmount?: number;
+}
+
+export interface ShippingRate {
+  method: 'standard' | 'priority';
+  name: string;
+  description: string;
+  price: number;
+  estimatedDays: string;
+}
+
+export interface ShippingRateRequest {
+  items: CartItem[];
+  destinationZip: string;
+  destinationCountry?: string;
 }
 
 export interface PaymentIntentResult {
@@ -101,6 +117,14 @@ export const shopApi = {
    */
   checkAvailability: async (items: CartItem[]): Promise<StockCheckResult> => {
     const response = await axios.post('/api/shop/check-availability', { items });
+    return response.data;
+  },
+
+  /**
+   * Get shipping rates
+   */
+  getShippingRates: async (request: ShippingRateRequest): Promise<ShippingRate[]> => {
+    const response = await axios.post('/api/shop/shipping-rates', request);
     return response.data;
   },
 
@@ -220,6 +244,14 @@ export const shopApi = {
    */
   adminGetStats: async (): Promise<ShopStats> => {
     const response = await axios.get('/api/shop/admin/stats');
+    return response.data;
+  },
+
+  /**
+   * Refund an order (admin)
+   */
+  adminRefundOrder: async (id: string, reason?: string): Promise<ShopOrder> => {
+    const response = await axios.put(`/api/shop/admin/orders/${id}/refund`, { reason });
     return response.data;
   },
 };

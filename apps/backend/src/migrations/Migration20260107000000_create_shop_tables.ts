@@ -42,6 +42,10 @@ export class Migration20260107000000_create_shop_tables extends Migration {
         "stripe_price_id" text,
         "quickbooks_item_id" text,
         "metadata" jsonb,
+        "weight_oz" decimal(8,2),
+        "length_in" decimal(8,2),
+        "width_in" decimal(8,2),
+        "height_in" decimal(8,2),
         "created_at" timestamptz NOT NULL DEFAULT now(),
         "updated_at" timestamptz NOT NULL DEFAULT now()
       );

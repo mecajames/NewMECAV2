@@ -266,6 +266,7 @@ export class InvoicesService {
 
   /**
    * Create invoice from an order (automated)
+   * Supports both authenticated users and guest orders
    */
   async createFromOrder(orderId: string): Promise<Invoice> {
     const em = this.em.fork();
@@ -293,10 +294,9 @@ export class InvoicesService {
     // Calculate due date (30 days from now)
     const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    // Create invoice
-    const invoice = em.create(Invoice, {
+    // Build invoice data
+    const invoiceData: Partial<Invoice> = {
       invoiceNumber,
-      user: order.user,
       order,
       status: InvoiceStatus.PAID, // Since it's from a completed order
       subtotal: order.subtotal,
@@ -309,7 +309,20 @@ export class InvoicesService {
       notes: order.notes,
       billingAddress: order.billingAddress as BillingAddress,
       companyInfo: DEFAULT_COMPANY_INFO,
-    });
+    };
+
+    // Set user if available
+    if (order.user) {
+      invoiceData.user = order.user;
+    }
+
+    // Set guest email if available (for guest checkout)
+    if ((order as any).guestEmail) {
+      invoiceData.guestEmail = (order as any).guestEmail;
+    }
+
+    // Create invoice
+    const invoice = em.create(Invoice, invoiceData as Invoice);
 
     // Copy order items to invoice items
     for (const orderItem of order.items.getItems()) {
@@ -567,10 +580,11 @@ export class InvoicesService {
       throw new BadRequestException('Cannot send a refunded invoice');
     }
 
-    // Get user email
+    // Get email address (prefer user email, fallback to guest email)
     const user = invoice.user;
-    if (!user?.email) {
-      throw new BadRequestException('Invoice has no associated user email');
+    const email = user?.email || (invoice as any).guestEmail;
+    if (!email) {
+      throw new BadRequestException('Invoice has no associated email address');
     }
 
     // Generate payment URL
@@ -589,8 +603,8 @@ export class InvoicesService {
 
     // Send email
     const emailResult = await this.emailService.sendInvoiceEmail({
-      to: user.email,
-      firstName: user.first_name || undefined,
+      to: email,
+      firstName: user?.first_name || undefined,
       invoiceNumber: invoice.invoiceNumber,
       invoiceTotal: invoice.total,
       dueDate,
@@ -650,9 +664,11 @@ export class InvoicesService {
       );
     }
 
+    // Get email address (prefer user email, fallback to guest email)
     const user = invoice.user;
-    if (!user?.email) {
-      throw new BadRequestException('Invoice has no associated user email');
+    const email = user?.email || (invoice as any).guestEmail;
+    if (!email) {
+      throw new BadRequestException('Invoice has no associated email address');
     }
 
     const paymentUrl = this.generatePaymentUrl(invoice.id);
@@ -668,8 +684,8 @@ export class InvoicesService {
     const dueDate = invoice.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const emailResult = await this.emailService.sendInvoiceEmail({
-      to: user.email,
-      firstName: user.first_name || undefined,
+      to: email,
+      firstName: user?.first_name || undefined,
       invoiceNumber: invoice.invoiceNumber,
       invoiceTotal: invoice.total,
       dueDate,
@@ -686,7 +702,7 @@ export class InvoicesService {
       };
     }
 
-    this.logger.log(`Invoice ${invoice.invoiceNumber} resent to ${user.email}`);
+    this.logger.log(`Invoice ${invoice.invoiceNumber} resent to ${email}`);
 
     return {
       success: true,

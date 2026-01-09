@@ -70,6 +70,11 @@ export const ShopProductSchema = z.object({
   stripePriceId: z.string().nullable().optional(),
   quickbooksItemId: z.string().nullable().optional(),
   metadata: z.record(z.any()).nullable().optional(),
+  // Shipping dimensions
+  weightOz: z.number().nullable().optional(), // Weight in ounces
+  lengthIn: z.number().nullable().optional(), // Length in inches
+  widthIn: z.number().nullable().optional(), // Width in inches
+  heightIn: z.number().nullable().optional(), // Height in inches
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -95,6 +100,11 @@ export const CreateShopProductSchema = z.object({
   stripePriceId: z.string().optional(),
   quickbooksItemId: z.string().optional(),
   metadata: z.record(z.any()).optional(),
+  // Shipping dimensions
+  weightOz: z.number().optional(),
+  lengthIn: z.number().optional(),
+  widthIn: z.number().optional(),
+  heightIn: z.number().optional(),
 });
 
 export type CreateShopProductDto = z.infer<typeof CreateShopProductSchema>;
@@ -204,6 +214,8 @@ export const CreateShopPaymentIntentSchema = z.object({
   shippingAddress: ShopAddressSchema.optional(),
   billingAddress: ShopAddressSchema.optional(),
   userId: z.string().uuid().optional(),
+  shippingMethod: z.enum(['standard', 'priority']).optional(),
+  shippingAmount: z.number().nonnegative().optional(),
 });
 
 export type CreateShopPaymentIntentDto = z.infer<typeof CreateShopPaymentIntentSchema>;

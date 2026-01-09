@@ -62,6 +62,19 @@ export class ShopProduct {
   @Property({ type: 'jsonb', nullable: true })
   metadata?: Record<string, unknown>;
 
+  // Shipping dimensions (for USPS rate calculation)
+  @Property({ type: 'decimal', precision: 8, scale: 2, nullable: true, fieldName: 'weight_oz' })
+  weightOz?: number; // Weight in ounces
+
+  @Property({ type: 'decimal', precision: 8, scale: 2, nullable: true, fieldName: 'length_in' })
+  lengthIn?: number; // Length in inches
+
+  @Property({ type: 'decimal', precision: 8, scale: 2, nullable: true, fieldName: 'width_in' })
+  widthIn?: number; // Width in inches
+
+  @Property({ type: 'decimal', precision: 8, scale: 2, nullable: true, fieldName: 'height_in' })
+  heightIn?: number; // Height in inches
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   createdAt: Date = new Date();
 

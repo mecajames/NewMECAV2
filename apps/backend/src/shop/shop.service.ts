@@ -1,15 +1,17 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import {
   ShopProductCategory,
   ShopOrderStatus,
   CreateShopProductDto,
   UpdateShopProductDto,
   ShopAddress,
+  OrderStatus,
 } from '@newmeca/shared';
 import { ShopProduct } from './entities/shop-product.entity';
 import { ShopOrder } from './entities/shop-order.entity';
 import { ShopOrderItem } from './entities/shop-order-item.entity';
+import { ShippingService } from './shipping.service';
 
 interface CartItem {
   productId: string;
@@ -28,6 +30,7 @@ export class ShopService {
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
+    private readonly shippingService: ShippingService,
   ) {}
 
   // =============================================================================
@@ -180,12 +183,14 @@ export class ShopService {
     billingAddress?: ShopAddress;
     notes?: string;
     stripePaymentIntentId?: string;
+    shippingMethod?: 'standard' | 'priority';
+    shippingAmount?: number;
   }): Promise<ShopOrder> {
     const em = this.em.fork();
 
     // Validate items and calculate totals
     const products = await this.validateAndGetProducts(em, data.items);
-    const totals = this.calculateOrderTotals(products, data.items);
+    const totals = this.calculateOrderTotals(products, data.items, data.shippingAmount);
 
     // Generate order number
     const orderNumber = await this.generateOrderNumber(em);
@@ -198,6 +203,7 @@ export class ShopService {
       status: ShopOrderStatus.PENDING,
       subtotal: totals.subtotal,
       shippingAmount: totals.shippingAmount,
+      shippingMethod: data.shippingMethod || 'standard',
       taxAmount: totals.taxAmount,
       totalAmount: totals.totalAmount,
       shippingAddress: data.shippingAddress,
@@ -457,6 +463,86 @@ export class ShopService {
   }
 
   // =============================================================================
+  // REFUND METHODS
+  // =============================================================================
+
+  /**
+   * Process a refund for a shop order
+   * Updates shop order status, restores inventory, and marks billing order as refunded
+   */
+  async processRefund(orderId: string, reason?: string): Promise<ShopOrder> {
+    const em = this.em.fork();
+
+    // Get the shop order with items and products
+    const order = await em.findOne(
+      ShopOrder,
+      { id: orderId },
+      { populate: ['items', 'items.product'] },
+    );
+
+    if (!order) {
+      throw new NotFoundException(`Shop order with ID ${orderId} not found`);
+    }
+
+    if (order.status === ShopOrderStatus.REFUNDED) {
+      throw new BadRequestException('Order has already been refunded');
+    }
+
+    if (order.status !== ShopOrderStatus.PAID && order.status !== ShopOrderStatus.PROCESSING) {
+      throw new BadRequestException(
+        `Cannot refund order with status ${order.status}. Only paid or processing orders can be refunded.`,
+      );
+    }
+
+    // Update shop order status
+    order.status = ShopOrderStatus.REFUNDED;
+    if (reason) {
+      order.adminNotes = reason;
+    }
+
+    // Restore inventory for tracked products
+    for (const item of order.items) {
+      if (item.product && item.product.trackInventory && item.product.stockQuantity >= 0) {
+        item.product.stockQuantity += item.quantity;
+      }
+    }
+
+    // Update billing order if exists
+    if (order.billingOrderId) {
+      try {
+        const { Order } = await import('../orders/orders.entity');
+        const billingOrder = await em.findOne(Order, { id: order.billingOrderId });
+        if (billingOrder) {
+          wrap(billingOrder).assign({
+            status: OrderStatus.REFUNDED,
+            notes: reason || 'Refunded via shop order',
+          });
+        }
+
+        // Also update associated invoice if exists
+        if (billingOrder?.invoiceId) {
+          const { Invoice } = await import('../invoices/invoices.entity');
+          const { InvoiceStatus } = await import('@newmeca/shared');
+          const invoice = await em.findOne(Invoice, { id: billingOrder.invoiceId });
+          if (invoice) {
+            wrap(invoice).assign({
+              status: InvoiceStatus.REFUNDED,
+              notes: reason || 'Refunded via shop order',
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error updating billing order/invoice during refund:', error);
+        // Non-critical - continue with the refund
+      }
+    }
+
+    await em.flush();
+
+    return order;
+  }
+
+  // =============================================================================
   // PRIVATE HELPERS
   // =============================================================================
 
@@ -473,18 +559,21 @@ export class ShopService {
     return products;
   }
 
-  private calculateOrderTotals(products: ShopProduct[], items: CartItem[]): OrderTotals {
+  private calculateOrderTotals(
+    products: ShopProduct[],
+    items: CartItem[],
+    providedShippingAmount?: number,
+  ): OrderTotals {
     let subtotal = 0;
 
     for (const item of items) {
-      const product = products.find(p => p.id === item.productId)!;
+      const product = products.find((p) => p.id === item.productId)!;
       subtotal += Number(product.price) * item.quantity;
     }
 
-    // For now, free shipping and no tax
-    // These can be configured later
-    const shippingAmount = 0;
-    const taxAmount = 0;
+    // Use provided shipping amount or default to 0
+    const shippingAmount = providedShippingAmount ?? 0;
+    const taxAmount = 0; // Tax can be configured later
     const totalAmount = subtotal + shippingAmount + taxAmount;
 
     return { subtotal, shippingAmount, taxAmount, totalAmount };

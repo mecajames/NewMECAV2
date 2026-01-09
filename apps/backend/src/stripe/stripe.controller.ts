@@ -487,7 +487,7 @@ export class StripeController {
       throw new BadRequestException(`Some items are out of stock: ${unavailableNames}`);
     }
 
-    // Create order in pending state
+    // Create order in pending state with shipping
     const order = await this.shopService.createOrder({
       userId: data.userId,
       guestEmail: data.email,
@@ -495,6 +495,8 @@ export class StripeController {
       items: data.items,
       shippingAddress: data.shippingAddress,
       billingAddress: data.billingAddress,
+      shippingMethod: (data as any).shippingMethod || 'standard',
+      shippingAmount: (data as any).shippingAmount || 0,
     });
 
     // Convert price to cents for Stripe
@@ -841,6 +843,7 @@ export class StripeController {
 
   /**
    * Create a billing Order and Invoice from a shop payment
+   * Handles both authenticated and guest checkout
    */
   private async createShopOrderAndInvoice(
     paymentIntent: Stripe.PaymentIntent,
@@ -849,10 +852,9 @@ export class StripeController {
     try {
       // Get the shop order with items
       const shopOrder = await this.shopService.findOrderById(metadata.orderId);
-      const amountPaid = paymentIntent.amount / 100;
 
       // Build order items from shop order items
-      const items = shopOrder.items.getItems().map(item => ({
+      const items = shopOrder.items.getItems().map((item) => ({
         description: item.productName,
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice).toFixed(2),
@@ -864,19 +866,61 @@ export class StripeController {
         },
       }));
 
-      // Create the billing order
+      // Build billing address from shop order
+      const billingAddress = shopOrder.billingAddress
+        ? {
+            name: shopOrder.billingAddress.name,
+            email: shopOrder.guestEmail || metadata.email,
+            phone: shopOrder.billingAddress.phone,
+            address1: shopOrder.billingAddress.line1,
+            address2: shopOrder.billingAddress.line2,
+            city: shopOrder.billingAddress.city,
+            state: shopOrder.billingAddress.state,
+            postalCode: shopOrder.billingAddress.postalCode,
+            country: shopOrder.billingAddress.country || 'US',
+          }
+        : undefined;
+
+      // Determine user ID and guest info
+      const userId = metadata.userId || shopOrder.user?.id;
+      const guestEmail = !userId ? (shopOrder.guestEmail || metadata.email) : undefined;
+      const guestName = !userId ? (shopOrder.guestName || shopOrder.billingAddress?.name) : undefined;
+
+      // Create the billing order with cross-reference
       const order = await this.ordersService.createFromPayment({
-        userId: metadata.userId,
+        userId,
+        guestEmail,
+        guestName,
         orderType: OrderType.SHOP,
         items,
+        billingAddress,
         notes: `Shop Order: ${shopOrder.orderNumber} | Stripe: ${paymentIntent.id}`,
+        shopOrderReference: {
+          shopOrderId: shopOrder.id,
+          shopOrderNumber: shopOrder.orderNumber,
+        },
       });
 
       console.log(`Billing order ${order.orderNumber} created for shop order ${shopOrder.orderNumber}`);
 
+      // Update shop order with billing order reference
+      const em = this.em.fork();
+      const shopOrderToUpdate = await em.findOne('ShopOrder', { id: shopOrder.id });
+      if (shopOrderToUpdate) {
+        (shopOrderToUpdate as any).billingOrderId = order.id;
+        await em.flush();
+      }
+
       // Create invoice from order
       const invoice = await this.invoicesService.createFromOrder(order.id);
       console.log(`Invoice ${invoice.invoiceNumber} created for billing order ${order.orderNumber}`);
+
+      // Send invoice email (async, non-blocking)
+      if (invoice) {
+        this.invoicesService.sendInvoice(invoice.id).catch((error) => {
+          console.error('Failed to send shop invoice email:', error);
+        });
+      }
     } catch (error) {
       console.error('Failed to create order/invoice for shop order:', error);
       throw error;
