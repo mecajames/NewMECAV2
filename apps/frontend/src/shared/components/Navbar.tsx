@@ -12,6 +12,7 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
   const [membersMenuOpen, setMembersMenuOpen] = useState(false);
+  const [resultsMenuOpen, setResultsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
@@ -78,13 +79,10 @@ export default function Navbar() {
 
   const currentPage = getCurrentPage();
 
-  // Members dropdown is now handled separately, so removed from navItems
+  // Results and Members dropdowns are handled separately
   const navItems = [
     { id: 'home', label: 'Home', icon: null, path: '/' },
     { id: 'events', label: 'Events', icon: Calendar, path: '/events' },
-    { id: 'results', label: 'Results', icon: Trophy, path: '/results' },
-    { id: 'standings', label: 'Standings', icon: Award, path: '/standings' },
-    { id: 'leaderboard', label: 'Top 10', icon: Trophy, path: '/leaderboard' },
     { id: 'shop', label: 'MECA Shop', icon: ShoppingBag, path: '/shop' },
   ];
 
@@ -101,7 +99,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div
-            className="flex items-center cursor-pointer"
+            className="flex items-center cursor-pointer flex-shrink-0"
             onClick={() => navigate('/')}
           >
             <img
@@ -126,6 +124,61 @@ export default function Navbar() {
                 {item.label}
               </button>
             ))}
+
+            {/* Results Dropdown */}
+            <div className="relative"
+              onMouseEnter={() => setResultsMenuOpen(true)}
+              onMouseLeave={() => setResultsMenuOpen(false)}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === 'results' || currentPage === 'standings' || currentPage === 'leaderboard'
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Trophy className="h-4 w-4" />
+                Results
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {resultsMenuOpen && (
+                <div className="absolute top-full left-0 mt-0 pt-2 w-56">
+                  <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                    <button
+                      onClick={() => {
+                        navigate('/results');
+                        setResultsMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Trophy className="h-4 w-4" />
+                      Competition Results
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/standings');
+                        setResultsMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Award className="h-4 w-4" />
+                      Standings
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/leaderboard');
+                        setResultsMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Trophy className="h-4 w-4" />
+                      Top 10
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Members Dropdown */}
             <div className="relative"
@@ -486,6 +539,50 @@ export default function Navbar() {
                 {item.label}
               </button>
             ))}
+
+            {/* Results Section */}
+            <button
+              onClick={() => {
+                navigate('/results');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'results'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Trophy className="h-5 w-5" />
+              Competition Results
+            </button>
+            <button
+              onClick={() => {
+                navigate('/standings');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'standings'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Award className="h-5 w-5" />
+              Standings
+            </button>
+            <button
+              onClick={() => {
+                navigate('/leaderboard');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'leaderboard'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Trophy className="h-5 w-5" />
+              Top 10
+            </button>
 
             {/* Members Directory */}
             <button
