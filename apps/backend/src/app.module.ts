@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -37,9 +39,23 @@ import { RatingsModule } from './ratings/ratings.module';
 import { ContactModule } from './contact/contact.module';
 import { WorldFinalsModule } from './world-finals/world-finals.module';
 import { AchievementsModule } from './achievements/achievements.module';
+import { ShopModule } from './shop/shop.module';
 
 @Module({
   imports: [
+    // Rate limiting: 60 requests per minute per IP (generous default)
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000, // 1 minute window
+        limit: 60, // 60 requests per minute
+      },
+      {
+        name: 'strict',
+        ttl: 60000, // 1 minute window
+        limit: 10, // 10 requests per minute for sensitive endpoints
+      },
+    ]),
     DatabaseModule,
     AuthModule,
     EmailModule,
@@ -76,8 +92,16 @@ import { AchievementsModule } from './achievements/achievements.module';
     ContactModule,
     WorldFinalsModule,
     AchievementsModule,
+    ShopModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Apply rate limiting globally to all endpoints
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

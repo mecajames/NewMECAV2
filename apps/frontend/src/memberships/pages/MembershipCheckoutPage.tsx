@@ -15,6 +15,9 @@ import {
   Car,
   Users,
   LogIn,
+  Eye,
+  EyeOff,
+  UserPlus,
 } from 'lucide-react';
 import { useAuth } from '@/auth';
 import {
@@ -22,6 +25,8 @@ import {
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
+import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
+import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
 
 // Check if Stripe is configured (without loading it)
@@ -94,6 +99,16 @@ export default function MembershipCheckoutPage() {
 
   // Order data saved after successful payment
   const [orderData, setOrderData] = useState<OrderData | null>(null);
+
+  // Account creation state (for guest checkout)
+  const [showAccountCreation, setShowAccountCreation] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({

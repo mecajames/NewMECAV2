@@ -7,7 +7,14 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     exclude: ['lucide-react'],
-    include: ['@stripe/stripe-js', '@stripe/react-stripe-js', '@newmeca/shared'],
+    include: [
+      '@stripe/stripe-js',
+      '@stripe/react-stripe-js',
+      '@newmeca/shared',
+      '@newmeca/shared > zod',
+    ],
+    // Force prebundle linked packages
+    force: true,
   },
   resolve: {
     alias: {

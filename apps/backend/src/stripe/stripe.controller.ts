@@ -8,6 +8,8 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
   Inject,
 } from '@nestjs/common';
 import { Request } from 'express';
@@ -22,7 +24,9 @@ import { MembershipTypeConfig } from '../membership-type-configs/membership-type
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Payment } from '../payments/payments.entity';
-import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus } from '@newmeca/shared';
+import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, UserRole, ShopAddress } from '@newmeca/shared';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { ShopService } from '../shop/shop.service';
 import Stripe from 'stripe';
 
 interface CreateMembershipPaymentIntentDto {
@@ -90,6 +94,14 @@ interface CreateInvoicePaymentIntentDto {
   invoiceId: string;
 }
 
+interface CreateShopPaymentIntentDto {
+  items: Array<{ productId: string; quantity: number }>;
+  email: string;
+  shippingAddress?: ShopAddress;
+  billingAddress?: ShopAddress;
+  userId?: string;
+}
+
 @Controller('api/stripe')
 export class StripeController {
   constructor(
@@ -99,9 +111,37 @@ export class StripeController {
     private readonly eventRegistrationsService: EventRegistrationsService,
     private readonly ordersService: OrdersService,
     private readonly invoicesService: InvoicesService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly shopService: ShopService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
+
+  // Helper to validate admin for test mode
+  private async validateTestModeAccess(authHeader?: string): Promise<void> {
+    // Must be in development environment
+    if (process.env.NODE_ENV !== 'development') {
+      throw new ForbiddenException('Test mode is only available in development environment');
+    }
+
+    // Must have valid admin auth
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Admin authentication required for test mode');
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required for test mode');
+    }
+  }
 
   @Post('create-payment-intent')
   @HttpCode(HttpStatus.OK)
@@ -168,6 +208,7 @@ export class StripeController {
   @Post('create-event-registration-payment-intent')
   @HttpCode(HttpStatus.OK)
   async createEventRegistrationPaymentIntent(
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateEventRegistrationPaymentIntentDto,
   ): Promise<PaymentIntentResult & { registrationId: string }> {
     // Validate required fields
@@ -268,8 +309,9 @@ export class StripeController {
       metadata.membershipPrice = String(membershipPrice);
     }
 
-    // Test mode - skip Stripe and mark as paid
+    // Test mode - skip Stripe and mark as paid (requires admin + development environment)
     if (data.testMode) {
+      await this.validateTestModeAccess(authHeader);
       const testPaymentId = 'test-payment-' + Date.now();
       await this.eventRegistrationsService.markAsPaid(registration.id, testPaymentId, totalAmount);
 
@@ -425,6 +467,74 @@ export class StripeController {
     });
   }
 
+  @Post('create-shop-payment-intent')
+  @HttpCode(HttpStatus.OK)
+  async createShopPaymentIntent(
+    @Body() data: CreateShopPaymentIntentDto,
+  ): Promise<PaymentIntentResult & { orderId: string }> {
+    // Validate required fields
+    if (!data.items || data.items.length === 0) {
+      throw new BadRequestException('At least one item is required');
+    }
+    if (!data.email) {
+      throw new BadRequestException('Email is required');
+    }
+
+    // Check stock availability
+    const stockCheck = await this.shopService.checkStockAvailability(data.items);
+    if (!stockCheck.available) {
+      const unavailableNames = stockCheck.unavailableItems.map(i => i.productName).join(', ');
+      throw new BadRequestException(`Some items are out of stock: ${unavailableNames}`);
+    }
+
+    // Create order in pending state
+    const order = await this.shopService.createOrder({
+      userId: data.userId,
+      guestEmail: data.email,
+      guestName: data.shippingAddress?.name,
+      items: data.items,
+      shippingAddress: data.shippingAddress,
+      billingAddress: data.billingAddress,
+    });
+
+    // Convert price to cents for Stripe
+    const amountInCents = Math.round(Number(order.totalAmount) * 100);
+
+    // Create metadata
+    const metadata: Record<string, string> = {
+      paymentType: 'shop',
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      email: data.email.toLowerCase(),
+      itemCount: String(data.items.length),
+    };
+
+    if (data.userId) metadata.userId = data.userId;
+
+    // Update order with payment intent ID (will be updated after creation)
+    const paymentIntent = await this.stripeService.createPaymentIntent({
+      amount: amountInCents,
+      currency: 'usd',
+      membershipTypeConfigId: 'shop-order',
+      membershipTypeName: `Shop Order: ${order.orderNumber}`,
+      email: data.email,
+      metadata,
+    });
+
+    // Update order with payment intent ID
+    const em = this.em.fork();
+    const orderToUpdate = await em.findOne('ShopOrder', { id: order.id });
+    if (orderToUpdate) {
+      (orderToUpdate as any).stripePaymentIntentId = paymentIntent.paymentIntentId;
+      await em.flush();
+    }
+
+    return {
+      ...paymentIntent,
+      orderId: order.id,
+    };
+  }
+
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
@@ -471,6 +581,8 @@ export class StripeController {
       await this.handleTeamUpgradePayment(paymentIntent);
     } else if (paymentType === 'invoice_payment') {
       await this.handleInvoicePayment(paymentIntent);
+    } else if (paymentType === 'shop') {
+      await this.handleShopPayment(paymentIntent);
     } else {
       await this.handleMembershipPayment(paymentIntent);
     }
@@ -692,6 +804,81 @@ export class StripeController {
       console.log(`Invoice payment processed successfully for ${invoiceId}`);
     } catch (error) {
       console.error('Error handling invoice payment:', error);
+      throw error;
+    }
+  }
+
+  private async handleShopPayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    const metadata = paymentIntent.metadata;
+    const orderId = metadata.orderId;
+
+    if (!orderId) {
+      console.error('Missing orderId in shop payment:', paymentIntent.id);
+      return;
+    }
+
+    try {
+      // Get the charge ID for the successful payment
+      const chargeId = paymentIntent.latest_charge as string;
+
+      // Process the payment success - marks order as paid and decrements stock
+      const order = await this.shopService.processPaymentSuccess(
+        paymentIntent.id,
+        chargeId,
+      );
+
+      console.log(`Shop order ${order.orderNumber} marked as paid via Stripe payment ${paymentIntent.id}`);
+
+      // Create Order and Invoice for the shop purchase (async, non-blocking)
+      this.createShopOrderAndInvoice(paymentIntent, metadata).catch((error) => {
+        console.error('Order/Invoice creation failed for shop order (non-critical):', error);
+      });
+    } catch (error) {
+      console.error('Error handling shop payment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a billing Order and Invoice from a shop payment
+   */
+  private async createShopOrderAndInvoice(
+    paymentIntent: Stripe.PaymentIntent,
+    metadata: Stripe.Metadata,
+  ): Promise<void> {
+    try {
+      // Get the shop order with items
+      const shopOrder = await this.shopService.findOrderById(metadata.orderId);
+      const amountPaid = paymentIntent.amount / 100;
+
+      // Build order items from shop order items
+      const items = shopOrder.items.getItems().map(item => ({
+        description: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice).toFixed(2),
+        itemType: OrderItemType.SHOP_PRODUCT,
+        referenceId: item.product?.id,
+        metadata: {
+          shopOrderId: shopOrder.id,
+          productSku: item.productSku,
+        },
+      }));
+
+      // Create the billing order
+      const order = await this.ordersService.createFromPayment({
+        userId: metadata.userId,
+        orderType: OrderType.SHOP,
+        items,
+        notes: `Shop Order: ${shopOrder.orderNumber} | Stripe: ${paymentIntent.id}`,
+      });
+
+      console.log(`Billing order ${order.orderNumber} created for shop order ${shopOrder.orderNumber}`);
+
+      // Create invoice from order
+      const invoice = await this.invoicesService.createFromOrder(order.id);
+      console.log(`Invoice ${invoice.invoiceNumber} created for billing order ${order.orderNumber}`);
+    } catch (error) {
+      console.error('Failed to create order/invoice for shop order:', error);
       throw error;
     }
   }

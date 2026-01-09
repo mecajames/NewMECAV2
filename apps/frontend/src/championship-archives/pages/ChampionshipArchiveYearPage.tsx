@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Trophy, Medal, Search, Filter, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { championshipArchivesApi, ChampionshipArchive, ChampionshipAward } from '@/championship-archives';
 import { useAuth } from '@/auth';
 
@@ -421,7 +422,7 @@ export default function ChampionshipArchiveYearPage() {
           <div className="bg-slate-800 rounded-xl p-8 mb-6">
             <div className="prose prose-invert prose-orange max-w-none">
               <div
-                dangerouslySetInnerHTML={{ __html: archive.additional_content.html }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(archive.additional_content.html) }}
                 className="championship-archive-content"
               />
             </div>

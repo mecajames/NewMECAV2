@@ -1,9 +1,10 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, ClipboardList, Shield } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, ClipboardList, Shield, ShoppingBag } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '@/notifications';
+import { CartIcon } from '@/shop/components/CartIcon';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -66,6 +67,7 @@ export default function Navbar() {
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/members')) return 'members';
     if (path.startsWith('/teams')) return 'teams';
+    if (path.startsWith('/shop')) return 'shop';
     if (path.startsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/membership')) return 'membership';
     if (path.startsWith('/login')) return 'login';
@@ -82,6 +84,7 @@ export default function Navbar() {
     { id: 'results', label: 'Results', icon: Trophy, path: '/results' },
     { id: 'standings', label: 'Standings', icon: Award, path: '/standings' },
     { id: 'leaderboard', label: 'Top 10', icon: Trophy, path: '/leaderboard' },
+    { id: 'shop', label: 'MECA Shop', icon: ShoppingBag, path: '/shop' },
   ];
 
   const groupedRulebooks = activeRulebooks.reduce((acc, rulebook) => {
@@ -239,6 +242,9 @@ export default function Navbar() {
 
             {user ? (
               <div className="flex items-center gap-3">
+                {/* Cart Icon */}
+                <CartIcon />
+
                 <button
                   onClick={() => navigate('/dashboard')}
                   className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
@@ -430,6 +436,8 @@ export default function Navbar() {
               </div>
             ) : (
               <div className="flex items-center gap-4">
+                {/* Cart Icon for non-logged in users */}
+                <CartIcon />
                 <button
                   onClick={() => navigate('/login')}
                   className="px-4 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition-colors"

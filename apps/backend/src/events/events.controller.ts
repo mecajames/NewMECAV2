@@ -1,21 +1,55 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Put, 
-  Delete, 
-  Body, 
-  Param, 
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
   Query,
-  HttpCode, 
-  HttpStatus 
+  HttpCode,
+  HttpStatus,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { EventsService } from './events.service';
 import { Event } from './events.entity';
+import { Profile } from '../profiles/profiles.entity';
+import { UserRole } from '@newmeca/shared';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
 
 @Controller('api/events')
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
+  ) {}
+
+  // Helper to require admin or event director authentication
+  private async requireAdminOrEventDirector(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+
+    if (profile?.role !== UserRole.ADMIN && profile?.role !== UserRole.EVENT_DIRECTOR) {
+      throw new ForbiddenException('Admin or Event Director access required');
+    }
+
+    return { user, profile };
+  }
 
   @Get()
   async listEvents(
@@ -51,36 +85,50 @@ export class EventsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async createEvent(@Body() data: Partial<Event>): Promise<Event> {
+  async createEvent(
+    @Headers('authorization') authHeader: string,
+    @Body() data: Partial<Event>,
+  ): Promise<Event> {
+    await this.requireAdminOrEventDirector(authHeader);
     return this.eventsService.create(data);
   }
 
   @Post('multi-day')
   @HttpCode(HttpStatus.CREATED)
   async createMultiDayEvent(
+    @Headers('authorization') authHeader: string,
     @Body() body: { data: Partial<Event>; numberOfDays: number; dayDates: string[] },
   ): Promise<Event[]> {
+    await this.requireAdminOrEventDirector(authHeader);
     return this.eventsService.createMultiDay(body.data, body.numberOfDays, body.dayDates);
   }
 
   @Put(':id')
   async updateEvent(
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() data: Partial<Event>,
   ): Promise<Event> {
+    await this.requireAdminOrEventDirector(authHeader);
     return this.eventsService.update(id, data);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteEvent(@Param('id') id: string): Promise<void> {
+  async deleteEvent(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.requireAdminOrEventDirector(authHeader);
     return this.eventsService.delete(id);
   }
 
   @Post(':id/send-rating-emails')
   async sendRatingEmails(
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ): Promise<{ sent: number; failed: number; errors: string[] }> {
+    await this.requireAdminOrEventDirector(authHeader);
     return this.eventsService.sendRatingRequestEmails(id);
   }
 }

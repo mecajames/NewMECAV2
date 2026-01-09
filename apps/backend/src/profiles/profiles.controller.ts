@@ -114,7 +114,11 @@ export class ProfilesController {
    */
   @Post('admin/create-with-password')
   @HttpCode(HttpStatus.CREATED)
-  async createUserWithPassword(@Body() dto: CreateUserWithPasswordDto): Promise<Profile> {
+  async createUserWithPassword(
+    @Headers('authorization') authHeader: string,
+    @Body() dto: CreateUserWithPasswordDto,
+  ): Promise<Profile> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.createWithPassword(dto);
   }
 
@@ -122,7 +126,10 @@ export class ProfilesController {
    * Generates a secure password that meets minimum strength requirements
    */
   @Get('admin/generate-password')
-  async generatePassword(): Promise<{ password: string; strength: ReturnType<typeof calculatePasswordStrength> }> {
+  async generatePassword(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ password: string; strength: ReturnType<typeof calculatePasswordStrength> }> {
+    await this.requireAdmin(authHeader);
     const password = this.profilesService.generatePassword();
     const strength = calculatePasswordStrength(password);
     return { password, strength };
@@ -132,11 +139,15 @@ export class ProfilesController {
    * Checks password strength
    */
   @Post('admin/check-password-strength')
-  async checkPasswordStrength(@Body() body: { password: string }): Promise<{
+  async checkPasswordStrength(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { password: string },
+  ): Promise<{
     strength: ReturnType<typeof calculatePasswordStrength>;
     meetsMinimum: boolean;
     minimumRequired: number;
   }> {
+    await this.requireAdmin(authHeader);
     const strength = calculatePasswordStrength(body.password);
     return {
       strength,
@@ -149,7 +160,10 @@ export class ProfilesController {
    * Checks if email service is configured
    */
   @Get('admin/email-service-status')
-  async getEmailServiceStatus(): Promise<{ configured: boolean }> {
+  async getEmailServiceStatus(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ configured: boolean }> {
+    await this.requireAdmin(authHeader);
     return { configured: this.profilesService.isEmailServiceReady() };
   }
 
@@ -158,9 +172,11 @@ export class ProfilesController {
    */
   @Post(':id/reset-password')
   async resetPassword(
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() dto: ResetPasswordDto,
   ): Promise<{ success: boolean; emailSent: boolean }> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.resetPassword(id, dto);
   }
 
@@ -179,7 +195,11 @@ export class ProfilesController {
    */
   @Delete('admin/cleanup-auth-user')
   @HttpCode(HttpStatus.OK)
-  async cleanupOrphanedAuthUser(@Body() body: { email: string }): Promise<{ success: boolean; message: string }> {
+  async cleanupOrphanedAuthUser(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { email: string },
+  ): Promise<{ success: boolean; message: string }> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.cleanupOrphanedAuthUser(body.email);
   }
 
@@ -189,7 +209,11 @@ export class ProfilesController {
    */
   @Delete('admin/delete-user-completely')
   @HttpCode(HttpStatus.OK)
-  async deleteUserCompletely(@Body() body: { email: string }): Promise<{ success: boolean; message: string }> {
+  async deleteUserCompletely(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { email: string },
+  ): Promise<{ success: boolean; message: string }> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.deleteUserCompletelyByEmail(body.email);
   }
 
@@ -199,11 +223,15 @@ export class ProfilesController {
    */
   @Delete('admin/delete-user/:id')
   @HttpCode(HttpStatus.OK)
-  async deleteUserById(@Param('id') id: string): Promise<{
+  async deleteUserById(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<{
     success: boolean;
     message: string;
     deletedMemberships?: number;
   }> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.deleteUserCompletelyById(id);
   }
 
@@ -214,9 +242,11 @@ export class ProfilesController {
   @Post('admin/impersonate/:id')
   @HttpCode(HttpStatus.OK)
   async impersonateUser(
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() body: { redirectTo?: string },
   ): Promise<{ success: boolean; link?: string; error?: string }> {
+    await this.requireAdmin(authHeader);
     const redirectTo = body.redirectTo || process.env.FRONTEND_URL || 'http://localhost:5173';
     return this.profilesService.generateImpersonationLink(id, redirectTo);
   }

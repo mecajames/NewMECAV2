@@ -8,9 +8,9 @@ export default function ImpersonationBanner() {
   const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
-    // Check if currently impersonating
-    const impersonating = localStorage.getItem('isImpersonating') === 'true';
-    const userName = localStorage.getItem('impersonatedUserName') || '';
+    // Check if currently impersonating (use sessionStorage for security)
+    const impersonating = sessionStorage.getItem('isImpersonating') === 'true';
+    const userName = sessionStorage.getItem('impersonatedUserName') || '';
 
     setIsImpersonating(impersonating);
     setImpersonatedUserName(userName);
@@ -20,8 +20,8 @@ export default function ImpersonationBanner() {
     setIsRestoring(true);
 
     try {
-      // Get stored admin session
-      const adminSessionStr = localStorage.getItem('adminSession');
+      // Get stored admin session (use sessionStorage for security)
+      const adminSessionStr = sessionStorage.getItem('adminSession');
       if (!adminSessionStr) {
         throw new Error('No admin session found');
       }
@@ -42,10 +42,10 @@ export default function ImpersonationBanner() {
       }
 
       // Clear impersonation state
-      localStorage.removeItem('adminSession');
-      localStorage.removeItem('isImpersonating');
-      localStorage.removeItem('impersonatedUserId');
-      localStorage.removeItem('impersonatedUserName');
+      sessionStorage.removeItem('adminSession');
+      sessionStorage.removeItem('isImpersonating');
+      sessionStorage.removeItem('impersonatedUserId');
+      sessionStorage.removeItem('impersonatedUserName');
 
       // Navigate to admin members page
       window.location.href = '/admin/members';
@@ -54,10 +54,10 @@ export default function ImpersonationBanner() {
       alert('Failed to restore admin session. Please log in again.');
 
       // Clear everything and redirect to login
-      localStorage.removeItem('adminSession');
-      localStorage.removeItem('isImpersonating');
-      localStorage.removeItem('impersonatedUserId');
-      localStorage.removeItem('impersonatedUserName');
+      sessionStorage.removeItem('adminSession');
+      sessionStorage.removeItem('isImpersonating');
+      sessionStorage.removeItem('impersonatedUserId');
+      sessionStorage.removeItem('impersonatedUserName');
 
       await supabase.auth.signOut();
       window.location.href = '/login';

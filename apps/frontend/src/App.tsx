@@ -47,6 +47,17 @@ import {
   GuestTicketViewPage,
   GuestTicketAccessPage,
 } from '@/tickets';
+// Shop
+import { CartProvider } from '@/shop/context/CartContext';
+import { ShopPage } from '@/shop/pages/ShopPage';
+import { ProductDetailPage } from '@/shop/pages/ProductDetailPage';
+import { CartPage } from '@/shop/pages/CartPage';
+import { CheckoutPage } from '@/shop/pages/CheckoutPage';
+import { OrderConfirmationPage } from '@/shop/pages/OrderConfirmationPage';
+import { OrderHistoryPage } from '@/shop/pages/OrderHistoryPage';
+import { OrderDetailPage as ShopOrderDetailPage } from '@/shop/pages/OrderDetailPage';
+import { AdminShopProductsPage } from '@/admin/pages/AdminShopProductsPage';
+import { AdminShopOrdersPage } from '@/admin/pages/AdminShopOrdersPage';
 
 // Lazy load checkout pages to avoid loading Stripe until needed
 const EventRegistrationCheckoutPage = lazy(() => import('@/event-registrations/pages/EventRegistrationCheckoutPage'));
@@ -62,6 +73,7 @@ const PageLoader = () => (
 function App() {
   return (
     <AuthProvider>
+      <CartProvider>
       <ReCaptchaProvider version="v2">
         <BrowserRouter>
           <ScrollToTop />
@@ -185,6 +197,19 @@ function App() {
               <Route path="/admin/billing/invoices/:id" element={<InvoiceDetailPage />} />
               <Route path="/admin/billing/revenue" element={<RevenueReportsPage />} />
 
+              {/* Shop Routes */}
+              <Route path="/shop" element={<ShopPage />} />
+              <Route path="/shop/products/:id" element={<ProductDetailPage />} />
+              <Route path="/shop/cart" element={<CartPage />} />
+              <Route path="/shop/checkout" element={<CheckoutPage />} />
+              <Route path="/shop/orders" element={<OrderHistoryPage />} />
+              <Route path="/shop/orders/:id" element={<ShopOrderDetailPage />} />
+              <Route path="/shop/orders/:id/confirmation" element={<OrderConfirmationPage />} />
+
+              {/* Admin Shop Routes */}
+              <Route path="/admin/shop/products" element={<AdminShopProductsPage />} />
+              <Route path="/admin/shop/orders" element={<AdminShopOrdersPage />} />
+
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
@@ -194,6 +219,7 @@ function App() {
         </div>
         </BrowserRouter>
       </ReCaptchaProvider>
+      </CartProvider>
     </AuthProvider>
   );
 }

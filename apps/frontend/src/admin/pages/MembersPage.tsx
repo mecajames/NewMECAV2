@@ -254,17 +254,17 @@ export default function MembersPage() {
     setImpersonateLoading(member.id);
 
     try {
-      // Store admin session info before impersonating
+      // Store admin session info before impersonating (use sessionStorage for security - clears on tab close)
       const { data: { session: adminSession } } = await supabase.auth.getSession();
       if (adminSession) {
-        localStorage.setItem('adminSession', JSON.stringify({
+        sessionStorage.setItem('adminSession', JSON.stringify({
           access_token: adminSession.access_token,
           refresh_token: adminSession.refresh_token,
           user: adminSession.user,
         }));
-        localStorage.setItem('isImpersonating', 'true');
-        localStorage.setItem('impersonatedUserId', member.id);
-        localStorage.setItem('impersonatedUserName', `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email);
+        sessionStorage.setItem('isImpersonating', 'true');
+        sessionStorage.setItem('impersonatedUserId', member.id);
+        sessionStorage.setItem('impersonatedUserName', `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email);
       }
 
       // Get impersonation link from backend

@@ -12,8 +12,14 @@ import {
   BadRequestException,
   Logger,
   Req,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
-import { AdminCreateMembershipDto, AdminCreateMembershipSchema } from '@newmeca/shared';
+import { EntityManager } from '@mikro-orm/postgresql';
+import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole } from '@newmeca/shared';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
 import { ZodError } from 'zod';
 import { MembershipsService, AdminAssignMembershipDto, CreateMembershipDto, AdminCreateMembershipResult } from './memberships.service';
 import { Membership } from './memberships.entity';
@@ -28,7 +34,53 @@ export class MembershipsController {
     private readonly membershipsService: MembershipsService,
     private readonly mecaIdService: MecaIdService,
     private readonly masterSecondaryService: MasterSecondaryService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
   ) {}
+
+  // Helper to get authenticated user from token
+  private async getAuthenticatedUser(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    return { user, profile };
+  }
+
+  // Helper to require admin OR owner access
+  private async requireAdminOrOwner(authHeader: string | undefined, targetUserId: string) {
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+
+    if (profile?.role === UserRole.ADMIN) {
+      return { user, profile, isAdmin: true };
+    }
+
+    if (user.id !== targetUserId) {
+      throw new ForbiddenException('You can only access your own membership data');
+    }
+
+    return { user, profile, isAdmin: false };
+  }
+
+  // Helper to require admin authentication
+  private async requireAdmin(authHeader?: string) {
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+
+    return { user, profile };
+  }
 
   /**
    * Create a new membership for a user
@@ -137,7 +189,10 @@ export class MembershipsController {
    * Admin: Get all memberships in the system
    */
   @Get('admin/all')
-  async getAllMemberships(): Promise<Membership[]> {
+  async getAllMemberships(
+    @Headers('authorization') authHeader: string,
+  ): Promise<Membership[]> {
+    await this.requireAdmin(authHeader);
     return this.membershipsService.getAllMemberships();
   }
 
@@ -146,7 +201,11 @@ export class MembershipsController {
    */
   @Post('admin/assign')
   @HttpCode(HttpStatus.CREATED)
-  async adminAssignMembership(@Body() data: AdminAssignMembershipDto): Promise<Membership> {
+  async adminAssignMembership(
+    @Headers('authorization') authHeader: string,
+    @Body() data: AdminAssignMembershipDto,
+  ): Promise<Membership> {
+    await this.requireAdmin(authHeader);
     return this.membershipsService.adminAssignMembership(data);
   }
 
@@ -158,7 +217,11 @@ export class MembershipsController {
    */
   @Post('admin/create')
   @HttpCode(HttpStatus.CREATED)
-  async adminCreateMembership(@Body() data: AdminCreateMembershipDto): Promise<AdminCreateMembershipResult> {
+  async adminCreateMembership(
+    @Headers('authorization') authHeader: string,
+    @Body() data: AdminCreateMembershipDto,
+  ): Promise<AdminCreateMembershipResult> {
+    await this.requireAdmin(authHeader);
     this.logger.log(`Admin create membership request received:`, JSON.stringify(data, null, 2));
 
     try {
@@ -181,9 +244,11 @@ export class MembershipsController {
    */
   @Get('admin/meca-id-history')
   async getMecaIdHistory(
+    @Headers('authorization') authHeader: string,
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
   ): Promise<{ items: any[]; total: number }> {
+    await this.requireAdmin(authHeader);
     return this.mecaIdService.getAllMecaIdHistory(limit || 50, offset || 0);
   }
 
@@ -191,7 +256,11 @@ export class MembershipsController {
    * Admin: Get history for a specific MECA ID
    */
   @Get('admin/meca-id/:mecaId/history')
-  async getMecaIdHistoryById(@Param('mecaId') mecaId: string): Promise<any[]> {
+  async getMecaIdHistoryById(
+    @Headers('authorization') authHeader: string,
+    @Param('mecaId') mecaId: string,
+  ): Promise<any[]> {
+    await this.requireAdmin(authHeader);
     const mecaIdNum = parseInt(mecaId, 10);
     if (isNaN(mecaIdNum)) {
       return [];
@@ -352,7 +421,10 @@ export class MembershipsController {
    */
   @Post('admin/fix-secondary-profiles')
   @HttpCode(HttpStatus.OK)
-  async fixSecondaryProfiles(): Promise<{ fixed: number; errors: string[] }> {
+  async fixSecondaryProfiles(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ fixed: number; errors: string[] }> {
+    await this.requireAdmin(authHeader);
     this.logger.log('Admin triggered fix for secondary memberships without profiles');
     return this.masterSecondaryService.fixSecondaryMembershipsWithoutProfiles();
   }

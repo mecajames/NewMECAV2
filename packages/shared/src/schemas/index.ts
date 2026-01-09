@@ -35,3 +35,6 @@ export * from "./contact.schema";
 
 // Achievements
 export * from "./achievements.schema";
+
+// Shop
+export * from "./shop.schema";

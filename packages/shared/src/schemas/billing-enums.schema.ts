@@ -26,6 +26,7 @@ export enum OrderType {
   MEMBERSHIP = 'membership',
   EVENT_REGISTRATION = 'event_registration',
   MANUAL = 'manual',
+  SHOP = 'shop',
 }
 
 export enum OrderItemType {
@@ -35,6 +36,7 @@ export enum OrderItemType {
   PROCESSING_FEE = 'processing_fee',
   DISCOUNT = 'discount',
   TAX = 'tax',
+  SHOP_PRODUCT = 'shop_product',
   OTHER = 'other',
 }
 
