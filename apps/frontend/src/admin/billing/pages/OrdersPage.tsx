@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
-import { billingApi, Order, OrderListParams, PaginatedResponse } from '../../../api-client/billing.api-client';
+import { billingApi, Order, OrderListParams } from '../../../api-client/billing.api-client';
 import { OrderTable } from '../components/OrderTable';
 import { OrderStatus, OrderType } from '../billing.types';
 
 export default function OrdersPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, _setSearchParams] = useSearchParams();
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [pagination, setPagination] = useState({

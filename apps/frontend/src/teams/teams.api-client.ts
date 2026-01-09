@@ -261,6 +261,16 @@ export const teamsApi = {
     return response.data;
   },
 
+  // Update team cover image (upload file)
+  updateTeamLogo: async (id: string, file: File): Promise<Team> => {
+    const formData = new FormData();
+    formData.append('cover_image', file);
+    const response = await axios.put(`/api/teams/${id}/cover-image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   // Update team cover image position
   updateCoverImagePosition: async (id: string, position: { x: number; y: number }): Promise<Team> => {
     const response = await axios.put(`/api/teams/${id}`, { cover_image_position: position });

@@ -21,8 +21,8 @@ interface TeamUpgradeModalProps {
 
 function PaymentForm({
   upgradeDetails,
-  teamName,
-  teamDescription,
+  teamName: _teamName,
+  teamDescription: _teamDescription,
   onSuccess,
   onBack,
 }: {

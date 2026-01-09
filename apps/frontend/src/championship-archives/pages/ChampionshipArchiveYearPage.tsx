@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Trophy, Medal, Search, Filter, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'lucide-react';
+import { Trophy, Medal, Search, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { championshipArchivesApi, ChampionshipArchive, ChampionshipAward } from '@/championship-archives';
 import { useAuth } from '@/auth';
@@ -81,7 +81,7 @@ export default function ChampionshipArchiveYearPage() {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState('all');
-  const [classFilter, setClassFilter] = useState('all');
+  const [_classFilter, _setClassFilter] = useState('all');
   const [stateFilter, setStateFilter] = useState('all');
 
   // Admin editing

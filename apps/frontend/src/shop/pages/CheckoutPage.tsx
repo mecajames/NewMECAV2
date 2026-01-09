@@ -277,7 +277,7 @@ function AddressForm({
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const { items, itemCount, subtotal, clearCart } = useCart();
+  const { items, itemCount: _itemCount, subtotal, clearCart } = useCart();
   const [step, setStep] = useState<'address' | 'payment'>('address');
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -358,7 +358,7 @@ export function CheckoutPage() {
     }
   };
 
-  const handlePaymentSuccess = async (paymentIntentId: string) => {
+  const handlePaymentSuccess = async (_paymentIntentId: string) => {
     clearCart();
     navigate(`/shop/orders/${orderId}/confirmation`);
   };

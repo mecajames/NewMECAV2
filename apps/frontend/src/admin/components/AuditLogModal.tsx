@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, FileSpreadsheet, User, Edit2, Trash2, Clock, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Download, FileText, FileSpreadsheet, User, Edit2, Trash2, Eye } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';

@@ -84,7 +84,6 @@ export default function RulebookManagement() {
   };
 
   const uploadPDF = async (file: File): Promise<string | null> => {
-    const fileExt = 'pdf';
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = `rulebooks/${fileName}`;
 

@@ -5,7 +5,6 @@ import {
   Edit2,
   Trash2,
   Search,
-  Filter,
   Check,
   X,
   Star,
@@ -141,17 +140,17 @@ export function AdminShopProductsPage() {
       const dto: CreateShopProductDto | UpdateShopProductDto = {
         name: formData.name,
         description: formData.description || undefined,
-        short_description: formData.short_description || undefined,
+        shortDescription: formData.short_description || undefined,
         category: formData.category,
-        price: formData.price,
-        compare_at_price: formData.compare_at_price || undefined,
-        is_active: formData.is_active,
-        is_featured: formData.is_featured,
-        display_order: formData.display_order,
-        image_url: formData.image_url || undefined,
+        price: parseFloat(formData.price) || 0,
+        compareAtPrice: formData.compare_at_price ? parseFloat(formData.compare_at_price) : undefined,
+        isActive: formData.is_active,
+        isFeatured: formData.is_featured,
+        displayOrder: formData.display_order,
+        imageUrl: formData.image_url || undefined,
         sku: formData.sku || undefined,
-        stock_quantity: formData.stock_quantity,
-        track_inventory: formData.track_inventory,
+        stockQuantity: formData.stock_quantity,
+        trackInventory: formData.track_inventory,
       };
 
       if (editingProduct) {
@@ -183,7 +182,7 @@ export function AdminShopProductsPage() {
 
   const toggleActive = async (product: ShopProduct) => {
     try {
-      await shopApi.adminUpdateProduct(product.id, { is_active: !product.isActive });
+      await shopApi.adminUpdateProduct(product.id, { isActive: !product.isActive });
       loadProducts();
     } catch (err) {
       console.error('Error updating product:', err);
@@ -192,7 +191,7 @@ export function AdminShopProductsPage() {
 
   const toggleFeatured = async (product: ShopProduct) => {
     try {
-      await shopApi.adminUpdateProduct(product.id, { is_featured: !product.isFeatured });
+      await shopApi.adminUpdateProduct(product.id, { isFeatured: !product.isFeatured });
       loadProducts();
     } catch (err) {
       console.error('Error updating product:', err);

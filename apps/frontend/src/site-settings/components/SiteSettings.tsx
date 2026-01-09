@@ -7,7 +7,7 @@ import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 
 export default function SiteSettings() {
   const { user } = useAuth();
-  const [settings, setSettings] = useState<SiteSetting[]>([]);
+  const [_settings, setSettings] = useState<SiteSetting[]>([]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

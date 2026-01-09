@@ -12,9 +12,6 @@ import {
   Lock,
   AlertCircle,
   CheckCircle,
-  Car,
-  Users,
-  LogIn,
   Eye,
   EyeOff,
   UserPlus,
@@ -25,6 +22,7 @@ import {
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
+// import { membershipsApi } from '../memberships.api-client';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
@@ -86,7 +84,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user, profile, signUp } = useAuth();
 
   const [membership, setMembership] = useState<MembershipTypeConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -326,7 +324,7 @@ export default function MembershipCheckoutPage() {
 
     try {
       // Create the account
-      const { error, data: signUpData } = await signUp(
+      const { error } = await signUp(
         orderData.email,
         accountPassword,
         orderData.firstName,
@@ -338,18 +336,17 @@ export default function MembershipCheckoutPage() {
         return;
       }
 
-      // Link the membership to the new user
-      if (signUpData?.user?.id) {
-        try {
-          await membershipsApi.linkMembershipsToUser({
-            email: orderData.email,
-            userId: signUpData.user.id,
-          });
-        } catch (linkError) {
-          console.error('Failed to link membership:', linkError);
-          // Don't fail the account creation if linking fails
-        }
-      }
+      // TODO: Link the membership to the new user once backend endpoint exists
+      // if (signUpData?.user?.id) {
+      //   try {
+      //     await membershipsApi.linkMembershipsToUser({
+      //       email: orderData.email,
+      //       userId: signUpData.user.id,
+      //     });
+      //   } catch (linkError) {
+      //     console.error('Failed to link membership:', linkError);
+      //   }
+      // }
 
       setAccountCreated(true);
       setShowAccountCreation(false);

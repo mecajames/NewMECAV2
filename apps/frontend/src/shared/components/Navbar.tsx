@@ -67,7 +67,8 @@ export default function Navbar() {
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/members')) return 'members';
     if (path.startsWith('/teams')) return 'teams';
-    if (path.startsWith('/shop')) return 'shop';
+    if (path === '/shop' || path.startsWith('/shop/products')) return 'shop';
+    if (path.startsWith('/shop/')) return 'cart'; // cart/checkout/orders - no nav highlight
     if (path.startsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/membership')) return 'membership';
     if (path.startsWith('/login')) return 'login';

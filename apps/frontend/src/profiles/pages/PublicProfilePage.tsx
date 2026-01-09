@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft } from 'lucide-react';
+import { Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { profilesApi } from '@/profiles';
 import { supabase } from '@/lib/supabase';
@@ -10,7 +10,7 @@ export default function PublicProfilePage() {
   const { profile, user, refreshProfile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [loading, setLoading] = useState(false);
+  const [_loading, _setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);

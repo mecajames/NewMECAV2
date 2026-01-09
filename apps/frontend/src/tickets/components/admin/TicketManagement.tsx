@@ -15,7 +15,6 @@ import {
   BarChart3,
   Users,
   TrendingUp,
-  Calendar,
   RefreshCw,
   Eye,
   UserPlus,
@@ -26,7 +25,6 @@ import {
   TicketStats,
   TicketStatus,
   TicketPriority,
-  TicketCategory,
   TicketDepartment,
   TicketListQuery,
 } from '../../tickets.api-client';
@@ -57,7 +55,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [stats, setStats] = useState<TicketStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [_statsLoading, setStatsLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);

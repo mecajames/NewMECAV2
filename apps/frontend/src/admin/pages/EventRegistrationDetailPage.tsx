@@ -8,7 +8,6 @@ import {
   Calendar,
   Car,
   Tag,
-  DollarSign,
   CheckCircle,
   XCircle,
   Clock,

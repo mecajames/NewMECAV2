@@ -281,7 +281,7 @@ export const billingApi = {
   /**
    * Send invoice email
    */
-  sendInvoice: async (id: string): Promise<{ success: boolean; invoice: Invoice }> => {
+  sendInvoice: async (id: string): Promise<{ success: boolean; invoice: Invoice; error?: string }> => {
     const response = await axios.post(`/api/billing/invoices/${id}/send`);
     return response.data;
   },

@@ -42,7 +42,7 @@ export default function JudgeDetailPage() {
         level: data.level || '',
         is_active: data.is_active ?? true,
         admin_notes: data.admin_notes || '',
-        bio: data.bio || '',
+        bio: (data as any).bio || '',
       });
     } catch (err: any) {
       setError(err.message || 'Failed to load judge');

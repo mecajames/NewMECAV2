@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, Search, Filter, Archive } from 'lucide-react';
+import { FileText, Search, Archive } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 

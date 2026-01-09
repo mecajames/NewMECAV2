@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
-  Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell
+  Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
+  ShoppingCart, Package
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -353,6 +354,29 @@ export default function AdminDashboard() {
           action: 'business-listings',
           color: 'orange',
           navigateTo: '/admin/business-listings',
+        },
+      ],
+    },
+    {
+      id: 'shop',
+      icon: ShoppingCart,
+      title: 'MECA Shop',
+      actions: [
+        {
+          icon: Package,
+          title: 'Manage Products',
+          description: 'Add, edit, and manage shop products',
+          action: 'shop-products',
+          color: 'emerald',
+          navigateTo: '/admin/shop/products',
+        },
+        {
+          icon: ShoppingCart,
+          title: 'Shop Orders',
+          description: 'View and manage customer orders',
+          action: 'shop-orders',
+          color: 'blue',
+          navigateTo: '/admin/shop/orders',
         },
       ],
     },

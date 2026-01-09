@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  Ticket,
   Clock,
   User,
   Calendar,
@@ -16,8 +15,6 @@ import {
   XCircle,
   RotateCcw,
   UserPlus,
-  Edit,
-  Trash2,
   Lock,
   Eye,
   Search,

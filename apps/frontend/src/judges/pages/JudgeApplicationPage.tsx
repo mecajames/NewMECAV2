@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth';
 import { createJudgeApplication, getMyJudgeApplication, getMyJudgeProfile } from '../judges.api-client';
-import type { CreateJudgeApplicationDto, JudgeSpecialty, ApplicationStatus } from '@newmeca/shared';
+import type { CreateJudgeApplicationDto, JudgeSpecialty } from '@newmeca/shared';
 import CountrySelect from '@/shared/fields/CountrySelect';
 import StateProvinceSelect from '@/shared/fields/StateProvinceSelect';
 import { getPostalCodeLabel, getStateLabel } from '@/utils/countries';
@@ -51,7 +51,7 @@ interface Reference {
 }
 
 export default function JudgeApplicationPage() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<ApplicationStep>('personal');
   const [loading, setLoading] = useState(true);

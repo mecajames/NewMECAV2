@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   Calendar,
   Send,
-  Paperclip,
 } from 'lucide-react';
 import {
   ticketsApi,

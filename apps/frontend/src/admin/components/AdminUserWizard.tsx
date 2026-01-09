@@ -287,7 +287,7 @@ export default function AdminUserWizard({
               if (!results.find(r => r.membership.id === matchingMembership.id)) {
                 results.push({
                   membership: matchingMembership,
-                  user: matchingMembership.user as Profile,
+                  user: matchingMembership.user as unknown as Profile,
                 });
               }
             }
@@ -1286,7 +1286,7 @@ export default function AdminUserWizard({
                           <div className="flex items-center justify-between">
                             <div>
                               <div className="font-medium text-white">
-                                {result.user.full_name || `${result.user.first_name} ${result.user.last_name}`}
+                                {`${result.user.first_name || ''} ${result.user.last_name || ''}`.trim() || result.user.email}
                               </div>
                               <div className="text-sm text-gray-400">
                                 {result.user.email}
@@ -1319,7 +1319,7 @@ export default function AdminUserWizard({
                         <div>
                           <div className="text-sm text-green-400 font-medium mb-1">Selected Master Account</div>
                           <div className="text-white font-medium">
-                            {selectedMaster.user.full_name || `${selectedMaster.user.first_name} ${selectedMaster.user.last_name}`}
+                            {`${selectedMaster.user.first_name || ''} ${selectedMaster.user.last_name || ''}`.trim() || selectedMaster.user.email}
                           </div>
                           <div className="text-sm text-gray-400">{selectedMaster.user.email}</div>
                         </div>
@@ -2081,7 +2081,7 @@ export default function AdminUserWizard({
                     <div className="flex justify-between">
                       <span className="text-gray-400">Linked to Master:</span>
                       <span className="text-white">
-                        {selectedMaster.user.full_name || `${selectedMaster.user.first_name} ${selectedMaster.user.last_name}`}
+                        {`${selectedMaster.user.first_name || ''} ${selectedMaster.user.last_name || ''}`.trim() || selectedMaster.user.email}
                       </span>
                     </div>
                     <div className="flex justify-between">

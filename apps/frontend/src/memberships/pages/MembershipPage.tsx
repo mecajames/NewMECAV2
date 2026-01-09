@@ -146,7 +146,7 @@ export default function MembershipPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {memberships.map((membership, index) => (
+              {memberships.map((membership, _index) => (
                 <div
                   key={membership.id}
                   className={`bg-slate-800 rounded-2xl shadow-2xl p-8 flex flex-col ${

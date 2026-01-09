@@ -7,14 +7,6 @@ import { supabase } from '@/lib/supabase';
 import CountrySelect from '@/shared/fields/CountrySelect';
 import StateProvinceSelect from '@/shared/fields/StateProvinceSelect';
 
-// Local constants to avoid Rollup bundling issues
-const APPLICATION_STATUS = {
-  PENDING: 'pending' as const,
-  UNDER_REVIEW: 'under_review' as const,
-  APPROVED: 'approved' as const,
-  REJECTED: 'rejected' as const,
-};
-
 type StatusFilter = 'all' | 'pending' | 'under_review' | 'approved' | 'rejected';
 
 interface UserSearchResult {
@@ -318,9 +310,7 @@ export default function JudgeApplicationsAdminPage() {
                     <tr key={app.id} className="hover:bg-slate-700/30">
                       <td className="px-4 py-4">
                         <div className="text-white font-medium">
-                          {app.user?.first_name && app.user?.last_name
-                            ? `${app.user.first_name} ${app.user.last_name}`
-                            : app.full_name || 'Unknown'}
+                          {app.full_name || 'Unknown'}
                         </div>
                         {app.preferred_name && app.preferred_name !== app.full_name && (
                           <div className="text-slate-400 text-sm">({app.preferred_name})</div>

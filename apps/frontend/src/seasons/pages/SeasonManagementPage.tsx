@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Plus, Edit, Trash2, Check, X, ArrowLeft, Copy, Trophy } from 'lucide-react';
+import { Calendar, Plus, Edit, Trash2, Check, ArrowLeft, Copy, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Season, CompetitionFormat } from '@/types/database';
 import { seasonsApi } from '@/seasons';
@@ -21,7 +21,7 @@ const formatDateString = (dateString: string): string => {
 };
 
 export default function SeasonManagementPage() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const navigate = useNavigate();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);

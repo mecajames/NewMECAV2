@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, Filter, UserCheck, UserX, ChevronRight, Star, ArrowLeft } from 'lucide-react';
-import { getAllJudges, type Judge } from '@/judges/judges.api-client';
+import { Search, UserCheck, UserX, ChevronRight, Star, ArrowLeft } from 'lucide-react';
+import { getAllJudges } from '@/judges/judges.api-client';
 import { JudgeLevel } from '@newmeca/shared';
 
 export default function JudgesAdminPage() {

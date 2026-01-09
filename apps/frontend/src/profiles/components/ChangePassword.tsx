@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Lock, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { useSearchParams, useNavigate } from 'react-router-dom';

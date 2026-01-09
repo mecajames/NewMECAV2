@@ -9,6 +9,7 @@ import {
   Download,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
+import { OrderStatus, InvoiceStatus } from '../billing.types';
 
 type DateRange = 'week' | 'month' | 'quarter' | 'year' | 'all';
 
@@ -201,9 +202,9 @@ export default function RevenueReportsPage() {
                 <TrendingUp className="h-6 w-6 text-blue-500" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">This Month</p>
+                <p className="text-gray-400 text-sm">Completed Orders</p>
                 <p className="text-white font-semibold text-2xl">
-                  ${stats?.revenue.thisMonth || '0.00'}
+                  {stats?.orders.counts[OrderStatus.COMPLETED] || 0}
                 </p>
               </div>
             </div>
@@ -241,44 +242,21 @@ export default function RevenueReportsPage() {
         {/* Revenue by Category */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-            <h2 className="text-xl font-semibold text-white mb-6">Revenue by Category</h2>
+            <h2 className="text-xl font-semibold text-white mb-6">Order Breakdown by Type</h2>
             <div className="space-y-4">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-400">Memberships</span>
-                  <span className="text-white font-medium">${stats?.revenue.byCategory?.memberships || '0.00'}</span>
-                </div>
-                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full"
-                    style={{ width: stats?.revenue.total ? `${(parseFloat(stats.revenue.byCategory?.memberships || '0') / parseFloat(stats.revenue.total) * 100)}%` : '0%' }}
-                  />
-                </div>
+              <div className="flex justify-between items-center py-3 border-b border-slate-700">
+                <span className="text-gray-400">Membership Orders</span>
+                <span className="text-blue-500 font-medium">--</span>
               </div>
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-400">Event Registrations</span>
-                  <span className="text-white font-medium">${stats?.revenue.byCategory?.events || '0.00'}</span>
-                </div>
-                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-green-500 rounded-full"
-                    style={{ width: stats?.revenue.total ? `${(parseFloat(stats.revenue.byCategory?.events || '0') / parseFloat(stats.revenue.total) * 100)}%` : '0%' }}
-                  />
-                </div>
+              <div className="flex justify-between items-center py-3 border-b border-slate-700">
+                <span className="text-gray-400">Event Registrations</span>
+                <span className="text-green-500 font-medium">--</span>
               </div>
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-400">Manual Orders</span>
-                  <span className="text-white font-medium">${stats?.revenue.byCategory?.manual || '0.00'}</span>
-                </div>
-                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-purple-500 rounded-full"
-                    style={{ width: stats?.revenue.total ? `${(parseFloat(stats.revenue.byCategory?.manual || '0') / parseFloat(stats.revenue.total) * 100)}%` : '0%' }}
-                  />
-                </div>
+              <div className="flex justify-between items-center py-3">
+                <span className="text-gray-400">Manual Orders</span>
+                <span className="text-purple-500 font-medium">--</span>
               </div>
+              <p className="text-xs text-gray-500 mt-4">Category breakdown coming soon</p>
             </div>
           </div>
 
@@ -291,15 +269,15 @@ export default function RevenueReportsPage() {
               </div>
               <div className="flex justify-between items-center py-3 border-b border-slate-700">
                 <span className="text-gray-400">Completed</span>
-                <span className="text-green-500 font-medium">{stats?.orders.completed || 0}</span>
+                <span className="text-green-500 font-medium">{stats?.orders.counts[OrderStatus.COMPLETED] || 0}</span>
               </div>
               <div className="flex justify-between items-center py-3 border-b border-slate-700">
                 <span className="text-gray-400">Pending</span>
-                <span className="text-yellow-500 font-medium">{stats?.orders.pending || 0}</span>
+                <span className="text-yellow-500 font-medium">{stats?.orders.counts[OrderStatus.PENDING] || 0}</span>
               </div>
               <div className="flex justify-between items-center py-3">
                 <span className="text-gray-400">Cancelled/Refunded</span>
-                <span className="text-red-400 font-medium">{stats?.orders.cancelled || 0}</span>
+                <span className="text-red-400 font-medium">{(stats?.orders.counts[OrderStatus.CANCELLED] || 0) + (stats?.orders.counts[OrderStatus.REFUNDED] || 0)}</span>
               </div>
             </div>
           </div>
@@ -314,19 +292,19 @@ export default function RevenueReportsPage() {
               <p className="text-gray-400 text-sm mt-1">Total Invoices</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-gray-400">{stats?.invoices.draft || 0}</p>
+              <p className="text-3xl font-bold text-gray-400">{stats?.invoices.counts[InvoiceStatus.DRAFT] || 0}</p>
               <p className="text-gray-400 text-sm mt-1">Draft</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-blue-500">{stats?.invoices.sent || 0}</p>
+              <p className="text-3xl font-bold text-blue-500">{stats?.invoices.counts[InvoiceStatus.SENT] || 0}</p>
               <p className="text-gray-400 text-sm mt-1">Sent</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-green-500">{stats?.invoices.paid || 0}</p>
+              <p className="text-3xl font-bold text-green-500">{stats?.invoices.counts[InvoiceStatus.PAID] || 0}</p>
               <p className="text-gray-400 text-sm mt-1">Paid</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-red-500">{stats?.invoices.overdue || 0}</p>
+              <p className="text-3xl font-bold text-red-500">{stats?.invoices.counts[InvoiceStatus.OVERDUE] || 0}</p>
               <p className="text-gray-400 text-sm mt-1">Overdue</p>
             </div>
           </div>

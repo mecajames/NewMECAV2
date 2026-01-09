@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Search, Car, Music, User, Trophy, Award } from 'lucide-react';
+import { Users, Search, Car, Music, User, Award } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
 
 export default function MemberDirectoryPage() {

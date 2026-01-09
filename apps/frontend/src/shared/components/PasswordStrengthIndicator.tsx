@@ -3,7 +3,6 @@ import {
   calculatePasswordStrength,
   getStrengthColorClasses,
   MIN_PASSWORD_STRENGTH,
-  type PasswordStrengthResult,
 } from '../../utils/passwordUtils';
 
 interface PasswordStrengthIndicatorProps {

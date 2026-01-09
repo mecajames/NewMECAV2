@@ -3,7 +3,6 @@ import {
   User,
   Mail,
   Phone,
-  MapPin,
   CreditCard,
   FileText,
   Calendar,
@@ -36,7 +35,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
-import { profilesApi, MemberStats, ActivityItem, UpcomingEvent } from '@/profiles';
+import { profilesApi, ActivityItem, UpcomingEvent } from '@/profiles';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { membershipsApi, Membership, AdminCreateMembershipResult, AddSecondaryModal } from '@/memberships';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs';
@@ -44,7 +43,7 @@ import AdminMembershipWizard from '../components/AdminMembershipWizard';
 import { UserPlus } from 'lucide-react';
 import { teamsApi, Team } from '@/teams';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
-import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH, getStrengthColorClasses } from '../../utils/passwordUtils';
+import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
 
 type TabType =
@@ -1311,15 +1310,6 @@ function OverviewTab({ member, derivedMembershipStatus }: { member: Profile; der
     }
   };
 
-  const getOrdinalSuffix = (num: number) => {
-    const j = num % 10;
-    const k = num % 100;
-    if (j === 1 && k !== 11) return 'st';
-    if (j === 2 && k !== 12) return 'nd';
-    if (j === 3 && k !== 13) return 'rd';
-    return 'th';
-  };
-
   const getMembershipColor = () => {
     switch (derivedMembershipStatus) {
       case 'active': return 'bg-green-600';
@@ -2149,20 +2139,22 @@ function MediaGalleryTab({ member }: { member: Profile }) {
         link: selectedImage.type === 'profile' ? '/public-profile' : `/teams/${selectedImage.teamId}`,
       });
 
-      // Log the moderation action
-      await supabase.from('moderation_log').insert({
-        user_id: member.id,
-        moderator_id: user?.id,
-        action: 'image_deleted',
-        reason: deleteReason,
-        details: {
-          image_url: selectedImage.url,
-          image_type: selectedImage.type,
-          custom_message: customMessage,
-        },
-      }).catch(() => {
+      // Log the moderation action (table might not exist)
+      try {
+        await supabase.from('moderation_log').insert({
+          user_id: member.id,
+          moderator_id: user?.id,
+          action: 'image_deleted',
+          reason: deleteReason,
+          details: {
+            image_url: selectedImage.url,
+            image_type: selectedImage.type,
+            custom_message: customMessage,
+          },
+        });
+      } catch {
         // Log table might not exist
-      });
+      }
 
       // Refresh data
       if (selectedImage.type === 'team') {
@@ -3432,7 +3424,7 @@ function MembershipsTab({ member }: { member: Profile }) {
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('edit_user');
   const [memberships, setMemberships] = useState<Membership[]>([]);
-  const [membershipTypes, setMembershipTypes] = useState<MembershipTypeConfig[]>([]);
+  const [_membershipTypes, setMembershipTypes] = useState<MembershipTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMembershipWizard, setShowMembershipWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -3721,7 +3713,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-lg font-semibold text-white">
-                      {membership.membershipTypeConfig?.name || membership.membershipType}
+                      {membership.membershipTypeConfig?.name || 'Membership'}
                     </h3>
                     {getStatusBadge(membership)}
                   </div>
@@ -3834,7 +3826,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                 {canEdit && (
                   <div className="flex items-center gap-2 ml-4">
                     {/* Add Secondary button - only for non-secondary memberships with paid status */}
-                    {membership.accountType !== 'secondary' && membership.paymentStatus === 'paid' && (
+                    {(membership as any).accountType !== 'secondary' && membership.paymentStatus === 'paid' && (
                       <button
                         onClick={() => handleAddSecondary(membership)}
                         className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
@@ -4397,7 +4389,7 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
   );
 }
 
-function EventRegistrationsTab({ member }: { member: Profile }) {
+function EventRegistrationsTab({ member: _member }: { member: Profile }) {
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-6">Event Registrations</h2>
@@ -4589,7 +4581,7 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
   );
 }
 
-function CommunicationsTab({ member }: { member: Profile }) {
+function CommunicationsTab({ member: _member }: { member: Profile }) {
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-6">Communications</h2>
@@ -4601,7 +4593,7 @@ function CommunicationsTab({ member }: { member: Profile }) {
   );
 }
 
-function PermissionsTab({ member }: { member: Profile }) {
+function PermissionsTab({ member: _member }: { member: Profile }) {
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-6">Permissions</h2>

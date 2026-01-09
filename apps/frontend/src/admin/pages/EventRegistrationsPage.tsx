@@ -15,7 +15,6 @@ import {
   Eye,
   RefreshCw,
   Ban,
-  Car,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';

@@ -7,7 +7,7 @@ import { InvoiceStatus } from '../billing.types';
 
 export default function InvoicesPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, _setSearchParams] = useSearchParams();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [pagination, setPagination] = useState({

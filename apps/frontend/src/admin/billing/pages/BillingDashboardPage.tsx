@@ -19,7 +19,7 @@ export default function BillingDashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<BillingDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [_refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{

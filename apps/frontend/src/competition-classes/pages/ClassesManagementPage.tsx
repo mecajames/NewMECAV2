@@ -8,7 +8,7 @@ import { competitionClassesApi } from '@/competition-classes';
 import { competitionFormatsApi, CompetitionFormat as ApiCompetitionFormat } from '@/competition-formats';
 
 export default function ClassesManagementPage() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const navigate = useNavigate();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);

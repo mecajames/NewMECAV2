@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, Trash2, Edit2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, Filter, X } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { MediaType, MediaFile } from '@/media-files';
 import { useAuth } from '@/auth';
@@ -76,7 +76,6 @@ export default function MediaLibrary() {
     setUploading(true);
 
     try {
-      const fileExt = uploadData.file.name.split('.').pop();
       const fileName = `${Date.now()}-${uploadData.file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
       const filePath = `media/${fileName}`;
 

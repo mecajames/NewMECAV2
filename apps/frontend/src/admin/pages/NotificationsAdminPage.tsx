@@ -75,7 +75,7 @@ export default function NotificationsAdminPage() {
   const [activeMemberCount, setActiveMemberCount] = useState<number | null>(null);
   const [allUserCount, setAllUserCount] = useState<number | null>(null);
   const [loadingCounts, setLoadingCounts] = useState(false);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetchData();

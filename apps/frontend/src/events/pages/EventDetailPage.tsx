@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn, ArrowLeft, Star } from 'lucide-react';
 import { eventsApi, Event, EventAssignmentManager } from '@/events';
-import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
+import { eventRegistrationsApi } from '@/event-registrations';
 import { useAuth, usePermissions } from '@/auth';
 import { EventRatingsPanel } from '@/ratings';
 import { ratingsApi } from '@/api-client/ratings.api-client';
@@ -26,7 +26,7 @@ export default function EventDetailPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const { user, profile } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission: _hasPermission } = usePermissions();
 
   // Position editing state
   const [isEditingPosition, setIsEditingPosition] = useState(false);
@@ -256,10 +256,6 @@ export default function EventDetailPage() {
       </div>
     );
   }
-
-  const mapUrl = event.latitude && event.longitude
-    ? `https://www.google.com/maps/embed/v1/place?key=YOUR_GOOGLE_MAPS_API_KEY&q=${event.latitude},${event.longitude}`
-    : `https://www.google.com/maps/embed/v1/place?key=YOUR_GOOGLE_MAPS_API_KEY&q=${encodeURIComponent(event.venue_address)}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">

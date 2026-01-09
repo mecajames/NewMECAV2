@@ -6,7 +6,6 @@ import {
   Send,
   CheckCircle,
   AlertTriangle,
-  ArrowRight,
   Search,
   Loader2,
   HelpCircle,

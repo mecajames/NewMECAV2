@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Star, ArrowLeft, TrendingUp, Users, Gavel, UserCheck, Trash2,
-  ChevronRight, Calendar, MessageSquare, Eye, EyeOff, BarChart3
+  Star, ArrowLeft, TrendingUp, Gavel, UserCheck, Trash2,
+  ChevronRight, MessageSquare, Eye, EyeOff, BarChart3
 } from 'lucide-react';
 import { ratingsApi } from '@/api-client/ratings.api-client';
 import { RatingEntityType } from '@/shared/enums';

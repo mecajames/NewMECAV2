@@ -219,21 +219,6 @@ export default function HomePage() {
     },
   ];
 
-  const getSlideAnimation = () => {
-    switch (heroSettings.carousel_direction) {
-      case 'left':
-        return 'animate-slide-left';
-      case 'right':
-        return 'animate-slide-right';
-      case 'top':
-        return 'animate-slide-top';
-      case 'bottom':
-        return 'animate-slide-bottom';
-      default:
-        return 'animate-slide-left';
-    }
-  };
-
   const nextEventSlide = () => {
     setCurrentEventSlide((prev) => (prev + 1) % Math.ceil(upcomingEvents.length / 3));
   };
@@ -242,11 +227,6 @@ export default function HomePage() {
     setCurrentEventSlide((prev) =>
       prev === 0 ? Math.ceil(upcomingEvents.length / 3) - 1 : prev - 1
     );
-  };
-
-  const getCurrentEvents = () => {
-    const startIndex = currentEventSlide * 3;
-    return upcomingEvents.slice(startIndex, startIndex + 3);
   };
 
   const totalSlides = Math.ceil(upcomingEvents.length / 3);
