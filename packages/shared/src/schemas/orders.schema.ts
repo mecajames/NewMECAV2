@@ -6,7 +6,7 @@ import {
   OrderTypeSchema,
   OrderItemType,
   OrderItemTypeSchema,
-} from './billing-enums.schema';
+} from './billing-enums.schema.js';
 
 // =============================================================================
 // Billing Address Schema

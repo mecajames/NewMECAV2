@@ -6,6 +6,7 @@ import { eventRegistrationsApi } from '@/event-registrations';
 import { useAuth, usePermissions } from '@/auth';
 import { EventRatingsPanel } from '@/ratings';
 import { ratingsApi } from '@/api-client/ratings.api-client';
+import { getStorageUrl } from '@/lib/storage';
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -285,7 +286,7 @@ export default function EventDetailPage() {
             onTouchEnd={handleTouchEnd}
           >
             <img
-              src={event.flyer_url}
+              src={getStorageUrl(event.flyer_url)}
               alt={event.title}
               className="w-full max-h-96 object-cover select-none"
               style={{ objectPosition: `${position.x}% ${position.y}%` }}
@@ -467,7 +468,7 @@ export default function EventDetailPage() {
                     </p>
                     <div className="relative overflow-hidden rounded-lg">
                       <img
-                        src={event.flyer_url}
+                        src={getStorageUrl(event.flyer_url)}
                         alt={`${event.title} flyer`}
                         className="w-full h-32 object-cover transition-transform group-hover:scale-105"
                         style={{
@@ -743,7 +744,7 @@ export default function EventDetailPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={event.flyer_url}
+              src={getStorageUrl(event.flyer_url)}
               alt={`${event.title} flyer`}
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
             />

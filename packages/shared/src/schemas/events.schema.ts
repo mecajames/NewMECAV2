@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EventStatusSchema, EventTypeSchema } from './enums.schema';
+import { EventStatusSchema, EventTypeSchema } from './enums.schema.js';
 
 // Create Event DTO (API format with snake_case)
 export const CreateEventApiSchema = z.object({

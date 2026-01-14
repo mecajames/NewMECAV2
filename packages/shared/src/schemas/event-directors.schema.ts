@@ -12,7 +12,7 @@ import {
   EventAssignmentStatusSchema,
   AssignmentRequestType,
   AssignmentRequestTypeSchema,
-} from './enums.schema';
+} from './enums.schema.js';
 
 // =============================================================================
 // Event Director Application Reference

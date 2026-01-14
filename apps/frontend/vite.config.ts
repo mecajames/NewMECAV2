@@ -16,6 +16,12 @@ export default defineConfig({
     // Force prebundle linked packages
     force: true,
   },
+  build: {
+    commonjsOptions: {
+      include: [/node_modules/, /@newmeca\/shared/],
+      transformMixedEsModules: true,
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

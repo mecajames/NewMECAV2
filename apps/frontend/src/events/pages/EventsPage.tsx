@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { seasonsApi, Season } from '@/seasons';
 import { countries, getStatesForCountry } from '@/utils/countries';
+import { getStorageUrl } from '@/lib/storage';
 
 type EventStatus = 'upcoming' | 'completed';
 
@@ -398,7 +399,7 @@ export default function EventsPage() {
                 {event.flyer_url ? (
                   <div className="h-48 overflow-hidden">
                     <img
-                      src={event.flyer_url}
+                      src={getStorageUrl(event.flyer_url)}
                       alt={event.title}
                       className="w-full h-full object-cover"
                       style={{

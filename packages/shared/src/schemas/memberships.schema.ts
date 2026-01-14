@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { MembershipTypeSchema, PaymentStatusSchema, MembershipCategorySchema, ManufacturerTierSchema } from './enums.schema';
-import { AdminPaymentMethodSchema } from './billing-enums.schema';
+import { MembershipTypeSchema, PaymentStatusSchema, MembershipCategorySchema, ManufacturerTierSchema } from './enums.schema.js';
+import { AdminPaymentMethodSchema } from './billing-enums.schema.js';
 
 // Create Guest Membership DTO
 export const CreateGuestMembershipSchema = z.object({

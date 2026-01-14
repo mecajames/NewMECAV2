@@ -40,20 +40,21 @@ import { ContactModule } from './contact/contact.module';
 import { WorldFinalsModule } from './world-finals/world-finals.module';
 import { AchievementsModule } from './achievements/achievements.module';
 import { ShopModule } from './shop/shop.module';
+import { TrainingRecordsModule } from './training-records/training-records.module';
 
 @Module({
   imports: [
-    // Rate limiting: 60 requests per minute per IP (generous default)
+    // Rate limiting: 300 requests per minute per IP (generous for SPA with many concurrent requests)
     ThrottlerModule.forRoot([
       {
         name: 'default',
         ttl: 60000, // 1 minute window
-        limit: 60, // 60 requests per minute
+        limit: 300, // 300 requests per minute (5/second average)
       },
       {
         name: 'strict',
         ttl: 60000, // 1 minute window
-        limit: 10, // 10 requests per minute for sensitive endpoints
+        limit: 20, // 20 requests per minute for sensitive endpoints
       },
     ]),
     DatabaseModule,
@@ -93,6 +94,7 @@ import { ShopModule } from './shop/shop.module';
     WorldFinalsModule,
     AchievementsModule,
     ShopModule,
+    TrainingRecordsModule,
   ],
   controllers: [AppController],
   providers: [

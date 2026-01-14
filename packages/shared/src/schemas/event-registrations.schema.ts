@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RegistrationStatusSchema, PaymentStatusSchema } from './enums.schema';
+import { RegistrationStatusSchema, PaymentStatusSchema } from './enums.schema.js';
 
 // =============================================================================
 // Event Registration Class Schema

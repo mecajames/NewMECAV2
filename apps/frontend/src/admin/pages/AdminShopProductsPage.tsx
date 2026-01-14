@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Package,
   Plus,
@@ -11,6 +12,7 @@ import {
   Loader2,
   Image,
   DollarSign,
+  ArrowLeft,
 } from 'lucide-react';
 import { ShopProduct, ShopProductCategory, CreateShopProductDto, UpdateShopProductDto } from '@newmeca/shared';
 import { shopApi } from '@/shop/shop.api-client';
@@ -56,6 +58,7 @@ const initialFormData: ProductFormData = {
 };
 
 export function AdminShopProductsPage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -207,13 +210,22 @@ export function AdminShopProductsPage() {
             <h1 className="text-3xl font-bold text-white">Shop Products</h1>
             <p className="text-gray-400 mt-1">Manage your shop inventory</p>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors"
-          >
-            <Plus className="h-5 w-5" />
-            Add Product
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Dashboard
+            </button>
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors"
+            >
+              <Plus className="h-5 w-5" />
+              Add Product
+            </button>
+          </div>
         </div>
 
         {error && (

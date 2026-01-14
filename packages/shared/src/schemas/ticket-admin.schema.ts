@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TicketPrioritySchema } from './enums.schema';
+import { TicketPrioritySchema } from './enums.schema.js';
 
 // =============================================================================
 // Permission Level Enum

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UserRole, MembershipStatus, UserRoleSchema, MembershipStatusSchema } from './enums.schema';
+import { UserRole, MembershipStatus, UserRoleSchema, MembershipStatusSchema } from './enums.schema.js';
 
 // Create Profile DTO
 export const CreateProfileSchema = z.object({

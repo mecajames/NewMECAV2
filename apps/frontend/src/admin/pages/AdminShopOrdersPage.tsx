@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Package,
   Filter,
@@ -12,6 +13,7 @@ import {
   X,
   RotateCcw,
   ExternalLink,
+  ArrowLeft,
 } from 'lucide-react';
 import { ShopOrder, ShopOrderStatus } from '@newmeca/shared';
 import { shopApi, ShopStats } from '@/shop/shop.api-client';
@@ -28,6 +30,7 @@ const statusLabels: Record<ShopOrderStatus, string> = {
 };
 
 export function AdminShopOrdersPage() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<ShopOrder[]>([]);
   const [stats, setStats] = useState<ShopStats | null>(null);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -187,9 +190,18 @@ export function AdminShopOrdersPage() {
     <div className="min-h-screen bg-slate-900 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Shop Orders</h1>
-          <p className="text-gray-400 mt-1">Manage customer orders</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Shop Orders</h1>
+            <p className="text-gray-400 mt-1">Manage customer orders</p>
+          </div>
+          <button
+            onClick={() => navigate('/dashboard/admin')}
+            className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Dashboard
+          </button>
         </div>
 
         {error && (

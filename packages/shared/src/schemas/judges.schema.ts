@@ -18,7 +18,7 @@ import {
   EventAssignmentStatusSchema,
   AssignmentRequestType,
   AssignmentRequestTypeSchema,
-} from './enums.schema';
+} from './enums.schema.js';
 
 // =============================================================================
 // Judge Application Reference

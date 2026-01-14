@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, UserCheck, UserX, Star, MapPin, Calendar, Award } from 'lucide-react';
+import { ArrowLeft, Save, UserCheck, UserX, Star, MapPin, Calendar, Award, Pencil } from 'lucide-react';
 import { getEventDirector, updateEventDirector } from '@/event-directors/event-directors.api-client';
+import { TraineeType } from '@newmeca/shared';
+import TrainingRecordsSection from '@/admin/components/TrainingRecordsSection';
 
 export default function EventDirectorDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -11,6 +13,9 @@ export default function EventDirectorDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState('');
   const [formData, setFormData] = useState({
     is_active: true,
     admin_notes: '',
@@ -34,6 +39,7 @@ export default function EventDirectorDetailPage() {
         admin_notes: data.admin_notes || '',
         bio: data.bio || '',
       });
+      setNotesValue(data.admin_notes || '');
     } catch (err: any) {
       setError(err.message || 'Failed to load event director');
     } finally {
@@ -56,6 +62,22 @@ export default function EventDirectorDetailPage() {
       setError(err.message || 'Failed to save changes');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveNotes() {
+    setSavingNotes(true);
+    setError(null);
+    try {
+      await updateEventDirector(id!, {
+        admin_notes: notesValue,
+      });
+      await loadEventDirector();
+      setEditingNotes(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save notes');
+    } finally {
+      setSavingNotes(false);
     }
   }
 
@@ -294,7 +316,21 @@ export default function EventDirectorDetailPage() {
 
             {/* Admin Notes */}
             <div className="bg-slate-800 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Admin Notes</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-white">Admin Notes</h3>
+                {!editingNotes && !editMode && (
+                  <button
+                    onClick={() => {
+                      setNotesValue(eventDirector.admin_notes || '');
+                      setEditingNotes(true);
+                    }}
+                    className="p-1.5 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 hover:text-white transition-colors"
+                    title="Edit notes"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
               {editMode ? (
                 <textarea
                   value={formData.admin_notes}
@@ -302,12 +338,41 @@ export default function EventDirectorDetailPage() {
                   className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none h-32"
                   placeholder="Admin notes..."
                 />
+              ) : editingNotes ? (
+                <div>
+                  <textarea
+                    value={notesValue}
+                    onChange={(e) => setNotesValue(e.target.value)}
+                    className="w-full bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none h-32 mb-3"
+                    placeholder="Admin notes..."
+                    autoFocus
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setEditingNotes(false)}
+                      className="px-3 py-1 bg-slate-600 text-white rounded-lg hover:bg-slate-500 text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveNotes}
+                      disabled={savingNotes}
+                      className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <Save className="h-3 w-3" />
+                      {savingNotes ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <p className="text-slate-300 whitespace-pre-wrap text-sm">
                   {eventDirector.admin_notes || <span className="text-slate-500 italic">No notes</span>}
                 </p>
               )}
             </div>
+
+            {/* Training Records */}
+            {id && <TrainingRecordsSection traineeType={TraineeType.EVENT_DIRECTOR} traineeId={id} />}
           </div>
         </div>
       </div>

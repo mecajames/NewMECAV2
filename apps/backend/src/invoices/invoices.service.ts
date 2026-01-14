@@ -629,7 +629,7 @@ export class InvoicesService {
 
     await em.flush();
 
-    this.logger.log(`Invoice ${invoice.invoiceNumber} sent to ${user.email}`);
+    this.logger.log(`Invoice ${invoice.invoiceNumber} sent to ${email}`);
 
     return {
       success: true,

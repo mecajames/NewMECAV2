@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business-listings';
+import { getStorageUrl } from '@/lib/storage';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -242,7 +243,7 @@ export default function HomePage() {
               index === currentImageIndex ? 'opacity-100' : 'opacity-0'
             }`}
             style={{
-              backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${url})`,
+              backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${getStorageUrl(url)})`,
             }}
           />
         ))}

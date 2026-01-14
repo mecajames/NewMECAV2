@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MembershipCategorySchema, ManufacturerTierSchema } from './enums.schema';
+import { MembershipCategorySchema, ManufacturerTierSchema } from './enums.schema.js';
 
 // Create Membership Type Config DTO
 export const CreateMembershipTypeConfigSchema = z.object({

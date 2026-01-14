@@ -4,8 +4,8 @@ import {
   InvoiceStatusSchema,
   InvoiceItemType,
   InvoiceItemTypeSchema,
-} from './billing-enums.schema';
-import { BillingAddressSchema } from './orders.schema';
+} from './billing-enums.schema.js';
+import { BillingAddressSchema } from './orders.schema.js';
 
 // =============================================================================
 // Company Info Schema

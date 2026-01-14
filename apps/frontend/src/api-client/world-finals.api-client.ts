@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 const API_BASE = '/api/world-finals';
 

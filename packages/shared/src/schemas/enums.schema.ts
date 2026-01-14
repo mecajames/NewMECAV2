@@ -313,6 +313,26 @@ export enum WeekendAvailability {
 }
 
 // =============================================================================
+// Training Records Enums
+// =============================================================================
+
+export enum TrainingType {
+  SPL = 'spl',
+  SQL = 'sql',
+  BOTH = 'both',
+}
+
+export enum TraineeType {
+  JUDGE = 'judge',
+  EVENT_DIRECTOR = 'event_director',
+}
+
+export enum TrainingResult {
+  PASS = 'pass',
+  FAIL = 'fail',
+}
+
+// =============================================================================
 // Zod Schemas (using z.nativeEnum for type safety)
 // =============================================================================
 
@@ -361,3 +381,8 @@ export const RatingEntityTypeSchema = z.nativeEnum(RatingEntityType);
 export const ApplicationEntryMethodSchema = z.nativeEnum(ApplicationEntryMethod);
 export const VerificationPurposeSchema = z.nativeEnum(VerificationPurpose);
 export const WeekendAvailabilitySchema = z.nativeEnum(WeekendAvailability);
+
+// Training Records Schemas
+export const TrainingTypeSchema = z.nativeEnum(TrainingType);
+export const TraineeTypeSchema = z.nativeEnum(TraineeType);
+export const TrainingResultSchema = z.nativeEnum(TrainingResult);

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { OrderListItemSchema } from './orders.schema';
-import { InvoiceListItemSchema } from './invoices.schema';
+import { OrderListItemSchema } from './orders.schema.js';
+import { InvoiceListItemSchema } from './invoices.schema.js';
 
 // =============================================================================
 // Revenue Stats Schemas

@@ -3,6 +3,7 @@ import { Save, Image as ImageIcon, Plus, X } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { mediaFilesApi, MediaFile } from '@/media-files';
+import { getStorageUrl } from '@/lib/storage';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 
 export default function SiteSettings() {
@@ -932,7 +933,7 @@ export default function SiteSettings() {
                   className="relative aspect-video bg-slate-700 rounded-lg overflow-hidden hover:ring-2 hover:ring-orange-500 transition-all"
                 >
                   <img
-                    src={file.fileUrl}
+                    src={getStorageUrl(file.fileUrl)}
                     alt={file.title}
                     className="w-full h-full object-cover"
                   />

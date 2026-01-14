@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { JudgeApplication } from './judge-application.entity';
 import { JudgeApplicationReference } from './judge-application-reference.entity';
@@ -34,6 +34,7 @@ import { EmailService } from '../email/email.service';
 @Injectable()
 export class JudgesService {
   constructor(
+    @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
   ) {}
@@ -43,8 +44,9 @@ export class JudgesService {
   // =============================================================================
 
   async createApplication(userId: string, dto: CreateJudgeApplicationDto): Promise<JudgeApplication> {
+    const em = this.em.fork();
     // Check if user already has a pending or approved application
-    const existingApplication = await this.em.findOne(JudgeApplication, {
+    const existingApplication = await em.findOne(JudgeApplication, {
       user: { id: userId },
       status: { $in: [ApplicationStatus.PENDING, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.APPROVED] },
     });
@@ -54,12 +56,12 @@ export class JudgesService {
     }
 
     // Check if user is already a judge
-    const existingJudge = await this.em.findOne(Judge, { user: { id: userId } });
+    const existingJudge = await em.findOne(Judge, { user: { id: userId } });
     if (existingJudge) {
       throw new BadRequestException('You are already a registered judge');
     }
 
-    const user = await this.em.findOneOrFail(Profile, userId);
+    const user = await em.findOneOrFail(Profile, userId);
 
     // Create application using new instance
     const application = new JudgeApplication();
@@ -98,7 +100,7 @@ export class JudgesService {
       entryMethod: ApplicationEntryMethod.SELF,
     });
 
-    await this.em.persistAndFlush(application);
+    await em.persistAndFlush(application);
 
     // Create references
     for (const refDto of dto.references) {
@@ -111,10 +113,10 @@ export class JudgesService {
         phone: refDto.phone,
         company: refDto.company_name,
       });
-      this.em.persist(reference);
+      em.persist(reference);
     }
 
-    await this.em.flush();
+    await em.flush();
 
     // Send verification emails to references
     await this.sendReferenceVerificationEmails(application);
@@ -123,11 +125,12 @@ export class JudgesService {
   }
 
   async adminCreateApplication(adminId: string, dto: AdminCreateJudgeApplicationDto): Promise<JudgeApplication> {
-    const user = await this.em.findOneOrFail(Profile, dto.user_id);
-    const admin = await this.em.findOneOrFail(Profile, adminId);
+    const em = this.em.fork();
+    const user = await em.findOneOrFail(Profile, dto.user_id);
+    const admin = await em.findOneOrFail(Profile, adminId);
 
     // Check if user already has an application
-    const existingApplication = await this.em.findOne(JudgeApplication, {
+    const existingApplication = await em.findOne(JudgeApplication, {
       user: { id: dto.user_id },
       status: { $in: [ApplicationStatus.PENDING, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.APPROVED] },
     });
@@ -173,7 +176,7 @@ export class JudgesService {
       entryMethod: dto.entry_method || ApplicationEntryMethod.ADMIN_APPLICATION,
     });
 
-    await this.em.persistAndFlush(application);
+    await em.persistAndFlush(application);
 
     // Create references
     for (const refDto of dto.references) {
@@ -186,20 +189,21 @@ export class JudgesService {
         phone: refDto.phone,
         company: refDto.company_name,
       });
-      this.em.persist(reference);
+      em.persist(reference);
     }
 
-    await this.em.flush();
+    await em.flush();
 
     return application;
   }
 
   async adminQuickCreateApplication(adminId: string, dto: AdminQuickCreateJudgeApplicationDto): Promise<JudgeApplication> {
-    const user = await this.em.findOneOrFail(Profile, dto.user_id);
-    const admin = await this.em.findOneOrFail(Profile, adminId);
+    const em = this.em.fork();
+    const user = await em.findOneOrFail(Profile, dto.user_id);
+    const admin = await em.findOneOrFail(Profile, adminId);
 
     // Check if user already has an application
-    const existingApplication = await this.em.findOne(JudgeApplication, {
+    const existingApplication = await em.findOne(JudgeApplication, {
       user: { id: dto.user_id },
       status: { $in: [ApplicationStatus.PENDING, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.APPROVED] },
     });
@@ -246,12 +250,13 @@ export class JudgesService {
       adminNotes: dto.admin_notes,
     });
 
-    await this.em.persistAndFlush(application);
+    await em.persistAndFlush(application);
     return application;
   }
 
   async getApplication(applicationId: string): Promise<JudgeApplication> {
-    const application = await this.em.findOne(JudgeApplication, applicationId, {
+    const em = this.em.fork();
+    const application = await em.findOne(JudgeApplication, applicationId, {
       populate: ['user', 'references', 'reviewedBy', 'enteredBy'],
     });
 
@@ -263,7 +268,8 @@ export class JudgesService {
   }
 
   async getMyApplication(userId: string): Promise<JudgeApplication | null> {
-    return this.em.findOne(JudgeApplication, { user: { id: userId } }, {
+    const em = this.em.fork();
+    return em.findOne(JudgeApplication, { user: { id: userId } }, {
       populate: ['references'],
       orderBy: { applicationDate: 'DESC' },
     });
@@ -273,6 +279,7 @@ export class JudgesService {
     status?: ApplicationStatus;
     specialty?: string;
   }): Promise<JudgeApplication[]> {
+    const em = this.em.fork();
     const where: any = {};
 
     if (filters?.status) {
@@ -282,7 +289,7 @@ export class JudgesService {
       where.specialty = filters.specialty;
     }
 
-    return this.em.find(JudgeApplication, where, {
+    return em.find(JudgeApplication, where, {
       populate: ['user', 'references'],
       orderBy: { applicationDate: 'DESC' },
     });
@@ -293,10 +300,11 @@ export class JudgesService {
     reviewerId: string,
     dto: ReviewJudgeApplicationDto,
   ): Promise<JudgeApplication> {
-    const application = await this.em.findOneOrFail(JudgeApplication, applicationId, {
+    const em = this.em.fork();
+    const application = await em.findOneOrFail(JudgeApplication, applicationId, {
       populate: ['user', 'references'],
     });
-    const reviewer = await this.em.findOneOrFail(Profile, reviewerId);
+    const reviewer = await em.findOneOrFail(Profile, reviewerId);
 
     if (application.status === ApplicationStatus.APPROVED) {
       throw new BadRequestException('This application has already been approved');
@@ -312,7 +320,7 @@ export class JudgesService {
 
     // If approved, create the Judge record
     if (dto.status === ApplicationStatus.APPROVED) {
-      await this.createJudgeFromApplication(application, dto.judge_level);
+      await this.createJudgeFromApplication(em, application, dto.judge_level);
 
       // Update user role to include JUDGE
       if (application.user.role !== UserRole.ADMIN) {
@@ -320,7 +328,7 @@ export class JudgesService {
       }
     }
 
-    await this.em.flush();
+    await em.flush();
 
     // Send notification email to applicant
     await this.sendApplicationStatusEmail(application);
@@ -329,6 +337,7 @@ export class JudgesService {
   }
 
   private async createJudgeFromApplication(
+    em: EntityManager,
     application: JudgeApplication,
     level?: JudgeLevel,
   ): Promise<Judge> {
@@ -350,17 +359,17 @@ export class JudgesService {
       isActive: true, // Explicitly set as active when approved
     });
 
-    this.em.persist(judge);
+    em.persist(judge);
 
     // Create initial season qualification for current season
-    const currentSeason = await this.em.findOne(Season, { isCurrent: true });
+    const currentSeason = await em.findOne(Season, { isCurrent: true });
     if (currentSeason) {
       const seasonQual = new JudgeSeasonQualification();
       Object.assign(seasonQual, {
         judge,
         season: currentSeason,
       });
-      this.em.persist(seasonQual);
+      em.persist(seasonQual);
     }
 
     return judge;
@@ -371,7 +380,8 @@ export class JudgesService {
   // =============================================================================
 
   private async sendReferenceVerificationEmails(application: JudgeApplication): Promise<void> {
-    await this.em.populate(application, ['references']);
+    const em = this.em.fork();
+    await em.populate(application, ['references']);
 
     for (const reference of application.references) {
       const token = randomBytes(32).toString('hex');
@@ -387,7 +397,7 @@ export class JudgesService {
         expiresAt,
       });
 
-      this.em.persist(verificationToken);
+      em.persist(verificationToken);
 
       // Send verification email
       await this.emailService.sendReferenceVerificationEmail({
@@ -399,11 +409,12 @@ export class JudgesService {
       });
     }
 
-    await this.em.flush();
+    await em.flush();
   }
 
   async verifyReference(token: string, response: string): Promise<void> {
-    const verificationToken = await this.em.findOne(EmailVerificationToken, { token });
+    const em = this.em.fork();
+    const verificationToken = await em.findOne(EmailVerificationToken, { token });
 
     if (!verificationToken) {
       throw new NotFoundException('Invalid verification token');
@@ -422,12 +433,12 @@ export class JudgesService {
     verificationToken.usedAt = new Date();
 
     // Update the reference
-    const reference = await this.em.findOneOrFail(JudgeApplicationReference, verificationToken.relatedEntityId);
+    const reference = await em.findOneOrFail(JudgeApplicationReference, verificationToken.relatedEntityId);
     reference.referenceChecked = true;
     reference.checkedDate = new Date();
     reference.referenceNotes = response;
 
-    await this.em.flush();
+    await em.flush();
   }
 
   // =============================================================================
@@ -435,7 +446,8 @@ export class JudgesService {
   // =============================================================================
 
   async getJudge(judgeId: string): Promise<Judge> {
-    const judge = await this.em.findOne(Judge, judgeId, {
+    const em = this.em.fork();
+    const judge = await em.findOne(Judge, judgeId, {
       populate: ['user', 'application', 'seasonQualifications'],
     });
 
@@ -447,7 +459,8 @@ export class JudgesService {
   }
 
   async getJudgeByUserId(userId: string): Promise<Judge | null> {
-    return this.em.findOne(Judge, { user: { id: userId } }, {
+    const em = this.em.fork();
+    return em.findOne(Judge, { user: { id: userId } }, {
       populate: ['seasonQualifications'],
     });
   }
@@ -458,6 +471,7 @@ export class JudgesService {
     specialty?: string;
     state?: string;
   }): Promise<Judge[]> {
+    const em = this.em.fork();
     const where: any = {};
 
     if (filters?.isActive !== undefined) {
@@ -473,14 +487,15 @@ export class JudgesService {
       where.state = filters.state;
     }
 
-    return this.em.find(Judge, where, {
+    return em.find(Judge, where, {
       populate: ['user'],
       orderBy: { createdAt: 'DESC' },
     });
   }
 
   async updateJudge(judgeId: string, dto: UpdateJudgeDto): Promise<Judge> {
-    const judge = await this.em.findOneOrFail(Judge, judgeId);
+    const em = this.em.fork();
+    const judge = await em.findOneOrFail(Judge, judgeId);
 
     // Update fields
     if (dto.level !== undefined) judge.level = dto.level;
@@ -493,7 +508,7 @@ export class JudgesService {
     if (dto.bio !== undefined) judge.bio = dto.bio;
     if (dto.headshot_url !== undefined) judge.headshotUrl = dto.headshot_url;
 
-    await this.em.flush();
+    await em.flush();
     return judge;
   }
 
@@ -504,8 +519,9 @@ export class JudgesService {
     changedById: string,
     reason?: string,
   ): Promise<void> {
-    const judge = await this.em.findOneOrFail(Judge, judgeId);
-    const changedBy = await this.em.findOneOrFail(Profile, changedById);
+    const em = this.em.fork();
+    const judge = await em.findOneOrFail(Judge, judgeId);
+    const changedBy = await em.findOneOrFail(Profile, changedById);
 
     const history = new JudgeLevelHistory();
     Object.assign(history, {
@@ -516,7 +532,7 @@ export class JudgesService {
       changedBy,
     });
 
-    await this.em.persistAndFlush(history);
+    await em.persistAndFlush(history);
   }
 
   // =============================================================================
@@ -549,12 +565,13 @@ export class JudgesService {
     dto: CreateEventJudgeAssignmentDto,
     requestedById?: string,
   ): Promise<EventJudgeAssignment> {
-    const event = await this.em.findOne(Event, dto.event_id);
+    const em = this.em.fork();
+    const event = await em.findOne(Event, dto.event_id);
     if (!event) {
       throw new NotFoundException('Event not found');
     }
 
-    const judge = await this.em.findOne(Judge, dto.judge_id, { populate: ['user'] });
+    const judge = await em.findOne(Judge, dto.judge_id, { populate: ['user'] });
     if (!judge) {
       throw new NotFoundException('Judge not found');
     }
@@ -564,7 +581,7 @@ export class JudgesService {
     }
 
     // Check if assignment already exists
-    const existingAssignment = await this.em.findOne(EventJudgeAssignment, {
+    const existingAssignment = await em.findOne(EventJudgeAssignment, {
       event: { id: dto.event_id },
       judge: { id: dto.judge_id },
     });
@@ -581,13 +598,13 @@ export class JudgesService {
     assignment.status = EventAssignmentStatus.REQUESTED;
 
     if (requestedById) {
-      const requestedBy = await this.em.findOne(Profile, requestedById);
+      const requestedBy = await em.findOne(Profile, requestedById);
       if (requestedBy) {
         assignment.requestedBy = requestedBy;
       }
     }
 
-    await this.em.persistAndFlush(assignment);
+    await em.persistAndFlush(assignment);
 
     // Send notification email to judge
     await this.sendAssignmentNotification(assignment, 'new');
@@ -596,7 +613,8 @@ export class JudgesService {
   }
 
   async getAssignment(assignmentId: string): Promise<EventJudgeAssignment> {
-    const assignment = await this.em.findOne(EventJudgeAssignment, assignmentId, {
+    const em = this.em.fork();
+    const assignment = await em.findOne(EventJudgeAssignment, assignmentId, {
       populate: ['event', 'judge', 'judge.user', 'requestedBy'],
     });
 
@@ -608,7 +626,8 @@ export class JudgesService {
   }
 
   async getEventAssignments(eventId: string): Promise<EventJudgeAssignment[]> {
-    return this.em.find(EventJudgeAssignment, { event: { id: eventId } }, {
+    const em = this.em.fork();
+    return em.find(EventJudgeAssignment, { event: { id: eventId } }, {
       populate: ['judge', 'judge.user', 'requestedBy'],
       orderBy: { role: 'ASC', createdAt: 'ASC' },
     });
@@ -621,13 +640,14 @@ export class JudgesService {
       upcoming?: boolean;
     }
   ): Promise<EventJudgeAssignment[]> {
+    const em = this.em.fork();
     const where: any = { judge: { id: judgeId } };
 
     if (filters?.status) {
       where.status = filters.status;
     }
 
-    const assignments = await this.em.find(EventJudgeAssignment, where, {
+    const assignments = await em.find(EventJudgeAssignment, where, {
       populate: ['event', 'requestedBy'],
       orderBy: { createdAt: 'DESC' },
     });
@@ -648,7 +668,8 @@ export class JudgesService {
       upcoming?: boolean;
     }
   ): Promise<EventJudgeAssignment[]> {
-    const judge = await this.em.findOne(Judge, { user: { id: userId } });
+    const em = this.em.fork();
+    const judge = await em.findOne(Judge, { user: { id: userId } });
     if (!judge) {
       return [];
     }
@@ -662,7 +683,8 @@ export class JudgesService {
     accept: boolean,
     declineReason?: string,
   ): Promise<EventJudgeAssignment> {
-    const assignment = await this.em.findOne(EventJudgeAssignment, assignmentId, {
+    const em = this.em.fork();
+    const assignment = await em.findOne(EventJudgeAssignment, assignmentId, {
       populate: ['judge', 'judge.user', 'event'],
     });
 
@@ -686,7 +708,7 @@ export class JudgesService {
       assignment.notes = declineReason;
     }
 
-    await this.em.flush();
+    await em.flush();
 
     // Send notification about the response
     await this.sendAssignmentNotification(assignment, accept ? 'accepted' : 'declined');
@@ -698,7 +720,8 @@ export class JudgesService {
     assignmentId: string,
     dto: UpdateEventJudgeAssignmentDto,
   ): Promise<EventJudgeAssignment> {
-    const assignment = await this.em.findOneOrFail(EventJudgeAssignment, assignmentId, {
+    const em = this.em.fork();
+    const assignment = await em.findOneOrFail(EventJudgeAssignment, assignmentId, {
       populate: ['judge', 'judge.user', 'event'],
     });
 
@@ -714,26 +737,28 @@ export class JudgesService {
     }
     if (dto.admin_notes !== undefined) assignment.notes = dto.admin_notes;
 
-    await this.em.flush();
+    await em.flush();
     return assignment;
   }
 
   async deleteAssignment(assignmentId: string): Promise<void> {
-    const assignment = await this.em.findOneOrFail(EventJudgeAssignment, assignmentId, {
+    const em = this.em.fork();
+    const assignment = await em.findOneOrFail(EventJudgeAssignment, assignmentId, {
       populate: ['judge', 'judge.user', 'event'],
     });
 
     // Send cancellation notification
     await this.sendAssignmentNotification(assignment, 'cancelled');
 
-    await this.em.removeAndFlush(assignment);
+    await em.removeAndFlush(assignment);
   }
 
   private async sendAssignmentNotification(
     assignment: EventJudgeAssignment,
     type: 'new' | 'accepted' | 'declined' | 'updated' | 'cancelled',
   ): Promise<void> {
-    await this.em.populate(assignment, ['judge.user', 'event']);
+    const em = this.em.fork();
+    await em.populate(assignment, ['judge.user', 'event']);
 
     const judgeEmail = assignment.judge.user?.email;
     if (!judgeEmail) return;

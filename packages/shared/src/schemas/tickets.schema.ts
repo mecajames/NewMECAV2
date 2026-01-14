@@ -8,7 +8,7 @@ import {
   TicketCategorySchema,
   TicketDepartment,
   TicketDepartmentSchema,
-} from './enums.schema';
+} from './enums.schema.js';
 
 // =============================================================================
 // Ticket Schemas

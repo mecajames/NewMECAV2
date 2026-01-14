@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   RatingEntityType,
   RatingEntityTypeSchema,
-} from './enums.schema';
+} from './enums.schema.js';
 
 // =============================================================================
 // Rating

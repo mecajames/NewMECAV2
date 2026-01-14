@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Upload, Trash2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getStorageUrl } from '@/lib/storage';
 import { MediaType, MediaFile } from '@/media-files';
 import { useAuth } from '@/auth';
 import { useMediaFiles, useCreateMediaFile, useDeleteMediaFile } from '@/media-files/useMediaFiles';
@@ -269,7 +270,7 @@ export default function MediaLibrary() {
           <div key={file.id} className="bg-slate-800 rounded-xl overflow-hidden hover:ring-2 hover:ring-orange-500 transition-all">
             <div className="aspect-video bg-slate-700 flex items-center justify-center relative">
               {file.fileType === 'image' ? (
-                <img src={file.fileUrl} alt={file.title} className="w-full h-full object-cover" />
+                <img src={getStorageUrl(file.fileUrl)} alt={file.title} className="w-full h-full object-cover" />
               ) : (
                 <div className="text-gray-500">
                   {getFileIcon(file.fileType)}
