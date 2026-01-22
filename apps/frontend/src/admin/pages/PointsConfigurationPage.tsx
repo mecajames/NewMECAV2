@@ -318,40 +318,37 @@ export default function PointsConfigurationPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">Points Configuration</h1>
+            <p className="text-gray-400">
+              Configure competition points for each season
+            </p>
+          </div>
           <div className="flex items-center gap-4">
+            {/* Season Selector */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-slate-400">Season:</label>
+              <select
+                value={selectedSeasonId}
+                onChange={(e) => setSelectedSeasonId(e.target.value)}
+                className="bg-slate-700 border border-slate-600 text-white rounded-lg px-4 py-2 focus:border-orange-500 focus:ring-orange-500"
+              >
+                {seasons.map(season => (
+                  <option key={season.id} value={season.id}>
+                    {season.name} {(season.isCurrent || season.is_current) && '(Current)'}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
-              onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to Dashboard</span>
+              <ArrowLeft className="h-5 w-5" />
+              Back to Dashboard
             </button>
           </div>
-
-          {/* Season Selector */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-slate-400">Season:</label>
-            <select
-              value={selectedSeasonId}
-              onChange={(e) => setSelectedSeasonId(e.target.value)}
-              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-4 py-2 focus:border-orange-500 focus:ring-orange-500"
-            >
-              {seasons.map(season => (
-                <option key={season.id} value={season.id}>
-                  {season.name} {(season.isCurrent || season.is_current) && '(Current)'}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Title */}
-        <div>
-          <h1 className="text-2xl font-bold text-white">Points Configuration</h1>
-          <p className="text-slate-400 mt-1">
-            Configure competition points for each season
-          </p>
         </div>
 
         {/* Error/Success Messages */}

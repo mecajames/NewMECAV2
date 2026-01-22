@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Pencil, Trash2, Image, X, ExternalLink, BarChart3, Upload, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Pencil, Trash2, Image, X, ExternalLink, BarChart3, Upload, Loader2, ArrowLeft } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { BannerPosition, BannerStatus, type Banner, type Advertiser, type CreateBannerDto, type UpdateBannerDto } from '@newmeca/shared';
 import {
   getBanners,
@@ -56,6 +56,7 @@ const positionOptions = [
 ];
 
 export default function BannersAdminPage() {
+  const navigate = useNavigate();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [advertisers, setAdvertisers] = useState<Advertiser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,15 +236,15 @@ export default function BannersAdminPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
               <Image className="h-8 w-8 text-orange-500" />
               Banner Ads
             </h1>
-            <p className="text-slate-400 mt-2">Manage banner advertisements</p>
+            <p className="text-gray-400">Manage banner advertisements</p>
           </div>
-          <div className="mt-4 sm:mt-0 flex gap-3">
+          <div className="flex items-center gap-3">
             <Link
               to="/admin/banners/analytics"
               className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
@@ -258,6 +259,13 @@ export default function BannersAdminPage() {
             >
               <Plus className="h-5 w-5" />
               Add Banner
+            </button>
+            <button
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Dashboard
             </button>
           </div>
         </div>

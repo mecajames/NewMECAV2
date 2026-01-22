@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { BarChart3, Eye, MousePointer, TrendingUp, ArrowLeft, Calendar } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { BannerAnalytics } from '@newmeca/shared';
 import { getAllBannersAnalytics } from '../../api-client/banners.api-client';
 
 type DateRange = 'last7' | 'last30' | 'last90' | 'custom';
 
 export default function BannerAnalyticsPage() {
+  const navigate = useNavigate();
   const [analytics, setAnalytics] = useState<BannerAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,22 +106,30 @@ export default function BannerAnalyticsPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+        <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
               to="/admin/banners"
               className="p-2 text-slate-400 hover:text-white transition-colors"
+              title="Back to Banners"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+              <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
                 <BarChart3 className="h-8 w-8 text-orange-500" />
                 Banner Analytics
               </h1>
-              <p className="text-slate-400 mt-2">Track banner performance</p>
+              <p className="text-gray-400">Track banner performance</p>
             </div>
           </div>
+          <button
+            onClick={() => navigate('/dashboard/admin')}
+            className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Back to Dashboard
+          </button>
         </div>
 
         {/* Date Range Selector */}
