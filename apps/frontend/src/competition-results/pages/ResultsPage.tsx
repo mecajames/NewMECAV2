@@ -289,7 +289,7 @@ export default function ResultsPage() {
           );
           break;
         case 'state':
-          comparison = (a.competitor?.state || '').localeCompare(b.competitor?.state || '');
+          comparison = (a.stateCode || a.state_code || '').localeCompare(b.stateCode || b.state_code || '');
           break;
         case 'mecaId':
           comparison = (a.mecaId || a.meca_id || '').localeCompare(b.mecaId || b.meca_id || '');
@@ -628,7 +628,7 @@ export default function ResultsPage() {
                                     const mecaId = result.mecaId || result.meca_id;
                                     const membershipExpiry = result.competitor?.membership_expiry;
                                     const mecaDisplay = getMecaIdDisplay(mecaId, membershipExpiry);
-                                    const state = result.competitor?.state || 'N/E';
+                                    const state = result.stateCode || result.state_code || 'N/E';
 
                                     return (
                                       <tr

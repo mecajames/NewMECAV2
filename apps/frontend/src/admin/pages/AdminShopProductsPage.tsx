@@ -14,22 +14,25 @@ import {
   DollarSign,
   ArrowLeft,
 } from 'lucide-react';
-import { ShopProduct, ShopProductCategory, CreateShopProductDto, UpdateShopProductDto } from '@newmeca/shared';
+import { ShopProduct, CreateShopProductDto, UpdateShopProductDto } from '@newmeca/shared';
 import { shopApi } from '@/shop/shop.api-client';
 
-const categoryLabels: Record<ShopProductCategory, string> = {
-  [ShopProductCategory.MEASURING_TOOLS]: 'Measuring Tools',
-  [ShopProductCategory.CDS]: 'CDs',
-  [ShopProductCategory.APPAREL]: 'Apparel',
-  [ShopProductCategory.ACCESSORIES]: 'Accessories',
-  [ShopProductCategory.OTHER]: 'Other',
+// Local type to avoid Rollup issues with CommonJS enum re-exports
+type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
+
+const categoryLabels: Record<string, string> = {
+  measuring_tools: 'Measuring Tools',
+  cds: 'CDs',
+  apparel: 'Apparel',
+  accessories: 'Accessories',
+  other: 'Other',
 };
 
 interface ProductFormData {
   name: string;
   description: string;
   short_description: string;
-  category: ShopProductCategory;
+  category: string;
   price: string;
   compare_at_price: string;
   is_active: boolean;
@@ -45,7 +48,7 @@ const initialFormData: ProductFormData = {
   name: '',
   description: '',
   short_description: '',
-  category: ShopProductCategory.OTHER,
+  category: 'other',
   price: '',
   compare_at_price: '',
   is_active: true,
@@ -64,7 +67,7 @@ export function AdminShopProductsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState<ShopProductCategory | ''>('');
+  const [filterCategory, setFilterCategory] = useState<string>('');
   const [filterActive, setFilterActive] = useState<boolean | undefined>(undefined);
 
   // Modal state

@@ -2,12 +2,14 @@ import axios from '@/lib/axios';
 import {
   ShopProduct,
   ShopOrder,
-  ShopOrderStatus,
-  ShopProductCategory,
   ShopAddress,
   CreateShopProductDto,
   UpdateShopProductDto,
 } from '@newmeca/shared';
+
+// Local types to avoid Rollup issues with CommonJS enum re-exports
+type ShopOrderStatus = 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
 
 // ==========================================
 // Types

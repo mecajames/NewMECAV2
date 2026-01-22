@@ -68,9 +68,9 @@ export default function EventsPage() {
       // Filter out not_public events (public page should never show them)
       const publicEvents = data.filter(e => e.status !== 'not_public');
 
-      // Sort by event_date ascending
+      // Sort by event_date descending (newest first)
       publicEvents.sort((a, b) =>
-        new Date(a.event_date).getTime() - new Date(b.event_date).getTime()
+        new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
       );
 
       setEvents(publicEvents);

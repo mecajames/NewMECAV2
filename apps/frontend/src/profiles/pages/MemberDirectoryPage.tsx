@@ -31,8 +31,8 @@ export default function MemberDirectoryPage() {
 
   const filteredProfiles = profiles.filter(profile => {
     const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.toLowerCase();
-    const mecaId = profile.meca_id ? String(profile.meca_id).toLowerCase() : '';
-    const vehicle = profile.vehicle_info?.toLowerCase() || '';
+    const mecaId = String(profile.meca_id || '').toLowerCase();
+    const vehicle = (profile.vehicle_info || '').toLowerCase();
     const search = searchTerm.toLowerCase();
 
     return fullName.includes(search) || mecaId.includes(search) || vehicle.includes(search);

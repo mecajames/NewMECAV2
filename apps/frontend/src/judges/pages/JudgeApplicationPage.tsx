@@ -158,6 +158,7 @@ export default function JudgeApplicationPage() {
         ...formData,
         date_of_birth: new Date(formData.date_of_birth),
         references: formData.references.filter(r => r.name && r.email),
+        weekend_availability: formData.weekend_availability as WeekendAvailability,
       };
 
       await createJudgeApplication(dto);

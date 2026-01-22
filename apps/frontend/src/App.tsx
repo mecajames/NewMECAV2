@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
+import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner } from '@/shared/components';
 // Static pages
 import HomePage from '@/pages/HomePage';
@@ -79,10 +80,12 @@ function App() {
   return (
     <HelmetProvider>
       <AuthProvider>
-        <CartProvider>
-          <ReCaptchaProvider version="v2">
-            <BrowserRouter>
-          <ScrollToTop />
+        <SiteSettingsProvider>
+          <SeasonsProvider>
+            <CartProvider>
+              <ReCaptchaProvider version="v2">
+                <BrowserRouter>
+                  <ScrollToTop />
           <ImpersonationBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
@@ -234,9 +237,11 @@ function App() {
             </ForcePasswordChangeGuard>
           <Footer />
         </div>
-            </BrowserRouter>
-          </ReCaptchaProvider>
-        </CartProvider>
+                </BrowserRouter>
+              </ReCaptchaProvider>
+            </CartProvider>
+          </SeasonsProvider>
+        </SiteSettingsProvider>
       </AuthProvider>
     </HelmetProvider>
   );
