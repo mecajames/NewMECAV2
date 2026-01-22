@@ -2,12 +2,14 @@ import { useEffect, useState, useMemo } from 'react';
 import { BookOpen, FileText, Archive as ArchiveIcon, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
+import { SEOHead, useRulebooksSEO } from '@/shared/seo';
 
 export default function RulebooksPage() {
   const navigate = useNavigate();
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<string>('');
+  const seoProps = useRulebooksSEO();
 
   useEffect(() => {
     fetchActiveRulebooks();
@@ -53,25 +55,30 @@ export default function RulebooksPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-        <div className="text-center py-20">
-          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+      <>
+        <SEOHead {...seoProps} />
+        <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+          <div className="text-center py-20">
+            <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <BookOpen className="h-10 w-10 text-orange-500" />
-              <h1 className="text-4xl font-bold text-white">Rulebooks</h1>
-            </div>
-            <p className="text-gray-400">
-              Official competition rulebooks for all MECA categories
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <BookOpen className="h-10 w-10 text-orange-500" />
+                <h1 className="text-4xl font-bold text-white">Rulebooks</h1>
+              </div>
+              <p className="text-gray-400">
+                Official competition rulebooks for all MECA categories
             </p>
           </div>
           <button
@@ -152,9 +159,10 @@ export default function RulebooksPage() {
               <ArchiveIcon className="h-5 w-5" />
               Browse Archive
             </button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

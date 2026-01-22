@@ -17,7 +17,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { EventsService } from './events.service';
 import { Event } from './events.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { UserRole } from '@newmeca/shared';
+import { UserRole, MultiDayResultsMode } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 
 @Controller('api/events')
@@ -97,10 +97,22 @@ export class EventsController {
   @HttpCode(HttpStatus.CREATED)
   async createMultiDayEvent(
     @Headers('authorization') authHeader: string,
-    @Body() body: { data: Partial<Event>; numberOfDays: number; dayDates: string[] },
+    @Body() body: {
+      data: Partial<Event>;
+      numberOfDays: number;
+      dayDates: string[];
+      dayMultipliers?: number[];
+      multiDayResultsMode?: MultiDayResultsMode;
+    },
   ): Promise<Event[]> {
     await this.requireAdminOrEventDirector(authHeader);
-    return this.eventsService.createMultiDay(body.data, body.numberOfDays, body.dayDates);
+    return this.eventsService.createMultiDay(
+      body.data,
+      body.numberOfDays,
+      body.dayDates,
+      body.dayMultipliers,
+      body.multiDayResultsMode
+    );
   }
 
   @Put(':id')

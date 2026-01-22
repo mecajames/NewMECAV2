@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { EventStatus, EventType } from '@newmeca/shared';
+import { EventStatus, EventType, MultiDayResultsMode } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { Season } from '../seasons/seasons.entity';
 
@@ -95,6 +95,10 @@ export class Event {
 
   @Property({ type: 'integer', nullable: true, fieldName: 'day_number', serializedName: 'day_number' })
   dayNumber?: number;
+
+  // Multi-day results mode: separate (default), combined_score, or combined_points
+  @Enum({ items: () => MultiDayResultsMode, nullable: true, fieldName: 'multi_day_results_mode', serializedName: 'multi_day_results_mode' })
+  multiDayResultsMode?: MultiDayResultsMode;
 
   @Property({ onCreate: () => new Date(), serializedName: 'created_at' })
   createdAt: Date = new Date();

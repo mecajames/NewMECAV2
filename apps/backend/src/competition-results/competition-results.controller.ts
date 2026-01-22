@@ -37,6 +37,12 @@ export class CompetitionResultsController {
     return this.competitionResultsService.getLeaderboard(seasonId);
   }
 
+  // Get result counts for all events in a single call (efficient bulk endpoint)
+  @Get('counts-by-event')
+  async getResultCountsByEvent(): Promise<Record<string, number>> {
+    return this.competitionResultsService.getResultCountsByEvent();
+  }
+
   @Get('by-event/:eventId')
   async getResultsByEvent(@Param('eventId') eventId: string): Promise<CompetitionResult[]> {
     return this.competitionResultsService.findByEvent(eventId);
@@ -111,6 +117,14 @@ export class CompetitionResultsController {
     return { message: 'Points recalculated successfully' };
   }
 
+  @Post('recalculate-season/:seasonId')
+  @HttpCode(HttpStatus.OK)
+  async recalculateSeasonPoints(
+    @Param('seasonId') seasonId: string
+  ): Promise<{ events_processed: number; results_updated: number; duration_ms: number }> {
+    return this.competitionResultsService.recalculateSeasonPoints(seasonId);
+  }
+
   @Post('import/:eventId')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
@@ -147,6 +161,47 @@ export class CompetitionResultsController {
       fileExtension,
       file
     );
+  }
+
+  @Post('parse-and-validate/:eventId')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  async parseAndValidate(
+    @Param('eventId') eventId: string,
+    @UploadedFile() file: Express.Multer.File
+  ): Promise<{
+    results: any[];
+    totalCount: number;
+    needsNameConfirmation: number;
+    needsDataCompletion: number;
+    fileExtension: string;
+  }> {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    // Determine file type and parse accordingly
+    let parsedResults;
+    const fileExtension = file.originalname.toLowerCase().split('.').pop() || 'xlsx';
+
+    if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+      parsedResults = this.resultsImportService.parseExcelFile(file.buffer);
+    } else if (fileExtension === 'tlab') {
+      parsedResults = this.resultsImportService.parseTermLabFile(file.buffer);
+    } else {
+      throw new BadRequestException('Unsupported file type. Only .xlsx and .tlab files are supported');
+    }
+
+    // Parse and validate the results
+    const validationResult = await this.competitionResultsService.parseAndValidate(
+      eventId,
+      parsedResults
+    );
+
+    return {
+      ...validationResult,
+      fileExtension,
+    };
   }
 
   @Post('check-duplicates/:eventId')

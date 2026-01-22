@@ -83,12 +83,13 @@ export function AddSecondaryModal({
     try {
       const types = await membershipTypeConfigsApi.getAll(true);
       // Filter to only competitor types for secondaries
-      // Exclude "Upgrade to Team" types - those are for existing members, not new secondaries
+      // Exclude upgrade-only types - those are for upgrading existing memberships, not new secondaries
+      // Secondary memberships cannot have team upgrades
       setMembershipTypes(
         types.filter(
           (t) => t.isActive &&
                  t.category === MembershipCategory.COMPETITOR &&
-                 !t.name.toLowerCase().includes('upgrade')
+                 !t.isUpgradeOnly // Use the isUpgradeOnly flag instead of name matching
         )
       );
     } catch (err) {

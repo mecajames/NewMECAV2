@@ -77,7 +77,7 @@ export class OrdersService {
     const order = await em.findOne(
       Order,
       { id },
-      { populate: ['user', 'items', 'payment'] },
+      { populate: ['member', 'items', 'payment'] },
     );
 
     if (!order) {
@@ -95,12 +95,13 @@ export class OrdersService {
     return em.findOne(
       Order,
       { orderNumber },
-      { populate: ['user', 'items', 'payment'] },
+      { populate: ['member', 'items', 'payment'] },
     );
   }
 
   /**
    * Find orders by user with pagination
+   * Note: Uses 'member' relation which maps to member_id column in database
    */
   async findByUser(
     userId: string,
@@ -112,7 +113,7 @@ export class OrdersService {
 
     const [orders, total] = await em.findAndCount(
       Order,
-      { user: userId },
+      { member: userId },
       {
         populate: ['items'],
         limit,
@@ -152,7 +153,7 @@ export class OrdersService {
     }
 
     if (userId) {
-      filter.user = userId;
+      filter.member = userId;
     }
 
     if (startDate) {
@@ -168,7 +169,7 @@ export class OrdersService {
     }
 
     const [orders, total] = await em.findAndCount(Order, filter, {
-      populate: ['user', 'items'],
+      populate: ['member', 'items'],
       limit,
       offset,
       orderBy: { createdAt: 'DESC' },
@@ -214,7 +215,6 @@ export class OrdersService {
 
     const order = em.create(Order, {
       orderNumber,
-      user,
       member: user,
       status: OrderStatus.PENDING,
       orderType: data.orderType,
@@ -298,9 +298,8 @@ export class OrdersService {
       payment,
     };
 
-    // Set user/member if we have one
+    // Set member if we have one
     if (user) {
-      orderData.user = user;
       orderData.member = user;
     }
 
@@ -429,7 +428,6 @@ export class OrdersService {
     // Create order
     const order = em.create(Order, {
       orderNumber,
-      user: registration.user,
       member: registration.user,
       status: OrderStatus.COMPLETED,
       orderType: OrderType.EVENT_REGISTRATION,
@@ -563,7 +561,7 @@ export class OrdersService {
       Order,
       {},
       {
-        populate: ['user', 'items'],
+        populate: ['member', 'items'],
         limit,
         orderBy: { createdAt: 'DESC' },
       },
@@ -600,7 +598,7 @@ export class OrdersService {
         createdAt: { $gte: date },
       },
       {
-        populate: ['user', 'items'],
+        populate: ['member', 'items'],
         orderBy: { createdAt: 'ASC' },
       },
     );

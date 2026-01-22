@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { QrCode, Calendar, MapPin, Users, ArrowLeft, Loader2, Search, Filter } from 'lucide-react';
+import { QrCode, Calendar, MapPin, ArrowLeft, Loader2, Search, Filter } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { seasonsApi, Season } from '@/seasons';

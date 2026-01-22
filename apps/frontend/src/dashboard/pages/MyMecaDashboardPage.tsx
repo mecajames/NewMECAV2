@@ -3,20 +3,20 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle,
   Eye, MessageSquare, Settings, Users, FileText, Image, BarChart3, UserPlus, Crown, LogOut, Trash2, Plus, X, Loader2,
-  TrendingUp, TrendingDown, Minus, Star, ArrowLeft, Bell, Check
+  TrendingUp, TrendingDown, Minus, Star, Bell, Check
 } from 'lucide-react';
 import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth';
 import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
 import axios from 'axios';
-import { teamsApi, Team, TeamType, TeamMemberRole, TeamMember, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult } from '@/teams';
+import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult } from '@/teams';
 import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
 import type { Judge } from '@newmeca/shared';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 import { EventRatingsPanel } from '@/ratings';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
@@ -61,7 +61,7 @@ export default function MyMecaDashboardPage() {
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamError, setTeamError] = useState('');
   const [canCreateTeam, setCanCreateTeam] = useState(false);
-  const [canCreateReason, setCanCreateReason] = useState('');
+  const [_canCreateReason, setCanCreateReason] = useState('');
   const [upgradeEligibility, setUpgradeEligibility] = useState<UpgradeEligibilityResponse | null>(null);
 
   // Judge and Event Director state
@@ -97,6 +97,11 @@ export default function MyMecaDashboardPage() {
     state: '',
   });
 
+  // Profile image selector state
+  const [showProfileImageSelector, setShowProfileImageSelector] = useState(false);
+  const [updatingProfileImage, setUpdatingProfileImage] = useState(false);
+  const profileImageInputRef = useRef<HTMLInputElement>(null);
+
   // Team image upload state
   const teamLogoInputRef = useRef<HTMLInputElement>(null);
   const teamGalleryInputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +109,6 @@ export default function MyMecaDashboardPage() {
   const [uploadingTeamGallery, setUploadingTeamGallery] = useState(false);
   const [teamLogoUrl, setTeamLogoUrl] = useState<string | null>(null);
   const [teamGalleryImages, setTeamGalleryImages] = useState<string[]>([]);
-  const [showTeamGalleryModal, setShowTeamGalleryModal] = useState(false);
 
   // Edit Team modal state
   const [showEditTeamModal, setShowEditTeamModal] = useState(false);
@@ -140,13 +144,8 @@ export default function MyMecaDashboardPage() {
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
 
   // User's own pending invites/requests state (when not on a team)
-  const [myPendingInvites, setMyPendingInvites] = useState<any[]>([]);
-  const [myPendingJoinRequests, setMyPendingJoinRequests] = useState<any[]>([]);
-  const [processingInviteResponse, setProcessingInviteResponse] = useState<string | null>(null);
-  const [joiningTeamId, setJoiningTeamId] = useState<string | null>(null);
-  const [joinRequestMessage, setJoinRequestMessage] = useState('');
-  const [showJoinRequestModal, setShowJoinRequestModal] = useState(false);
-  const [selectedTeamForJoin, setSelectedTeamForJoin] = useState<Team | null>(null);
+  const [, setMyPendingInvites] = useState<any[]>([]);
+  const [, setMyPendingJoinRequests] = useState<any[]>([]);
 
   // Enhanced team form state
   const [newTeam, setNewTeam] = useState<CreateTeamDto>({
@@ -198,6 +197,13 @@ export default function MyMecaDashboardPage() {
         getMyJudgeProfile(),
         getMyEventDirectorProfile(),
       ]);
+      // DEBUG: Log the returned values
+      console.log('DEBUG - Profile permissions:', {
+        can_apply_judge: (profile as any)?.can_apply_judge,
+        can_apply_event_director: (profile as any)?.can_apply_event_director,
+      });
+      console.log('DEBUG - Judge profile:', judge);
+      console.log('DEBUG - ED profile:', ed);
       setJudgeProfile(judge);
       setEdProfile(ed);
 
@@ -606,82 +612,9 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  // ============================================
-  // USER'S OWN INVITE/REQUEST HANDLERS (when not on a team)
-  // ============================================
-
-  // Accept an invite I received
-  const handleAcceptInvite = async (teamId: string) => {
-    setProcessingInviteResponse(teamId);
-    setTeamError('');
-
-    try {
-      await teamsApi.acceptInvite(teamId);
-      fetchTeamData();
-    } catch (error: any) {
-      setTeamError(error.response?.data?.message || 'Failed to accept invite');
-    } finally {
-      setProcessingInviteResponse(null);
-    }
-  };
-
-  // Decline an invite I received
-  const handleDeclineInvite = async (teamId: string) => {
-    if (!confirm('Are you sure you want to decline this invite?')) {
-      return;
-    }
-
-    setProcessingInviteResponse(teamId);
-    setTeamError('');
-
-    try {
-      await teamsApi.declineInvite(teamId);
-      fetchTeamData();
-    } catch (error: any) {
-      setTeamError(error.response?.data?.message || 'Failed to decline invite');
-    } finally {
-      setProcessingInviteResponse(null);
-    }
-  };
-
-  // Request to join a team
-  const handleRequestToJoin = async () => {
-    if (!selectedTeamForJoin) return;
-
-    setJoiningTeamId(selectedTeamForJoin.id);
-    setTeamError('');
-
-    try {
-      await teamsApi.requestToJoin(selectedTeamForJoin.id, joinRequestMessage || undefined);
-      setShowJoinRequestModal(false);
-      setSelectedTeamForJoin(null);
-      setJoinRequestMessage('');
-      fetchTeamData();
-    } catch (error: any) {
-      setTeamError(error.response?.data?.message || 'Failed to request to join');
-    } finally {
-      setJoiningTeamId(null);
-    }
-  };
-
-  // Cancel my own join request
-  const handleCancelMyJoinRequest = async (teamId: string) => {
-    if (!confirm('Are you sure you want to cancel your join request?')) {
-      return;
-    }
-
-    setProcessingInviteResponse(teamId);
-    setTeamError('');
-
-    try {
-      await teamsApi.cancelJoinRequest(teamId);
-      fetchTeamData();
-    } catch (error: any) {
-      setTeamError(error.response?.data?.message || 'Failed to cancel request');
-    } finally {
-      setProcessingInviteResponse(null);
-    }
-  };
+  // NOTE: Team invite/request handlers (handleAcceptInvite, handleDeclineInvite,
+  // handleRequestToJoin, handleCancelMyJoinRequest) have been removed as they were unused.
+  // Add them back when the corresponding UI components are implemented.
 
   // Get role display info
   const getRoleInfo = (role: TeamMemberRole) => {
@@ -859,6 +792,78 @@ export default function MyMecaDashboardPage() {
       setUploadingTeamLogo(false);
       if (teamLogoInputRef.current) {
         teamLogoInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle selecting an existing profile image as the main profile picture
+  const handleSelectProfileImage = async (imageUrl: string) => {
+    if (!profile) return;
+    setUpdatingProfileImage(true);
+    try {
+      await axios.put(`/api/profiles/${profile.id}`, {
+        profile_picture_url: imageUrl,
+      });
+      // Refresh the auth context to get updated profile
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Error updating profile image:', err);
+      alert('Failed to update profile image');
+    } finally {
+      setUpdatingProfileImage(false);
+      setShowProfileImageSelector(false);
+    }
+  };
+
+  // Handle uploading a new profile image
+  const handleUploadProfileImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !profile) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+
+    setUpdatingProfileImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `profile-pictures/${profile.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(fileName);
+
+      // Update profile with new image URL and add to profile_images array
+      const newProfileImages = [...(profile.profile_images || []), publicUrl];
+      await axios.put(`/api/profiles/${profile.id}`, {
+        profile_picture_url: publicUrl,
+        profile_images: newProfileImages,
+      });
+
+      // Refresh the auth context to get updated profile
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Error uploading profile image:', err);
+      alert('Failed to upload profile image');
+    } finally {
+      setUpdatingProfileImage(false);
+      setShowProfileImageSelector(false);
+      if (profileImageInputRef.current) {
+        profileImageInputRef.current.value = '';
       }
     }
   };
@@ -1176,75 +1181,119 @@ export default function MyMecaDashboardPage() {
           </div>
         </button>
 
-        {/* Judge Card */}
-        {judgeProfile ? (
+        {/* Judge Card - Only show if user has judge permission enabled */}
+        {/* Show "My Judging" only if permission ON AND record exists AND is_active */}
+        {/* Show "Become a Judge" only if permission ON AND no record exists */}
+        {(profile as any)?.can_apply_judge && (
+          judgeProfile && judgeProfile.is_active ? (
+            <button
+              onClick={() => navigate('/judges/assignments')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                  <Gavel className="h-6 w-6 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">My Judging</h3>
+                  <p className="text-gray-400 text-sm">
+                    {judgeAssignments.length > 0
+                      ? `${judgeAssignments.length} upcoming assignment${judgeAssignments.length > 1 ? 's' : ''}`
+                      : 'View assignments'}
+                  </p>
+                </div>
+              </div>
+            </button>
+          ) : !judgeProfile ? (
+            <button
+              onClick={() => navigate('/judges/apply')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                  <Gavel className="h-6 w-6 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Become a Judge</h3>
+                  <p className="text-gray-400 text-sm">Apply to judge MECA events</p>
+                </div>
+              </div>
+            </button>
+          ) : null /* Judge record exists but inactive - show nothing */
+        )}
+
+        {/* Event Director Card - Only show if user has ED permission enabled */}
+        {/* Show "My Event Directing" only if permission ON AND record exists AND is_active */}
+        {/* Show "Become an Event Director" only if permission ON AND no record exists */}
+        {(profile as any)?.can_apply_event_director && (
+          edProfile && edProfile.is_active ? (
+            <button
+              onClick={() => navigate('/event-directors/assignments')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                  <ClipboardList className="h-6 w-6 text-purple-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">My Event Directing</h3>
+                  <p className="text-gray-400 text-sm">
+                    {edAssignments.length > 0
+                      ? `${edAssignments.length} upcoming event${edAssignments.length > 1 ? 's' : ''}`
+                      : 'View assignments'}
+                  </p>
+                </div>
+              </div>
+            </button>
+          ) : !edProfile ? (
+            <button
+              onClick={() => navigate('/event-directors/apply')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                  <ClipboardList className="h-6 w-6 text-purple-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Become an Event Director</h3>
+                  <p className="text-gray-400 text-sm">Apply to direct MECA events</p>
+                </div>
+              </div>
+            </button>
+          ) : null /* ED record exists but inactive - show nothing */
+        )}
+
+        {/* ED Hosting Requests Card - Only show for active Event Directors */}
+        {(profile as any)?.can_apply_event_director && edProfile && edProfile.is_active && (
           <button
-            onClick={() => navigate('/judges/assignments')}
+            onClick={() => navigate('/event-directors/hosting-requests')}
             className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
           >
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-                <Gavel className="h-6 w-6 text-orange-500" />
+              <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors">
+                <Mail className="h-6 w-6 text-cyan-500" />
               </div>
               <div>
-                <h3 className="text-white font-semibold text-lg">My Judging</h3>
-                <p className="text-gray-400 text-sm">
-                  {judgeAssignments.length > 0
-                    ? `${judgeAssignments.length} upcoming assignment${judgeAssignments.length > 1 ? 's' : ''}`
-                    : 'View assignments'}
-                </p>
-              </div>
-            </div>
-          </button>
-        ) : (
-          <button
-            onClick={() => navigate('/judges/apply')}
-            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-                <Gavel className="h-6 w-6 text-orange-500" />
-              </div>
-              <div>
-                <h3 className="text-white font-semibold text-lg">Become a Judge</h3>
-                <p className="text-gray-400 text-sm">Apply to judge MECA events</p>
+                <h3 className="text-white font-semibold text-lg">Hosting Requests</h3>
+                <p className="text-gray-400 text-sm">Review assigned event requests</p>
               </div>
             </div>
           </button>
         )}
 
-        {/* Event Director Card */}
-        {edProfile ? (
+        {/* ED Submit New Event Card - Only show for active Event Directors */}
+        {(profile as any)?.can_apply_event_director && edProfile && edProfile.is_active && (
           <button
-            onClick={() => navigate('/event-directors/assignments')}
+            onClick={() => navigate('/event-directors/submit-event')}
             className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
           >
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                <ClipboardList className="h-6 w-6 text-purple-500" />
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                <Calendar className="h-6 w-6 text-green-500" />
               </div>
               <div>
-                <h3 className="text-white font-semibold text-lg">My Event Directing</h3>
-                <p className="text-gray-400 text-sm">
-                  {edAssignments.length > 0
-                    ? `${edAssignments.length} upcoming event${edAssignments.length > 1 ? 's' : ''}`
-                    : 'View assignments'}
-                </p>
-              </div>
-            </div>
-          </button>
-        ) : (
-          <button
-            onClick={() => navigate('/event-directors/apply')}
-            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                <ClipboardList className="h-6 w-6 text-purple-500" />
-              </div>
-              <div>
-                <h3 className="text-white font-semibold text-lg">Become an Event Director</h3>
-                <p className="text-gray-400 text-sm">Apply to direct MECA events</p>
+                <h3 className="text-white font-semibold text-lg">Submit New Event</h3>
+                <p className="text-gray-400 text-sm">Submit an event for approval</p>
               </div>
             </div>
           </button>
@@ -1682,8 +1731,8 @@ export default function MyMecaDashboardPage() {
       const isCoOwner = myRole === 'co_owner';
       const isModerator = myRole === 'moderator';
       const canManageTeam = isOwner || isCoOwner; // Can edit team settings
-      const canManageMembers = isOwner || isCoOwner || isModerator; // Can add/remove members
       const canManageRoles = isOwner || isCoOwner; // Can change roles
+      const canManageJoinRequests = isOwner || isCoOwner || isModerator; // Can approve/reject join requests
 
       // Get owner info (prefer owner field, fallback to captain)
       const ownerInfo = team.owner || team.captain;
@@ -1827,7 +1876,7 @@ export default function MyMecaDashboardPage() {
               </div>
               <div className="space-y-3">
                 {team.members?.map((member) => {
-                  const memberRole = (member.role === 'captain' ? 'owner' : member.role) as TeamMemberRole;
+                  const memberRole = ((member.role as string) === 'captain' ? 'owner' : member.role) as TeamMemberRole;
                   const roleInfo = getRoleInfo(memberRole);
                   const RoleIcon = roleInfo.icon;
                   const isMe = member.userId === profile?.id;
@@ -1919,8 +1968,8 @@ export default function MyMecaDashboardPage() {
               </div>
             </div>
 
-            {/* Pending Join Requests - Only visible to owner/co-owner */}
-            {canManageTeam && team.pendingRequests && team.pendingRequests.length > 0 && (
+            {/* Pending Join Requests - Visible to owner/co-owner/moderator */}
+            {canManageJoinRequests && team.pendingRequests && team.pendingRequests.length > 0 && (
               <div className="mt-6 pt-6 border-t border-slate-700">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Clock className="h-5 w-5 text-yellow-500" />
@@ -3122,8 +3171,7 @@ export default function MyMecaDashboardPage() {
       return true;
     });
 
-    // Group results by event to avoid duplicate rating panels
-    const eventIds = [...new Set(filteredResultsData.map(r => r.event?.id).filter(Boolean))] as string[];
+    // Note: eventIds can be computed from filteredResultsData if needed for duplicate rating panel detection
 
     return (
       <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
@@ -3316,7 +3364,7 @@ export default function MyMecaDashboardPage() {
     // Helper to detect format from result - checks multiple fields
     const getResultFormat = (r: CompetitionResult): string => {
       // Check direct format field first
-      if (r.format) return r.format;
+      if ((r as any).format) return (r as any).format;
 
       // Check class.format (from joined CompetitionClass)
       if (r.class?.format) return r.class.format;
@@ -3625,7 +3673,7 @@ export default function MyMecaDashboardPage() {
                           paddingAngle={2}
                           dataKey="value"
                         >
-                          {placementChartData.map((entry, index) => (
+                          {placementChartData.map((_entry, index) => (
                             <Cell key={`cell-${index}`} fill={PLACEMENT_COLORS[index % PLACEMENT_COLORS.length]} />
                           ))}
                         </Pie>
@@ -3918,20 +3966,38 @@ export default function MyMecaDashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Hidden file input for profile image upload */}
+        <input
+          type="file"
+          ref={profileImageInputRef}
+          className="hidden"
+          accept="image/*"
+          onChange={handleUploadProfileImage}
+        />
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            {(profile.profile_picture_url || (profile.profile_images && profile.profile_images.length > 0)) ? (
-              <img
-                src={profile.profile_picture_url || profile.profile_images?.[0]}
-                alt="Profile"
-                className="w-16 h-16 rounded-full object-cover border-2 border-orange-500"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center">
-                <User className="h-8 w-8 text-orange-500" />
+            <div
+              onClick={() => setShowProfileImageSelector(true)}
+              className="relative group cursor-pointer"
+              title="Click to change profile picture"
+            >
+              {(profile.profile_picture_url || (profile.profile_images && profile.profile_images.length > 0)) ? (
+                <img
+                  src={profile.profile_picture_url || profile.profile_images?.[0]}
+                  alt="Profile"
+                  className="w-16 h-16 rounded-full object-cover border-2 border-orange-500 group-hover:opacity-80 transition-opacity"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center group-hover:bg-orange-500/30 transition-colors">
+                  <User className="h-8 w-8 text-orange-500" />
+                </div>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="h-6 w-6 text-white" />
               </div>
-            )}
+            </div>
             <div>
               <h1 className="text-4xl font-bold text-white">My MECA</h1>
               <p className="text-gray-400">Welcome back, {`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}</p>
@@ -4055,6 +4121,77 @@ export default function MyMecaDashboardPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Image Selector Modal */}
+        {showProfileImageSelector && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-white">Choose Profile Picture</h3>
+                <button
+                  onClick={() => setShowProfileImageSelector(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {updatingProfileImage && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
+                  <span className="text-white ml-3">Updating profile picture...</span>
+                </div>
+              )}
+
+              {!updatingProfileImage && (
+                <>
+                  {/* Upload new image */}
+                  <div className="mb-6">
+                    <button
+                      onClick={() => profileImageInputRef.current?.click()}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      <Upload className="h-5 w-5" />
+                      Upload New Photo
+                    </button>
+                  </div>
+
+                  {/* Existing images */}
+                  {profile?.profile_images && profile.profile_images.length > 0 && (
+                    <div>
+                      <p className="text-gray-400 text-sm mb-3">Or select from your gallery:</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        {profile.profile_images.map((imageUrl, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleSelectProfileImage(imageUrl)}
+                            className={`aspect-square rounded-lg overflow-hidden bg-slate-700 hover:ring-2 hover:ring-orange-500 transition-all ${
+                              profile.profile_picture_url === imageUrl ? 'ring-2 ring-orange-500' : ''
+                            }`}
+                          >
+                            <img
+                              src={imageUrl}
+                              alt={`Profile option ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(!profile?.profile_images || profile.profile_images.length === 0) && (
+                    <div className="text-center py-4">
+                      <Image className="h-12 w-12 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">No images in your gallery yet.</p>
+                      <p className="text-gray-500 text-xs mt-1">Upload a photo to get started!</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

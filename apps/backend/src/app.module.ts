@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -41,22 +42,27 @@ import { WorldFinalsModule } from './world-finals/world-finals.module';
 import { AchievementsModule } from './achievements/achievements.module';
 import { ShopModule } from './shop/shop.module';
 import { TrainingRecordsModule } from './training-records/training-records.module';
+import { ScheduledTasksModule } from './scheduled-tasks/scheduled-tasks.module';
+import { BannersModule } from './banners/banners.module';
+import { PointsConfigurationModule } from './points-configuration/points-configuration.module';
 
 @Module({
   imports: [
-    // Rate limiting: 300 requests per minute per IP (generous for SPA with many concurrent requests)
+    // Rate limiting: 1000 requests per minute per IP (generous for SPA with many concurrent requests)
     ThrottlerModule.forRoot([
       {
         name: 'default',
         ttl: 60000, // 1 minute window
-        limit: 300, // 300 requests per minute (5/second average)
+        limit: 1000, // 1000 requests per minute (~17/second average)
       },
       {
         name: 'strict',
         ttl: 60000, // 1 minute window
-        limit: 20, // 20 requests per minute for sensitive endpoints
+        limit: 60, // 60 requests per minute for sensitive endpoints
       },
     ]),
+    // Scheduled tasks (cron jobs for membership expiration, event reminders, etc.)
+    ScheduleModule.forRoot(),
     DatabaseModule,
     AuthModule,
     EmailModule,
@@ -95,6 +101,9 @@ import { TrainingRecordsModule } from './training-records/training-records.modul
     AchievementsModule,
     ShopModule,
     TrainingRecordsModule,
+    ScheduledTasksModule,
+    BannersModule,
+    PointsConfigurationModule,
   ],
   controllers: [AppController],
   providers: [

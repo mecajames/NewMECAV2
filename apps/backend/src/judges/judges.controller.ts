@@ -19,6 +19,8 @@ import {
   AdminCreateJudgeApplicationSchema,
   AdminQuickCreateJudgeApplicationDto,
   AdminQuickCreateJudgeApplicationSchema,
+  AdminDirectCreateJudgeDto,
+  AdminDirectCreateJudgeSchema,
   ReviewJudgeApplicationDto,
   ReviewJudgeApplicationSchema,
   UpdateJudgeDto,
@@ -282,7 +284,7 @@ export class JudgesController {
     const user = await this.getCurrentUser(authHeader);
     const judge = await this.judgesService.getJudgeByUserId(user.id);
     // Return explicit object to ensure valid JSON response (not empty body)
-    return { data: judge || null };
+    return { data: judge ? serializeJudge(judge) : null };
   }
 
   // =============================================================================
@@ -328,6 +330,16 @@ export class JudgesController {
     const admin = await this.requireAdmin(authHeader);
     const application = await this.judgesService.adminQuickCreateApplication(admin.id, dto);
     return serializeApplication(application);
+  }
+
+  @Post('direct')
+  async createJudgeDirectly(
+    @Headers('authorization') authHeader: string,
+    @Body(new ZodValidationPipe(AdminDirectCreateJudgeSchema)) dto: AdminDirectCreateJudgeDto,
+  ) {
+    const admin = await this.requireAdmin(authHeader);
+    const judge = await this.judgesService.createJudgeDirectly(admin.id, dto);
+    return serializeJudge(judge);
   }
 
   @Put('applications/:id/review')

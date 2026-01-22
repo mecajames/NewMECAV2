@@ -361,3 +361,22 @@ export const EventJudgeAssignmentWithDetailsSchema = EventJudgeAssignmentSchema.
   }).optional(),
 });
 export type EventJudgeAssignmentWithDetails = z.infer<typeof EventJudgeAssignmentWithDetailsSchema>;
+
+// =============================================================================
+// Admin Direct Judge Creation (without application)
+// =============================================================================
+
+export const AdminDirectCreateJudgeSchema = z.object({
+  user_id: z.string().uuid(),
+  level: JudgeLevelSchema.default(JudgeLevel.IN_TRAINING),
+  specialty: JudgeSpecialtySchema,
+  sub_specialties: z.array(z.string()).default([]),
+  state: z.string().min(1, 'State is required'),
+  city: z.string().min(1, 'City is required'),
+  country: z.string().default('USA'),
+  travel_radius: z.string().default('100 miles'),
+  additional_regions: z.array(z.string()).default([]),
+  admin_notes: z.string().optional(),
+  enable_permission: z.boolean().default(false), // If true, enable canApplyJudge on profile
+});
+export type AdminDirectCreateJudgeDto = z.infer<typeof AdminDirectCreateJudgeSchema>;

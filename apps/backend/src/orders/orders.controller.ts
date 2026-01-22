@@ -35,15 +35,8 @@ export class OrdersController {
   }
 
   /**
-   * Get order by ID
-   */
-  @Get(':id')
-  async findById(@Param('id') id: string) {
-    return this.ordersService.findById(id);
-  }
-
-  /**
    * Get orders by user ID
+   * Note: Must be before :id route to avoid matching 'user' as an ID
    */
   @Get('user/:userId')
   async findByUser(
@@ -52,6 +45,32 @@ export class OrdersController {
     @Query('limit') limit?: number,
   ) {
     return this.ordersService.findByUser(userId, page, limit);
+  }
+
+  /**
+   * Get order status counts (admin dashboard)
+   * Note: Must be before :id route to avoid matching 'stats' as an ID
+   */
+  @Get('stats/counts')
+  async getStatusCounts() {
+    return this.ordersService.getStatusCounts();
+  }
+
+  /**
+   * Get recent orders (admin dashboard)
+   * Note: Must be before :id route to avoid matching 'stats' as an ID
+   */
+  @Get('stats/recent')
+  async getRecentOrders(@Query('limit') limit?: number) {
+    return this.ordersService.getRecentOrders(limit);
+  }
+
+  /**
+   * Get order by ID
+   */
+  @Get(':id')
+  async findById(@Param('id') id: string) {
+    return this.ordersService.findById(id);
   }
 
   /**
@@ -84,21 +103,5 @@ export class OrdersController {
   async cancel(@Param('id') id: string, @Body() data: CancelOrderDto) {
     const validatedData = CancelOrderSchema.parse(data);
     return this.ordersService.cancel(id, validatedData);
-  }
-
-  /**
-   * Get order status counts (admin dashboard)
-   */
-  @Get('stats/counts')
-  async getStatusCounts() {
-    return this.ordersService.getStatusCounts();
-  }
-
-  /**
-   * Get recent orders (admin dashboard)
-   */
-  @Get('stats/recent')
-  async getRecentOrders(@Query('limit') limit?: number) {
-    return this.ordersService.getRecentOrders(limit);
   }
 }

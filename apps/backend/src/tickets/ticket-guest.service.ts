@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { randomBytes } from 'crypto';
 import { TicketGuestToken, GuestTokenPurpose } from './entities/ticket-guest-token.entity';
@@ -6,6 +6,7 @@ import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
 import { TicketCategory, TicketPriority, TicketStatus } from '@newmeca/shared';
 import { TicketRoutingService } from './ticket-routing.service';
+import { EmailService } from '../email/email.service';
 
 export interface CreateGuestTicketData {
   title: string;
@@ -40,6 +41,9 @@ export interface GuestTicketResponse {
 
 @Injectable()
 export class TicketGuestService {
+  private readonly logger = new Logger(TicketGuestService.name);
+  private readonly frontendUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+
   // Token validity duration (1 hour for creation, 30 days for access)
   private readonly CREATE_TOKEN_EXPIRY_HOURS = 1;
   private readonly ACCESS_TOKEN_EXPIRY_DAYS = 30;
@@ -51,6 +55,7 @@ export class TicketGuestService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly routingService: TicketRoutingService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -95,6 +100,17 @@ export class TicketGuestService {
     } as any);
 
     await em.persistAndFlush(guestToken);
+
+    // Send magic link email
+    const magicLinkUrl = `${this.frontendUrl}/support/guest/verify?token=${token}`;
+    this.emailService.sendTicketGuestVerificationEmail({
+      to: normalizedEmail,
+      magicLinkUrl,
+      expiresInHours: this.CREATE_TOKEN_EXPIRY_HOURS,
+      isNewTicket: true,
+    }).catch(err => {
+      this.logger.error(`Failed to send guest verification email: ${err.message}`);
+    });
 
     return { token, expiresAt };
   }
@@ -188,6 +204,20 @@ export class TicketGuestService {
     }
 
     await em.persistAndFlush([guestToken, ticket]);
+
+    // Send confirmation email to guest
+    const viewTicketUrl = `${this.frontendUrl}/support/guest/ticket?access=${accessToken}`;
+    this.emailService.sendTicketCreatedEmail({
+      to: guestToken.email,
+      firstName: data.guest_name.split(' ')[0] || undefined,
+      ticketNumber: ticket.ticketNumber,
+      ticketTitle: ticket.title,
+      ticketDescription: ticket.description,
+      category: ticket.category,
+      viewTicketUrl,
+    }).catch(err => {
+      this.logger.error(`Failed to send guest ticket confirmation email: ${err.message}`);
+    });
 
     return this.formatGuestTicketResponse(ticket, []);
   }
@@ -307,6 +337,18 @@ export class TicketGuestService {
     } as any);
 
     await em.persistAndFlush(guestToken);
+
+    // Send magic link email for existing ticket access
+    const magicLinkUrl = `${this.frontendUrl}/support/guest/access?token=${token}`;
+    this.emailService.sendTicketGuestVerificationEmail({
+      to: normalizedEmail,
+      magicLinkUrl,
+      expiresInHours: this.ACCESS_TOKEN_EXPIRY_DAYS * 24, // Convert days to hours
+      isNewTicket: false,
+      ticketNumber: ticket.ticketNumber,
+    }).catch(err => {
+      this.logger.error(`Failed to send guest ticket access email: ${err.message}`);
+    });
 
     return { found: true, token, expiresAt };
   }

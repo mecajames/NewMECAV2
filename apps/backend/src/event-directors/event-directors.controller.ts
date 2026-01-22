@@ -17,6 +17,8 @@ import {
   CreateEventDirectorApplicationDto,
   AdminQuickCreateEventDirectorApplicationDto,
   AdminQuickCreateEventDirectorApplicationSchema,
+  AdminDirectCreateEventDirectorDto,
+  AdminDirectCreateEventDirectorSchema,
   ReviewEventDirectorApplicationDto,
   CreateEventDirectorAssignmentDto,
   CreateEventDirectorAssignmentSchema,
@@ -262,7 +264,7 @@ export class EventDirectorsController {
 
     const profile = await this.eventDirectorsService.getMyProfile(user.id);
     // Return explicit object to ensure valid JSON response (not empty body)
-    return { data: profile || null };
+    return { data: profile ? serializeEventDirector(profile) : null };
   }
 
   // =============================================================================
@@ -298,6 +300,16 @@ export class EventDirectorsController {
     const admin = await this.requireAdmin(authHeader);
     const application = await this.eventDirectorsService.adminQuickCreateApplication(admin.id, dto);
     return serializeApplication(application);
+  }
+
+  @Post('direct')
+  async createEventDirectorDirectly(
+    @Headers('authorization') authHeader: string,
+    @Body(new ZodValidationPipe(AdminDirectCreateEventDirectorSchema)) dto: AdminDirectCreateEventDirectorDto,
+  ) {
+    const admin = await this.requireAdmin(authHeader);
+    const eventDirector = await this.eventDirectorsService.createEventDirectorDirectly(admin.id, dto);
+    return serializeEventDirector(eventDirector);
   }
 
   @Put('applications/:id/review')

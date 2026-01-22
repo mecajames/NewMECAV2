@@ -21,6 +21,7 @@ import { Order } from '../orders/orders.entity';
 import { OrderItem } from '../orders/order-items.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
+import { EmailService } from '../email/email.service';
 
 // Legacy interface - kept for backwards compatibility
 export interface AdminAssignMembershipDto {
@@ -78,6 +79,7 @@ export class MembershipsService {
     private readonly mecaIdService: MecaIdService,
     @Inject(forwardRef(() => TeamsService))
     private readonly teamsService: TeamsService,
+    private readonly emailService: EmailService,
   ) {}
 
   async findById(id: string): Promise<Membership> {
@@ -367,6 +369,27 @@ export class MembershipsService {
       }
     }
 
+    // Send welcome email
+    try {
+      const user = await em.findOne(Profile, { id: data.userId });
+      if (user?.email) {
+        await this.emailService.sendMembershipWelcomeEmail({
+          to: user.email,
+          firstName: user.first_name || undefined,
+          mecaId: membership.mecaId!,
+          membershipType: config.name,
+          membershipCategory: config.category,
+          expiryDate: membership.endDate!,
+          teamName: data.teamName,
+          businessName: data.businessName,
+        });
+        this.logger.log(`Sent welcome email for membership ${membership.id} to ${user.email}`);
+      }
+    } catch (emailError) {
+      this.logger.error(`Failed to send welcome email for membership ${membership.id}:`, emailError);
+      // Don't fail the membership creation if email fails
+    }
+
     return membership;
   }
 
@@ -539,6 +562,25 @@ export class MembershipsService {
       }
     }
 
+    // Send welcome email
+    try {
+      const user = await em.findOne(Profile, { id: data.userId });
+      if (user?.email) {
+        await this.emailService.sendMembershipWelcomeEmail({
+          to: user.email,
+          firstName: user.first_name || undefined,
+          mecaId: membership.mecaId!,
+          membershipType: membershipConfig.name,
+          membershipCategory: membershipConfig.category,
+          expiryDate: membership.endDate!,
+        });
+        this.logger.log(`Sent welcome email for admin-assigned membership ${membership.id} to ${user.email}`);
+      }
+    } catch (emailError) {
+      this.logger.error(`Failed to send welcome email for admin-assigned membership ${membership.id}:`, emailError);
+      // Don't fail the membership assignment if email fails
+    }
+
     return membership;
   }
 
@@ -700,7 +742,6 @@ export class MembershipsService {
 
       order = em.create(Order, {
         orderNumber,
-        user: user,
         member: user,
         status: data.paymentMethod === AdminPaymentMethod.CREDIT_CARD_INVOICE ? OrderStatus.PENDING : OrderStatus.COMPLETED,
         orderType: OrderType.MEMBERSHIP,
@@ -832,6 +873,26 @@ export class MembershipsService {
         this.logger.log(`Auto-created team ${team.id} for admin-created membership ${managedMembership.id}`);
       } catch (teamError) {
         this.logger.error(`Failed to auto-create team for admin-created membership ${managedMembership.id}:`, teamError);
+      }
+    }
+
+    // Send welcome email (only if payment is completed, not for pending invoice payments)
+    if (paymentStatus === PaymentStatus.PAID && user?.email) {
+      try {
+        await this.emailService.sendMembershipWelcomeEmail({
+          to: user.email,
+          firstName: user.first_name || undefined,
+          mecaId: managedMembership.mecaId!,
+          membershipType: membershipConfig.name,
+          membershipCategory: membershipConfig.category,
+          expiryDate: managedMembership.endDate!,
+          teamName: data.teamName,
+          businessName: data.businessName,
+        });
+        this.logger.log(`Sent welcome email for admin-created membership ${managedMembership.id} to ${user.email}`);
+      } catch (emailError) {
+        this.logger.error(`Failed to send welcome email for admin-created membership ${managedMembership.id}:`, emailError);
+        // Don't fail the membership creation if email fails
       }
     }
 

@@ -20,8 +20,10 @@ import {
   Check,
   Camera,
   Loader2,
+  UserPlus,
+  Clock,
 } from 'lucide-react';
-import { teamsApi, Team, TeamPublicStats } from '../teams.api-client';
+import { teamsApi, Team, TeamPublicStats, PendingRequest } from '../teams.api-client';
 import { seasonsApi, Season } from '@/seasons';
 import { useAuth } from '@/auth';
 
@@ -72,14 +74,35 @@ export default function TeamPublicProfilePage() {
   const [uploadingCoverImage, setUploadingCoverImage] = useState(false);
   const coverImageInputRef = useRef<HTMLInputElement>(null);
 
+  // Join request state
+  const [myPendingRequest, setMyPendingRequest] = useState<PendingRequest | null>(null);
+  const [requestingToJoin, setRequestingToJoin] = useState(false);
+  const [cancellingRequest, setCancellingRequest] = useState(false);
+  const [joinRequestMessage, setJoinRequestMessage] = useState('');
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
   // Check if logged-in user is the team owner
   const isTeamOwner = user?.id === team?.captainId;
+
+  // Check if logged-in user is already a member of this team
+  const isTeamMember = team?.members?.some(m => m.userId === user?.id && m.status === 'active');
+
+  // Check if user has a pending request to this team
+  const hasPendingRequest = myPendingRequest?.teamId === team?.id;
 
   useEffect(() => {
     if (id) {
       fetchInitialData();
     }
   }, [id]);
+
+  // Fetch user's team membership status and pending requests when logged in
+  useEffect(() => {
+    if (user) {
+      fetchUserTeamStatus();
+    }
+  }, [user]);
 
   useEffect(() => {
     // Initialize position from team data
@@ -141,6 +164,52 @@ export default function TeamPublicProfilePage() {
       console.error('Error fetching stats:', err);
     } finally {
       setLoadingStats(false);
+    }
+  };
+
+  const fetchUserTeamStatus = async () => {
+    try {
+      // Get user's pending join requests
+      const pendingRequests = await teamsApi.getMyPendingRequests();
+
+      // Find if user has a pending request for this team
+      const requestForThisTeam = pendingRequests.find(r => r.teamId === id);
+      setMyPendingRequest(requestForThisTeam || null);
+    } catch (err) {
+      console.error('Error fetching user team status:', err);
+    }
+  };
+
+  const handleRequestToJoin = async () => {
+    if (!team) return;
+
+    try {
+      setRequestingToJoin(true);
+      setJoinError(null);
+      await teamsApi.requestToJoin(team.id, joinRequestMessage || undefined);
+      setShowJoinModal(false);
+      setJoinRequestMessage('');
+      // Refresh pending request status
+      await fetchUserTeamStatus();
+    } catch (err: any) {
+      console.error('Error requesting to join:', err);
+      setJoinError(err.response?.data?.message || 'Failed to send join request');
+    } finally {
+      setRequestingToJoin(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!team) return;
+
+    try {
+      setCancellingRequest(true);
+      await teamsApi.cancelJoinRequest(team.id);
+      setMyPendingRequest(null);
+    } catch (err) {
+      console.error('Error cancelling request:', err);
+    } finally {
+      setCancellingRequest(false);
     }
   };
 
@@ -433,8 +502,46 @@ export default function TeamPublicProfilePage() {
                 </div>
               </div>
 
-              <div className={`px-4 py-2 rounded-full border font-medium ${TEAM_TYPE_COLORS[team.teamType] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
-                {TEAM_TYPE_LABELS[team.teamType] || team.teamType}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div className={`px-4 py-2 rounded-full border font-medium ${TEAM_TYPE_COLORS[team.teamType] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
+                  {TEAM_TYPE_LABELS[team.teamType] || team.teamType}
+                </div>
+
+                {/* Join Request Button - show for logged-in users who are not already members of THIS team */}
+                {user && !isTeamOwner && !isTeamMember && (
+                  <>
+                    {hasPendingRequest ? (
+                      <button
+                        onClick={handleCancelRequest}
+                        disabled={cancellingRequest}
+                        className="flex items-center gap-2 px-4 py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-500/30 rounded-lg hover:bg-yellow-600/30 transition-colors disabled:opacity-50"
+                      >
+                        {cancellingRequest ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Clock className="h-4 w-4" />
+                        )}
+                        Request Pending
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowJoinModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors font-medium"
+                      >
+                        <UserPlus className="h-4 w-4" />
+                        Request to Join
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {/* Show member badge if user is already a member */}
+                {isTeamMember && !isTeamOwner && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg">
+                    <Check className="h-4 w-4" />
+                    Team Member
+                  </div>
+                )}
               </div>
             </div>
 
@@ -735,6 +842,84 @@ export default function TeamPublicProfilePage() {
             className="max-w-full max-h-full object-contain"
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {/* Join Request Modal */}
+      {showJoinModal && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowJoinModal(false)}
+        >
+          <div
+            className="bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">Request to Join Team</h3>
+              <button
+                onClick={() => setShowJoinModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-4 p-3 bg-slate-700/50 rounded-lg">
+                <Shield className="h-8 w-8 text-orange-500" />
+                <div>
+                  <p className="text-white font-semibold">Team {team?.name}</p>
+                  <p className="text-sm text-gray-400">{team?.members?.length || 0} members</p>
+                </div>
+              </div>
+
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Message to Team Owner (optional)
+              </label>
+              <textarea
+                value={joinRequestMessage}
+                onChange={(e) => setJoinRequestMessage(e.target.value)}
+                placeholder="Introduce yourself and explain why you'd like to join this team..."
+                className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none resize-none"
+                rows={4}
+                maxLength={500}
+              />
+              <p className="text-xs text-gray-500 mt-1">{joinRequestMessage.length}/500 characters</p>
+
+              {joinError && (
+                <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-red-400 text-sm">{joinError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowJoinModal(false)}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestToJoin}
+                disabled={requestingToJoin}
+                className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {requestingToJoin ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Send Request
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

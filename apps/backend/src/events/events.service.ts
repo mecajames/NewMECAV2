@@ -4,7 +4,7 @@ import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
-import { EventStatus, RegistrationStatus } from '@newmeca/shared';
+import { EventStatus, RegistrationStatus, MultiDayResultsMode } from '@newmeca/shared';
 import { randomUUID } from 'crypto';
 import { EmailService } from '../email/email.service';
 
@@ -193,14 +193,24 @@ export class EventsService {
    * @param data Base event data
    * @param numberOfDays Number of days (1, 2, or 3)
    * @param dayDates Array of ISO date strings for each day
+   * @param dayMultipliers Optional array of per-day points multipliers (1-4)
+   * @param multiDayResultsMode Optional mode for how to calculate results across days
    * @returns Array of created events
    */
-  async createMultiDay(data: Partial<Event>, numberOfDays: number, dayDates: string[]): Promise<Event[]> {
+  async createMultiDay(
+    data: Partial<Event>,
+    numberOfDays: number,
+    dayDates: string[],
+    dayMultipliers?: number[],
+    multiDayResultsMode?: MultiDayResultsMode
+  ): Promise<Event[]> {
     const em = this.em.fork();
 
     try {
       console.log('📝 CREATE MULTI-DAY EVENT - Received data:', JSON.stringify(data, null, 2));
       console.log('📝 CREATE MULTI-DAY EVENT - Days:', numberOfDays, 'Dates:', dayDates);
+      console.log('📝 CREATE MULTI-DAY EVENT - Day Multipliers:', dayMultipliers);
+      console.log('📝 CREATE MULTI-DAY EVENT - Results Mode:', multiDayResultsMode);
 
       // Generate a shared group ID for all days of this event
       const multiDayGroupId = randomUUID();
@@ -248,8 +258,14 @@ export class EventsService {
         if (data.longitude !== undefined) transformedData.longitude = data.longitude;
         if (data.status !== undefined) transformedData.status = data.status;
         if (data.formats !== undefined) transformedData.formats = data.formats;
-        if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
         if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
+
+        // Set points multiplier - use per-day multiplier if provided, otherwise use base multiplier
+        if (dayMultipliers && dayMultipliers[dayNum - 1] !== undefined) {
+          transformedData.pointsMultiplier = dayMultipliers[dayNum - 1];
+        } else if ((data as any).points_multiplier !== undefined) {
+          transformedData.pointsMultiplier = (data as any).points_multiplier;
+        }
 
         // Set the date for this specific day
         transformedData.eventDate = dayDate;
@@ -257,6 +273,11 @@ export class EventsService {
         // Set multi-day fields
         transformedData.multiDayGroupId = multiDayGroupId;
         transformedData.dayNumber = dayNum;
+
+        // Set multi-day results mode (same for all days in the group)
+        if (multiDayResultsMode) {
+          transformedData.multiDayResultsMode = multiDayResultsMode;
+        }
 
         // Append day number to description
         const baseDescription = data.description || '';
@@ -360,6 +381,7 @@ export class EventsService {
     if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
     if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
     if ((data as any).flyer_image_position !== undefined) transformedData.flyerImagePosition = (data as any).flyer_image_position;
+    if ((data as any).multi_day_results_mode !== undefined) transformedData.multiDayResultsMode = (data as any).multi_day_results_mode;
 
     console.log('🔍 UPDATE EVENT - Transformed eventDate:', transformedData.eventDate);
 

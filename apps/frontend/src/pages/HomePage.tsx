@@ -5,6 +5,7 @@ import { eventsApi, Event } from '@/events';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business-listings';
 import { getStorageUrl } from '@/lib/storage';
+import { SEOHead, useHomeSEO } from '@/shared/seo';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -232,8 +233,13 @@ export default function HomePage() {
 
   const totalSlides = Math.ceil(upcomingEvents.length / 3);
 
+  // SEO
+  const seoData = useHomeSEO(heroSettings.subtitle);
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
+    <>
+      <SEOHead {...seoData} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       <div className="relative h-[600px] flex items-center justify-center overflow-hidden">
         {/* Carousel Images */}
         {heroSettings.image_urls.map((url, index) => (
@@ -806,6 +812,7 @@ export default function HomePage() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

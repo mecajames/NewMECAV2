@@ -77,6 +77,13 @@ export const competitionResultsApi = {
     return response.json();
   },
 
+  // Get result counts for all events in a single call (efficient bulk endpoint)
+  getResultCountsByEvent: async (): Promise<Record<string, number>> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/counts-by-event`);
+    if (!response.ok) throw new Error('Failed to fetch result counts');
+    return response.json();
+  },
+
   create: async (data: Partial<CompetitionResult>): Promise<CompetitionResult> => {
     const response = await fetch(`${API_BASE_URL}/api/competition-results`, {
       method: 'POST',
@@ -161,6 +168,44 @@ export const competitionResultsApi = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Failed to check for duplicates');
+    }
+
+    return response.json();
+  },
+
+  parseAndValidate: async (
+    eventId: string,
+    file: File
+  ): Promise<{
+    results: Array<{
+      index: number;
+      data: any;
+      nameMatch?: {
+        matchedMecaId: string;
+        matchedName: string;
+        matchedCompetitorId: string | null;
+        confidence: 'exact' | 'partial';
+      };
+      missingFields: string[];
+      isValid: boolean;
+      validationErrors: string[];
+    }>;
+    totalCount: number;
+    needsNameConfirmation: number;
+    needsDataCompletion: number;
+    fileExtension: string;
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/parse-and-validate/${eventId}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to parse and validate file');
     }
 
     return response.json();

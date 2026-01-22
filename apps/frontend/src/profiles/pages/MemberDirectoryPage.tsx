@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Search, Car, Music, User, Award } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
+import { SEOHead, useMemberDirectorySEO } from '@/shared/seo';
 
 export default function MemberDirectoryPage() {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ export default function MemberDirectoryPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const seoProps = useMemberDirectorySEO();
 
   useEffect(() => {
     fetchPublicProfiles();
@@ -29,7 +31,7 @@ export default function MemberDirectoryPage() {
 
   const filteredProfiles = profiles.filter(profile => {
     const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.toLowerCase();
-    const mecaId = profile.meca_id?.toLowerCase() || '';
+    const mecaId = profile.meca_id ? String(profile.meca_id).toLowerCase() : '';
     const vehicle = profile.vehicle_info?.toLowerCase() || '';
     const search = searchTerm.toLowerCase();
 
@@ -38,14 +40,19 @@ export default function MemberDirectoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-      </div>
+      <>
+        <SEOHead {...seoProps} />
+        <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -206,6 +213,7 @@ export default function MemberDirectoryPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

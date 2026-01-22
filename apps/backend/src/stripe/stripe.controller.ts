@@ -1133,8 +1133,12 @@ export class StripeController {
       const invoice = await this.invoicesService.createFromOrder(order.id);
       console.log(`Invoice ${invoice.invoiceNumber} created for order ${order.orderNumber}`);
 
-      // TODO: Send invoice email if configured
-      // await this.emailService.sendInvoice(invoice);
+      // Send invoice email (async, non-blocking)
+      if (invoice) {
+        this.invoicesService.sendInvoice(invoice.id).catch((error) => {
+          console.error('Failed to send invoice email:', error);
+        });
+      }
 
     } catch (error) {
       console.error('Failed to create order/invoice:', error);

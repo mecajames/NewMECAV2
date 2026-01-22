@@ -1,9 +1,15 @@
+import { SEOHead, useStaticPageSEO } from '@/shared/seo';
+
 export default function HallOfFamePage() {
+  const seoProps = useStaticPageSEO('hallOfFame');
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">MECA Hall of Fame</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h1 className="text-4xl font-bold text-white mb-4">MECA Hall of Fame</h1>
           <p className="text-gray-400 text-lg">
             Celebrating the legends and pioneers of car audio competition
           </p>
@@ -18,7 +24,8 @@ export default function HallOfFamePage() {
             to the sport of car audio competition.
           </p>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

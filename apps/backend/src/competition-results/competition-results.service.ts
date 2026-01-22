@@ -11,6 +11,8 @@ import { AuditService } from '../audit/audit.service';
 import { Membership } from '../memberships/memberships.entity';
 import { WorldFinalsService } from '../world-finals/world-finals.service';
 import { AchievementsService } from '../achievements/achievements.service';
+import { PointsConfigurationService } from '../points-configuration/points-configuration.service';
+import { PointsConfiguration } from '../points-configuration/points-configuration.entity';
 
 @Injectable()
 export class CompetitionResultsService {
@@ -28,6 +30,7 @@ export class CompetitionResultsService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly auditService: AuditService,
+    private readonly pointsConfigService: PointsConfigurationService,
     @Optional() private readonly worldFinalsService?: WorldFinalsService,
     @Optional() private readonly achievementsService?: AchievementsService,
   ) {}
@@ -97,6 +100,26 @@ export class CompetitionResultsService {
       orderBy: { placement: 'ASC' },
       populate: ['competitor'],
     });
+  }
+
+  /**
+   * Get result counts for all events in a single efficient query
+   * Returns a map of eventId -> count
+   */
+  async getResultCountsByEvent(): Promise<Record<string, number>> {
+    const em = this.em.fork();
+
+    // Use raw query for efficient GROUP BY count
+    const results = await em.getConnection().execute(
+      `SELECT event_id, COUNT(*) as count FROM competition_results GROUP BY event_id`
+    );
+
+    const counts: Record<string, number> = {};
+    for (const row of results) {
+      counts[row.event_id] = parseInt(row.count, 10);
+    }
+
+    return counts;
   }
 
   async findByCompetitor(competitorId: string): Promise<CompetitionResult[]> {
@@ -565,46 +588,21 @@ export class CompetitionResultsService {
 
   /**
    * Calculate points for a single result based on placement and event multiplier
+   * Uses the configurable points system from the database
    *
-   * Point Structure (NO points awarded below 5th place for ANY event type):
-   * 1X Single Point Event: 1st=5, 2nd=4, 3rd=3, 4th=2, 5th=1
-   * 2X Double Points Event: 1st=10, 2nd=8, 3rd=6, 4th=4, 5th=2
-   * 3X Triple Points Event (SOUNDFEST): 1st=15, 2nd=12, 3rd=9, 4th=6, 5th=3
-   * 4X Points Event (SQ, Install, RTA, SQ2/SQ2+): 1st=20, 2nd=19, 3rd=18, 4th=17, 5th=16
+   * Standard Events (1X, 2X, 3X): Base points × multiplier (only top 5)
+   * 4X Events: Special fixed points per placement (configurable)
+   * Extended 4X: Optional participation points for placements 6th-50th (when enabled)
+   *
+   * @param placement - The competitor's placement (1st, 2nd, etc.)
+   * @param multiplier - The event's points multiplier (0, 1, 2, 3, or 4)
+   * @param format - The competition format (e.g., 'SPL', 'SQL')
+   * @param config - The points configuration for the season
+   * @returns The calculated points
    */
-  private calculatePoints(placement: number, multiplier: number, format: string): number {
-    // No points for multiplier 0 (non-competitive events)
-    if (multiplier === 0) {
-      return 0;
-    }
-
-    // Only top 5 placements receive points - NO exceptions
-    if (placement < 1 || placement > 5) {
-      return 0;
-    }
-
-    // 4X Points Event - Special scoring (SQ, Install, RTA, SQ2/SQ2+)
-    if (multiplier === 4) {
-      const fourXPoints: { [key: number]: number } = {
-        1: 20,
-        2: 19,
-        3: 18,
-        4: 17,
-        5: 16,
-      };
-      return fourXPoints[placement] || 0;
-    }
-
-    // Standard events (1X, 2X, 3X) - Base points × multiplier
-    const basePoints: { [key: number]: number } = {
-      1: 5,
-      2: 4,
-      3: 3,
-      4: 2,
-      5: 1,
-    };
-
-    return (basePoints[placement] || 0) * multiplier;
+  private calculatePoints(placement: number, multiplier: number, format: string, config: PointsConfiguration): number {
+    // Delegate to the PointsConfigurationService for consistent calculation
+    return this.pointsConfigService.calculatePoints(placement, multiplier, config);
   }
 
   /**
@@ -748,6 +746,20 @@ export class CompetitionResultsService {
 
     const multiplier = event.pointsMultiplier || 2; // Default to 2x if not set
 
+    // Fetch the points configuration for this event's season
+    let pointsConfig: PointsConfiguration | null = null;
+    if (event.season?.id) {
+      pointsConfig = await this.pointsConfigService.getConfigForSeason(event.season.id);
+    } else {
+      // Fall back to current season config if event has no season
+      pointsConfig = await this.pointsConfigService.getConfigForCurrentSeason();
+    }
+
+    // If still no config, log warning and use hardcoded defaults
+    if (!pointsConfig) {
+      this.logger.warn(`No points configuration found for event ${eventId}, using hardcoded defaults`);
+    }
+
     // Fetch all results for this event, populated with competitor and class info
     const results = await em.find(
       CompetitionResult,
@@ -812,7 +824,7 @@ export class CompetitionResultsService {
         // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
         const isEligible = await this.isMemberEligibleAsync(mecaId);
 
-        if (isEligible) {
+        if (isEligible && pointsConfig) {
           // Get format from class or result
           let format = result.format;
           const competitionClass = classMap.get(result.classId || '');
@@ -824,7 +836,8 @@ export class CompetitionResultsService {
             result.pointsEarned = this.calculatePoints(
               currentPlacement,
               multiplier,
-              format
+              format,
+              pointsConfig
             );
           } else {
             result.pointsEarned = 0;
@@ -884,6 +897,54 @@ export class CompetitionResultsService {
         }
       }
     }
+  }
+
+  /**
+   * Recalculate points for all events in a season
+   * Used when points configuration is changed
+   */
+  async recalculateSeasonPoints(seasonId: string): Promise<{ events_processed: number; results_updated: number; duration_ms: number }> {
+    const startTime = Date.now();
+    const em = this.em.fork();
+
+    // Verify season exists
+    const season = await em.findOne(Season, { id: seasonId });
+    if (!season) {
+      throw new NotFoundException(`Season with ID ${seasonId} not found`);
+    }
+
+    // Get all events for this season
+    const events = await em.find(Event, { season: seasonId });
+
+    this.logger.log(`Recalculating points for ${events.length} events in season ${season.name}`);
+
+    let eventsProcessed = 0;
+    let totalResultsUpdated = 0;
+
+    for (const event of events) {
+      try {
+        // Count results before update for tracking
+        const resultCount = await em.count(CompetitionResult, { event: event.id });
+
+        await this.updateEventPoints(event.id);
+
+        eventsProcessed++;
+        totalResultsUpdated += resultCount;
+
+        this.logger.debug(`Recalculated points for event ${event.title} (${resultCount} results)`);
+      } catch (error) {
+        this.logger.error(`Failed to recalculate points for event ${event.id}: ${error}`);
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    this.logger.log(`Season points recalculation complete: ${eventsProcessed} events, ${totalResultsUpdated} results in ${duration}ms`);
+
+    return {
+      events_processed: eventsProcessed,
+      results_updated: totalResultsUpdated,
+      duration_ms: duration,
+    };
   }
 
   /**
@@ -1122,6 +1183,183 @@ export class CompetitionResultsService {
       message: `Successfully imported ${imported} of ${parsedResults.length} results`,
       imported,
       errors,
+    };
+  }
+
+  /**
+   * Check if wattage/frequency is required for a given format and class
+   * Required for all SPL classes except Dueling Demos
+   */
+  private isWattageFrequencyRequired(format: string, className: string): boolean {
+    if (!format || format.toUpperCase() !== 'SPL') return false;
+    const exemptClasses = ['dueling demos'];
+    const classLower = (className || '').toLowerCase();
+    return !exemptClasses.some(exempt => classLower.includes(exempt));
+  }
+
+  /**
+   * Parse and validate results from a file before importing
+   * Returns parsed data with flags for name matches needing confirmation and missing required fields
+   */
+  async parseAndValidate(
+    eventId: string,
+    parsedResults: any[]
+  ): Promise<{
+    results: Array<{
+      index: number;
+      data: any;
+      nameMatch?: {
+        matchedMecaId: string;
+        matchedName: string;
+        matchedCompetitorId: string | null;
+        confidence: 'exact' | 'partial';
+      };
+      missingFields: string[];
+      isValid: boolean;
+      validationErrors: string[];
+    }>;
+    totalCount: number;
+    needsNameConfirmation: number;
+    needsDataCompletion: number;
+  }> {
+    const em = this.em.fork();
+    const today = new Date();
+
+    // Fetch active memberships for name matching
+    const pointsEligibleCategories = [
+      MembershipCategory.COMPETITOR,
+      MembershipCategory.RETAIL,
+      MembershipCategory.MANUFACTURER,
+    ];
+
+    const activeMemberships = await em.find(
+      Membership,
+      {
+        mecaId: { $ne: null },
+        paymentStatus: PaymentStatus.PAID,
+        membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
+        $or: [{ endDate: null }, { endDate: { $gt: today } }],
+      },
+      {
+        populate: ['membershipTypeConfig', 'user'],
+      }
+    );
+
+    // Also fetch profiles for fallback matching
+    const profiles = await em.find(Profile, {});
+
+    const results: Array<{
+      index: number;
+      data: any;
+      nameMatch?: {
+        matchedMecaId: string;
+        matchedName: string;
+        matchedCompetitorId: string | null;
+        confidence: 'exact' | 'partial';
+      };
+      missingFields: string[];
+      isValid: boolean;
+      validationErrors: string[];
+    }> = [];
+
+    let needsNameConfirmation = 0;
+    let needsDataCompletion = 0;
+
+    for (let i = 0; i < parsedResults.length; i++) {
+      const result = parsedResults[i];
+      const validationErrors: string[] = [];
+      const missingFields: string[] = [];
+      let nameMatch: {
+        matchedMecaId: string;
+        matchedName: string;
+        matchedCompetitorId: string | null;
+        confidence: 'exact' | 'partial';
+      } | undefined = undefined;
+
+      // Validate required fields
+      if (!result.name || result.name.trim() === '') {
+        validationErrors.push('Name is required');
+      }
+      if (!result.class || result.class.trim() === '') {
+        validationErrors.push('Class is required');
+      }
+      if (result.score === undefined || result.score === null || result.score === '') {
+        validationErrors.push('Score is required');
+      }
+
+      // Check for wattage/frequency requirement (SPL classes except Dueling Demos)
+      const format = result.format || 'SPL';
+      if (this.isWattageFrequencyRequired(format, result.class)) {
+        if (!result.wattage) {
+          missingFields.push('wattage');
+        }
+        if (!result.frequency) {
+          missingFields.push('frequency');
+        }
+      }
+
+      // Check for name match when MECA ID is not provided
+      if ((!result.memberID || result.memberID === '999999' || result.memberID === '0') && result.name) {
+        const nameLower = result.name.toLowerCase().trim();
+
+        // Search in active memberships by competitor name
+        const matchedMembership = activeMemberships.find(m => {
+          const competitorName = m.getCompetitorDisplayName()?.toLowerCase().trim();
+          return competitorName === nameLower ||
+                 (m.competitorName?.toLowerCase().trim() === nameLower);
+        });
+
+        if (matchedMembership) {
+          nameMatch = {
+            matchedMecaId: matchedMembership.mecaId!.toString(),
+            matchedName: matchedMembership.getCompetitorDisplayName() || result.name,
+            matchedCompetitorId: matchedMembership.user?.id || null,
+            confidence: 'exact',
+          };
+          needsNameConfirmation++;
+        } else {
+          // Fall back to profile matching
+          const profile = profiles.find(p => {
+            const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase().trim();
+            return fullName === nameLower;
+          });
+
+          if (profile && profile.meca_id) {
+            nameMatch = {
+              matchedMecaId: profile.meca_id,
+              matchedName: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+              matchedCompetitorId: profile.id,
+              confidence: 'exact',
+            };
+            needsNameConfirmation++;
+          }
+        }
+      }
+
+      if (missingFields.length > 0) {
+        needsDataCompletion++;
+      }
+
+      const isValid = validationErrors.length === 0;
+
+      results.push({
+        index: i,
+        data: {
+          ...result,
+          format: format,
+        },
+        nameMatch,
+        missingFields,
+        isValid,
+        validationErrors,
+      });
+    }
+
+    return {
+      results,
+      totalCount: parsedResults.length,
+      needsNameConfirmation,
+      needsDataCompletion,
     };
   }
 

@@ -125,10 +125,9 @@ export class BillingController {
   @Post('invoices/:id/send')
   @HttpCode(HttpStatus.OK)
   async sendInvoice(@Param('id') id: string) {
-    // Mark as sent (email sending would be added here)
-    const invoice = await this.invoicesService.markAsSent(id);
-    // TODO: Integrate with email service to send invoice
-    return { success: true, invoice };
+    // Send invoice email and mark as sent
+    const result = await this.invoicesService.sendInvoice(id);
+    return { success: result.success, invoice: result.invoice, error: result.error };
   }
 
   // ==========================================
@@ -437,9 +436,9 @@ export class BillingController {
     const rows = result.data.map(order => [
       order.orderNumber,
       order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : '',
-      order.user?.email || '',
-      order.user ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim() : '',
-      order.user?.meca_id || '',
+      order.member?.email || '',
+      order.member ? `${order.member.first_name || ''} ${order.member.last_name || ''}`.trim() : '',
+      order.member?.meca_id || '',
       order.orderType,
       order.status,
       order.subtotal,

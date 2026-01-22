@@ -36,8 +36,54 @@ export interface Profile {
   profile_images?: string[];
   cover_image_position?: { x: number; y: number };
   force_password_change?: boolean;
+  is_trainer?: boolean;
+  // Judge and Event Director permissions
+  can_apply_judge?: boolean;
+  can_apply_event_director?: boolean;
+  judge_permission_granted_at?: string;
+  judge_permission_granted_by?: string;
+  ed_permission_granted_at?: string;
+  ed_permission_granted_by?: string;
+  judge_certification_expires?: string;
+  ed_certification_expires?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface JudgeEdStatus {
+  judge: {
+    permissionEnabled: boolean;
+    status: string;
+    grantedAt: string | null;
+    grantedBy: { id: string; name: string } | null;
+    expirationDate: string | null;
+    judgeRecord: { id: string; level: string; isActive: boolean } | null;
+    application: { id: string; status: string; submittedAt: string } | null;
+  };
+  eventDirector: {
+    permissionEnabled: boolean;
+    status: string;
+    grantedAt: string | null;
+    grantedBy: { id: string; name: string } | null;
+    expirationDate: string | null;
+    edRecord: { id: string; isActive: boolean } | null;
+    application: { id: string; status: string; submittedAt: string } | null;
+  };
+  eventsJudged: Array<{ id: string; name: string; date: string }>;
+  eventsDirected: Array<{ id: string; name: string; date: string }>;
+}
+
+export interface UpdateJudgePermissionDto {
+  enabled: boolean;
+  autoComplete?: boolean;
+  expirationDate?: string | null;
+  judgeLevel?: string;
+}
+
+export interface UpdateEdPermissionDto {
+  enabled: boolean;
+  autoComplete?: boolean;
+  expirationDate?: string | null;
 }
 
 export interface CreateUserWithPasswordDto {
@@ -257,6 +303,70 @@ export const profilesApi = {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Failed to fetch member stats' }));
       throw new Error(error.message || 'Failed to fetch member stats');
+    }
+    return response.json();
+  },
+
+  // ===== Judge and Event Director Permission Management =====
+
+  /**
+   * Gets Judge and Event Director status for a profile (admin only)
+   */
+  getJudgeEdStatus: async (userId: string, authToken: string): Promise<JudgeEdStatus> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/judge-ed-status`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to fetch Judge/ED status' }));
+      throw new Error(error.message || 'Failed to fetch Judge/ED status');
+    }
+    return response.json();
+  },
+
+  /**
+   * Updates judge permission for a profile (admin only)
+   */
+  updateJudgePermission: async (
+    userId: string,
+    dto: UpdateJudgePermissionDto,
+    authToken: string,
+  ): Promise<Profile> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/judge-permission`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(dto),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to update judge permission' }));
+      throw new Error(error.message || 'Failed to update judge permission');
+    }
+    return response.json();
+  },
+
+  /**
+   * Updates event director permission for a profile (admin only)
+   */
+  updateEventDirectorPermission: async (
+    userId: string,
+    dto: UpdateEdPermissionDto,
+    authToken: string,
+  ): Promise<Profile> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/ed-permission`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(dto),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to update event director permission' }));
+      throw new Error(error.message || 'Failed to update event director permission');
     }
     return response.json();
   },

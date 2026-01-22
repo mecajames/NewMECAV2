@@ -17,7 +17,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole } from '@newmeca/shared';
+import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole, MembershipAccountType, PaymentStatus } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { ZodError } from 'zod';
@@ -427,5 +427,85 @@ export class MembershipsController {
     await this.requireAdmin(authHeader);
     this.logger.log('Admin triggered fix for secondary memberships without profiles');
     return this.masterSecondaryService.fixSecondaryMembershipsWithoutProfiles();
+  }
+
+  /**
+   * Admin: Fix orphaned memberships that should be secondary but aren't linked.
+   * This finds memberships where the same user_id has multiple memberships and
+   * links the one without MECA ID as secondary to the one with MECA ID.
+   */
+  @Post('admin/fix-orphaned-secondaries')
+  @HttpCode(HttpStatus.OK)
+  async fixOrphanedSecondaries(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ fixed: number; details: string[] }> {
+    await this.requireAdmin(authHeader);
+    this.logger.log('Admin triggered fix for orphaned secondary memberships');
+
+    const em = this.em.fork();
+    const details: string[] = [];
+    let fixed = 0;
+
+    // Find all users who have multiple memberships with payment_status paid or pending
+    const memberships = await em.find(Membership, {
+      paymentStatus: { $in: [PaymentStatus.PAID, PaymentStatus.PENDING] },
+    }, {
+      populate: ['user'],
+      orderBy: { createdAt: 'ASC' },
+    });
+
+    // Group by user_id
+    const byUser = new Map<string, Membership[]>();
+    for (const m of memberships) {
+      const userId = m.user.id;
+      if (!byUser.has(userId)) {
+        byUser.set(userId, []);
+      }
+      byUser.get(userId)!.push(m);
+    }
+
+    // Process users with multiple memberships
+    for (const [userId, userMemberships] of byUser) {
+      if (userMemberships.length <= 1) continue;
+
+      // Find the master (one with MECA ID, preferably paid)
+      const masterCandidates = userMemberships.filter(m => m.mecaId && m.paymentStatus === PaymentStatus.PAID);
+      if (masterCandidates.length === 0) {
+        details.push(`User ${userId}: No valid master membership found (no paid membership with MECA ID)`);
+        continue;
+      }
+
+      const master = masterCandidates[0];
+
+      // Find secondaries (ones without MECA ID that are still 'independent')
+      const secondaryCandidates = userMemberships.filter(
+        m => !m.mecaId && m.accountType !== MembershipAccountType.SECONDARY && m.id !== master.id
+      );
+
+      if (secondaryCandidates.length === 0) {
+        details.push(`User ${userId}: No orphaned secondary memberships found`);
+        continue;
+      }
+
+      // Upgrade master to 'master' type if not already
+      if (master.accountType !== MembershipAccountType.MASTER) {
+        master.accountType = MembershipAccountType.MASTER;
+        details.push(`User ${userId}: Upgraded membership ${master.id} (MECA ${master.mecaId}) to master`);
+      }
+
+      // Link each secondary to the master
+      for (const secondary of secondaryCandidates) {
+        secondary.accountType = MembershipAccountType.SECONDARY;
+        secondary.masterMembership = master;
+        secondary.hasOwnLogin = false; // They share the master's profile
+        details.push(`User ${userId}: Linked membership ${secondary.id} as secondary to master ${master.id} (MECA ${master.mecaId})`);
+        fixed++;
+      }
+    }
+
+    await em.flush();
+    this.logger.log(`Fixed ${fixed} orphaned secondary memberships`);
+
+    return { fixed, details };
   }
 }

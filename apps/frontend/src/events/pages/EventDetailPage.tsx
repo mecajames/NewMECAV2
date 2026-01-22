@@ -7,6 +7,7 @@ import { useAuth, usePermissions } from '@/auth';
 import { EventRatingsPanel } from '@/ratings';
 import { ratingsApi } from '@/api-client/ratings.api-client';
 import { getStorageUrl } from '@/lib/storage';
+import { SEOHead, useEventDetailSEO } from '@/shared/seo';
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -44,6 +45,27 @@ export default function EventDetailPage() {
 
   // Track if user participated in this event (for ratings)
   const [userParticipated, setUserParticipated] = useState(false);
+
+  // SEO - must be called unconditionally at the top level
+  const seoData = useEventDetailSEO(
+    event
+      ? {
+          id: event.id,
+          title: event.title,
+          description: event.description || undefined,
+          date: event.event_date,
+          location: {
+            name: event.venue_name,
+            address: event.venue_address || undefined,
+            city: event.venue_city || undefined,
+            state: event.venue_state || undefined,
+            country: event.venue_country || undefined,
+          },
+          image: event.flyer_url ? getStorageUrl(event.flyer_url) : undefined,
+          price: event.registration_fee || undefined,
+        }
+      : null
+  );
 
   useEffect(() => {
     if (!eventId) {
@@ -259,7 +281,9 @@ export default function EventDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <>
+      {seoData && <SEOHead {...seoData} />}
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header with Back button */}
         <div className="flex items-center justify-between mb-6">
@@ -751,6 +775,7 @@ export default function EventDetailPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

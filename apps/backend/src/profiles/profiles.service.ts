@@ -156,20 +156,21 @@ export class ProfilesService {
       return [];
     }
 
-    // Search by MECA ID (exact match or starts with)
-    // Search by email (contains)
-    // Search by first_name or last_name (contains)
-    return em.find(Profile, {
-      $or: [
-        { meca_id: { $like: `${searchTerm}%` } },
-        { email: { $like: `%${searchTerm}%` } },
-        { first_name: { $ilike: `%${searchTerm}%` } },
-        { last_name: { $ilike: `%${searchTerm}%` } },
-      ],
-    }, {
-      limit,
-      orderBy: { first_name: 'ASC', last_name: 'ASC' },
-    });
+    // Use raw query to handle meca_id as integer with CAST to text
+    // Search by MECA ID (starts with), email (contains), first_name or last_name (contains)
+    const results = await em.getConnection().execute(
+      `SELECT * FROM profiles
+       WHERE CAST(meca_id AS TEXT) LIKE ?
+          OR email LIKE ?
+          OR first_name ILIKE ?
+          OR last_name ILIKE ?
+       ORDER BY first_name ASC, last_name ASC
+       LIMIT ?`,
+      [`${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, limit],
+    );
+
+    // Return raw results - they have all the profile fields
+    return results as Profile[];
   }
 
   /**
@@ -244,6 +245,8 @@ export class ProfilesService {
         meca_id: mecaId,
         force_password_change: dto.forcePasswordChange ?? false,
         account_type: AccountType.MEMBER,
+        canApplyJudge: false,
+        canApplyEventDirector: false,
         created_at: now,
         updated_at: now,
       });
@@ -521,5 +524,303 @@ export class ProfilesService {
 
     // Generate the impersonation link
     return this.supabaseAdmin.generateImpersonationLink(targetUserId, redirectTo);
+  }
+
+  // =============================================================================
+  // Judge and Event Director Permission Management
+  // =============================================================================
+
+  /**
+   * Updates judge permission for a profile.
+   * When enabling, can optionally auto-complete the application.
+   */
+  async updateJudgePermission(
+    profileId: string,
+    adminId: string,
+    data: {
+      enabled: boolean;
+      autoComplete?: boolean;
+      expirationDate?: Date | null;
+      judgeLevel?: string;
+    },
+  ): Promise<Profile> {
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: profileId });
+    if (!profile) {
+      throw new NotFoundException(`Profile with ID ${profileId} not found`);
+    }
+
+    const admin = await em.findOne(Profile, { id: adminId });
+    if (!admin) {
+      throw new NotFoundException(`Admin profile not found`);
+    }
+
+    // Update permission fields
+    profile.canApplyJudge = data.enabled;
+
+    if (data.enabled) {
+      // Set audit trail when enabling
+      profile.judgePermissionGrantedAt = new Date();
+      profile.judgePermissionGrantedBy = admin;
+    } else {
+      // Clear audit trail when disabling (but keep the last values for history)
+      // We don't clear grantedAt/grantedBy - they serve as historical record
+    }
+
+    // Update expiration date
+    if (data.expirationDate !== undefined) {
+      profile.judgeCertificationExpires = data.expirationDate || undefined;
+    }
+
+    await em.flush();
+
+    return profile;
+  }
+
+  /**
+   * Updates event director permission for a profile.
+   * When enabling, can optionally auto-complete the application.
+   */
+  async updateEventDirectorPermission(
+    profileId: string,
+    adminId: string,
+    data: {
+      enabled: boolean;
+      autoComplete?: boolean;
+      expirationDate?: Date | null;
+    },
+  ): Promise<Profile> {
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: profileId });
+    if (!profile) {
+      throw new NotFoundException(`Profile with ID ${profileId} not found`);
+    }
+
+    const admin = await em.findOne(Profile, { id: adminId });
+    if (!admin) {
+      throw new NotFoundException(`Admin profile not found`);
+    }
+
+    // Update permission fields
+    profile.canApplyEventDirector = data.enabled;
+
+    if (data.enabled) {
+      // Set audit trail when enabling
+      profile.edPermissionGrantedAt = new Date();
+      profile.edPermissionGrantedBy = admin;
+    }
+
+    // Update expiration date
+    if (data.expirationDate !== undefined) {
+      profile.edCertificationExpires = data.expirationDate || undefined;
+    }
+
+    await em.flush();
+
+    return profile;
+  }
+
+  /**
+   * Gets the combined Judge/ED status for a profile.
+   * Returns permission status, application status, records, and event history.
+   */
+  async getJudgeEdStatus(profileId: string): Promise<{
+    judge: {
+      permissionEnabled: boolean;
+      status: string;
+      grantedAt: Date | null;
+      grantedBy: { id: string; name: string } | null;
+      expirationDate: Date | null;
+      judgeRecord: { id: string; level: string; isActive: boolean } | null;
+      application: { id: string; status: string; submittedAt: Date } | null;
+    };
+    eventDirector: {
+      permissionEnabled: boolean;
+      status: string;
+      grantedAt: Date | null;
+      grantedBy: { id: string; name: string } | null;
+      expirationDate: Date | null;
+      edRecord: { id: string; isActive: boolean } | null;
+      application: { id: string; status: string; submittedAt: Date } | null;
+    };
+    eventsJudged: Array<{ id: string; name: string; date: Date }>;
+    eventsDirected: Array<{ id: string; name: string; date: Date }>;
+  }> {
+    const em = this.em.fork();
+
+    // Get profile with permission granted by relationships
+    const profile = await em.findOne(Profile, { id: profileId }, {
+      populate: ['judgePermissionGrantedBy', 'edPermissionGrantedBy'],
+    });
+
+    if (!profile) {
+      throw new NotFoundException(`Profile with ID ${profileId} not found`);
+    }
+
+    // Get judge record if exists
+    const judgeRecord = await em.getConnection().execute(
+      `SELECT id, level, is_active FROM judges WHERE user_id = ?`,
+      [profileId],
+    );
+
+    // Get judge application if exists
+    const judgeApplication = await em.getConnection().execute(
+      `SELECT id, status, application_date FROM judge_applications WHERE user_id = ? ORDER BY application_date DESC LIMIT 1`,
+      [profileId],
+    );
+
+    // Get ED record if exists
+    const edRecord = await em.getConnection().execute(
+      `SELECT id, is_active FROM event_directors WHERE user_id = ?`,
+      [profileId],
+    );
+
+    // Get ED application if exists
+    const edApplication = await em.getConnection().execute(
+      `SELECT id, status, application_date FROM event_director_applications WHERE user_id = ? ORDER BY application_date DESC LIMIT 1`,
+      [profileId],
+    );
+
+    // Get events judged
+    const eventsJudged = await em.getConnection().execute(
+      `SELECT e.id, e.title as name, e.event_date as date
+       FROM event_judge_assignments eja
+       JOIN events e ON eja.event_id = e.id
+       JOIN judges j ON eja.judge_id = j.id
+       WHERE j.user_id = ? AND eja.status IN ('accepted', 'confirmed', 'completed')
+       ORDER BY e.event_date DESC
+       LIMIT 20`,
+      [profileId],
+    );
+
+    // Get events directed
+    const eventsDirected = await em.getConnection().execute(
+      `SELECT e.id, e.title as name, e.event_date as date
+       FROM event_director_assignments eda
+       JOIN events e ON eda.event_id = e.id
+       JOIN event_directors ed ON eda.event_director_id = ed.id
+       WHERE ed.user_id = ? AND eda.status IN ('accepted', 'confirmed', 'completed')
+       ORDER BY e.event_date DESC
+       LIMIT 20`,
+      [profileId],
+    );
+
+    // Calculate judge status
+    const judgeStatus = this.calculateJudgeStatus(
+      profile.canApplyJudge,
+      profile.judgeCertificationExpires,
+      judgeRecord[0],
+      judgeApplication[0],
+    );
+
+    // Calculate ED status
+    const edStatus = this.calculateEdStatus(
+      profile.canApplyEventDirector,
+      profile.edCertificationExpires,
+      edRecord[0],
+      edApplication[0],
+    );
+
+    return {
+      judge: {
+        permissionEnabled: profile.canApplyJudge,
+        status: judgeStatus,
+        grantedAt: profile.judgePermissionGrantedAt || null,
+        grantedBy: profile.judgePermissionGrantedBy
+          ? {
+              id: profile.judgePermissionGrantedBy.id,
+              name: profile.judgePermissionGrantedBy.full_name ||
+                    `${profile.judgePermissionGrantedBy.first_name || ''} ${profile.judgePermissionGrantedBy.last_name || ''}`.trim() ||
+                    'Unknown',
+            }
+          : null,
+        expirationDate: profile.judgeCertificationExpires || null,
+        judgeRecord: judgeRecord[0]
+          ? {
+              id: judgeRecord[0].id,
+              level: judgeRecord[0].level,
+              isActive: judgeRecord[0].is_active,
+            }
+          : null,
+        application: judgeApplication[0]
+          ? {
+              id: judgeApplication[0].id,
+              status: judgeApplication[0].status,
+              submittedAt: judgeApplication[0].application_date,
+            }
+          : null,
+      },
+      eventDirector: {
+        permissionEnabled: profile.canApplyEventDirector,
+        status: edStatus,
+        grantedAt: profile.edPermissionGrantedAt || null,
+        grantedBy: profile.edPermissionGrantedBy
+          ? {
+              id: profile.edPermissionGrantedBy.id,
+              name: profile.edPermissionGrantedBy.full_name ||
+                    `${profile.edPermissionGrantedBy.first_name || ''} ${profile.edPermissionGrantedBy.last_name || ''}`.trim() ||
+                    'Unknown',
+            }
+          : null,
+        expirationDate: profile.edCertificationExpires || null,
+        edRecord: edRecord[0]
+          ? {
+              id: edRecord[0].id,
+              isActive: edRecord[0].is_active,
+            }
+          : null,
+        application: edApplication[0]
+          ? {
+              id: edApplication[0].id,
+              status: edApplication[0].status,
+              submittedAt: edApplication[0].application_date,
+            }
+          : null,
+      },
+      eventsJudged: eventsJudged.map((e: any) => ({
+        id: e.id,
+        name: e.name,
+        date: e.date,
+      })),
+      eventsDirected: eventsDirected.map((e: any) => ({
+        id: e.id,
+        name: e.name,
+        date: e.date,
+      })),
+    };
+  }
+
+  /**
+   * Calculates the display status for judge permissions
+   */
+  private calculateJudgeStatus(
+    permissionEnabled: boolean,
+    certificationExpires: Date | undefined,
+    judgeRecord: any,
+    application: any,
+  ): string {
+    if (!permissionEnabled) return 'Disabled';
+    if (certificationExpires && certificationExpires < new Date()) return 'Expired';
+    if (judgeRecord?.is_active) return 'Approved';
+    if (application?.status === 'pending' || application?.status === 'under_review') return 'Pending';
+    if (application?.status === 'rejected') return 'Rejected';
+    return 'Not Applied';
+  }
+
+  /**
+   * Calculates the display status for event director permissions
+   */
+  private calculateEdStatus(
+    permissionEnabled: boolean,
+    certificationExpires: Date | undefined,
+    edRecord: any,
+    application: any,
+  ): string {
+    if (!permissionEnabled) return 'Disabled';
+    if (certificationExpires && certificationExpires < new Date()) return 'Expired';
+    if (edRecord?.is_active) return 'Approved';
+    if (application?.status === 'pending' || application?.status === 'under_review') return 'Pending';
+    if (application?.status === 'rejected') return 'Rejected';
+    return 'Not Applied';
   }
 }

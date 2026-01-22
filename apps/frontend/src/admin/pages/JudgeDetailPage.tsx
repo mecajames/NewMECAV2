@@ -3,7 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, UserCheck, UserX, Star, MapPin, Calendar, Award, Pencil } from 'lucide-react';
 import { getJudge, updateJudge } from '@/judges/judges.api-client';
 import { JudgeLevel, TraineeType } from '@newmeca/shared';
+import { RatingEntityType } from '@/shared/enums';
 import TrainingRecordsSection from '@/admin/components/TrainingRecordsSection';
+import EventHistorySection from '@/admin/components/EventHistorySection';
+import RatingsAndReviewsSection from '@/admin/components/RatingsAndReviewsSection';
 
 const JUDGE_LEVELS = [
   { value: 'in_training', label: 'In Training' },
@@ -295,6 +298,9 @@ export default function JudgeDetailPage() {
                 </p>
               )}
             </div>
+
+            {/* Event History */}
+            {id && <EventHistorySection personId={id} personType="judge" />}
           </div>
 
           {/* Sidebar */}
@@ -323,6 +329,9 @@ export default function JudgeDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Ratings & Reviews */}
+            {id && <RatingsAndReviewsSection entityType={RatingEntityType.JUDGE} entityId={id} />}
 
             {/* Timeline */}
             <div className="bg-slate-800 rounded-lg p-6">

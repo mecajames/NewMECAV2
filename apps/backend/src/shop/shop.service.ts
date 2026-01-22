@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager, wrap } from '@mikro-orm/core';
 import {
   ShopProductCategory,
@@ -12,6 +12,11 @@ import { ShopProduct } from './entities/shop-product.entity';
 import { ShopOrder } from './entities/shop-order.entity';
 import { ShopOrderItem } from './entities/shop-order-item.entity';
 import { ShippingService } from './shipping.service';
+import {
+  EmailService,
+  ShopOrderItemDto,
+  ShopAddressDto,
+} from '../email/email.service';
 
 interface CartItem {
   productId: string;
@@ -27,10 +32,13 @@ interface OrderTotals {
 
 @Injectable()
 export class ShopService {
+  private readonly logger = new Logger(ShopService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly shippingService: ShippingService,
+    private readonly emailService: EmailService,
   ) {}
 
   // =============================================================================
@@ -237,7 +245,12 @@ export class ShopService {
     await em.flush();
 
     // Reload with items
-    return this.findOrderById(order.id);
+    const fullOrder = await this.findOrderById(order.id);
+
+    // Send order confirmation email
+    await this.sendOrderConfirmationEmail(fullOrder, products, data.items);
+
+    return fullOrder;
   }
 
   async findOrderById(id: string): Promise<ShopOrder> {
@@ -306,6 +319,7 @@ export class ShopService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
 
+    const previousStatus = order.status;
     order.status = status;
 
     // Set shipped_at timestamp when marked as shipped
@@ -314,7 +328,19 @@ export class ShopService {
     }
 
     await em.flush();
-    return this.findOrderById(id);
+    const fullOrder = await this.findOrderById(id);
+
+    // Send shipping notification email when order is shipped
+    if (status === ShopOrderStatus.SHIPPED && previousStatus !== ShopOrderStatus.SHIPPED) {
+      await this.sendShippingNotificationEmail(fullOrder);
+    }
+
+    // Send delivery confirmation email when order is delivered
+    if (status === ShopOrderStatus.DELIVERED && previousStatus !== ShopOrderStatus.DELIVERED) {
+      await this.sendDeliveryConfirmationEmail(fullOrder);
+    }
+
+    return fullOrder;
   }
 
   async addTrackingNumber(id: string, trackingNumber: string): Promise<ShopOrder> {
@@ -350,6 +376,7 @@ export class ShopService {
   async processPaymentSuccess(
     paymentIntentId: string,
     chargeId: string,
+    last4?: string,
   ): Promise<ShopOrder> {
     const em = this.em.fork();
     const order = await em.findOne(ShopOrder, { stripePaymentIntentId: paymentIntentId });
@@ -365,7 +392,12 @@ export class ShopService {
     await this.decrementStock(em, order.id);
 
     await em.flush();
-    return this.findOrderById(order.id);
+    const fullOrder = await this.findOrderById(order.id);
+
+    // Send payment receipt email
+    await this.sendPaymentReceiptEmail(fullOrder, last4);
+
+    return fullOrder;
   }
 
   async checkStockAvailability(items: CartItem[]): Promise<{
@@ -611,5 +643,154 @@ export class ShopService {
     }
 
     await em.flush();
+  }
+
+  // =============================================================================
+  // EMAIL HELPER METHODS
+  // =============================================================================
+
+  private getCustomerEmail(order: ShopOrder): string | undefined {
+    // Check guest email first, then fall back to user email
+    if (order.guestEmail) return order.guestEmail;
+    if (order.user?.email) return order.user.email;
+    return undefined;
+  }
+
+  private getCustomerName(order: ShopOrder): string | undefined {
+    // Check guest name first, then fall back to user name
+    if (order.guestName) return order.guestName;
+    if (order.user?.first_name) {
+      return order.user.last_name
+        ? `${order.user.first_name} ${order.user.last_name}`
+        : order.user.first_name;
+    }
+    return undefined;
+  }
+
+  private mapOrderItemsToEmailDto(order: ShopOrder): ShopOrderItemDto[] {
+    return order.items.getItems().map(item => ({
+      productName: item.productName,
+      productSku: item.productSku || undefined,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+    }));
+  }
+
+  private mapShippingAddressToEmailDto(address: ShopAddress | null | undefined): ShopAddressDto | undefined {
+    if (!address) return undefined;
+    return {
+      name: address.name,
+      line1: address.line1,
+      line2: address.line2,
+      city: address.city,
+      state: address.state,
+      postalCode: address.postalCode,
+      country: address.country || 'US',
+    };
+  }
+
+  private async sendOrderConfirmationEmail(
+    order: ShopOrder,
+    products: ShopProduct[],
+    cartItems: CartItem[],
+  ): Promise<void> {
+    const email = this.getCustomerEmail(order);
+    if (!email) {
+      this.logger.warn(`Cannot send order confirmation email - no email for order ${order.orderNumber}`);
+      return;
+    }
+
+    try {
+      await this.emailService.sendShopOrderConfirmationEmail({
+        to: email,
+        customerName: this.getCustomerName(order),
+        orderNumber: order.orderNumber,
+        items: this.mapOrderItemsToEmailDto(order),
+        subtotal: Number(order.subtotal),
+        shippingAmount: Number(order.shippingAmount),
+        taxAmount: Number(order.taxAmount),
+        totalAmount: Number(order.totalAmount),
+        shippingAddress: this.mapShippingAddressToEmailDto(order.shippingAddress),
+        shippingMethod: order.shippingMethod,
+        orderDate: order.createdAt,
+      });
+      this.logger.log(`Order confirmation email sent for order ${order.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`Failed to send order confirmation email for order ${order.orderNumber}: ${error}`);
+    }
+  }
+
+  private async sendPaymentReceiptEmail(order: ShopOrder, last4?: string): Promise<void> {
+    const email = this.getCustomerEmail(order);
+    if (!email) {
+      this.logger.warn(`Cannot send payment receipt email - no email for order ${order.orderNumber}`);
+      return;
+    }
+
+    try {
+      await this.emailService.sendShopPaymentReceiptEmail({
+        to: email,
+        customerName: this.getCustomerName(order),
+        orderNumber: order.orderNumber,
+        items: this.mapOrderItemsToEmailDto(order),
+        subtotal: Number(order.subtotal),
+        shippingAmount: Number(order.shippingAmount),
+        taxAmount: Number(order.taxAmount),
+        totalAmount: Number(order.totalAmount),
+        paymentDate: new Date(),
+        last4,
+      });
+      this.logger.log(`Payment receipt email sent for order ${order.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`Failed to send payment receipt email for order ${order.orderNumber}: ${error}`);
+    }
+  }
+
+  private async sendShippingNotificationEmail(order: ShopOrder): Promise<void> {
+    const email = this.getCustomerEmail(order);
+    if (!email) {
+      this.logger.warn(`Cannot send shipping notification email - no email for order ${order.orderNumber}`);
+      return;
+    }
+
+    try {
+      await this.emailService.sendShopShippingNotificationEmail({
+        to: email,
+        customerName: this.getCustomerName(order),
+        orderNumber: order.orderNumber,
+        items: this.mapOrderItemsToEmailDto(order),
+        trackingNumber: order.trackingNumber || undefined,
+        trackingUrl: order.trackingNumber
+          ? `https://track.aftership.com/${order.trackingNumber}`
+          : undefined,
+        shippingAddress: this.mapShippingAddressToEmailDto(order.shippingAddress),
+        shippedDate: order.shippedAt || new Date(),
+      });
+      this.logger.log(`Shipping notification email sent for order ${order.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`Failed to send shipping notification email for order ${order.orderNumber}: ${error}`);
+    }
+  }
+
+  private async sendDeliveryConfirmationEmail(order: ShopOrder): Promise<void> {
+    const email = this.getCustomerEmail(order);
+    if (!email) {
+      this.logger.warn(`Cannot send delivery confirmation email - no email for order ${order.orderNumber}`);
+      return;
+    }
+
+    try {
+      await this.emailService.sendShopDeliveryConfirmationEmail({
+        to: email,
+        customerName: this.getCustomerName(order),
+        orderNumber: order.orderNumber,
+        items: this.mapOrderItemsToEmailDto(order),
+        deliveryDate: new Date(),
+      });
+      this.logger.log(`Delivery confirmation email sent for order ${order.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`Failed to send delivery confirmation email for order ${order.orderNumber}: ${error}`);
+    }
   }
 }

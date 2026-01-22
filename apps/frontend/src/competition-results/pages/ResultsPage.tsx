@@ -5,6 +5,7 @@ import { eventsApi, Event } from '@/events';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { SeasonSelector } from '@/seasons';
+import { SEOHead, useResultsSEO } from '@/shared/seo';
 
 interface GroupedResults {
   [format: string]: {
@@ -18,6 +19,7 @@ type SortDirection = 'asc' | 'desc';
 export default function ResultsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const seoProps = useResultsSEO();
 
   // Get event ID from URL query params
   const eventIdFromUrl = searchParams.get('eventId');
@@ -293,10 +295,10 @@ export default function ResultsPage() {
           comparison = (a.mecaId || a.meca_id || '').localeCompare(b.mecaId || b.meca_id || '');
           break;
         case 'wattage':
-          comparison = (parseFloat(a.wattage || '0')) - (parseFloat(b.wattage || '0'));
+          comparison = (parseFloat(String(a.wattage || '0'))) - (parseFloat(String(b.wattage || '0')));
           break;
         case 'frequency':
-          comparison = (parseFloat(a.frequency || '0')) - (parseFloat(b.frequency || '0'));
+          comparison = (parseFloat(String(a.frequency || '0'))) - (parseFloat(String(b.frequency || '0')));
           break;
         case 'score':
           comparison = (a.score || 0) - (b.score || 0);
@@ -345,6 +347,7 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+      <SEOHead {...seoProps} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-4">Competition Results</h1>
@@ -359,7 +362,7 @@ export default function ResultsPage() {
             selectedSeasonId={selectedSeasonId}
             onSeasonChange={setSelectedSeasonId}
             showAllOption={true}
-            autoSelectCurrent={!eventIdFromUrl}
+            autoSelectCurrent={true}
           />
         </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Users, Trophy, Plus, CreditCard as Edit, QrCode } from 'lucide-react';
+import { Calendar, Users, Trophy, Plus, QrCode } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { supabase, Event } from '@/lib/supabase';
 

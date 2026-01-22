@@ -5,6 +5,8 @@ import { eventsApi, Event } from '@/events';
 import { seasonsApi, Season } from '@/seasons';
 import { countries, getStatesForCountry } from '@/utils/countries';
 import { getStorageUrl } from '@/lib/storage';
+import { EventsBanner } from '@/banners';
+import { SEOHead, useEventsListSEO } from '@/shared/seo';
 
 type EventStatus = 'upcoming' | 'completed';
 
@@ -161,8 +163,13 @@ export default function EventsPage() {
     }
   };
 
+  // SEO
+  const seoData = useEventsListSEO();
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <>
+      <SEOHead {...seoData} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-4">Competition Events</h1>
@@ -385,13 +392,25 @@ export default function EventsPage() {
           </div>
         </div>
 
+        {/* Banner Ad - Below filters, above events */}
+        <EventsBanner />
+
         {loading ? (
           <div className="text-center py-20">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
           </div>
         ) : filteredEvents.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredEvents.map((event) => (
+          <div className="space-y-6">
+            {/* Render events in chunks of 4 (2 rows) with banners between */}
+            {Array.from({ length: Math.ceil(filteredEvents.length / 4) }).map((_, chunkIndex) => {
+              const startIdx = chunkIndex * 4;
+              const chunkEvents = filteredEvents.slice(startIdx, startIdx + 4);
+
+              return (
+                <div key={`chunk-${chunkIndex}`}>
+                  {/* Event grid for this chunk */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {chunkEvents.map((event) => (
               <div
                 key={event.id}
                 className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1"
@@ -552,7 +571,18 @@ export default function EventsPage() {
                   )}
                 </div>
               </div>
-            ))}
+                    ))}
+                  </div>
+
+                  {/* Show banner after every 2 rows, but not after the last chunk */}
+                  {chunkIndex < Math.ceil(filteredEvents.length / 4) - 1 && (
+                    <div className="mt-6">
+                      <EventsBanner />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-20 bg-slate-800 rounded-xl">
@@ -561,6 +591,7 @@ export default function EventsPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

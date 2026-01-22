@@ -31,8 +31,17 @@ export class InvoicesController {
   ) {}
 
   /**
+   * Get all invoices with filters (admin)
+   */
+  @Get()
+  async findAll(@Query() query: InvoiceListQuery) {
+    const validatedQuery = InvoiceListQuerySchema.parse(query);
+    return this.invoicesService.findAll(validatedQuery);
+  }
+
+  /**
    * Get invoice for public payment page (no auth required)
-   * Returns limited info for security
+   * Note: Must be before :id route
    */
   @Get('pay/:id')
   async getInvoiceForPayment(@Param('id') id: string) {
@@ -65,12 +74,43 @@ export class InvoicesController {
   }
 
   /**
-   * Get all invoices with filters (admin)
+   * Get invoices by user ID
+   * Note: Must be before :id route
    */
-  @Get()
-  async findAll(@Query() query: InvoiceListQuery) {
-    const validatedQuery = InvoiceListQuerySchema.parse(query);
-    return this.invoicesService.findAll(validatedQuery);
+  @Get('user/:userId')
+  async findByUser(
+    @Param('userId') userId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.invoicesService.findByUser(userId, page, limit);
+  }
+
+  /**
+   * Get invoice status counts (admin dashboard)
+   * Note: Must be before :id route
+   */
+  @Get('stats/counts')
+  async getStatusCounts() {
+    return this.invoicesService.getStatusCounts();
+  }
+
+  /**
+   * Get recent invoices (admin dashboard)
+   * Note: Must be before :id route
+   */
+  @Get('stats/recent')
+  async getRecentInvoices(@Query('limit') limit?: number) {
+    return this.invoicesService.getRecentInvoices(limit);
+  }
+
+  /**
+   * Get unpaid invoices total
+   * Note: Must be before :id route
+   */
+  @Get('stats/unpaid')
+  async getUnpaidTotal() {
+    return this.invoicesService.getUnpaidTotal();
   }
 
   /**
@@ -105,18 +145,6 @@ export class InvoicesController {
       `attachment; filename="${invoice.invoiceNumber}.html"`,
     );
     res.send(html);
-  }
-
-  /**
-   * Get invoices by user ID
-   */
-  @Get('user/:userId')
-  async findByUser(
-    @Param('userId') userId: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.invoicesService.findByUser(userId, page, limit);
   }
 
   /**
@@ -184,30 +212,6 @@ export class InvoicesController {
   @HttpCode(HttpStatus.OK)
   async cancel(@Param('id') id: string, @Body() body: { reason?: string }) {
     return this.invoicesService.cancel(id, body.reason);
-  }
-
-  /**
-   * Get invoice status counts (admin dashboard)
-   */
-  @Get('stats/counts')
-  async getStatusCounts() {
-    return this.invoicesService.getStatusCounts();
-  }
-
-  /**
-   * Get recent invoices (admin dashboard)
-   */
-  @Get('stats/recent')
-  async getRecentInvoices(@Query('limit') limit?: number) {
-    return this.invoicesService.getRecentInvoices(limit);
-  }
-
-  /**
-   * Get unpaid invoices total
-   */
-  @Get('stats/unpaid')
-  async getUnpaidTotal() {
-    return this.invoicesService.getUnpaidTotal();
   }
 
   /**

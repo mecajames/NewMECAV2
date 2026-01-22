@@ -265,4 +265,63 @@ export class ProfilesController {
     await this.requireAdmin(authHeader);
     return this.memberStatsService.getMemberStats(id);
   }
+
+  // ===== Judge and Event Director Permission Endpoints =====
+
+  /**
+   * Get Judge and Event Director status for a profile (admin only)
+   * Returns combined status info including permissions, applications, records, and event history
+   */
+  @Get(':id/judge-ed-status')
+  async getJudgeEdStatus(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.profilesService.getJudgeEdStatus(id);
+  }
+
+  /**
+   * Update judge permission for a profile (admin only)
+   */
+  @Put(':id/judge-permission')
+  async updateJudgePermission(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Body() body: {
+      enabled: boolean;
+      autoComplete?: boolean;
+      expirationDate?: string | null;
+      judgeLevel?: string;
+    },
+  ) {
+    const { profile: adminProfile } = await this.requireAdmin(authHeader);
+    return this.profilesService.updateJudgePermission(id, adminProfile.id, {
+      enabled: body.enabled,
+      autoComplete: body.autoComplete,
+      expirationDate: body.expirationDate ? new Date(body.expirationDate) : null,
+      judgeLevel: body.judgeLevel,
+    });
+  }
+
+  /**
+   * Update event director permission for a profile (admin only)
+   */
+  @Put(':id/ed-permission')
+  async updateEventDirectorPermission(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Body() body: {
+      enabled: boolean;
+      autoComplete?: boolean;
+      expirationDate?: string | null;
+    },
+  ) {
+    const { profile: adminProfile } = await this.requireAdmin(authHeader);
+    return this.profilesService.updateEventDirectorPermission(id, adminProfile.id, {
+      enabled: body.enabled,
+      autoComplete: body.autoComplete,
+      expirationDate: body.expirationDate ? new Date(body.expirationDate) : null,
+    });
+  }
 }

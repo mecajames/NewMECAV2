@@ -2,30 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth';
 import { createJudgeApplication, getMyJudgeApplication, getMyJudgeProfile } from '../judges.api-client';
-import type { CreateJudgeApplicationDto, JudgeSpecialty } from '@newmeca/shared';
+import type { CreateJudgeApplicationDto } from '@newmeca/shared';
+import { JudgeSpecialty, WeekendAvailability, ApplicationStatus } from '@newmeca/shared';
 import CountrySelect from '@/shared/fields/CountrySelect';
 import StateProvinceSelect from '@/shared/fields/StateProvinceSelect';
 import { getPostalCodeLabel, getStateLabel } from '@/utils/countries';
-
-// Define string constants matching the enum values to avoid Rollup bundling issues
-const JUDGE_SPECIALTY = {
-  SQL: 'sql' as const,
-  SPL: 'spl' as const,
-  BOTH: 'both' as const,
-};
-
-const WEEKEND_AVAILABILITY = {
-  SATURDAY: 'saturday' as const,
-  SUNDAY: 'sunday' as const,
-  BOTH: 'both' as const,
-};
-
-const APPLICATION_STATUS = {
-  PENDING: 'pending' as const,
-  UNDER_REVIEW: 'under_review' as const,
-  APPROVED: 'approved' as const,
-  REJECTED: 'rejected' as const,
-};
 
 type ApplicationStep = 'personal' | 'location' | 'experience' | 'specialty' | 'essays' | 'references' | 'acknowledgments' | 'review';
 
@@ -51,7 +32,7 @@ interface Reference {
 }
 
 export default function JudgeApplicationPage() {
-  const { user: _user } = useAuth();
+  const { user: _user, profile } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<ApplicationStep>('personal');
   const [loading, setLoading] = useState(true);
@@ -59,6 +40,7 @@ export default function JudgeApplicationPage() {
   const [error, setError] = useState<string | null>(null);
   const [existingApplication, setExistingApplication] = useState<any>(null);
   const [isJudge, setIsJudge] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -77,7 +59,7 @@ export default function JudgeApplicationPage() {
     zip: '',
     travel_radius: '',
     additional_regions: [] as string[],
-    weekend_availability: WEEKEND_AVAILABILITY.BOTH,
+    weekend_availability: WeekendAvailability.BOTH,
     availability_notes: '',
 
     // Experience
@@ -89,7 +71,7 @@ export default function JudgeApplicationPage() {
     judging_experience: '',
 
     // Specialty
-    specialty: JUDGE_SPECIALTY.BOTH as JudgeSpecialty,
+    specialty: JudgeSpecialty.BOTH,
     sub_specialties: [] as string[],
     additional_skills: '',
 
@@ -112,8 +94,14 @@ export default function JudgeApplicationPage() {
   });
 
   useEffect(() => {
+    // Check if user has permission to access judge features
+    if (profile && !(profile as any).can_apply_judge) {
+      setPermissionDenied(true);
+      setLoading(false);
+      return;
+    }
     checkExistingApplication();
-  }, []);
+  }, [profile]);
 
   async function checkExistingApplication() {
     setLoading(true);
@@ -181,6 +169,31 @@ export default function JudgeApplicationPage() {
     }
   };
 
+  // Show permission denied message if user doesn't have judge permission
+  if (permissionDenied) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="bg-slate-800 rounded-xl p-8 max-w-md text-center">
+          <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
+          <p className="text-slate-400 mb-6">
+            You don't currently have permission to access judge features. Please contact MECA administration if you believe this is an error.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -229,19 +242,19 @@ export default function JudgeApplicationPage() {
             </span>
           </div>
 
-          {existingApplication.status === APPLICATION_STATUS.PENDING && (
+          {existingApplication.status === ApplicationStatus.PENDING && (
             <p className="text-slate-300 mb-4">
               Your application is pending review. We'll notify you via email once it has been reviewed.
             </p>
           )}
 
-          {existingApplication.status === APPLICATION_STATUS.UNDER_REVIEW && (
+          {existingApplication.status === ApplicationStatus.UNDER_REVIEW && (
             <p className="text-slate-300 mb-4">
               Your application is currently under review. Thank you for your patience.
             </p>
           )}
 
-          {existingApplication.status === APPLICATION_STATUS.REJECTED && (
+          {existingApplication.status === ApplicationStatus.REJECTED && (
             <p className="text-slate-300 mb-4">
               Unfortunately, your application was not approved at this time.
               Please contact support for more information.
@@ -440,9 +453,9 @@ export default function JudgeApplicationPage() {
                   className="w-full bg-slate-700 text-white px-4 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
                   required
                 >
-                  <option value={WEEKEND_AVAILABILITY.BOTH}>Both Saturday & Sunday</option>
-                  <option value={WEEKEND_AVAILABILITY.SATURDAY}>Saturday Only</option>
-                  <option value={WEEKEND_AVAILABILITY.SUNDAY}>Sunday Only</option>
+                  <option value={WeekendAvailability.BOTH}>Both Saturday & Sunday</option>
+                  <option value={WeekendAvailability.SATURDAY}>Saturday Only</option>
+                  <option value={WeekendAvailability.SUNDAY}>Sunday Only</option>
                 </select>
               </div>
 
@@ -525,9 +538,9 @@ export default function JudgeApplicationPage() {
                   className="w-full bg-slate-700 text-white px-4 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
                   required
                 >
-                  <option value={JUDGE_SPECIALTY.BOTH}>Both SQL & SPL</option>
-                  <option value={JUDGE_SPECIALTY.SQL}>SQL (Sound Quality League)</option>
-                  <option value={JUDGE_SPECIALTY.SPL}>SPL (Sound Pressure League)</option>
+                  <option value={JudgeSpecialty.BOTH}>Both SQL & SPL</option>
+                  <option value={JudgeSpecialty.SQL}>SQL (Sound Quality League)</option>
+                  <option value={JudgeSpecialty.SPL}>SPL (Sound Pressure League)</option>
                 </select>
               </div>
 

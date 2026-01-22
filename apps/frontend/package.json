@@ -26,7 +26,8 @@
     "xlsx": "^0.18.5",
     "@newmeca/shared": "workspace:*",
     "@yudiel/react-qr-scanner": "~2.5.0",
-    "dompurify": "~3.3.1"
+    "dompurify": "~3.3.1",
+    "react-helmet-async": "~2.0.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

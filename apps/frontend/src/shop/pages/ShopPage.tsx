@@ -5,6 +5,7 @@ import { ShopProduct, ShopProductCategory } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
 import { ProductGrid } from '../components/ProductGrid';
 import { useCart } from '../context/CartContext';
+import { SEOHead, useShopSEO } from '@/shared/seo';
 
 const categoryLabels: Record<ShopProductCategory, string> = {
   [ShopProductCategory.MEASURING_TOOLS]: 'Measuring Tools',
@@ -21,6 +22,7 @@ export function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState<ShopProductCategory | undefined>();
   const [loading, setLoading] = useState(true);
   const { itemCount, subtotal } = useCart();
+  const seoProps = useShopSEO();
 
   useEffect(() => {
     loadInitialData();
@@ -57,6 +59,7 @@ export function ShopPage() {
 
   return (
     <div className="min-h-screen bg-slate-900">
+      <SEOHead {...seoProps} />
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">

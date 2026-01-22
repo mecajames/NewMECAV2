@@ -22,12 +22,9 @@ export class Order {
   @Property({ type: 'varchar', length: 50, unique: true, fieldName: 'order_number' })
   orderNumber!: string;
 
-  @ManyToOne(() => Profile, { nullable: true, fieldName: 'user_id' })
-  user?: Profile;
-
-  // Legacy member_id field - kept for backwards compatibility with RLS policies
-  @ManyToOne(() => Profile, { fieldName: 'member_id' })
-  member!: Profile;
+  // User who placed the order (maps to member_id in database)
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'member_id' })
+  member?: Profile;
 
   @Enum(() => OrderStatus)
   @Property({ fieldName: 'status' })

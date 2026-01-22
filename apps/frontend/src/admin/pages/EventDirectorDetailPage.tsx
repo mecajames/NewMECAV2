@@ -3,7 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, UserCheck, UserX, Star, MapPin, Calendar, Award, Pencil } from 'lucide-react';
 import { getEventDirector, updateEventDirector } from '@/event-directors/event-directors.api-client';
 import { TraineeType } from '@newmeca/shared';
+import { RatingEntityType } from '@/shared/enums';
 import TrainingRecordsSection from '@/admin/components/TrainingRecordsSection';
+import EventHistorySection from '@/admin/components/EventHistorySection';
+import RatingsAndReviewsSection from '@/admin/components/RatingsAndReviewsSection';
 
 export default function EventDirectorDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -263,6 +266,9 @@ export default function EventDirectorDetailPage() {
                 </p>
               )}
             </div>
+
+            {/* Event History */}
+            {id && <EventHistorySection personId={id} personType="event_director" />}
           </div>
 
           {/* Sidebar */}
@@ -291,6 +297,9 @@ export default function EventDirectorDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Ratings & Reviews */}
+            {id && <RatingsAndReviewsSection entityType={RatingEntityType.EVENT_DIRECTOR} entityId={id} />}
 
             {/* Timeline */}
             <div className="bg-slate-800 rounded-lg p-6">

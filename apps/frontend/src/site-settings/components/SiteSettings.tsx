@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { mediaFilesApi, MediaFile } from '@/media-files';
 import { getStorageUrl } from '@/lib/storage';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
+import { scheduledTasksApi } from '@/scheduled-tasks';
 
 export default function SiteSettings() {
   const { user } = useAuth();
@@ -14,6 +15,12 @@ export default function SiteSettings() {
   const [saving, setSaving] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState<number | null>(null);
+  const [triggeringMembershipEmails, setTriggeringMembershipEmails] = useState(false);
+  const [triggeringEventReminders, setTriggeringEventReminders] = useState(false);
+  const [updatingEventStatuses, setUpdatingEventStatuses] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [taskResult, setTaskResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [formData, setFormData] = useState({
     hero_image_urls: [] as string[],
@@ -298,6 +305,86 @@ export default function SiteSettings() {
       setCurrentImageIndex(index);
     }
     setShowMediaPicker(true);
+  };
+
+  const handleTriggerMembershipEmails = async () => {
+    setTriggeringMembershipEmails(true);
+    setTaskResult(null);
+    try {
+      const result = await scheduledTasksApi.triggerMembershipExpiration();
+      setTaskResult({
+        type: result.success ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (error: any) {
+      setTaskResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to trigger membership emails',
+      });
+    } finally {
+      setTriggeringMembershipEmails(false);
+    }
+  };
+
+  const handleTriggerEventReminders = async () => {
+    setTriggeringEventReminders(true);
+    setTaskResult(null);
+    try {
+      const result = await scheduledTasksApi.triggerEventReminders();
+      setTaskResult({
+        type: result.success ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (error: any) {
+      setTaskResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to trigger event reminders',
+      });
+    } finally {
+      setTriggeringEventReminders(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress) {
+      setTaskResult({ type: 'error', message: 'Please enter an email address' });
+      return;
+    }
+    setSendingTestEmail(true);
+    setTaskResult(null);
+    try {
+      const result = await scheduledTasksApi.sendTestEmail(testEmailAddress);
+      setTaskResult({
+        type: result.success ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (error: any) {
+      setTaskResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to send test email',
+      });
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
+  const handleUpdateEventStatuses = async () => {
+    setUpdatingEventStatuses(true);
+    setTaskResult(null);
+    try {
+      const result = await scheduledTasksApi.triggerEventStatusUpdates();
+      setTaskResult({
+        type: result.success ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (error: any) {
+      setTaskResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to update event statuses',
+      });
+    } finally {
+      setUpdatingEventStatuses(false);
+    }
   };
 
   if (loading) {
@@ -910,6 +997,257 @@ export default function SiteSettings() {
 
       {/* QuickBooks Integration */}
       <QuickBooksSettings />
+
+      {/* Scheduled Tasks & System Settings */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
+          <Clock className="h-6 w-6 text-orange-500" />
+          <div>
+            <h3 className="text-xl font-semibold text-white">Scheduled Tasks</h3>
+            <p className="text-sm text-gray-400">
+              Automated emails run daily at 8:00 AM. Use these buttons to trigger manually if needed.
+            </p>
+          </div>
+        </div>
+
+        {/* Task Result Alert */}
+        {taskResult && (
+          <div className={`flex items-center gap-3 p-4 rounded-lg ${
+            taskResult.type === 'success' ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'
+          }`}>
+            {taskResult.type === 'success' ? (
+              <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0" />
+            )}
+            <p className={taskResult.type === 'success' ? 'text-green-300' : 'text-red-300'}>
+              {taskResult.message}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Membership Expiration Emails */}
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-orange-500" />
+              <h4 className="font-semibold text-white">Membership Expiration Emails</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Sends expiration warnings (30-day, 7-day) and expired notifications to members.
+            </p>
+            <button
+              onClick={handleTriggerMembershipEmails}
+              disabled={triggeringMembershipEmails}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {triggeringMembershipEmails ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4" />
+                  Trigger Now
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Event Reminder Emails */}
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-blue-500" />
+              <h4 className="font-semibold text-white">Event Reminder Emails</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Sends reminder emails to all registrants for events happening tomorrow.
+            </p>
+            <button
+              onClick={handleTriggerEventReminders}
+              disabled={triggeringEventReminders}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {triggeringEventReminders ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Calendar className="h-4 w-4" />
+                  Trigger Now
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Event Status Updates */}
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-purple-500" />
+              <h4 className="font-semibold text-white">Event Status Updates</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Auto-updates event statuses: upcoming → ongoing → completed based on date.
+            </p>
+            <button
+              onClick={handleUpdateEventStatuses}
+              disabled={updatingEventStatuses}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {updatingEventStatuses ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  Update Now
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Test Email */}
+        <div className="border-t border-slate-700 pt-4">
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-green-500" />
+              <h4 className="font-semibold text-white">Test Email Configuration</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Send a test email to verify your email settings are working correctly.
+              Check <span className="text-green-400">http://localhost:54324</span> (Supabase Inbucket) for local emails.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                placeholder="Enter email address"
+                className="flex-1 px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <button
+                onClick={handleSendTestEmail}
+                disabled={sendingTestEmail}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+              >
+                {sendingTestEmail ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4" />
+                    Send Test
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Production Environment Settings */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
+          <Server className="h-6 w-6 text-purple-500" />
+          <div>
+            <h3 className="text-xl font-semibold text-white">Production Environment Setup</h3>
+            <p className="text-sm text-gray-400">
+              Required environment variables for AWS Lightsail production deployment
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
+          <p className="text-sm text-gray-400 mb-3">
+            Add these environment variables to your AWS Lightsail container or .env file:
+          </p>
+          <pre className="text-sm text-gray-300 font-mono whitespace-pre-wrap">
+{`# ===========================================
+# EMAIL CONFIGURATION (Required for emails)
+# ===========================================
+
+# For Production - Use Mailgun
+MAILGUN_API_KEY=your-mailgun-api-key
+MAILGUN_DOMAIN=mg.yourdomain.com
+EMAIL_FROM=noreply@yourdomain.com
+
+# ===========================================
+# APPLICATION URLs
+# ===========================================
+
+# Frontend URL (used in email links)
+FRONTEND_URL=https://www.maborc.com
+
+# ===========================================
+# SCHEDULED TASKS
+# ===========================================
+
+# Cron jobs run automatically when server starts:
+# - Membership expiration emails: Daily at 8:00 AM
+# - Event reminder emails: Daily at 8:00 AM
+
+# No additional configuration needed - runs within NestJS
+
+# ===========================================
+# OTHER PRODUCTION SETTINGS
+# ===========================================
+
+# Database
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Stripe
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# QuickBooks (if using)
+QUICKBOOKS_CLIENT_ID=your-client-id
+QUICKBOOKS_CLIENT_SECRET=your-client-secret
+QUICKBOOKS_REDIRECT_URI=https://www.maborc.com/api/quickbooks/callback
+QUICKBOOKS_ENVIRONMENT=production`}
+          </pre>
+        </div>
+
+        <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+            <div className="space-y-2">
+              <p className="text-blue-300 font-medium">Mailgun Setup Instructions</p>
+              <ol className="text-sm text-blue-200/80 list-decimal list-inside space-y-1">
+                <li>Create a Mailgun account at <span className="text-blue-400">mailgun.com</span></li>
+                <li>Add and verify your domain (e.g., mg.maborc.com)</li>
+                <li>Get your API key from API Security settings</li>
+                <li>Set <code className="bg-slate-700 px-1 rounded">MAILGUN_API_KEY</code> and <code className="bg-slate-700 px-1 rounded">MAILGUN_DOMAIN</code></li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 flex-shrink-0" />
+            <div className="space-y-2">
+              <p className="text-green-300 font-medium">Local Development</p>
+              <p className="text-sm text-green-200/80">
+                In development, emails are captured by Mailpit (included with Supabase local).
+                View sent emails at <span className="text-green-400">http://localhost:8025</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Media Picker Modal */}
       {showMediaPicker && (

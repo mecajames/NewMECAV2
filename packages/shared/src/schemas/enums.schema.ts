@@ -94,6 +94,16 @@ export enum EventType {
   JUDGES_POINT = 'judges_point',
 }
 
+// Multi-day event results mode
+// - SEPARATE: Each day's results are calculated independently (default)
+// - COMBINED_SCORE: Sum scores across days, determine placement from total, then calculate points
+// - COMBINED_POINTS: Each day calculates points separately, total points are summed
+export enum MultiDayResultsMode {
+  SEPARATE = 'separate',
+  COMBINED_SCORE = 'combined_score',
+  COMBINED_POINTS = 'combined_points',
+}
+
 export enum PaymentMethod {
   STRIPE = 'stripe',
   PAYPAL = 'paypal',
@@ -386,3 +396,6 @@ export const WeekendAvailabilitySchema = z.nativeEnum(WeekendAvailability);
 export const TrainingTypeSchema = z.nativeEnum(TrainingType);
 export const TraineeTypeSchema = z.nativeEnum(TraineeType);
 export const TrainingResultSchema = z.nativeEnum(TrainingResult);
+
+// Multi-Day Event Schemas
+export const MultiDayResultsModeSchema = z.nativeEnum(MultiDayResultsMode);

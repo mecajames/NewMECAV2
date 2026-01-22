@@ -8,6 +8,7 @@ import { MecaIdService } from './meca-id.service';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { EmailService } from '../email/email.service';
 
 // DTO for creating a secondary membership
 export interface CreateSecondaryMembershipDto {
@@ -76,6 +77,7 @@ export class MasterSecondaryService {
     private readonly em: EntityManager,
     private readonly mecaIdService: MecaIdService,
     private readonly supabaseAdminService: SupabaseAdminService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -295,7 +297,7 @@ export class MasterSecondaryService {
     const em = this.em.fork();
 
     const secondary = await em.findOne(Membership, { id: secondaryMembershipId }, {
-      populate: ['masterMembership', 'user'],
+      populate: ['masterMembership', 'masterMembership.user', 'user', 'membershipTypeConfig'],
     });
 
     if (!secondary) {
@@ -318,6 +320,30 @@ export class MasterSecondaryService {
     await em.flush();
 
     this.logger.log(`Marked secondary membership ${secondaryMembershipId} as paid with MECA ID ${secondary.mecaId}`);
+
+    // Send welcome email to secondary member
+    try {
+      const secondaryProfile = secondary.user;
+      const masterProfile = secondary.masterMembership?.user;
+      const membershipConfig = secondary.membershipTypeConfig;
+
+      // Only send if secondary has their own valid email (not a placeholder)
+      if (secondaryProfile?.email && !secondaryProfile.email.includes('@placeholder.meca.local')) {
+        await this.emailService.sendSecondaryMemberWelcomeEmail({
+          to: secondaryProfile.email,
+          secondaryMemberName: secondary.competitorName || secondaryProfile.full_name || secondaryProfile.first_name || 'Member',
+          mecaId: secondary.mecaId!,
+          membershipType: membershipConfig?.name || 'MECA Membership',
+          masterMemberName: masterProfile?.full_name || masterProfile?.first_name || 'Primary Member',
+          expiryDate: secondary.endDate!,
+        });
+        this.logger.log(`Sent secondary member welcome email for membership ${secondaryMembershipId} to ${secondaryProfile.email}`);
+      }
+    } catch (emailError) {
+      this.logger.error(`Failed to send secondary member welcome email for membership ${secondaryMembershipId}:`, emailError);
+      // Don't fail the payment marking if email fails
+    }
+
     return secondary;
   }
 

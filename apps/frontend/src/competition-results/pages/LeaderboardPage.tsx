@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Medal, Award, TrendingUp, Filter } from 'lucide-react';
+import { Trophy, TrendingUp, Filter, Medal } from 'lucide-react';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
-import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { eventsApi } from '@/events';
 import { SeasonSelector } from '@/seasons';
+import { SEOHead, useLeaderboardSEO } from '@/shared/seo';
 
 interface LeaderboardEntry {
   competitor_id: string;
@@ -22,8 +22,6 @@ interface LeaderboardEntry {
 
 type RankByType = 'points' | 'score';
 
-const FORMATS = ['SPL', 'SQL', 'SSI', 'MK'];
-
 export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
@@ -31,10 +29,11 @@ export default function LeaderboardPage() {
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
   const [rankBy, setRankBy] = useState<RankByType>('points');
   const [classes, setClasses] = useState<string[]>([]);
-  const [formats, setFormats] = useState<string[]>([]);
+  const [_formats, setFormats] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [mostEventsAttended, setMostEventsAttended] = useState<LeaderboardEntry[]>([]);
   const [highestSPLScores, setHighestSPLScores] = useState<any[]>([]);
+  const seoProps = useLeaderboardSEO();
 
   useEffect(() => {
     fetchLeaderboard();
@@ -223,18 +222,6 @@ export default function LeaderboardPage() {
     setLoading(false);
   };
 
-  const getMedalColor = (rank: number) => {
-    if (rank === 1) return 'from-yellow-400 to-yellow-600';
-    if (rank === 2) return 'from-gray-300 to-gray-500';
-    if (rank === 3) return 'from-orange-400 to-orange-600';
-    return 'from-slate-600 to-slate-700';
-  };
-
-  const getMedalIcon = (rank: number) => {
-    if (rank <= 3) return <Medal className="h-8 w-8 text-white" />;
-    return <span className="text-2xl font-bold text-white">{rank}</span>;
-  };
-
   const getMecaIdDisplay = (mecaId?: string, membershipExpiry?: string) => {
     // Non-member
     if (!mecaId || mecaId === '999999') {
@@ -256,6 +243,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+      <SEOHead {...seoProps} />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-yellow-400 to-orange-600 rounded-full mb-4">

@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Points Configuration Guide - MECA Documentation</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      color: #f97316;
+      font-size: 2rem;
+    }
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 40px;
+    }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #f97316;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .section {
+      background: #334155;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    h2 {
+      color: #f97316;
+      font-size: 1.4rem;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #475569;
+    }
+    h3 {
+      color: #22c55e;
+      font-size: 1.1rem;
+      margin: 16px 0 12px 0;
+    }
+    p {
+      margin-bottom: 12px;
+    }
+    ul, ol {
+      margin-left: 24px;
+      margin-bottom: 12px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .highlight {
+      background: #475569;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #f97316;
+    }
+    .status-box {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin: 4px;
+    }
+    .status-1x {
+      background: #f97316;
+      color: #fff;
+    }
+    .status-2x {
+      background: #eab308;
+      color: #1a1a1a;
+    }
+    .status-3x {
+      background: #22c55e;
+      color: #052e16;
+    }
+    .status-4x {
+      background: #a855f7;
+      color: #fff;
+    }
+    .code-block {
+      background: #1e293b;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .flow-diagram {
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .flow-number {
+      background: #f97316;
+      color: #fff;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .arrow {
+      text-align: center;
+      color: #f97316;
+      font-size: 1.5rem;
+      margin: 8px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #475569;
+    }
+    th {
+      background: #475569;
+      color: #f97316;
+    }
+    tr:nth-child(even) {
+      background: #3d4f63;
+    }
+    .warning {
+      background: #7c2d12;
+      border-left-color: #ef4444;
+    }
+    .info {
+      background: #1e3a5f;
+      border-left-color: #3b82f6;
+    }
+    .success {
+      background: #14532d;
+      border-left-color: #22c55e;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Documentation Index</a>
+
+    <h1>Points Configuration Guide</h1>
+    <p class="subtitle">Admin Guide for Configuring Competition Points Per Season</p>
+
+    <div class="section">
+      <h2>Overview</h2>
+      <p>
+        The Points Configuration system allows MECA administrators to customize how competition points
+        are awarded for each season. This provides flexibility to adjust point values without requiring
+        code changes, and enables different point structures for different seasons.
+      </p>
+
+      <div class="highlight">
+        <strong>Key Features:</strong>
+        <ul style="margin-top: 8px;">
+          <li>Configure base points for standard events (1X, 2X, 3X multipliers)</li>
+          <li>Configure fixed points for 4X championship events</li>
+          <li>Optional extended placement points for 4X events (6th-50th place)</li>
+          <li>Per-season configuration - each season can have different point values</li>
+          <li>Live preview showing calculated points for all multipliers</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Event Types and Multipliers</h2>
+      <p>MECA events have different point multipliers that affect how points are calculated:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Event Type</th>
+            <th>Multiplier</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-box status-1x">1X</span></td>
+            <td>Single Points</td>
+            <td>Standard regional events - base points awarded</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-2x">2X</span></td>
+            <td>Double Points</td>
+            <td>Major regional events - base points multiplied by 2</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-3x">3X</span></td>
+            <td>Triple Points</td>
+            <td>SOUNDFEST and other special events - base points multiplied by 3</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-4x">4X</span></td>
+            <td>Championship</td>
+            <td>SQ, Install, RTA - special fixed point values per placement</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Default Point Values</h2>
+
+      <h3>Standard Events (1X, 2X, 3X)</h3>
+      <p>For standard events, base points are multiplied by the event multiplier:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Placement</th>
+            <th>Base Points</th>
+            <th>1X Event</th>
+            <th>2X Event</th>
+            <th>3X Event</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1st Place</td><td>5</td><td>5 pts</td><td>10 pts</td><td>15 pts</td></tr>
+          <tr><td>2nd Place</td><td>4</td><td>4 pts</td><td>8 pts</td><td>12 pts</td></tr>
+          <tr><td>3rd Place</td><td>3</td><td>3 pts</td><td>6 pts</td><td>9 pts</td></tr>
+          <tr><td>4th Place</td><td>2</td><td>2 pts</td><td>4 pts</td><td>6 pts</td></tr>
+          <tr><td>5th Place</td><td>1</td><td>1 pt</td><td>2 pts</td><td>3 pts</td></tr>
+          <tr><td>6th+ Place</td><td>0</td><td>0 pts</td><td>0 pts</td><td>0 pts</td></tr>
+        </tbody>
+      </table>
+
+      <h3>4X Championship Events</h3>
+      <p>4X events use a special fixed point structure:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Placement</th>
+            <th>Default Points</th>
+            <th>Extended (when enabled)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1st Place</td><td>30 pts</td><td>-</td></tr>
+          <tr><td>2nd Place</td><td>27 pts</td><td>-</td></tr>
+          <tr><td>3rd Place</td><td>24 pts</td><td>-</td></tr>
+          <tr><td>4th Place</td><td>21 pts</td><td>-</td></tr>
+          <tr><td>5th Place</td><td>18 pts</td><td>-</td></tr>
+          <tr><td>6th-50th Place</td><td>0 pts</td><td>15 pts (configurable)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="highlight info">
+        <strong>Extended 4X Placements:</strong> When enabled, competitors finishing in 6th place
+        through the configured maximum (default: 50th) will receive participation points in 4X events.
+        This feature can be toggled on/off per season.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>How to Configure Points</h2>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div>Navigate to <strong>Admin Dashboard</strong> &rarr; <strong>Points Configuration</strong></div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div>Select the <strong>Season</strong> you want to configure from the dropdown</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div>Adjust the <strong>Standard Event Base Points</strong> (used for 1X, 2X, 3X events)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">4</span>
+          <div>Adjust the <strong>4X Event Points</strong> for championship events</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">5</span>
+          <div>Optionally enable <strong>Extended 4X Placements</strong> for participation points</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">6</span>
+          <div>Review the <strong>Points Preview</strong> table to verify calculations</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">7</span>
+          <div>Click <strong>Save Configuration</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Points Preview</h2>
+      <p>
+        The admin page displays a live preview table showing exactly how many points will be awarded
+        for each placement under each multiplier. This helps verify the configuration before saving.
+      </p>
+
+      <div class="highlight success">
+        <strong>Tip:</strong> Use the preview table to ensure points are in the correct descending order.
+        The system will validate that 1st place points are greater than or equal to 2nd place, and so on.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Validation Rules</h2>
+      <p>The system enforces the following validation rules:</p>
+
+      <ul>
+        <li><strong>Descending Order:</strong> Points must be in descending order (1st &ge; 2nd &ge; 3rd &ge; 4th &ge; 5th)</li>
+        <li><strong>Non-Negative:</strong> All point values must be 0 or greater</li>
+        <li><strong>Extended Range:</strong> Maximum extended placement must be between 6 and 100</li>
+        <li><strong>Unique Per Season:</strong> Each season can only have one active configuration</li>
+      </ul>
+
+      <div class="highlight warning">
+        <strong>Warning:</strong> Changing points configuration affects how future results are calculated.
+        Existing results will use the new point values when the event is recalculated.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Extended 4X Placements</h2>
+      <p>
+        The extended placements feature allows 4X championship events to award participation points
+        to competitors who finish beyond 5th place. This is useful for encouraging participation
+        in championship-level competitions.
+      </p>
+
+      <h3>Configuration Options</h3>
+      <ul>
+        <li><strong>Enable/Disable:</strong> Toggle checkbox to turn this feature on or off</li>
+        <li><strong>Points Value:</strong> The number of points awarded (default: 15)</li>
+        <li><strong>Maximum Placement:</strong> The last placement eligible for points (default: 50th)</li>
+      </ul>
+
+      <h3>Example</h3>
+      <p>With extended placements enabled (15 points, max 50th place):</p>
+      <ul>
+        <li>6th place receives 15 points</li>
+        <li>25th place receives 15 points</li>
+        <li>50th place receives 15 points</li>
+        <li>51st place receives 0 points</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Per-Season Configuration</h2>
+      <p>
+        Points configuration is stored per season. This allows MECA to:
+      </p>
+
+      <ul>
+        <li>Adjust point structures for new seasons without affecting historical data</li>
+        <li>Test new point values for upcoming seasons</li>
+        <li>Maintain accurate historical records with season-specific configurations</li>
+      </ul>
+
+      <div class="highlight info">
+        <strong>New Seasons:</strong> When a new season is created, a default configuration is
+        automatically generated. You can then customize it as needed.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Technical Details</h2>
+
+      <h3>Database Table</h3>
+      <p>Configuration is stored in the <code>points_configuration</code> table with columns for:</p>
+      <ul>
+        <li>Season association (foreign key to seasons table)</li>
+        <li>Standard event points (5 columns for placements 1-5)</li>
+        <li>4X event points (5 columns for placements 1-5)</li>
+        <li>Extended placement settings (enabled flag, points value, max placement)</li>
+        <li>Metadata (created/updated timestamps, updated_by user)</li>
+      </ul>
+
+      <h3>Caching</h3>
+      <p>
+        The system caches points configuration for 1 minute to optimize performance during bulk
+        operations like recalculating event points. Cache is automatically invalidated when
+        configuration is updated.
+      </p>
+
+      <h3>API Endpoints</h3>
+      <div class="code-block">
+GET /api/points-configuration                      - List all configurations (admin)
+GET /api/points-configuration/current              - Get current season config (public)
+GET /api/points-configuration/season/:id           - Get config for specific season
+GET /api/points-configuration/season/:id/preview   - Get points preview
+PUT /api/points-configuration/season/:id           - Update configuration (admin)
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Troubleshooting</h2>
+
+      <h3>Configuration Not Saving</h3>
+      <ul>
+        <li>Ensure points are in descending order (1st &ge; 2nd &ge; 3rd &ge; 4th &ge; 5th)</li>
+        <li>Check that all values are non-negative integers</li>
+        <li>Verify you have admin privileges</li>
+      </ul>
+
+      <h3>Points Not Updating in Results</h3>
+      <ul>
+        <li>Points are calculated when results are created or when an event is recalculated</li>
+        <li>Use the "Recalculate Points" feature on the Results Entry page to update existing results</li>
+        <li>Check that the event is associated with the correct season</li>
+      </ul>
+
+      <h3>Extended Points Not Appearing</h3>
+      <ul>
+        <li>Verify the "Enable Extended Placements" checkbox is checked</li>
+        <li>Ensure the event has a 4X multiplier</li>
+        <li>Check that the competitor's placement is within the configured range (6 to max)</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Access</h2>
+      <p>The Points Configuration page is available at:</p>
+      <div class="code-block">
+/admin/points-configuration
+      </div>
+      <p>This page is restricted to administrators only.</p>
+    </div>
+
+    <p style="text-align: center; margin-top: 40px; color: #64748b;">
+      Last updated: January 2026
+    </p>
+  </div>
+</body>
+</html>

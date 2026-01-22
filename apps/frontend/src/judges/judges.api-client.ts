@@ -199,6 +199,37 @@ export async function adminQuickCreateJudgeApplication(dto: AdminQuickCreateJudg
   return response.json();
 }
 
+export interface AdminDirectCreateJudgeDto {
+  user_id: string;
+  level?: JudgeLevel;
+  specialty: 'sql' | 'spl' | 'both';
+  sub_specialties?: string[];
+  state: string;
+  city: string;
+  country?: string;
+  travel_radius?: string;
+  additional_regions?: string[];
+  admin_notes?: string;
+  enable_permission?: boolean; // If true, enable canApplyJudge on profile
+}
+
+export async function createJudgeDirectly(dto: AdminDirectCreateJudgeDto): Promise<Judge> {
+  const headers = await getAuthHeaders();
+
+  const response = await fetch(`${API_BASE}/direct`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(dto),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to create judge');
+  }
+
+  return response.json();
+}
+
 export async function getAllJudgeApplications(filters?: {
   status?: ApplicationStatus;
   specialty?: string;

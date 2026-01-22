@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users, Search, Filter, TrendingUp, Mail, Loader2 } from 'lucide-react';
-import { eventsApi, Event } from '@/events';
+import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2 } from 'lucide-react';
+import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionResultsApi } from '@/competition-results';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
-import { useNavigate } from 'react-router-dom';
 
 
 interface EventManagementProps {
@@ -13,7 +12,6 @@ interface EventManagementProps {
 }
 
 export default function EventManagement({ onViewResults }: EventManagementProps = {}) {
-  const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [eventDirectors, setEventDirectors] = useState<Profile[]>([]);
@@ -50,7 +48,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     registration_fee: '0',
     member_entry_fee: '',
     non_member_entry_fee: '',
-    has_gate_fee: false,
+    has_gate_fee: '' as '' | 'yes' | 'no',
     gate_fee: '',
     formats: [] as string[],
     points_multiplier: '1',
@@ -58,6 +56,12 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     number_of_days: '1',
     day2_date: '',
     day3_date: '',
+    // Per-day multipliers for multi-day events
+    day1_multiplier: '2',
+    day2_multiplier: '2',
+    day3_multiplier: '2',
+    // How to calculate results for multi-day events
+    multi_day_results_mode: 'separate' as MultiDayResultsMode,
   });
 
   useEffect(() => {
@@ -96,16 +100,14 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   };
 
   const fetchResultCounts = async () => {
-    const counts: {[key: string]: number} = {};
-    for (const event of events) {
-      try {
-        const results = await competitionResultsApi.getByEvent(event.id);
-        counts[event.id] = results.length;
-      } catch (error) {
-        counts[event.id] = 0;
-      }
+    try {
+      // Use the bulk endpoint to get all counts in a single call
+      const counts = await competitionResultsApi.getResultCountsByEvent();
+      setEventResults(counts);
+    } catch (error) {
+      console.error('Error fetching result counts:', error);
+      setEventResults({});
     }
-    setEventResults(counts);
   };
 
   const filterEvents = () => {
@@ -216,7 +218,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: parseFloat(formData.registration_fee),
       member_entry_fee: formData.member_entry_fee ? parseFloat(formData.member_entry_fee) : null,
       non_member_entry_fee: formData.non_member_entry_fee ? parseFloat(formData.non_member_entry_fee) : null,
-      has_gate_fee: formData.has_gate_fee,
+      has_gate_fee: formData.has_gate_fee === 'yes',
       gate_fee: formData.gate_fee ? parseFloat(formData.gate_fee) : null,
       formats: formData.formats.length > 0 ? formData.formats : null,
       points_multiplier: parseInt(formData.points_multiplier),
@@ -244,8 +246,25 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
             dayDates.push(convertToISO(formData.day3_date)!);
           }
 
+          // Collect per-day multipliers
+          const dayMultipliers: number[] = [parseInt(formData.day1_multiplier)];
+          if (numberOfDays >= 2) {
+            dayMultipliers.push(parseInt(formData.day2_multiplier));
+          }
+          if (numberOfDays >= 3) {
+            dayMultipliers.push(parseInt(formData.day3_multiplier));
+          }
+
           console.log('📤 FRONTEND - Creating multi-day event:', numberOfDays, 'days');
-          await eventsApi.createMultiDay(eventData, numberOfDays, dayDates);
+          console.log('📤 FRONTEND - Day multipliers:', dayMultipliers);
+          console.log('📤 FRONTEND - Results mode:', formData.multi_day_results_mode);
+          await eventsApi.createMultiDay(
+            eventData,
+            numberOfDays,
+            dayDates,
+            dayMultipliers,
+            formData.multi_day_results_mode
+          );
         } else {
           console.log('📤 FRONTEND - Creating new event');
           await eventsApi.create(eventData);
@@ -297,11 +316,18 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: event.registration_fee?.toString() || '0',
       member_entry_fee: (event as any).member_entry_fee?.toString() || '',
       non_member_entry_fee: (event as any).non_member_entry_fee?.toString() || '',
-      has_gate_fee: (event as any).has_gate_fee || false,
+      has_gate_fee: (event as any).has_gate_fee ? 'yes' : 'no',
       gate_fee: (event as any).gate_fee?.toString() || '',
       formats: event.formats || [],
       points_multiplier: (event as any).points_multiplier?.toString() || '1',
       event_type: (event as any).event_type || 'standard',
+      number_of_days: '1', // When editing, always show as single day (multi-day creates separate events)
+      day2_date: '',
+      day3_date: '',
+      day1_multiplier: (event as any).day1_multiplier?.toString() || '2',
+      day2_multiplier: (event as any).day2_multiplier?.toString() || '2',
+      day3_multiplier: (event as any).day3_multiplier?.toString() || '2',
+      multi_day_results_mode: (event as any).multi_day_results_mode || 'separate',
     });
     setShowModal(true);
   };
@@ -340,7 +366,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: '0',
       member_entry_fee: '',
       non_member_entry_fee: '',
-      has_gate_fee: false,
+      has_gate_fee: '',
       gate_fee: '',
       points_multiplier: '1',
       event_type: 'standard',
@@ -348,6 +374,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       number_of_days: '1',
       day2_date: '',
       day3_date: '',
+      day1_multiplier: '2',
+      day2_multiplier: '2',
+      day3_multiplier: '2',
+      multi_day_results_mode: 'separate',
     });
   };
 
@@ -1042,26 +1072,102 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Points Multiplier *
-                  </label>
-                  <select
-                    required
-                    value={formData.points_multiplier}
-                    onChange={(e) => setFormData({ ...formData, points_multiplier: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    <option value="0">0X - Non-competitive (exhibitions, judging events)</option>
-                    <option value="1">1X - Local events (single-day local shows)</option>
-                    <option value="2">2X - Regional events (standard competitive events)</option>
-                    <option value="3">3X - State/Major events (state championships)</option>
-                    <option value="4">4X - Championship events (national finals, world finals)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Determines points awarded: 1st=5pts, 2nd=4pts, 3rd=3pts, 4th=2pts, 5th=1pt × multiplier
-                  </p>
-                </div>
+                {/* Points Multiplier - show single select for single-day, per-day for multi-day */}
+                {parseInt(formData.number_of_days) === 1 || editingEvent ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Points Multiplier *
+                    </label>
+                    <select
+                      required
+                      value={formData.points_multiplier}
+                      onChange={(e) => setFormData({ ...formData, points_multiplier: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="1">1X - Local events</option>
+                      <option value="2">2X - Regional events</option>
+                      <option value="3">3X - State/Major events</option>
+                      <option value="4">4X - Championship events</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Determines points awarded: 1st=5pts, 2nd=4pts, 3rd=3pts, 4th=2pts, 5th=1pt × multiplier
+                    </p>
+                  </div>
+                ) : (
+                  <div className="md:col-span-2 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Per-Day Points Multipliers
+                      </label>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Day 1</label>
+                          <select
+                            value={formData.day1_multiplier}
+                            onChange={(e) => setFormData({ ...formData, day1_multiplier: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          >
+                            <option value="1">1X</option>
+                            <option value="2">2X</option>
+                            <option value="3">3X</option>
+                            <option value="4">4X</option>
+                          </select>
+                        </div>
+                        {parseInt(formData.number_of_days) >= 2 && (
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Day 2</label>
+                            <select
+                              value={formData.day2_multiplier}
+                              onChange={(e) => setFormData({ ...formData, day2_multiplier: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                              <option value="1">1X</option>
+                              <option value="2">2X</option>
+                              <option value="3">3X</option>
+                              <option value="4">4X</option>
+                            </select>
+                          </div>
+                        )}
+                        {parseInt(formData.number_of_days) >= 3 && (
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Day 3</label>
+                            <select
+                              value={formData.day3_multiplier}
+                              onChange={(e) => setFormData({ ...formData, day3_multiplier: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                              <option value="1">1X</option>
+                              <option value="2">2X</option>
+                              <option value="3">3X</option>
+                              <option value="4">4X</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Set different point multipliers for each day of the event
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Multi-Day Results Mode
+                      </label>
+                      <select
+                        value={formData.multi_day_results_mode}
+                        onChange={(e) => setFormData({ ...formData, multi_day_results_mode: e.target.value as MultiDayResultsMode })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      >
+                        <option value="separate">Separate - Each day calculated independently</option>
+                        <option value="combined_score">Combined Score - Sum scores across days, then calculate points</option>
+                        <option value="combined_points">Combined Points - Calculate each day's points, then sum totals</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Determines how results and points are calculated across event days
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -1142,7 +1248,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   <select
                     value={formData.has_gate_fee}
                     onChange={(e) =>
-                      setFormData({ ...formData, has_gate_fee: e.target.value })
+                      setFormData({ ...formData, has_gate_fee: e.target.value as '' | 'yes' | 'no' })
                     }
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >

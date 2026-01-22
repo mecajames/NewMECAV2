@@ -19,11 +19,11 @@ export type CompetitionFormat = 'SPL' | 'SQL' | 'Show and Shine' | 'Ride the Lig
 export interface Profile {
   id: string;
   email: string;
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
-  role: UserRole;
-  membership_status: MembershipStatus;
+  role: UserRole | string;
+  membership_status: MembershipStatus | string;
   membership_expiry?: string;
   meca_id?: string;
   profile_picture_url?: string;
@@ -55,6 +55,18 @@ export interface Profile {
   car_audio_system?: string;
   // Computed field (from AuthContext)
   full_name?: string;
+  // Permission fields
+  is_trainer?: boolean;
+  can_apply_judge?: boolean;
+  can_apply_event_director?: boolean;
+  judge_permission_granted_at?: string;
+  judge_permission_granted_by?: string;
+  ed_permission_granted_at?: string;
+  ed_permission_granted_by?: string;
+  judge_certification_expires?: string;
+  ed_certification_expires?: string;
+  force_password_change?: boolean;
+  cover_image_position?: { x: number; y: number };
   created_at: string;
   updated_at: string;
 }

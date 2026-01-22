@@ -1,4 +1,8 @@
+import axios from '@/lib/axios';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+export type MultiDayResultsMode = 'separate' | 'combined_score' | 'combined_points';
 
 export interface Event {
   id: string;
@@ -33,6 +37,7 @@ export interface Event {
   event_type?: string;
   multi_day_group_id?: string;
   day_number?: number;
+  multi_day_results_mode?: MultiDayResultsMode;
   created_at: string;
   updated_at: string;
   event_director?: any;
@@ -41,103 +46,82 @@ export interface Event {
 
 export const eventsApi = {
   getAll: async (page: number = 1, limit: number = 100): Promise<Event[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/events?page=${page}&limit=${limit}`);
-    if (!response.ok) throw new Error('Failed to fetch events');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/events?page=${page}&limit=${limit}`);
+    return response.data;
   },
 
   getAllBySeason: async (seasonId: string, page: number = 1, limit: number = 100): Promise<Event[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/events?season_id=${seasonId}&page=${page}&limit=${limit}`);
-    if (!response.ok) throw new Error('Failed to fetch events by season');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/events?season_id=${seasonId}&page=${page}&limit=${limit}`);
+    return response.data;
   },
 
   getById: async (id: string): Promise<Event> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch event');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/events/${id}`);
+    return response.data;
   },
 
   create: async (data: Partial<Event>): Promise<Event> => {
-    const response = await fetch(`${API_BASE_URL}/api/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Event creation failed:', response.status, errorBody);
-      throw new Error(`Failed to create event: ${errorBody}`);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/events`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Event creation failed:', error.response?.status, error.response?.data);
+      throw new Error(`Failed to create event: ${error.response?.data?.message || error.message}`);
     }
-    return response.json();
   },
 
   update: async (id: string, data: Partial<Event>): Promise<Event> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to update event');
-    return response.json();
+    const response = await axios.put(`${API_BASE_URL}/api/events/${id}`, data);
+    return response.data;
   },
 
   updateFlyerImagePosition: async (id: string, position: { x: number; y: number }): Promise<Event> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ flyer_image_position: position }),
-    });
-    if (!response.ok) throw new Error('Failed to update flyer image position');
-    return response.json();
+    const response = await axios.put(`${API_BASE_URL}/api/events/${id}`, { flyer_image_position: position });
+    return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete event');
+    await axios.delete(`${API_BASE_URL}/api/events/${id}`);
   },
 
   getStats: async (): Promise<{ totalEvents: number }> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/stats`);
-    if (!response.ok) throw new Error('Failed to fetch event stats');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/events/stats`);
+    return response.data;
   },
 
   createMultiDay: async (
     data: Partial<Event>,
     numberOfDays: number,
-    dayDates: string[]
+    dayDates: string[],
+    dayMultipliers?: number[],
+    multiDayResultsMode?: MultiDayResultsMode
   ): Promise<Event[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/multi-day`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data, numberOfDays, dayDates }),
-    });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Multi-day event creation failed:', response.status, errorBody);
-      throw new Error(`Failed to create multi-day event: ${errorBody}`);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/events/multi-day`, {
+        data,
+        numberOfDays,
+        dayDates,
+        dayMultipliers,
+        multiDayResultsMode,
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Multi-day event creation failed:', error.response?.status, error.response?.data);
+      throw new Error(`Failed to create multi-day event: ${error.response?.data?.message || error.message}`);
     }
-    return response.json();
   },
 
   getByMultiDayGroup: async (groupId: string): Promise<Event[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/multi-day-group/${groupId}`);
-    if (!response.ok) throw new Error('Failed to fetch events by multi-day group');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/events/multi-day-group/${groupId}`);
+    return response.data;
   },
 
   sendRatingEmails: async (eventId: string): Promise<{ sent: number; failed: number; errors: string[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/events/${eventId}/send-rating-emails`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Failed to send rating emails: ${errorBody}`);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/events/${eventId}/send-rating-emails`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to send rating emails: ${error.response?.data?.message || error.message}`);
     }
-    return response.json();
   },
 };

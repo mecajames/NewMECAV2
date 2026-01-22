@@ -5,6 +5,9 @@ import { getMyEDAssignments, respondToEDAssignment, EventDirectorAssignment, Eve
 
 interface EventDirectorAssignmentsProps {
   eventDirectorId?: string;
+  selectedSeasonId?: string;
+  seasonStartDate?: string;
+  seasonEndDate?: string;
 }
 
 const STATUS_STYLES: Record<EventAssignmentStatus, string> = {
@@ -16,7 +19,12 @@ const STATUS_STYLES: Record<EventAssignmentStatus, string> = {
   [EventAssignmentStatus.NO_SHOW]: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
 };
 
-export default function EventDirectorAssignments({ eventDirectorId }: EventDirectorAssignmentsProps) {
+export default function EventDirectorAssignments({
+  eventDirectorId,
+  selectedSeasonId,
+  seasonStartDate,
+  seasonEndDate
+}: EventDirectorAssignmentsProps) {
   const [assignments, setAssignments] = useState<EventDirectorAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +63,25 @@ export default function EventDirectorAssignments({ eventDirectorId }: EventDirec
     }
   }
 
+  // Filter assignments by season
+  const filterBySeason = (assignmentList: EventDirectorAssignment[]) => {
+    if (!selectedSeasonId || !seasonStartDate || !seasonEndDate) {
+      return assignmentList;
+    }
+
+    const seasonStart = new Date(seasonStartDate);
+    const seasonEnd = new Date(seasonEndDate);
+
+    return assignmentList.filter(assignment => {
+      if (!assignment.event?.event_date) return true; // Include if no date
+      const eventDate = new Date(assignment.event.event_date);
+      return eventDate >= seasonStart && eventDate <= seasonEnd;
+    });
+  };
+
   if (loading) {
     return (
-      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+      <div>
         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Calendar className="h-5 w-5 text-purple-500" />
           Upcoming Events to Direct
@@ -71,7 +95,7 @@ export default function EventDirectorAssignments({ eventDirectorId }: EventDirec
 
   if (error) {
     return (
-      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+      <div>
         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Calendar className="h-5 w-5 text-purple-500" />
           Upcoming Events to Direct
@@ -90,26 +114,72 @@ export default function EventDirectorAssignments({ eventDirectorId }: EventDirec
     );
   }
 
-  const pendingAssignments = assignments.filter(a => a.status === EventAssignmentStatus.REQUESTED);
-  const confirmedAssignments = assignments.filter(a =>
+  // Apply season filter
+  const filteredAssignments = filterBySeason(assignments);
+
+  const pendingAssignments = filteredAssignments.filter(a => a.status === EventAssignmentStatus.REQUESTED);
+  const confirmedAssignments = filteredAssignments.filter(a =>
     a.status === EventAssignmentStatus.ACCEPTED || a.status === EventAssignmentStatus.CONFIRMED
   );
 
+  const renderAssignmentCard = (assignment: EventDirectorAssignment) => (
+    <div
+      key={assignment.id}
+      className="bg-slate-700/50 rounded-lg p-4"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-medium text-white">
+              {assignment.event?.title || 'Event'}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_STYLES[assignment.status]}`}>
+              {assignment.status.replace('_', ' ')}
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-gray-400">
+            <span className="flex items-center gap-1">
+              <Calendar className="h-4 w-4" />
+              {assignment.event?.event_date
+                ? new Date(assignment.event.event_date).toLocaleDateString()
+                : 'TBD'}
+            </span>
+            <span className="flex items-center gap-1">
+              <MapPin className="h-4 w-4" />
+              {assignment.event?.venue_city}, {assignment.event?.venue_state}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {assignment.event?.id && (
+            <Link
+              to={`/event-directors/event/${assignment.event.id}`}
+              className="text-purple-500 hover:text-purple-400 flex items-center gap-1 text-sm"
+            >
+              Manage Event
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+    <div>
       <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
         <Calendar className="h-5 w-5 text-purple-500" />
         Upcoming Events to Direct
       </h3>
 
-      {assignments.length === 0 ? (
+      {filteredAssignments.length === 0 ? (
         <div className="text-center py-8">
           <Calendar className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400">No upcoming events to direct</p>
+          <p className="text-gray-400">No events to direct for this season</p>
           <p className="text-gray-500 text-sm mt-1">You'll see your event director assignments here once you're assigned to events.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {/* Pending Requests */}
           {pendingAssignments.length > 0 && (
             <div>
@@ -124,7 +194,7 @@ export default function EventDirectorAssignments({ eventDirectorId }: EventDirec
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-medium text-white">
-                            {assignment.event?.eventName || 'Event'}
+                            {assignment.event?.title || 'Event'}
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_STYLES[assignment.status]}`}>
                             {assignment.status.replace('_', ' ')}
@@ -133,13 +203,13 @@ export default function EventDirectorAssignments({ eventDirectorId }: EventDirec
                         <div className="flex items-center gap-4 text-sm text-gray-400">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {assignment.event?.eventDate
-                              ? new Date(assignment.event.eventDate).toLocaleDateString()
+                            {assignment.event?.event_date
+                              ? new Date(assignment.event.event_date).toLocaleDateString()
                               : 'TBD'}
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin className="h-4 w-4" />
-                            {assignment.event?.city}, {assignment.event?.state}
+                            {assignment.event?.venue_city}, {assignment.event?.venue_state}
                           </span>
                         </div>
                       </div>
@@ -168,51 +238,15 @@ export default function EventDirectorAssignments({ eventDirectorId }: EventDirec
             </div>
           )}
 
-          {/* Confirmed Assignments */}
+          {/* Confirmed Assignments (Active) */}
           {confirmedAssignments.length > 0 && (
             <div>
               <h4 className="text-sm font-medium text-green-400 mb-2 flex items-center gap-2">
                 <Check className="h-4 w-4" />
-                Confirmed ({confirmedAssignments.length})
+                Active ({confirmedAssignments.length})
               </h4>
               <div className="space-y-3">
-                {confirmedAssignments.map(assignment => (
-                  <div key={assignment.id} className="bg-slate-700/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-white">
-                            {assignment.event?.eventName || 'Event'}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_STYLES[assignment.status]}`}>
-                            {assignment.status.replace('_', ' ')}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-400">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
-                            {assignment.event?.eventDate
-                              ? new Date(assignment.event.eventDate).toLocaleDateString()
-                              : 'TBD'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {assignment.event?.city}, {assignment.event?.state}
-                          </span>
-                        </div>
-                      </div>
-                      {assignment.event?.id && (
-                        <Link
-                          to={`/events/${assignment.event.id}`}
-                          className="text-purple-500 hover:text-purple-400 flex items-center gap-1 text-sm"
-                        >
-                          View Event
-                          <ChevronRight className="h-4 w-4" />
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                {confirmedAssignments.map(assignment => renderAssignmentCard(assignment))}
               </div>
             </div>
           )}

@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Image as ImageIcon,
   Users as UsersIcon,
-  Settings,
   ArrowLeft,
   Send,
   ChevronDown,
@@ -30,6 +29,10 @@ import {
   ShoppingCart,
   Key,
   Pencil,
+  Search,
+  Filter,
+  Globe,
+  MapPin,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -42,6 +45,7 @@ import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-typ
 import AdminMembershipWizard from '../components/AdminMembershipWizard';
 import { UserPlus } from 'lucide-react';
 import { teamsApi, Team } from '@/teams';
+import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
@@ -992,7 +996,7 @@ export default function MemberDetailPage() {
           {activeTab === 'events' && <EventRegistrationsTab member={member} />}
           {activeTab === 'results' && <CompetitionResultsTab member={member} />}
           {activeTab === 'communications' && <CommunicationsTab member={member} />}
-          {activeTab === 'permissions' && <PermissionsTab member={member} />}
+          {activeTab === 'permissions' && <PermissionsTab member={member} onUpdate={setMember} />}
         </div>
 
         {/* Send Message Modal */}
@@ -4404,11 +4408,21 @@ function EventRegistrationsTab({ member: _member }: { member: Profile }) {
 function CompetitionResultsTab({ member }: { member: Profile }) {
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [eventMap, setEventMap] = useState<Record<string, string>>({});
+  const [eventsData, setEventsData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    search: '',
+    seasonId: '',
+    country: '',
+    state: '',
+  });
 
   useEffect(() => {
-    const fetchResults = async () => {
+    const fetchData = async () => {
       if (!member.meca_id) {
         setLoading(false);
         return;
@@ -4416,22 +4430,37 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
 
       try {
         setLoading(true);
-        const data = await competitionResultsApi.getByMecaId(member.meca_id);
-        setResults(data);
 
-        // Fetch events to get event names for lookup
-        // Get unique event IDs from results
+        // Fetch results and seasons in parallel
+        const [data, seasonsData] = await Promise.all([
+          competitionResultsApi.getByMecaId(member.meca_id),
+          seasonsApi.getAll(),
+        ]);
+
+        setResults(data);
+        setSeasons(seasonsData);
+
+        // Default to current season
+        const currentSeason = seasonsData.find((s: Season) => s.is_current);
+        if (currentSeason) {
+          setFilters(prev => ({ ...prev, seasonId: currentSeason.id }));
+        }
+
+        // Fetch events to get event names and location data for lookup
         const eventIds = [...new Set(data.map(r => r.eventId || r.event_id).filter(Boolean))];
         if (eventIds.length > 0) {
           try {
             const eventsResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/events`);
             if (eventsResponse.ok) {
               const events = await eventsResponse.json();
-              const map: Record<string, string> = {};
+              const nameMap: Record<string, string> = {};
+              const dataMap: Record<string, any> = {};
               events.forEach((event: any) => {
-                map[event.id] = event.title || event.name;
+                nameMap[event.id] = event.title || event.name;
+                dataMap[event.id] = event;
               });
-              setEventMap(map);
+              setEventMap(nameMap);
+              setEventsData(dataMap);
             }
           } catch (eventErr) {
             console.error('Error fetching events for names:', eventErr);
@@ -4445,8 +4474,77 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
       }
     };
 
-    fetchResults();
+    fetchData();
   }, [member.meca_id]);
+
+  // Get unique countries and states from events
+  const uniqueCountries = [...new Set(
+    results
+      .map(r => {
+        const eventId = r.eventId || r.event_id;
+        const event = r.event || eventsData[eventId || ''];
+        return event?.venue_country || event?.venueCountry;
+      })
+      .filter(Boolean)
+  )].sort();
+
+  const uniqueStates = [...new Set(
+    results
+      .filter(r => {
+        if (!filters.country) return true;
+        const eventId = r.eventId || r.event_id;
+        const event = r.event || eventsData[eventId || ''];
+        const country = event?.venue_country || event?.venueCountry;
+        return country === filters.country;
+      })
+      .map(r => {
+        const eventId = r.eventId || r.event_id;
+        const event = r.event || eventsData[eventId || ''];
+        return event?.venue_state || event?.venueState;
+      })
+      .filter(Boolean)
+  )].sort();
+
+  // Filter results
+  const filteredResults = results.filter(result => {
+    const eventId = result.eventId || result.event_id;
+    const event = result.event || eventsData[eventId || ''];
+    const eventName = event?.name || event?.title || eventMap[eventId || ''] || '';
+
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesEvent = eventName.toLowerCase().includes(searchLower);
+      const matchesClass = (result.competitionClass || result.competition_class || '').toLowerCase().includes(searchLower);
+      if (!matchesEvent && !matchesClass) return false;
+    }
+
+    // Season filter
+    if (filters.seasonId) {
+      const resultSeasonId = result.seasonId || result.season_id || event?.season_id || event?.seasonId;
+      if (resultSeasonId !== filters.seasonId) return false;
+    }
+
+    // Country filter
+    if (filters.country) {
+      const eventCountry = event?.venue_country || event?.venueCountry;
+      if (eventCountry !== filters.country) return false;
+    }
+
+    // State filter
+    if (filters.state) {
+      const eventState = event?.venue_state || event?.venueState;
+      if (eventState !== filters.state) return false;
+    }
+
+    return true;
+  });
+
+  const hasActiveFilters = filters.search || filters.seasonId || filters.country || filters.state;
+
+  const clearFilters = () => {
+    setFilters({ search: '', seasonId: '', country: '', state: '' });
+  };
 
   if (loading) {
     return (
@@ -4496,7 +4594,7 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
     );
   }
 
-  // Calculate totals
+  // Calculate totals (from all results, not filtered)
   const totalPoints = results.reduce((sum, r) => sum + (r.pointsEarned || r.points_earned || 0), 0);
   const totalEvents = new Set(results.map(r => r.eventId || r.event_id)).size;
   const firstPlaceCount = results.filter(r => r.placement === 1).length;
@@ -4525,6 +4623,95 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
         </div>
       </div>
 
+      {/* Event Filters Section */}
+      <div className="bg-slate-800 rounded-xl p-6 mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-orange-500" />
+            Event
+          </h3>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
+            >
+              <X className="h-4 w-4" />
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search events..."
+              value={filters.search}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Season Filter */}
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={filters.seasonId}
+              onChange={(e) => setFilters(prev => ({ ...prev, seasonId: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map(season => (
+                <option key={season.id} value={season.id}>
+                  {season.name} {season.is_current && '(Current)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Country Filter */}
+          <div className="relative">
+            <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={filters.country}
+              onChange={(e) => setFilters(prev => ({ ...prev, country: e.target.value, state: '' }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+            >
+              <option value="">All Countries</option>
+              {uniqueCountries.map(country => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* State Filter */}
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={filters.state}
+              onChange={(e) => setFilters(prev => ({ ...prev, state: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+              disabled={uniqueStates.length === 0}
+            >
+              <option value="">All States</option>
+              {uniqueStates.map(state => (
+                <option key={state} value={state}>{state}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Results count */}
+      {hasActiveFilters && (
+        <div className="text-sm text-gray-400 mb-4">
+          Showing {filteredResults.length} of {results.length} result{results.length !== 1 ? 's' : ''}
+        </div>
+      )}
+
       {/* Results Table */}
       <div className="bg-slate-700 rounded-lg overflow-hidden">
         <table className="w-full">
@@ -4540,40 +4727,48 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-600">
-            {results.map((result) => (
-              <tr key={result.id} className="hover:bg-slate-600/50">
-                <td className="px-4 py-3 text-white">
-                  {result.event?.name || result.event?.title || eventMap[result.eventId || result.event_id || ''] || 'Unknown Event'}
-                </td>
-                <td className="px-4 py-3 text-gray-300">
-                  {result.competitionClass || result.competition_class}
-                </td>
-                <td className="px-4 py-3 text-gray-300">
-                  {result.format || '-'}
-                </td>
-                <td className="px-4 py-3 text-center text-white font-medium">
-                  {result.score?.toFixed(2) || '-'}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                    result.placement === 1 ? 'bg-yellow-500 text-black' :
-                    result.placement === 2 ? 'bg-gray-300 text-black' :
-                    result.placement === 3 ? 'bg-amber-600 text-white' :
-                    'bg-slate-500 text-white'
-                  }`}>
-                    {result.placement}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center text-orange-400 font-medium">
-                  {result.pointsEarned || result.points_earned || 0}
-                </td>
-                <td className="px-4 py-3 text-gray-400 text-sm">
-                  {result.createdAt || result.created_at
-                    ? new Date(result.createdAt || result.created_at!).toLocaleDateString()
-                    : '-'}
+            {filteredResults.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  No results match the current filters
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredResults.map((result) => (
+                <tr key={result.id} className="hover:bg-slate-600/50">
+                  <td className="px-4 py-3 text-white">
+                    {result.event?.name || result.event?.title || eventMap[result.eventId || result.event_id || ''] || 'Unknown Event'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-300">
+                    {result.competitionClass || result.competition_class}
+                  </td>
+                  <td className="px-4 py-3 text-gray-300">
+                    {result.format || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-center text-white font-medium">
+                    {result.score?.toFixed(2) || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                      result.placement === 1 ? 'bg-yellow-500 text-black' :
+                      result.placement === 2 ? 'bg-gray-300 text-black' :
+                      result.placement === 3 ? 'bg-amber-600 text-white' :
+                      'bg-slate-500 text-white'
+                    }`}>
+                      {result.placement}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center text-orange-400 font-medium">
+                    {result.pointsEarned || result.points_earned || 0}
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-sm">
+                    {result.createdAt || result.created_at
+                      ? new Date(result.createdAt || result.created_at!).toLocaleDateString()
+                      : '-'}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -4593,14 +4788,528 @@ function CommunicationsTab({ member: _member }: { member: Profile }) {
   );
 }
 
-function PermissionsTab({ member: _member }: { member: Profile }) {
+function PermissionsTab({ member, onUpdate }: { member: Profile; onUpdate: (updated: Profile) => void }) {
+  const [isTrainer, setIsTrainer] = useState(member.is_trainer ?? false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [judgeEdStatus, setJudgeEdStatus] = useState<any>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+
+  // Judge permission state
+  const [judgeEnabled, setJudgeEnabled] = useState(false);
+  const [judgeExpiration, setJudgeExpiration] = useState<string>('');
+  const [savingJudge, setSavingJudge] = useState(false);
+
+  // ED permission state
+  const [edEnabled, setEdEnabled] = useState(false);
+  const [edExpiration, setEdExpiration] = useState<string>('');
+  const [savingEd, setSavingEd] = useState(false);
+
+  // Fetch Judge/ED status on mount
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const status = await profilesApi.getJudgeEdStatus(member.id, session.access_token);
+          setJudgeEdStatus(status);
+          setJudgeEnabled(status.judge.permissionEnabled);
+          setEdEnabled(status.eventDirector.permissionEnabled);
+          setJudgeExpiration(status.judge.expirationDate || '');
+          setEdExpiration(status.eventDirector.expirationDate || '');
+        }
+      } catch (err) {
+        console.error('Error fetching Judge/ED status:', err);
+      } finally {
+        setLoadingStatus(false);
+      }
+    };
+    fetchStatus();
+  }, [member.id]);
+
+  const handleTrainerToggle = async (checked: boolean) => {
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const updated = await profilesApi.update(member.id, { is_trainer: checked });
+      setIsTrainer(checked);
+      onUpdate(updated);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update permissions');
+      setIsTrainer(!checked);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleJudgePermissionToggle = async (checked: boolean) => {
+    setSavingJudge(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
+      await profilesApi.updateJudgePermission(
+        member.id,
+        {
+          enabled: checked,
+          expirationDate: judgeExpiration || null,
+        },
+        session.access_token
+      );
+      setJudgeEnabled(checked);
+
+      // Refresh status
+      const status = await profilesApi.getJudgeEdStatus(member.id, session.access_token);
+      setJudgeEdStatus(status);
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update judge permission');
+      setJudgeEnabled(!checked);
+    } finally {
+      setSavingJudge(false);
+    }
+  };
+
+  const handleEdPermissionToggle = async (checked: boolean) => {
+    setSavingEd(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
+      await profilesApi.updateEventDirectorPermission(
+        member.id,
+        {
+          enabled: checked,
+          expirationDate: edExpiration || null,
+        },
+        session.access_token
+      );
+      setEdEnabled(checked);
+
+      // Refresh status
+      const status = await profilesApi.getJudgeEdStatus(member.id, session.access_token);
+      setJudgeEdStatus(status);
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update event director permission');
+      setEdEnabled(!checked);
+    } finally {
+      setSavingEd(false);
+    }
+  };
+
+  const handleUpdateJudgeExpiration = async () => {
+    setSavingJudge(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
+      await profilesApi.updateJudgePermission(
+        member.id,
+        {
+          enabled: judgeEnabled,
+          expirationDate: judgeExpiration || null,
+        },
+        session.access_token
+      );
+
+      const status = await profilesApi.getJudgeEdStatus(member.id, session.access_token);
+      setJudgeEdStatus(status);
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update judge expiration');
+    } finally {
+      setSavingJudge(false);
+    }
+  };
+
+  const handleUpdateEdExpiration = async () => {
+    setSavingEd(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
+      await profilesApi.updateEventDirectorPermission(
+        member.id,
+        {
+          enabled: edEnabled,
+          expirationDate: edExpiration || null,
+        },
+        session.access_token
+      );
+
+      const status = await profilesApi.getJudgeEdStatus(member.id, session.access_token);
+      setJudgeEdStatus(status);
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update event director expiration');
+    } finally {
+      setSavingEd(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Approved': return 'text-green-400';
+      case 'Pending': return 'text-yellow-400';
+      case 'Rejected': return 'text-red-400';
+      case 'Expired': return 'text-orange-400';
+      case 'Disabled': return 'text-slate-400';
+      default: return 'text-slate-300';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'Approved': return <Check className="h-4 w-4 text-green-400" />;
+      case 'Pending': return <Clock className="h-4 w-4 text-yellow-400" />;
+      case 'Rejected': return <X className="h-4 w-4 text-red-400" />;
+      case 'Expired': return <AlertTriangle className="h-4 w-4 text-orange-400" />;
+      default: return null;
+    }
+  };
+
   return (
-    <div>
-      <h2 className="text-2xl font-bold text-white mb-6">Permissions</h2>
-      <div className="text-center py-12 text-gray-400">
-        <Settings className="h-16 w-16 mx-auto mb-4 text-gray-500" />
-        <p>Permission management coming soon</p>
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-white">Permissions</h2>
+
+      {error && (
+        <div className="p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="p-4 bg-green-900/50 border border-green-500 rounded-lg text-green-200">
+          Permissions updated successfully
+        </div>
+      )}
+
+      {/* Training Permissions */}
+      <div className="bg-slate-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">MECA Training</h3>
+
+        <label className="flex items-center justify-between p-4 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 transition-colors">
+          <div>
+            <p className="text-white font-medium">Is Trainer</p>
+            <p className="text-slate-400 text-sm mt-1">
+              Allow this user to be selected as a trainer for MECA training records
+            </p>
+          </div>
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={isTrainer}
+              onChange={(e) => handleTrainerToggle(e.target.checked)}
+              disabled={saving}
+              className="sr-only"
+            />
+            <div className={`w-14 h-8 rounded-full transition-colors ${
+              isTrainer ? 'bg-orange-500' : 'bg-slate-500'
+            } ${saving ? 'opacity-50' : ''}`}>
+              <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                isTrainer ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </div>
+          </div>
+        </label>
       </div>
+
+      {/* Judge Permissions */}
+      <div className="bg-slate-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Judge</h3>
+
+        <div
+          onClick={() => !savingJudge && !loadingStatus && handleJudgePermissionToggle(!judgeEnabled)}
+          className={`flex items-center justify-between p-4 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 transition-colors ${
+            savingJudge || loadingStatus ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          <div>
+            <p className="text-white font-medium">Can Apply as Judge</p>
+            <p className="text-slate-400 text-sm mt-1">
+              Allow this user to apply as a MECA Judge and access judging features
+            </p>
+          </div>
+          <div className="relative flex-shrink-0 ml-4">
+            <input
+              type="checkbox"
+              checked={judgeEnabled}
+              onChange={(e) => handleJudgePermissionToggle(e.target.checked)}
+              disabled={savingJudge || loadingStatus}
+              className="sr-only"
+            />
+            <div className={`w-14 h-8 rounded-full transition-colors ${
+              judgeEnabled ? 'bg-orange-500' : 'bg-slate-500'
+            }`}>
+              <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                judgeEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </div>
+          </div>
+        </div>
+
+        {loadingStatus ? (
+          <div className="text-slate-400 mt-4">Loading status...</div>
+        ) : judgeEdStatus && (
+          <div className="space-y-4 mt-4 pt-4 border-t border-slate-700">
+            {/* Status */}
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Status:</span>
+              <span className={`font-medium flex items-center gap-1 ${getStatusColor(judgeEdStatus.judge.status)}`}>
+                {getStatusIcon(judgeEdStatus.judge.status)}
+                {judgeEdStatus.judge.status}
+              </span>
+              {judgeEdStatus.judge.judgeRecord && (
+                <span className="text-slate-400">
+                  (Level: {judgeEdStatus.judge.judgeRecord.level.replace('_', ' ')})
+                </span>
+              )}
+            </div>
+
+            {/* Granted Info */}
+            {judgeEdStatus.judge.grantedAt && (
+              <div className="text-sm text-slate-400">
+                Granted: {new Date(judgeEdStatus.judge.grantedAt).toLocaleDateString()}
+                {judgeEdStatus.judge.grantedBy && (
+                  <span> by {judgeEdStatus.judge.grantedBy.name}</span>
+                )}
+              </div>
+            )}
+
+            {/* Expiration Date */}
+            {judgeEnabled && (
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-slate-400">Expires:</label>
+                <input
+                  type="date"
+                  value={judgeExpiration ? judgeExpiration.split('T')[0] : ''}
+                  onChange={(e) => setJudgeExpiration(e.target.value)}
+                  className="bg-slate-700 text-white px-3 py-1.5 rounded border border-slate-600 focus:border-orange-500 focus:outline-none text-sm"
+                />
+                <button
+                  onClick={handleUpdateJudgeExpiration}
+                  disabled={savingJudge}
+                  className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded disabled:opacity-50"
+                >
+                  {savingJudge ? 'Saving...' : 'Update'}
+                </button>
+                {judgeExpiration && (
+                  <button
+                    onClick={() => {
+                      setJudgeExpiration('');
+                      handleUpdateJudgeExpiration();
+                    }}
+                    className="text-slate-400 hover:text-white text-sm"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Links - only show if record or application exists */}
+            {judgeEdStatus.judge.judgeRecord && (
+              <div className="flex gap-3 pt-2">
+                <a
+                  href={`/admin/judges/${judgeEdStatus.judge.judgeRecord.id}`}
+                  className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
+                >
+                  <User className="h-4 w-4" />
+                  Manage Judge Profile
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Event Director Permissions */}
+      <div className="bg-slate-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Event Director</h3>
+
+        <div
+          onClick={() => !savingEd && !loadingStatus && handleEdPermissionToggle(!edEnabled)}
+          className={`flex items-center justify-between p-4 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 transition-colors ${
+            savingEd || loadingStatus ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          <div>
+            <p className="text-white font-medium">Can Apply as Event Director</p>
+            <p className="text-slate-400 text-sm mt-1">
+              Allow this user to apply as a MECA Event Director and host events
+            </p>
+          </div>
+          <div className="relative flex-shrink-0 ml-4">
+            <input
+              type="checkbox"
+              checked={edEnabled}
+              onChange={(e) => handleEdPermissionToggle(e.target.checked)}
+              disabled={savingEd || loadingStatus}
+              className="sr-only"
+            />
+            <div className={`w-14 h-8 rounded-full transition-colors ${
+              edEnabled ? 'bg-orange-500' : 'bg-slate-500'
+            }`}>
+              <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                edEnabled ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </div>
+          </div>
+        </div>
+
+        {loadingStatus ? (
+          <div className="text-slate-400 mt-4">Loading status...</div>
+        ) : judgeEdStatus && (
+          <div className="space-y-4 mt-4 pt-4 border-t border-slate-700">
+            {/* Status */}
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Status:</span>
+              <span className={`font-medium flex items-center gap-1 ${getStatusColor(judgeEdStatus.eventDirector.status)}`}>
+                {getStatusIcon(judgeEdStatus.eventDirector.status)}
+                {judgeEdStatus.eventDirector.status}
+              </span>
+            </div>
+
+            {/* Granted Info */}
+            {judgeEdStatus.eventDirector.grantedAt && (
+              <div className="text-sm text-slate-400">
+                Granted: {new Date(judgeEdStatus.eventDirector.grantedAt).toLocaleDateString()}
+                {judgeEdStatus.eventDirector.grantedBy && (
+                  <span> by {judgeEdStatus.eventDirector.grantedBy.name}</span>
+                )}
+              </div>
+            )}
+
+            {/* Expiration Date */}
+            {edEnabled && (
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-slate-400">Expires:</label>
+                <input
+                  type="date"
+                  value={edExpiration ? edExpiration.split('T')[0] : ''}
+                  onChange={(e) => setEdExpiration(e.target.value)}
+                  className="bg-slate-700 text-white px-3 py-1.5 rounded border border-slate-600 focus:border-orange-500 focus:outline-none text-sm"
+                />
+                <button
+                  onClick={handleUpdateEdExpiration}
+                  disabled={savingEd}
+                  className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded disabled:opacity-50"
+                >
+                  {savingEd ? 'Saving...' : 'Update'}
+                </button>
+                {edExpiration && (
+                  <button
+                    onClick={() => {
+                      setEdExpiration('');
+                      handleUpdateEdExpiration();
+                    }}
+                    className="text-slate-400 hover:text-white text-sm"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Links - only show if ED record exists */}
+            {judgeEdStatus.eventDirector.edRecord && (
+              <div className="flex gap-3 pt-2">
+                <a
+                  href={`/admin/event-directors/${judgeEdStatus.eventDirector.edRecord.id}`}
+                  className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
+                >
+                  <User className="h-4 w-4" />
+                  Manage ED Profile
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Judge/ED History Summary */}
+      {judgeEdStatus && (judgeEdStatus.eventsJudged.length > 0 || judgeEdStatus.eventsDirected.length > 0) && (
+        <div className="bg-slate-800 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Event History</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Events Judged */}
+            {judgeEdStatus.eventsJudged.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-400 mb-2">
+                  Events Judged ({judgeEdStatus.eventsJudged.length})
+                </h4>
+                <div className="space-y-2">
+                  {judgeEdStatus.eventsJudged.slice(0, 5).map((event: any) => (
+                    <a
+                      key={event.id}
+                      href={`/admin/events/${event.id}`}
+                      className="block p-2 bg-slate-700 rounded hover:bg-slate-600 transition-colors"
+                    >
+                      <p className="text-white text-sm">{event.name}</p>
+                      <p className="text-slate-400 text-xs">
+                        {new Date(event.date).toLocaleDateString()}
+                      </p>
+                    </a>
+                  ))}
+                  {judgeEdStatus.eventsJudged.length > 5 && (
+                    <p className="text-slate-400 text-sm">
+                      +{judgeEdStatus.eventsJudged.length - 5} more events
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Events Directed */}
+            {judgeEdStatus.eventsDirected.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-400 mb-2">
+                  Events Directed ({judgeEdStatus.eventsDirected.length})
+                </h4>
+                <div className="space-y-2">
+                  {judgeEdStatus.eventsDirected.slice(0, 5).map((event: any) => (
+                    <a
+                      key={event.id}
+                      href={`/admin/events/${event.id}`}
+                      className="block p-2 bg-slate-700 rounded hover:bg-slate-600 transition-colors"
+                    >
+                      <p className="text-white text-sm">{event.name}</p>
+                      <p className="text-slate-400 text-xs">
+                        {new Date(event.date).toLocaleDateString()}
+                      </p>
+                    </a>
+                  ))}
+                  {judgeEdStatus.eventsDirected.length > 5 && (
+                    <p className="text-slate-400 text-sm">
+                      +{judgeEdStatus.eventsDirected.length - 5} more events
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

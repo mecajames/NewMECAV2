@@ -318,3 +318,19 @@ export const EventDirectorAssignmentWithDetailsSchema = EventDirectorAssignmentS
   }).optional(),
 });
 export type EventDirectorAssignmentWithDetails = z.infer<typeof EventDirectorAssignmentWithDetailsSchema>;
+
+// =============================================================================
+// Admin Direct Event Director Creation (without application)
+// =============================================================================
+
+export const AdminDirectCreateEventDirectorSchema = z.object({
+  user_id: z.string().uuid(),
+  state: z.string().min(1, 'State is required'),
+  city: z.string().min(1, 'City is required'),
+  country: z.string().default('USA'),
+  travel_radius: z.string().default('100 miles'),
+  additional_regions: z.array(z.string()).default([]),
+  admin_notes: z.string().optional(),
+  enable_permission: z.boolean().default(false), // If true, enable canApplyEventDirector on profile
+});
+export type AdminDirectCreateEventDirectorDto = z.infer<typeof AdminDirectCreateEventDirectorSchema>;

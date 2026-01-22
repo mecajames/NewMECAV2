@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -14,6 +14,8 @@ import {
 import { ShopProduct, ShopProductCategory } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
 import { useCart } from '../context/CartContext';
+import { SEOHead, useProductDetailSEO } from '@/shared/seo';
+import type { ProductSEOData } from '@/shared/seo';
 
 const categoryLabels: Record<ShopProductCategory, string> = {
   [ShopProductCategory.MEASURING_TOOLS]: 'Measuring Tools',
@@ -32,6 +34,22 @@ export function ProductDetailPage() {
   const [addedToCart, setAddedToCart] = useState(false);
 
   const { addItem, isInCart, getItemQuantity } = useCart();
+
+  // Map product to SEO data format
+  const productSEOData: ProductSEOData | null = useMemo(() => {
+    if (!product) return null;
+    return {
+      id: product.id,
+      name: product.name,
+      description: product.description || undefined,
+      image: product.imageUrl || undefined,
+      price: Number(product.price),
+      sku: product.sku || undefined,
+      inStock: !product.trackInventory || product.stockQuantity > 0,
+    };
+  }, [product]);
+
+  const seoProps = useProductDetailSEO(productSEOData);
 
   useEffect(() => {
     if (id) {
@@ -107,6 +125,7 @@ export function ProductDetailPage() {
 
   return (
     <div className="min-h-screen bg-slate-900">
+      {seoProps && <SEOHead {...seoProps} />}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="mb-8">

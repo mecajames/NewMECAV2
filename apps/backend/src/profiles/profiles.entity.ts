@@ -79,6 +79,43 @@ export class Profile {
   @Property({ type: 'text', nullable: true })
   role?: string;
 
+  // Whether this user can act as a MECA Training Trainer
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'is_trainer' })
+  is_trainer?: boolean = false;
+
+  // =============================================================================
+  // Judge and Event Director Permissions
+  // =============================================================================
+
+  // Permission to access judge features and apply to be a judge
+  @Property({ type: 'boolean', default: false, fieldName: 'can_apply_judge' })
+  canApplyJudge: boolean = false;
+
+  // Permission to access event director features and apply to be an ED
+  @Property({ type: 'boolean', default: false, fieldName: 'can_apply_event_director' })
+  canApplyEventDirector: boolean = false;
+
+  // Audit trail for judge permission
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'judge_permission_granted_at' })
+  judgePermissionGrantedAt?: Date;
+
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'judge_permission_granted_by' })
+  judgePermissionGrantedBy?: Profile;
+
+  // Audit trail for event director permission
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'ed_permission_granted_at' })
+  edPermissionGrantedAt?: Date;
+
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'ed_permission_granted_by' })
+  edPermissionGrantedBy?: Profile;
+
+  // Optional certification expiration dates
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'judge_certification_expires' })
+  judgeCertificationExpires?: Date;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'ed_certification_expires' })
+  edCertificationExpires?: Date;
+
   @Property({ type: 'text', nullable: true, fieldName: 'membership_status' })
   membership_status?: string;
 

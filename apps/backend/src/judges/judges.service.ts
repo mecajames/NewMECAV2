@@ -14,6 +14,7 @@ import {
   CreateJudgeApplicationDto,
   AdminCreateJudgeApplicationDto,
   AdminQuickCreateJudgeApplicationDto,
+  AdminDirectCreateJudgeDto,
   ReviewJudgeApplicationDto,
   UpdateJudgeDto,
   CreateEventJudgeAssignmentDto,
@@ -326,6 +327,11 @@ export class JudgesService {
       if (application.user.role !== UserRole.ADMIN) {
         application.user.role = UserRole.JUDGE;
       }
+
+      // Auto-enable canApplyJudge permission on approval
+      application.user.canApplyJudge = true;
+      application.user.judgePermissionGrantedAt = new Date();
+      application.user.judgePermissionGrantedBy = reviewer;
     }
 
     await em.flush();
@@ -493,6 +499,69 @@ export class JudgesService {
     });
   }
 
+  async createJudgeDirectly(
+    adminId: string,
+    dto: AdminDirectCreateJudgeDto,
+  ): Promise<Judge> {
+    const em = this.em.fork();
+    const user = await em.findOneOrFail(Profile, dto.user_id);
+    const admin = await em.findOneOrFail(Profile, adminId);
+
+    // Check if user is already a judge
+    const existingJudge = await em.findOne(Judge, { user: { id: dto.user_id } });
+    if (existingJudge) {
+      throw new BadRequestException('This user is already a registered judge');
+    }
+
+    // Create the judge record directly without application
+    const judge = new Judge();
+    Object.assign(judge, {
+      user,
+      application: null, // No application - created directly by admin
+      level: dto.level || JudgeLevel.IN_TRAINING,
+      specialty: dto.specialty,
+      subSpecialties: dto.sub_specialties || [],
+      country: dto.country || 'USA',
+      state: dto.state,
+      city: dto.city,
+      travelRadius: dto.travel_radius || '100 miles',
+      additionalRegions: dto.additional_regions || [],
+      approvedDate: new Date(),
+      creationMethod: ApplicationEntryMethod.ADMIN_DIRECT,
+      isActive: true,
+      adminNotes: dto.admin_notes,
+    });
+
+    em.persist(judge);
+
+    // Create initial season qualification for current season
+    const currentSeason = await em.findOne(Season, { isCurrent: true });
+    if (currentSeason) {
+      const seasonQual = new JudgeSeasonQualification();
+      Object.assign(seasonQual, {
+        judge,
+        season: currentSeason,
+      });
+      em.persist(seasonQual);
+    }
+
+    // Only enable permission if explicitly requested
+    if (dto.enable_permission) {
+      user.canApplyJudge = true;
+      user.judgePermissionGrantedAt = new Date();
+      user.judgePermissionGrantedBy = admin;
+
+      // Update user role to JUDGE if not already admin
+      if (user.role !== UserRole.ADMIN) {
+        user.role = UserRole.JUDGE;
+      }
+    }
+
+    await em.flush();
+
+    return judge;
+  }
+
   async updateJudge(judgeId: string, dto: UpdateJudgeDto): Promise<Judge> {
     const em = this.em.fork();
     const judge = await em.findOneOrFail(Judge, judgeId);
@@ -578,6 +647,11 @@ export class JudgesService {
 
     if (!judge.isActive) {
       throw new BadRequestException('Cannot assign inactive judge to event');
+    }
+
+    // Check if judge has permission enabled on their profile
+    if (!judge.user.canApplyJudge) {
+      throw new BadRequestException('Cannot assign judge - judge permission is not enabled on their profile');
     }
 
     // Check if assignment already exists
@@ -730,8 +804,20 @@ export class JudgesService {
       const oldStatus = assignment.status;
       assignment.status = dto.status;
 
-      // If status changed to confirmed, accepted, etc. - send notification
+      // Update totalEventsJudged counter when status changes to/from COMPLETED
       if (oldStatus !== dto.status) {
+        const wasCompleted = oldStatus === EventAssignmentStatus.COMPLETED;
+        const isNowCompleted = dto.status === EventAssignmentStatus.COMPLETED;
+
+        if (!wasCompleted && isNowCompleted) {
+          // Status changed TO completed - increment counter
+          assignment.judge.totalEventsJudged = (assignment.judge.totalEventsJudged || 0) + 1;
+        } else if (wasCompleted && !isNowCompleted) {
+          // Status changed FROM completed - decrement counter (min 0)
+          assignment.judge.totalEventsJudged = Math.max(0, (assignment.judge.totalEventsJudged || 0) - 1);
+        }
+
+        // Send notification for status changes
         await this.sendAssignmentNotification(assignment, 'updated');
       }
     }

@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { EventRegistration } from './event-registrations.entity';
 import { EventRegistrationClass } from './event-registration-classes.entity';
@@ -7,6 +7,7 @@ import { Profile } from '../profiles/profiles.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { RegistrationStatus, PaymentStatus } from '@newmeca/shared';
 import { QrCodeService } from './qr-code.service';
+import { EmailService } from '../email/email.service';
 
 export interface CreateRegistrationDto {
   eventId: string;
@@ -92,10 +93,13 @@ export interface CheckInResponse {
 
 @Injectable()
 export class EventRegistrationsService {
+  private readonly logger = new Logger(EventRegistrationsService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly qrCodeService: QrCodeService,
+    private readonly emailService: EmailService,
   ) {}
 
   async findById(id: string): Promise<EventRegistration> {
@@ -238,7 +242,9 @@ export class EventRegistrationsService {
     membershipId?: string,
   ): Promise<EventRegistration> {
     const em = this.em.fork();
-    const registration = await em.findOne(EventRegistration, { id: registrationId });
+    const registration = await em.findOne(EventRegistration, { id: registrationId }, {
+      populate: ['event', 'classes'],
+    });
 
     if (!registration) {
       throw new NotFoundException(`Registration with ID ${registrationId} not found`);
@@ -255,6 +261,10 @@ export class EventRegistrationsService {
     }
 
     await em.flush();
+
+    // Send confirmation email
+    await this.sendRegistrationConfirmationEmail(registration);
+
     return registration;
   }
 
@@ -559,7 +569,9 @@ export class EventRegistrationsService {
    */
   async markAsPaid(id: string, paymentIntentId: string, amountPaid?: number): Promise<EventRegistration> {
     const em = this.em.fork();
-    const registration = await em.findOne(EventRegistration, { id });
+    const registration = await em.findOne(EventRegistration, { id }, {
+      populate: ['event', 'classes'],
+    });
 
     if (!registration) {
       throw new NotFoundException(`Registration with ID ${id} not found`);
@@ -574,6 +586,9 @@ export class EventRegistrationsService {
     }
     await em.flush();
 
+    // Send confirmation email
+    await this.sendRegistrationConfirmationEmail(registration);
+
     return registration;
   }
 
@@ -582,7 +597,9 @@ export class EventRegistrationsService {
    */
   async cancelRegistration(id: string): Promise<EventRegistration> {
     const em = this.em.fork();
-    const registration = await em.findOne(EventRegistration, { id });
+    const registration = await em.findOne(EventRegistration, { id }, {
+      populate: ['event'],
+    });
 
     if (!registration) {
       throw new NotFoundException(`Registration with ID ${id} not found`);
@@ -590,6 +607,9 @@ export class EventRegistrationsService {
 
     registration.registrationStatus = RegistrationStatus.CANCELLED;
     await em.flush();
+
+    // Send cancellation email
+    await this.sendRegistrationCancelledEmail(registration);
 
     return registration;
   }
@@ -599,7 +619,9 @@ export class EventRegistrationsService {
    */
   async processRefund(id: string): Promise<EventRegistration> {
     const em = this.em.fork();
-    const registration = await em.findOne(EventRegistration, { id });
+    const registration = await em.findOne(EventRegistration, { id }, {
+      populate: ['event'],
+    });
 
     if (!registration) {
       throw new NotFoundException(`Registration with ID ${id} not found`);
@@ -609,9 +631,13 @@ export class EventRegistrationsService {
       throw new BadRequestException('Registration has not been paid');
     }
 
+    const refundAmount = registration.amountPaid;
     registration.paymentStatus = PaymentStatus.REFUNDED;
     registration.registrationStatus = RegistrationStatus.CANCELLED;
     await em.flush();
+
+    // Send cancellation email with refund info
+    await this.sendRegistrationCancelledEmail(registration, refundAmount);
 
     return registration;
   }
@@ -810,5 +836,140 @@ export class EventRegistrationsService {
     }
     await em.flush();
     return registration;
+  }
+
+  // ==========================================================================
+  // Email Helper Methods
+  // ==========================================================================
+
+  /**
+   * Send registration confirmation email.
+   * Called when registration is paid/confirmed.
+   */
+  private async sendRegistrationConfirmationEmail(registration: EventRegistration): Promise<void> {
+    // Skip if no email address
+    if (!registration.email) {
+      this.logger.warn(`Cannot send confirmation email - no email address for registration ${registration.id}`);
+      return;
+    }
+
+    try {
+      const event = registration.event as Event;
+      const classes = registration.classes?.getItems() || [];
+
+      await this.emailService.sendEventRegistrationConfirmationEmail({
+        to: registration.email,
+        firstName: registration.firstName,
+        lastName: registration.lastName,
+        eventName: event.title,
+        eventDate: event.eventDate,
+        venueName: event.venueName || 'TBD',
+        venueAddress: event.venueAddress || 'TBD',
+        venueCity: event.venueCity,
+        venueState: event.venueState,
+        registrationId: registration.id,
+        checkInCode: registration.checkInCode || '',
+        classes: classes.map(c => ({
+          format: c.format,
+          className: c.className,
+          feeCharged: c.feeCharged,
+        })),
+        amountPaid: registration.amountPaid || 0,
+        qrCodeData: registration.qrCodeData,
+      });
+
+      this.logger.log(`Registration confirmation email sent to ${registration.email} for registration ${registration.id}`);
+    } catch (error) {
+      this.logger.error(`Failed to send registration confirmation email: ${error}`, error instanceof Error ? error.stack : undefined);
+      // Don't throw - email failure shouldn't fail the registration
+    }
+  }
+
+  /**
+   * Send registration cancelled email.
+   * Called when registration is cancelled or refunded.
+   */
+  private async sendRegistrationCancelledEmail(registration: EventRegistration, refundAmount?: number): Promise<void> {
+    // Skip if no email address
+    if (!registration.email) {
+      this.logger.warn(`Cannot send cancellation email - no email address for registration ${registration.id}`);
+      return;
+    }
+
+    try {
+      const event = registration.event as Event;
+
+      await this.emailService.sendEventRegistrationCancelledEmail({
+        to: registration.email,
+        firstName: registration.firstName,
+        eventName: event.title || 'Event',
+        eventDate: event.eventDate,
+        registrationId: registration.id,
+        checkInCode: registration.checkInCode || '',
+        refundAmount,
+      });
+
+      this.logger.log(`Registration cancelled email sent to ${registration.email} for registration ${registration.id}`);
+    } catch (error) {
+      this.logger.error(`Failed to send registration cancelled email: ${error}`, error instanceof Error ? error.stack : undefined);
+      // Don't throw - email failure shouldn't fail the cancellation
+    }
+  }
+
+  /**
+   * Send event reminder email.
+   * Called by scheduled job for day-before reminders.
+   */
+  async sendEventReminderEmails(eventId: string): Promise<{ sent: number; failed: number }> {
+    const em = this.em.fork();
+    const registrations = await em.find(EventRegistration, {
+      event: eventId,
+      registrationStatus: RegistrationStatus.CONFIRMED,
+      paymentStatus: PaymentStatus.PAID,
+    }, {
+      populate: ['event', 'classes'],
+    });
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const registration of registrations) {
+      // Skip if no email address
+      if (!registration.email) {
+        this.logger.warn(`Cannot send reminder email - no email address for registration ${registration.id}`);
+        continue;
+      }
+
+      try {
+        const event = registration.event as Event;
+        const classes = registration.classes?.getItems() || [];
+
+        await this.emailService.sendEventReminderEmail({
+          to: registration.email,
+          firstName: registration.firstName,
+          eventName: event.title || 'Event',
+          eventDate: event.eventDate,
+          venueName: event.venueName || 'TBD',
+          venueAddress: event.venueAddress || 'TBD',
+          venueCity: event.venueCity,
+          venueState: event.venueState,
+          checkInCode: registration.checkInCode || '',
+          classes: classes.map(c => ({
+            format: c.format,
+            className: c.className,
+          })),
+          qrCodeData: registration.qrCodeData,
+        });
+
+        sent++;
+        this.logger.log(`Event reminder email sent to ${registration.email}`);
+      } catch (error) {
+        failed++;
+        this.logger.error(`Failed to send event reminder email to ${registration.email}: ${error}`);
+      }
+    }
+
+    this.logger.log(`Event reminder emails for event ${eventId}: ${sent} sent, ${failed} failed`);
+    return { sent, failed };
   }
 }

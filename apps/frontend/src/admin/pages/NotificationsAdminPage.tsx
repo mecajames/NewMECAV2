@@ -57,6 +57,9 @@ export default function NotificationsAdminPage() {
   // Filters
   const [filterType, setFilterType] = useState<string>('');
   const [filterRead, setFilterRead] = useState<string>('');
+  const [filterSearch, setFilterSearch] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  const filterSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Send notification modal
   const [showSendModal, setShowSendModal] = useState(false);
@@ -77,9 +80,24 @@ export default function NotificationsAdminPage() {
   const [loadingCounts, setLoadingCounts] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Debounce search input
+  useEffect(() => {
+    if (filterSearchTimeoutRef.current) {
+      clearTimeout(filterSearchTimeoutRef.current);
+    }
+    filterSearchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(filterSearch);
+    }, 300);
+    return () => {
+      if (filterSearchTimeoutRef.current) {
+        clearTimeout(filterSearchTimeoutRef.current);
+      }
+    };
+  }, [filterSearch]);
+
   useEffect(() => {
     fetchData();
-  }, [filterType, filterRead]);
+  }, [filterType, filterRead, debouncedSearch]);
 
   // Fetch counts when mode changes to allActive or allUsers
   useEffect(() => {
@@ -153,6 +171,7 @@ export default function NotificationsAdminPage() {
       const params = new URLSearchParams();
       if (filterType) params.append('type', filterType);
       if (filterRead) params.append('read', filterRead);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       params.append('limit', '100');
 
       const [notifResponse, analyticsResponse] = await Promise.all([
@@ -398,6 +417,17 @@ export default function NotificationsAdminPage() {
               <option value="false">Unread</option>
               <option value="true">Read</option>
             </select>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                placeholder="Search by MECA ID, email, or name..."
+                className="pl-10 pr-4 py-2 w-64 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
 
             <span className="text-gray-400 text-sm ml-auto">
               Showing {notifications.length} of {total} notifications

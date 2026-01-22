@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner } from '@/shared/components';
@@ -26,7 +27,7 @@ import { ClassCalculatorPage, ClassesManagementPage } from '@/competition-classe
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
 import { BillingPage, InvoicePaymentPage } from '@/billing';
 import { JudgeApplicationPage, JudgesDirectoryPage, JudgeProfilePage, JudgeAssignmentsPage } from '@/judges';
-import { EventDirectorApplicationPage, EventDirectorsDirectoryPage, EventDirectorProfilePage, EventDirectorAssignmentsPage } from '@/event-directors';
+import { EventDirectorApplicationPage, EventDirectorsDirectoryPage, EventDirectorProfilePage, EventDirectorAssignmentsPage, EDHostingRequestsPage, EDSubmitEventPage, EDEventManagementPage } from '@/event-directors';
 import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage, EventRegistrationDetailPage, BusinessListingsAdminPage, JudgeApplicationsAdminPage, JudgeApplicationDetailPage, EventDirectorApplicationsAdminPage, EventDirectorApplicationDetailPage, JudgesAdminPage, AdminJudgeDetailPage, EventDirectorsAdminPage, AdminEventDirectorDetailPage, RatingsAdminPage, NotificationsAdminPage, WorldFinalsAdminPage } from '@/admin';
 import { AchievementsAdminPage } from '@/achievements';
 import { BillingDashboardPage, OrdersPage as AdminOrdersPage, InvoicesPage as AdminInvoicesPage, RevenueReportsPage, OrderDetailPage, InvoiceDetailPage } from '@/admin/billing';
@@ -58,6 +59,10 @@ import { OrderHistoryPage } from '@/shop/pages/OrderHistoryPage';
 import { OrderDetailPage as ShopOrderDetailPage } from '@/shop/pages/OrderDetailPage';
 import { AdminShopProductsPage } from '@/admin/pages/AdminShopProductsPage';
 import { AdminShopOrdersPage } from '@/admin/pages/AdminShopOrdersPage';
+import AdvertisersAdminPage from '@/admin/pages/AdvertisersAdminPage';
+import BannersAdminPage from '@/admin/pages/BannersAdminPage';
+import BannerAnalyticsPage from '@/admin/pages/BannerAnalyticsPage';
+import PointsConfigurationPage from '@/admin/pages/PointsConfigurationPage';
 
 // Lazy load checkout pages to avoid loading Stripe until needed
 const EventRegistrationCheckoutPage = lazy(() => import('@/event-registrations/pages/EventRegistrationCheckoutPage'));
@@ -72,10 +77,11 @@ const PageLoader = () => (
 
 function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-      <ReCaptchaProvider version="v2">
-        <BrowserRouter>
+    <HelmetProvider>
+      <AuthProvider>
+        <CartProvider>
+          <ReCaptchaProvider version="v2">
+            <BrowserRouter>
           <ScrollToTop />
           <ImpersonationBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
@@ -138,6 +144,9 @@ function App() {
               <Route path="/event-directors" element={<EventDirectorsDirectoryPage />} />
               <Route path="/event-directors/apply" element={<EventDirectorApplicationPage />} />
               <Route path="/event-directors/assignments" element={<EventDirectorAssignmentsPage />} />
+              <Route path="/event-directors/hosting-requests" element={<EDHostingRequestsPage />} />
+              <Route path="/event-directors/submit-event" element={<EDSubmitEventPage />} />
+              <Route path="/event-directors/event/:eventId" element={<EDEventManagementPage />} />
               <Route path="/event-directors/:id" element={<EventDirectorProfilePage />} />
 
               {/* User Routes */}
@@ -210,6 +219,14 @@ function App() {
               <Route path="/admin/shop/products" element={<AdminShopProductsPage />} />
               <Route path="/admin/shop/orders" element={<AdminShopOrdersPage />} />
 
+              {/* Admin Banner Routes */}
+              <Route path="/admin/advertisers" element={<AdvertisersAdminPage />} />
+              <Route path="/admin/banners" element={<BannersAdminPage />} />
+              <Route path="/admin/banners/analytics" element={<BannerAnalyticsPage />} />
+
+              {/* Admin Points Configuration */}
+              <Route path="/admin/points-configuration" element={<PointsConfigurationPage />} />
+
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
@@ -217,10 +234,11 @@ function App() {
             </ForcePasswordChangeGuard>
           <Footer />
         </div>
-        </BrowserRouter>
-      </ReCaptchaProvider>
-      </CartProvider>
-    </AuthProvider>
+            </BrowserRouter>
+          </ReCaptchaProvider>
+        </CartProvider>
+      </AuthProvider>
+    </HelmetProvider>
   );
 }
 

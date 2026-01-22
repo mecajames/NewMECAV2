@@ -6,6 +6,7 @@ import { AuditModule } from '../audit/audit.module';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { WorldFinalsModule } from '../world-finals/world-finals.module';
 import { AchievementsModule } from '../achievements/achievements.module';
+import { PointsConfigurationModule } from '../points-configuration/points-configuration.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { AchievementsModule } from '../achievements/achievements.module';
     forwardRef(() => MembershipsModule),
     forwardRef(() => WorldFinalsModule),
     forwardRef(() => AchievementsModule),
+    PointsConfigurationModule,
   ],
   controllers: [CompetitionResultsController],
   providers: [CompetitionResultsService, ResultsImportService],

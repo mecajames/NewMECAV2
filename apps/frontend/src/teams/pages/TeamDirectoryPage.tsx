@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Search, MapPin, User, Globe, Shield } from 'lucide-react';
 import { teamsApi, Team } from '../teams.api-client';
+import { SEOHead, useTeamDirectorySEO } from '@/shared/seo';
 
 const TEAM_TYPE_LABELS: Record<string, string> = {
   competitive: 'Competitive',
@@ -24,6 +25,7 @@ export default function TeamDirectoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [teamTypeFilter, setTeamTypeFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
+  const seoProps = useTeamDirectorySEO();
 
   useEffect(() => {
     fetchPublicTeams();
@@ -57,22 +59,27 @@ export default function TeamDirectoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-      </div>
+      <>
+        <SEOHead {...seoProps} />
+        <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Shield className="h-10 w-10 text-orange-500" />
-            <h1 className="text-4xl font-bold text-white">Team Directory</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <Shield className="h-10 w-10 text-orange-500" />
+              <h1 className="text-4xl font-bold text-white">Team Directory</h1>
+            </div>
+            <p className="text-gray-400">Browse MECA competition teams</p>
           </div>
-          <p className="text-gray-400">Browse MECA competition teams</p>
-        </div>
 
         {error && (
           <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4">
@@ -223,7 +230,8 @@ export default function TeamDirectoryPage() {
             </p>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

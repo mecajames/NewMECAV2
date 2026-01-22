@@ -40,18 +40,45 @@ export class TrainingRecordsController {
     }
 
     const token = authHeader.substring(7);
-    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
 
-    if (error || !user) {
-      throw new UnauthorizedException('Invalid authorization token');
+    let user;
+    try {
+      const result = await this.supabaseAdmin.getClient().auth.getUser(token);
+      if (result.error || !result.data?.user) {
+        console.error('[TrainingRecords] Auth error:', result.error?.message);
+        throw new UnauthorizedException('Invalid authorization token');
+      }
+      user = result.data.user;
+    } catch (error: any) {
+      if (error instanceof UnauthorizedException) throw error;
+      console.error('[TrainingRecords] Supabase auth error:', error.message);
+      throw new UnauthorizedException('Authentication failed');
     }
 
-    const em = this.em.fork();
-    const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Admin access required');
+    try {
+      const em = this.em.fork();
+      const profile = await em.findOne(Profile, { id: user.id });
+      if (!profile) {
+        console.error('[TrainingRecords] Profile not found for user:', user.id);
+        throw new ForbiddenException('Profile not found');
+      }
+      if (profile.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('Admin access required');
+      }
+      return { user, profile };
+    } catch (error: any) {
+      if (error instanceof ForbiddenException) throw error;
+      console.error('[TrainingRecords] Profile lookup error:', error.message);
+      throw new ForbiddenException('Authorization check failed');
     }
-    return { user, profile };
+  }
+
+  /**
+   * Health check endpoint - no auth required
+   */
+  @Get('health')
+  healthCheck() {
+    return { status: 'ok', module: 'training-records' };
   }
 
   /**
@@ -74,8 +101,7 @@ export class TrainingRecordsController {
         role: trainer.role,
       }));
     } catch (error: any) {
-      // Log and rethrow with more info for debugging
-      console.error('getPotentialTrainers error:', error?.message, error?.stack);
+      console.error('[TrainingRecords] getPotentialTrainers error:', error.message, error.stack);
       throw error;
     }
   }
@@ -89,28 +115,33 @@ export class TrainingRecordsController {
     @Param('traineeType') traineeType: TraineeType,
     @Param('traineeId') traineeId: string,
   ) {
-    await this.requireAdmin(authHeader);
-    const records = await this.trainingRecordsService.getByTrainee(traineeType, traineeId);
+    try {
+      await this.requireAdmin(authHeader);
+      const records = await this.trainingRecordsService.getByTrainee(traineeType, traineeId);
 
-    // Transform to snake_case response
-    return records.map(record => ({
-      id: record.id,
-      trainee_type: record.trainee_type,
-      trainee_id: record.trainee_id,
-      training_type: record.training_type,
-      training_date: record.training_date,
-      result: record.result,
-      trainer_id: record.trainer?.id,
-      notes: record.notes,
-      created_at: record.created_at,
-      updated_at: record.updated_at,
-      trainer: record.trainer ? {
-        id: record.trainer.id,
-        first_name: record.trainer.first_name,
-        last_name: record.trainer.last_name,
-        email: record.trainer.email,
-      } : undefined,
-    }));
+      // Transform to snake_case response
+      return records.map(record => ({
+        id: record.id,
+        trainee_type: record.trainee_type,
+        trainee_id: record.trainee_id,
+        training_type: record.training_type,
+        training_date: record.training_date,
+        result: record.result,
+        trainer_id: record.trainer?.id,
+        notes: record.notes,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+        trainer: record.trainer ? {
+          id: record.trainer.id,
+          first_name: record.trainer.first_name,
+          last_name: record.trainer.last_name,
+          email: record.trainer.email,
+        } : undefined,
+      }));
+    } catch (error: any) {
+      console.error('[TrainingRecords] getByTrainee error:', error.message, error.stack);
+      throw error;
+    }
   }
 
   /**

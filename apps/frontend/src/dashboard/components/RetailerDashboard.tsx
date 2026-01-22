@@ -6,7 +6,6 @@ import {
   Award,
   Edit,
   Plus,
-  Upload,
   X,
   Save,
   Eye,
@@ -89,7 +88,7 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
     }
   };
 
-  const loadFormData = (listing: RetailerListing | ManufacturerListing | null, type: ListingType) => {
+  const loadFormData = (listing: RetailerListing | ManufacturerListing | null, _type: ListingType) => {
     if (listing) {
       setFormData({
         business_name: listing.businessName || '',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Calendar } from 'lucide-react';
 import { Season } from '@/types/database';
 import { seasonsApi } from '@/seasons';
@@ -22,6 +22,7 @@ export default function SeasonSelector({
 }: SeasonSelectorProps) {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(false);
+  const hasAutoSelected = useRef(false);
 
   useEffect(() => {
     const fetchSeasons = async () => {
@@ -30,10 +31,11 @@ export default function SeasonSelector({
         const data = await seasonsApi.getAll();
         setSeasons(data as any);
 
-        // Auto-select current season if requested and no season is selected
-        if (autoSelectCurrent && !selectedSeasonId) {
+        // Auto-select current season only once on initial mount
+        if (autoSelectCurrent && !hasAutoSelected.current && !selectedSeasonId) {
           const currentSeason = (data as Season[]).find(s => s.is_current);
           if (currentSeason) {
+            hasAutoSelected.current = true;
             onSeasonChange(currentSeason.id);
           }
         }
@@ -46,7 +48,7 @@ export default function SeasonSelector({
     };
 
     fetchSeasons();
-  }, [autoSelectCurrent, selectedSeasonId, onSeasonChange]);
+  }, [autoSelectCurrent, onSeasonChange]);
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>

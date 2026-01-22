@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Search, MapPin, Globe, Mail, Phone, Building2, Tag } from 'lucide-react';
 import { getAllRetailers, RetailerListing } from '@/business-listings';
+import { SEOHead, useRetailerDirectorySEO } from '@/shared/seo';
 
 const STORE_TYPE_LABELS: Record<string, string> = {
   brick_and_mortar: 'Physical Store',
@@ -22,6 +23,7 @@ export default function RetailerDirectoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [storeTypeFilter, setStoreTypeFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
+  const seoProps = useRetailerDirectorySEO();
 
   useEffect(() => {
     fetchRetailers();
@@ -54,22 +56,27 @@ export default function RetailerDirectoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-      </div>
+      <>
+        <SEOHead {...seoProps} />
+        <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Store className="h-10 w-10 text-orange-500" />
-            <h1 className="text-4xl font-bold text-white">Retailer Directory</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <Store className="h-10 w-10 text-orange-500" />
+              <h1 className="text-4xl font-bold text-white">Retailer Directory</h1>
+            </div>
+            <p className="text-gray-400">Browse MECA authorized retailers and shops</p>
           </div>
-          <p className="text-gray-400">Browse MECA authorized retailers and shops</p>
-        </div>
 
         {error && (
           <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4">
@@ -224,7 +231,8 @@ export default function RetailerDirectoryPage() {
             </p>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

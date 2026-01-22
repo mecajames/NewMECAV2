@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   QrCode,
   Camera,
@@ -8,7 +8,6 @@ import {
   AlertCircle,
   Loader2,
   ArrowLeft,
-  User,
   Mail,
   Phone,
   Car,
@@ -27,7 +26,6 @@ import { eventRegistrationsApi, CheckInResponse } from '@/event-registrations';
 
 export default function EventCheckInPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const { user, profile, loading: authLoading } = useAuth();
 
   // State
@@ -346,7 +344,6 @@ export default function EventCheckInPage() {
                         constraints={{ facingMode: 'environment' }}
                         formats={['qr_code']}
                         components={{
-                          audio: false,
                           torch: true,
                         }}
                         styles={{

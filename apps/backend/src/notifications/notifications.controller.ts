@@ -104,6 +104,7 @@ export class NotificationsController {
     @Headers('authorization') authHeader: string,
     @Query('type') type?: string,
     @Query('read') read?: string,
+    @Query('search') search?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
@@ -111,6 +112,7 @@ export class NotificationsController {
     const result = await this.notificationsService.getAllNotifications({
       type,
       read: read === 'true' ? true : read === 'false' ? false : undefined,
+      search,
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });

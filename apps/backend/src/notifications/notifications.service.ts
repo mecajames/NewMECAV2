@@ -85,6 +85,7 @@ export class NotificationsService {
   async getAllNotifications(filters?: {
     type?: string;
     read?: boolean;
+    search?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ notifications: Notification[]; total: number }> {
@@ -96,6 +97,34 @@ export class NotificationsService {
     }
     if (filters?.read !== undefined) {
       where.read = filters.read;
+    }
+
+    // If search is provided, we need to filter by user fields
+    if (filters?.search && filters.search.trim()) {
+      const searchTerm = filters.search.trim().toLowerCase();
+
+      // Find matching user IDs first
+      const matchingProfiles = await em.find(
+        Profile,
+        {
+          $or: [
+            { email: { $ilike: `%${searchTerm}%` } },
+            { first_name: { $ilike: `%${searchTerm}%` } },
+            { last_name: { $ilike: `%${searchTerm}%` } },
+            { meca_id: { $ilike: `%${searchTerm}%` } },
+          ],
+        },
+        { fields: ['id'] }
+      );
+
+      const matchingUserIds = matchingProfiles.map(p => p.id);
+
+      if (matchingUserIds.length === 0) {
+        // No matching users, return empty result
+        return { notifications: [], total: 0 };
+      }
+
+      where.user = { $in: matchingUserIds };
     }
 
     const [notifications, total] = await em.findAndCount(

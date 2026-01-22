@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Users, UserPlus, X, Check, AlertCircle, Gavel, ClipboardList, Search, Trash2 } from 'lucide-react';
+import { Users, UserPlus, X, Check, AlertCircle, Gavel, ClipboardList, Search, Trash2, ChevronDown } from 'lucide-react';
 import {
   getEventAssignments,
   createAssignment,
   deleteAssignment,
+  updateAssignment,
   getAllJudges,
   EventJudgeAssignment,
   EventAssignmentStatus,
@@ -14,6 +15,7 @@ import {
   getEventEDAssignments,
   createEDAssignment,
   deleteEDAssignment,
+  updateEDAssignment,
   getAllEventDirectors,
   EventDirectorAssignment
 } from '@/event-directors';
@@ -61,7 +63,7 @@ const ROLE_LABELS: Record<EventAssignmentRole, string> = {
   [EventAssignmentRole.TRAINEE]: 'Trainee',
 };
 
-export default function EventAssignmentManager({ eventId, eventTitle }: EventAssignmentManagerProps) {
+export default function EventAssignmentManager({ eventId, eventTitle: _eventTitle }: EventAssignmentManagerProps) {
   const [activeTab, setActiveTab] = useState<'judges' | 'eds'>('judges');
   const [judgeAssignments, setJudgeAssignments] = useState<EventJudgeAssignment[]>([]);
   const [edAssignments, setEdAssignments] = useState<EventDirectorAssignment[]>([]);
@@ -75,6 +77,7 @@ export default function EventAssignmentManager({ eventId, eventTitle }: EventAss
   const [availableEDs, setAvailableEDs] = useState<EventDirector[]>([]);
   const [selectedRole, setSelectedRole] = useState<EventAssignmentRole>(EventAssignmentRole.PRIMARY);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   useEffect(() => {
     loadAssignments();
@@ -154,6 +157,22 @@ export default function EventAssignmentManager({ eventId, eventTitle }: EventAss
       await loadAssignments();
     } catch (err: any) {
       setError(err.message || 'Failed to remove assignment');
+    }
+  }
+
+  async function handleStatusUpdate(assignmentId: string, newStatus: EventAssignmentStatus, type: 'judge' | 'ed') {
+    try {
+      setUpdatingStatus(assignmentId);
+      if (type === 'judge') {
+        await updateAssignment(assignmentId, { status: newStatus });
+      } else {
+        await updateEDAssignment(assignmentId, { status: newStatus });
+      }
+      await loadAssignments();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update status');
+    } finally {
+      setUpdatingStatus(null);
     }
   }
 
@@ -265,9 +284,22 @@ export default function EventAssignmentManager({ eventId, eventTitle }: EventAss
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_STYLES[assignment.status]}`}>
-                    {assignment.status.replace('_', ' ')}
-                  </span>
+                  <div className="relative">
+                    <select
+                      value={assignment.status}
+                      onChange={(e) => handleStatusUpdate(assignment.id, e.target.value as EventAssignmentStatus, 'judge')}
+                      disabled={updatingStatus === assignment.id}
+                      className={`appearance-none pl-2 pr-7 py-1 rounded-full text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${STATUS_STYLES[assignment.status]} ${updatingStatus === assignment.id ? 'opacity-50' : ''}`}
+                    >
+                      <option value={EventAssignmentStatus.REQUESTED}>requested</option>
+                      <option value={EventAssignmentStatus.ACCEPTED}>accepted</option>
+                      <option value={EventAssignmentStatus.CONFIRMED}>confirmed</option>
+                      <option value={EventAssignmentStatus.COMPLETED}>completed</option>
+                      <option value={EventAssignmentStatus.DECLINED}>declined</option>
+                      <option value={EventAssignmentStatus.NO_SHOW}>no show</option>
+                    </select>
+                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" />
+                  </div>
                   <button
                     onClick={() => handleRemoveAssignment(assignment.id, 'judge')}
                     className="p-1 text-gray-400 hover:text-red-400 transition-colors"
@@ -299,9 +331,22 @@ export default function EventAssignmentManager({ eventId, eventTitle }: EventAss
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_STYLES[assignment.status]}`}>
-                    {assignment.status.replace('_', ' ')}
-                  </span>
+                  <div className="relative">
+                    <select
+                      value={assignment.status}
+                      onChange={(e) => handleStatusUpdate(assignment.id, e.target.value as EventAssignmentStatus, 'ed')}
+                      disabled={updatingStatus === assignment.id}
+                      className={`appearance-none pl-2 pr-7 py-1 rounded-full text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 ${STATUS_STYLES[assignment.status]} ${updatingStatus === assignment.id ? 'opacity-50' : ''}`}
+                    >
+                      <option value={EventAssignmentStatus.REQUESTED}>requested</option>
+                      <option value={EventAssignmentStatus.ACCEPTED}>accepted</option>
+                      <option value={EventAssignmentStatus.CONFIRMED}>confirmed</option>
+                      <option value={EventAssignmentStatus.COMPLETED}>completed</option>
+                      <option value={EventAssignmentStatus.DECLINED}>declined</option>
+                      <option value={EventAssignmentStatus.NO_SHOW}>no show</option>
+                    </select>
+                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" />
+                  </div>
                   <button
                     onClick={() => handleRemoveAssignment(assignment.id, 'ed')}
                     className="p-1 text-gray-400 hover:text-red-400 transition-colors"

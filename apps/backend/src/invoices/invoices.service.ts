@@ -93,7 +93,7 @@ export class InvoicesService {
     const invoice = await em.findOne(
       Invoice,
       { id },
-      { populate: ['user', 'items', 'order'] },
+      { populate: ['user', 'items'] },
     );
 
     if (!invoice) {
@@ -111,7 +111,7 @@ export class InvoicesService {
     return em.findOne(
       Invoice,
       { invoiceNumber },
-      { populate: ['user', 'items', 'order'] },
+      { populate: ['user', 'items'] },
     );
   }
 
@@ -275,7 +275,7 @@ export class InvoicesService {
     const order = await em.findOne(
       Order,
       { id: orderId },
-      { populate: ['user', 'items'] },
+      { populate: ['member', 'items'] },
     );
 
     if (!order) {
@@ -312,8 +312,8 @@ export class InvoicesService {
     };
 
     // Set user if available
-    if (order.user) {
-      invoiceData.user = order.user;
+    if (order.member) {
+      invoiceData.user = order.member;
     }
 
     // Set guest email if available (for guest checkout)

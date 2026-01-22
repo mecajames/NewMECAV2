@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, MapPin, Award, Star, Filter, Users, Scale } from 'lucide-react';
 import { getJudgesDirectory, PublicJudge } from '../judges.api-client';
+import { SEOHead, useJudgeDirectorySEO } from '@/shared/seo';
 
 const US_STATES = [
   'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
@@ -35,6 +36,7 @@ export default function JudgesDirectoryPage() {
   const [specialtyFilter, setSpecialtyFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const seoProps = useJudgeDirectorySEO();
 
   useEffect(() => {
     loadJudges();
@@ -90,14 +92,16 @@ export default function JudgesDirectoryPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-orange-500/20 mb-6">
-            <Scale className="h-10 w-10 text-orange-500" />
-          </div>
-          <h1 className="text-4xl font-bold text-white mb-4">MECA Certified Judges</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-orange-500/20 mb-6">
+              <Scale className="h-10 w-10 text-orange-500" />
+            </div>
+            <h1 className="text-4xl font-bold text-white mb-4">MECA Certified Judges</h1>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
             Find certified MECA judges in your area. Our judges are trained professionals
             dedicated to fair and accurate competition scoring.
@@ -316,8 +320,9 @@ export default function JudgesDirectoryPage() {
           >
             Apply to Become a Judge
           </Link>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

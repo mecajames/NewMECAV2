@@ -7,11 +7,13 @@ import {
   WeekendAvailability,
   CreateEventDirectorApplicationDto,
   AdminQuickCreateEventDirectorApplicationDto,
+  AdminDirectCreateEventDirectorDto,
   ReviewEventDirectorApplicationDto,
   CreateEventDirectorAssignmentDto,
   UpdateEventDirectorAssignmentDto,
   EventAssignmentStatus,
   AssignmentRequestType,
+  UserRole,
 } from '@newmeca/shared';
 import { EventDirectorApplication } from './event-director-application.entity';
 import { EventDirectorApplicationReference } from './event-director-application-reference.entity';
@@ -274,6 +276,12 @@ export class EventDirectorsService {
     if (dto.status === ApplicationStatus.APPROVED) {
       // Create EventDirector record
       await this.createEventDirectorFromApplication(application);
+
+      // Auto-enable canApplyEventDirector permission on approval
+      const user = await this.em.findOneOrFail(Profile, application.user.id);
+      user.canApplyEventDirector = true;
+      user.edPermissionGrantedAt = new Date();
+      user.edPermissionGrantedBy = application.reviewedBy;
     }
 
     await this.em.flush();
@@ -317,6 +325,51 @@ export class EventDirectorsService {
       populate: ['user'],
       orderBy: { createdAt: 'DESC' },
     });
+  }
+
+  async createEventDirectorDirectly(
+    adminId: string,
+    dto: AdminDirectCreateEventDirectorDto,
+  ): Promise<EventDirector> {
+    const user = await this.em.findOneOrFail(Profile, dto.user_id);
+    const admin = await this.em.findOneOrFail(Profile, adminId);
+
+    // Check if user is already an event director
+    const existingED = await this.em.findOne(EventDirector, { user: { id: dto.user_id } });
+    if (existingED) {
+      throw new BadRequestException('This user is already a registered event director');
+    }
+
+    // Create the event director record directly without application
+    const eventDirector = new EventDirector();
+    eventDirector.user = user;
+    eventDirector.application = null as any; // No application - created directly by admin
+    eventDirector.isActive = true;
+    eventDirector.state = dto.state;
+    eventDirector.city = dto.city;
+    eventDirector.country = dto.country || 'USA';
+    eventDirector.totalEventsDirected = 0;
+    eventDirector.totalRatings = 0;
+    eventDirector.approvedDate = new Date();
+    eventDirector.adminNotes = dto.admin_notes;
+
+    await this.em.persistAndFlush(eventDirector);
+
+    // Only enable permission if explicitly requested
+    if (dto.enable_permission) {
+      user.canApplyEventDirector = true;
+      user.edPermissionGrantedAt = new Date();
+      user.edPermissionGrantedBy = admin;
+
+      // Update user role to EVENT_DIRECTOR if not already admin
+      if (user.role !== UserRole.ADMIN) {
+        user.role = UserRole.EVENT_DIRECTOR;
+      }
+
+      await this.em.flush();
+    }
+
+    return eventDirector;
   }
 
   async getEventDirector(id: string): Promise<EventDirector> {
@@ -411,6 +464,11 @@ export class EventDirectorsService {
 
     if (!eventDirector.isActive) {
       throw new BadRequestException('Cannot assign inactive event director to event');
+    }
+
+    // Check if ED has permission enabled on their profile
+    if (!eventDirector.user.canApplyEventDirector) {
+      throw new BadRequestException('Cannot assign event director - event director permission is not enabled on their profile');
     }
 
     // Check if assignment already exists
@@ -555,8 +613,20 @@ export class EventDirectorsService {
       const oldStatus = assignment.status;
       assignment.status = dto.status;
 
-      // If status changed - send notification
+      // Update totalEventsDirected counter when status changes to/from COMPLETED
       if (oldStatus !== dto.status) {
+        const wasCompleted = oldStatus === EventAssignmentStatus.COMPLETED;
+        const isNowCompleted = dto.status === EventAssignmentStatus.COMPLETED;
+
+        if (!wasCompleted && isNowCompleted) {
+          // Status changed TO completed - increment counter
+          assignment.eventDirector.totalEventsDirected = (assignment.eventDirector.totalEventsDirected || 0) + 1;
+        } else if (wasCompleted && !isNowCompleted) {
+          // Status changed FROM completed - decrement counter (min 0)
+          assignment.eventDirector.totalEventsDirected = Math.max(0, (assignment.eventDirector.totalEventsDirected || 0) - 1);
+        }
+
+        // Send notification for status changes
         await this.sendAssignmentNotification(assignment, 'updated');
       }
     }

@@ -75,9 +75,9 @@ export class MemberStatsService {
     const result = await em.getConnection().execute(`
       SELECT
         COUNT(*)::int as count,
-        COALESCE(SUM(CAST(total AS DECIMAL)), 0)::float as total_spent
+        COALESCE(SUM(CAST(total_amount AS DECIMAL)), 0)::float as total_spent
       FROM orders
-      WHERE user_id = ? AND status IN ('completed', 'paid')
+      WHERE member_id = ? AND status IN ('completed', 'paid')
     `, [userId]);
 
     return {
@@ -225,9 +225,9 @@ export class MemberStatsService {
 
     // Get recent orders
     const orders = await em.getConnection().execute(`
-      SELECT id, created_at, order_number, total, status
+      SELECT id, created_at, order_number, total_amount, status
       FROM orders
-      WHERE user_id = ? AND status IN ('completed', 'paid')
+      WHERE member_id = ? AND status IN ('completed', 'paid')
       ORDER BY created_at DESC
       LIMIT 3
     `, [userId]);
@@ -236,9 +236,9 @@ export class MemberStatsService {
       activities.push({
         id: order.id,
         type: 'payment',
-        description: `Order #${order.order_number} - $${order.total}`,
+        description: `Order #${order.order_number} - $${order.total_amount}`,
         timestamp: new Date(order.created_at),
-        metadata: { total: order.total, status: order.status },
+        metadata: { total: order.total_amount, status: order.status },
       });
     }
 

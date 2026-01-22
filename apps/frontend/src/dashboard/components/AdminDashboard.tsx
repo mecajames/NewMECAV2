@@ -4,7 +4,7 @@ import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
-  ShoppingCart, Package
+  ShoppingCart, Package, Megaphone, Building2, BarChart3
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -38,7 +38,7 @@ interface AdminSection {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<AdminView>('overview');
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [_selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
@@ -241,6 +241,14 @@ export default function AdminDashboard() {
           color: 'orange',
           navigateTo: '/admin/achievements',
         },
+        {
+          icon: BarChart3,
+          title: 'Points Configuration',
+          description: 'Configure point values for competition placements',
+          action: 'points-config',
+          color: 'rose',
+          navigateTo: '/admin/points-configuration',
+        },
       ],
     },
     {
@@ -380,6 +388,37 @@ export default function AdminDashboard() {
         },
       ],
     },
+    {
+      id: 'advertising',
+      icon: Megaphone,
+      title: 'Advertising',
+      actions: [
+        {
+          icon: Building2,
+          title: 'Advertisers',
+          description: 'Manage advertiser contacts and details',
+          action: 'advertisers',
+          color: 'orange',
+          navigateTo: '/admin/advertisers',
+        },
+        {
+          icon: ImageIcon,
+          title: 'Banner Ads',
+          description: 'Create and manage banner advertisements',
+          action: 'banners',
+          color: 'purple',
+          navigateTo: '/admin/banners',
+        },
+        {
+          icon: BarChart3,
+          title: 'Banner Analytics',
+          description: 'View banner impressions and click rates',
+          action: 'banner-analytics',
+          color: 'cyan',
+          navigateTo: '/admin/banners/analytics',
+        },
+      ],
+    },
   ];
 
   const getIconColorClass = (color: string) => {
@@ -516,7 +555,7 @@ export default function AdminDashboard() {
               {/* Section Content */}
               {isExpanded && (
                 <div className="border-t border-slate-700 bg-slate-800/50">
-                  {section.actions.map((action, index) => {
+                  {section.actions.map((action) => {
                     const ActionIcon = action.icon;
                     return (
                       <button

@@ -296,6 +296,34 @@ export async function adminQuickCreateEventDirectorApplication(dto: AdminQuickCr
   return response.json();
 }
 
+export interface AdminDirectCreateEventDirectorDto {
+  user_id: string;
+  state: string;
+  city: string;
+  country?: string;
+  travel_radius?: string;
+  additional_regions?: string[];
+  admin_notes?: string;
+  enable_permission?: boolean; // If true, enable canApplyEventDirector on profile
+}
+
+export async function createEventDirectorDirectly(dto: AdminDirectCreateEventDirectorDto): Promise<EventDirector> {
+  const headers = await getAuthHeaders();
+
+  const response = await fetch(`${API_BASE}/direct`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(dto),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to create event director');
+  }
+
+  return response.json();
+}
+
 export async function getEventDirectorApplication(id: string): Promise<EventDirectorApplication> {
   const headers = await getAuthHeaders();
 
@@ -410,10 +438,10 @@ export interface EventDirectorAssignment {
   admin_notes: string | null;
   event?: {
     id: string;
-    eventName: string;
-    eventDate: string;
-    city: string;
-    state: string;
+    title: string;
+    event_date: string;
+    venue_city: string;
+    venue_state: string;
   };
   eventDirector?: {
     id: string;

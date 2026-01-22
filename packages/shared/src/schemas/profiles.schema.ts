@@ -74,3 +74,78 @@ export const PublicProfileSchema = z.object({
   membership_status: MembershipStatusSchema,
 });
 export type PublicProfile = z.infer<typeof PublicProfileSchema>;
+
+// =============================================================================
+// Judge and Event Director Permission Schemas
+// =============================================================================
+
+// Update Judge Permission DTO
+export const UpdateJudgePermissionSchema = z.object({
+  enabled: z.boolean(),
+  autoComplete: z.boolean().optional(),
+  expirationDate: z.string().nullable().optional(),
+  judgeLevel: z.string().optional(),
+});
+export type UpdateJudgePermissionDto = z.infer<typeof UpdateJudgePermissionSchema>;
+
+// Update Event Director Permission DTO
+export const UpdateEdPermissionSchema = z.object({
+  enabled: z.boolean(),
+  autoComplete: z.boolean().optional(),
+  expirationDate: z.string().nullable().optional(),
+});
+export type UpdateEdPermissionDto = z.infer<typeof UpdateEdPermissionSchema>;
+
+// Judge/ED Status Response Schema
+export const JudgeEdStatusSchema = z.object({
+  judge: z.object({
+    permissionEnabled: z.boolean(),
+    status: z.string(),
+    grantedAt: z.string().nullable(),
+    grantedBy: z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+    }).nullable(),
+    expirationDate: z.string().nullable(),
+    judgeRecord: z.object({
+      id: z.string().uuid(),
+      level: z.string(),
+      isActive: z.boolean(),
+    }).nullable(),
+    application: z.object({
+      id: z.string().uuid(),
+      status: z.string(),
+      submittedAt: z.string(),
+    }).nullable(),
+  }),
+  eventDirector: z.object({
+    permissionEnabled: z.boolean(),
+    status: z.string(),
+    grantedAt: z.string().nullable(),
+    grantedBy: z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+    }).nullable(),
+    expirationDate: z.string().nullable(),
+    edRecord: z.object({
+      id: z.string().uuid(),
+      isActive: z.boolean(),
+    }).nullable(),
+    application: z.object({
+      id: z.string().uuid(),
+      status: z.string(),
+      submittedAt: z.string(),
+    }).nullable(),
+  }),
+  eventsJudged: z.array(z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    date: z.string(),
+  })),
+  eventsDirected: z.array(z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    date: z.string(),
+  })),
+});
+export type JudgeEdStatus = z.infer<typeof JudgeEdStatusSchema>;

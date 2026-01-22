@@ -39,3 +39,9 @@ export * from "./achievements.schema.js";
 
 // Shop
 export * from "./shop.schema.js";
+
+// Banners
+export * from "./banners.schema.js";
+
+// Points Configuration
+export * from "./points-configuration.schema.js";

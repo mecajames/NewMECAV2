@@ -38,6 +38,9 @@ const TEAM_MANAGEMENT_ROLES: TeamMemberRole[] = ['owner', 'co_owner'];
 // Roles that can manage members (add/remove)
 const MEMBER_MANAGEMENT_ROLES: TeamMemberRole[] = ['owner', 'co_owner', 'moderator'];
 
+// Roles that can manage join requests (approve/reject)
+const JOIN_REQUEST_MANAGEMENT_ROLES: TeamMemberRole[] = ['owner', 'co_owner', 'moderator'];
+
 // Roles that can change other members' roles
 const ROLE_MANAGEMENT_ROLES: TeamMemberRole[] = ['owner', 'co_owner'];
 
@@ -501,12 +504,11 @@ export class TeamsService {
       throw new ForbiddenException('You need a Team membership to create a team. Please purchase a Team membership first.');
     }
 
-    // Check if user is already on a team or is an owner
-    const existingMembership = await em.findOne(TeamMember, { userId: ownerId });
+    // Check if user already owns a team (users can only OWN one team since it's a paid membership)
+    // Note: Users CAN join multiple teams as a member, but can only own ONE team
     const existingTeamAsOwner = await em.findOne(Team, { captainId: ownerId, isActive: true });
-
-    if (existingMembership || existingTeamAsOwner) {
-      throw new BadRequestException('You are already on a team. Leave your current team before creating a new one.');
+    if (existingTeamAsOwner) {
+      throw new BadRequestException('You already own a team. Each team membership allows you to own only one team.');
     }
 
     const team = em.create(Team, {
@@ -626,17 +628,13 @@ export class TeamsService {
       'Only team owners, co-owners, moderators, or admins can add members'
     );
 
-    // Check if user is already on a team
-    const existingMembership = await em.findOne(TeamMember, { userId });
-    if (existingMembership) {
-      throw new BadRequestException('User is already on a team');
+    // Check if user is already a member of THIS specific team
+    const existingMembershipOnThisTeam = await em.findOne(TeamMember, { teamId, userId, status: 'active' });
+    if (existingMembershipOnThisTeam) {
+      throw new BadRequestException('User is already a member of this team');
     }
 
-    // Check if user is an owner of another team
-    const existingTeamAsOwner = await em.findOne(Team, { captainId: userId, isActive: true });
-    if (existingTeamAsOwner && existingTeamAsOwner.id !== teamId) {
-      throw new BadRequestException('User is the owner of another team');
-    }
+    // Note: Users can now be on multiple teams - no cross-team constraint
 
     const member = em.create(TeamMember, {
       teamId,
@@ -851,9 +849,8 @@ export class TeamsService {
     // Check if user has active MECA membership
     const hasActiveMembership = await this.hasActiveMecaMembership(user.id);
 
-    // Check if user is already on a team
-    const existingTeamMembership = await em.findOne(TeamMember, { userId: user.id, status: 'active' });
-    const existingPendingInvite = await em.findOne(TeamMember, { userId: user.id, status: 'pending_invite' });
+    // Note: Users can now be on multiple teams, so we only check for active MECA membership
+    // The actual invite process will check for duplicate membership on the specific team
 
     let canInvite = true;
     let reason: string | undefined;
@@ -861,12 +858,6 @@ export class TeamsService {
     if (!hasActiveMembership) {
       canInvite = false;
       reason = 'This member does not have an active MECA membership';
-    } else if (existingTeamMembership) {
-      canInvite = false;
-      reason = 'This member is already on a team';
-    } else if (existingPendingInvite) {
-      canInvite = false;
-      reason = 'This member already has a pending team invite';
     }
 
     return {
@@ -933,13 +924,15 @@ export class TeamsService {
       throw new BadRequestException('Cannot invite a member without an active MECA membership');
     }
 
-    // Check if user is already on a team
-    const existingMembership = await em.findOne(TeamMember, { userId: targetUserId, status: 'active' });
-    if (existingMembership) {
-      throw new BadRequestException('This member is already on a team');
+    // Check if user is already a member of THIS specific team
+    const existingMembershipOnThisTeam = await em.findOne(TeamMember, { teamId, userId: targetUserId, status: 'active' });
+    if (existingMembershipOnThisTeam) {
+      throw new BadRequestException('This member is already on this team');
     }
 
-    // Check if there's already a pending invite
+    // Note: Users can now be on multiple teams - no cross-team constraint
+
+    // Check if there's already a pending invite to THIS team
     const existingInvite = await em.findOne(TeamMember, {
       teamId,
       userId: targetUserId,
@@ -996,13 +989,15 @@ export class TeamsService {
       throw new BadRequestException('You must have an active MECA membership to join a team');
     }
 
-    // Check if user is already on a team
-    const existingMembership = await em.findOne(TeamMember, { userId, status: 'active' });
-    if (existingMembership) {
-      throw new BadRequestException('You are already on a team');
+    // Check if user is already a member of THIS specific team
+    const existingMembershipOnThisTeam = await em.findOne(TeamMember, { teamId, userId, status: 'active' });
+    if (existingMembershipOnThisTeam) {
+      throw new BadRequestException('You are already a member of this team');
     }
 
-    // Check if there's already a pending request
+    // Note: Users can now be on multiple teams - no cross-team constraint
+
+    // Check if there's already a pending request to THIS team
     const existingRequest = await em.findOne(TeamMember, {
       teamId,
       userId,
@@ -1067,8 +1062,8 @@ export class TeamsService {
       em,
       teamId,
       requesterId,
-      TEAM_MANAGEMENT_ROLES,
-      'Only team owners or co-owners can approve join requests'
+      JOIN_REQUEST_MANAGEMENT_ROLES,
+      'Only team owners, co-owners, or moderators can approve join requests'
     );
 
     // Find the pending request
@@ -1103,8 +1098,8 @@ export class TeamsService {
       em,
       teamId,
       requesterId,
-      TEAM_MANAGEMENT_ROLES,
-      'Only team owners or co-owners can reject join requests'
+      JOIN_REQUEST_MANAGEMENT_ROLES,
+      'Only team owners, co-owners, or moderators can reject join requests'
     );
 
     // Find the pending request
@@ -1135,14 +1130,8 @@ export class TeamsService {
       throw new NotFoundException('Invite not found');
     }
 
-    // Check if user is already on another team
-    const existingMembership = await em.findOne(TeamMember, {
-      userId,
-      status: 'active'
-    });
-    if (existingMembership) {
-      throw new BadRequestException('You are already on a team. Leave your current team first.');
-    }
+    // Note: Users can now be on multiple teams - no cross-team constraint
+    // The invite process already ensures there's no duplicate membership on this specific team
 
     // Accept the invite
     invite.status = 'active';

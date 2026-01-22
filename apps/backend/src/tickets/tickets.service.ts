@@ -1,9 +1,10 @@
-import { Injectable, Inject, NotFoundException, forwardRef } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, forwardRef, Logger } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
 import { TicketAttachment } from './ticket-attachment.entity';
 import { TicketDepartment as TicketDepartmentEntity } from './entities/ticket-department.entity';
+import { TicketStaffDepartment } from './entities/ticket-staff-department.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
 import {
@@ -20,9 +21,13 @@ import {
 } from '@newmeca/shared';
 import { TicketRoutingService } from './ticket-routing.service';
 import { TicketStaffService } from './ticket-staff.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class TicketsService {
+  private readonly logger = new Logger(TicketsService.name);
+  private readonly frontendUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -30,6 +35,7 @@ export class TicketsService {
     private readonly routingService: TicketRoutingService,
     @Inject(forwardRef(() => TicketStaffService))
     private readonly staffService: TicketStaffService,
+    private readonly emailService: EmailService,
   ) {}
 
   // ==========================================================================
@@ -168,16 +174,27 @@ export class TicketsService {
     const ticket = em.create(Ticket, ticketData);
     await em.persistAndFlush(ticket);
 
-    return this.findById(ticket.id);
+    // Fetch the full ticket with relations for email notifications
+    const createdTicket = await this.findById(ticket.id);
+
+    // Send email notifications (don't await to avoid blocking response)
+    this.sendTicketCreatedEmails(createdTicket, routingResult.departmentId).catch(err => {
+      this.logger.error(`Failed to send ticket creation emails: ${err.message}`);
+    });
+
+    return createdTicket;
   }
 
   async update(id: string, data: UpdateTicketDto): Promise<Ticket> {
     const em = this.em.fork();
-    const ticket = await em.findOne(Ticket, { id });
+    const ticket = await em.findOne(Ticket, { id }, { populate: ['reporter'] });
 
     if (!ticket) {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
     }
+
+    // Track old status for email notification
+    const oldStatus = ticket.status;
 
     const updateData: any = {};
 
@@ -213,7 +230,16 @@ export class TicketsService {
     em.assign(ticket, updateData);
     await em.flush();
 
-    return this.findById(id);
+    const updatedTicket = await this.findById(id);
+
+    // Send status change email if status was updated
+    if (data.status !== undefined && data.status !== oldStatus) {
+      this.sendTicketStatusEmail(updatedTicket, oldStatus, data.status).catch(err => {
+        this.logger.error(`Failed to send ticket status email: ${err.message}`);
+      });
+    }
+
+    return updatedTicket;
   }
 
   async delete(id: string): Promise<void> {
@@ -283,14 +309,19 @@ export class TicketsService {
     });
   }
 
-  async createComment(data: CreateTicketCommentDto): Promise<TicketComment> {
+  async createComment(data: CreateTicketCommentDto, isStaffReply: boolean = false): Promise<TicketComment> {
     const em = this.em.fork();
 
-    // Verify ticket exists
-    const ticket = await em.findOne(Ticket, { id: data.ticket_id });
+    // Verify ticket exists and get reporter info
+    const ticket = await em.findOne(Ticket, { id: data.ticket_id }, {
+      populate: ['reporter', 'assignedTo'],
+    });
     if (!ticket) {
       throw new NotFoundException(`Ticket with ID ${data.ticket_id} not found`);
     }
+
+    // Get author info
+    const author = await em.findOne(Profile, { id: data.author_id });
 
     const commentData: any = {
       ticket: Reference.createFromPK(Ticket, data.ticket_id),
@@ -306,6 +337,13 @@ export class TicketsService {
     if (ticket.status === TicketStatus.AWAITING_RESPONSE && !data.is_internal) {
       ticket.status = TicketStatus.OPEN;
       await em.flush();
+    }
+
+    // Send reply notification email (only for non-internal comments)
+    if (!data.is_internal && author) {
+      this.sendTicketReplyEmail(ticket, data.content, author, isStaffReply).catch(err => {
+        this.logger.error(`Failed to send ticket reply email: ${err.message}`);
+      });
     }
 
     return comment;
@@ -558,5 +596,147 @@ export class TicketsService {
 
     const sequence = String(todayCount + 1).padStart(4, '0');
     return `MECA-${dateStr}-${sequence}`;
+  }
+
+  // ==========================================================================
+  // Email Notification Methods
+  // ==========================================================================
+
+  /**
+   * Send emails when a new ticket is created:
+   * 1. Confirmation email to the submitter
+   * 2. Alert email to assigned department staff
+   */
+  private async sendTicketCreatedEmails(ticket: Ticket, departmentId?: string): Promise<void> {
+    const viewTicketUrl = `${this.frontendUrl}/support/tickets/${ticket.ticketNumber}`;
+
+    // Send confirmation email to submitter
+    if (ticket.reporter?.email) {
+      await this.emailService.sendTicketCreatedEmail({
+        to: ticket.reporter.email,
+        firstName: ticket.reporter.first_name || undefined,
+        ticketNumber: ticket.ticketNumber,
+        ticketTitle: ticket.title,
+        ticketDescription: ticket.description,
+        category: ticket.category,
+        viewTicketUrl,
+      });
+    }
+
+    // Send alert email to department staff
+    if (departmentId) {
+      await this.sendStaffAlertEmails(ticket, departmentId, viewTicketUrl);
+    }
+  }
+
+  /**
+   * Send alert emails to all staff members assigned to a department
+   */
+  private async sendStaffAlertEmails(ticket: Ticket, departmentId: string, viewTicketUrl: string): Promise<void> {
+    const em = this.em.fork();
+
+    // Get department info
+    const department = await em.findOne(TicketDepartmentEntity, { id: departmentId });
+    if (!department) return;
+
+    // Get all staff assignments for this department
+    const staffAssignments = await em.find(TicketStaffDepartment, {
+      department: departmentId,
+    }, {
+      populate: ['staff.profile'],
+    });
+
+    const reporterName = ticket.reporter
+      ? `${ticket.reporter.first_name || ''} ${ticket.reporter.last_name || ''}`.trim() || 'Unknown'
+      : 'Guest User';
+    const reporterEmail = ticket.reporter?.email || 'No email provided';
+
+    // Send email to each staff member
+    for (const assignment of staffAssignments) {
+      const staffEmail = assignment.staff?.profile?.email;
+      if (staffEmail) {
+        const staffProfile = assignment.staff!.profile!;
+        await this.emailService.sendTicketStaffAlertEmail({
+          to: staffEmail,
+          staffName: staffProfile.first_name || undefined,
+          ticketNumber: ticket.ticketNumber,
+          ticketTitle: ticket.title,
+          ticketDescription: ticket.description,
+          category: ticket.category,
+          priority: ticket.priority,
+          departmentName: department.name,
+          reporterName,
+          reporterEmail,
+          viewTicketUrl: `${this.frontendUrl}/admin/tickets/${ticket.id}`,
+        });
+      }
+    }
+  }
+
+  /**
+   * Send status change notification email to ticket submitter
+   */
+  private async sendTicketStatusEmail(ticket: Ticket, oldStatus: string, newStatus: string): Promise<void> {
+    if (!ticket.reporter?.email) return;
+
+    const viewTicketUrl = `${this.frontendUrl}/support/tickets/${ticket.ticketNumber}`;
+
+    await this.emailService.sendTicketStatusEmail({
+      to: ticket.reporter.email,
+      firstName: ticket.reporter.first_name || undefined,
+      ticketNumber: ticket.ticketNumber,
+      ticketTitle: ticket.title,
+      oldStatus,
+      newStatus,
+      viewTicketUrl,
+    });
+  }
+
+  /**
+   * Send reply notification email
+   * - If staff replies, notify the ticket submitter
+   * - If user replies, notify the assigned staff member
+   */
+  private async sendTicketReplyEmail(
+    ticket: Ticket,
+    replyContent: string,
+    author: Profile,
+    isStaffReply: boolean,
+  ): Promise<void> {
+    const viewTicketUrl = isStaffReply
+      ? `${this.frontendUrl}/support/tickets/${ticket.ticketNumber}`
+      : `${this.frontendUrl}/admin/tickets/${ticket.id}`;
+
+    const replierName = `${author.first_name || ''} ${author.last_name || ''}`.trim() || author.email || 'Unknown';
+
+    if (isStaffReply) {
+      // Staff replied - notify the ticket submitter
+      if (ticket.reporter?.email && ticket.reporter.id !== author.id) {
+        await this.emailService.sendTicketReplyEmail({
+          to: ticket.reporter.email,
+          recipientName: ticket.reporter.first_name || undefined,
+          ticketNumber: ticket.ticketNumber,
+          ticketTitle: ticket.title,
+          replyContent,
+          replierName,
+          isStaffReply: true,
+          viewTicketUrl,
+        });
+      }
+    } else {
+      // User replied - notify assigned staff
+      if (ticket.assignedTo?.email && ticket.assignedTo.id !== author.id) {
+        await this.emailService.sendTicketReplyEmail({
+          to: ticket.assignedTo.email,
+          recipientName: ticket.assignedTo.first_name || undefined,
+          ticketNumber: ticket.ticketNumber,
+          ticketTitle: ticket.title,
+          replyContent,
+          replierName,
+          isStaffReply: false,
+          viewTicketUrl,
+        });
+      }
+    }
   }
 }
