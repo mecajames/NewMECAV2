@@ -16,7 +16,7 @@ import {
   EyeOff,
   UserPlus,
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import {
   membershipTypeConfigsApi,
   MembershipTypeConfig,

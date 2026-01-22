@@ -87,7 +87,8 @@ export default function MyRegistrationsPage() {
     const eventDate = reg.event?.event_date ? new Date(reg.event.event_date) : null;
     const now = new Date();
 
-    if (!eventDate) return true; // Show registrations without a valid event date
+    // If no event date, show the registration (upstream's approach - more inclusive)
+    if (!eventDate) return true;
 
     if (filter === 'upcoming') return eventDate >= now;
     if (filter === 'past') return eventDate < now;

@@ -20,7 +20,7 @@ import {
   Gift,
   QrCode,
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes/competition-classes.api-client';
 import {

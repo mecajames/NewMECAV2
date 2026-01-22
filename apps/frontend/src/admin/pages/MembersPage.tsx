@@ -109,7 +109,8 @@ export default function MembersPage() {
           )
         `)
         .or('is_secondary_account.is.null,is_secondary_account.eq.false')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       if (profilesError) throw profilesError;
 
@@ -136,7 +137,8 @@ export default function MembersPage() {
           )
         `)
         .in('payment_status', ['paid', 'pending'])
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       if (membershipsError) throw membershipsError;
 

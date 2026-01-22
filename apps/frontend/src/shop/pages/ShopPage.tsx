@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Filter, ShoppingCart, Star } from 'lucide-react';
-import { ShopProduct, ShopProductCategory } from '@newmeca/shared';
+import { ShopProduct } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
 import { ProductGrid } from '../components/ProductGrid';
 import { useCart } from '../context/CartContext';
 import { SEOHead, useShopSEO } from '@/shared/seo';
 
-const categoryLabels: Record<ShopProductCategory, string> = {
-  [ShopProductCategory.MEASURING_TOOLS]: 'Measuring Tools',
-  [ShopProductCategory.CDS]: 'CDs',
-  [ShopProductCategory.APPAREL]: 'Apparel',
-  [ShopProductCategory.ACCESSORIES]: 'Accessories',
-  [ShopProductCategory.OTHER]: 'Other',
+// Local type to avoid Rollup issues with CommonJS enum re-exports
+type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
+
+const categoryLabels: Record<string, string> = {
+  measuring_tools: 'Measuring Tools',
+  cds: 'CDs',
+  apparel: 'Apparel',
+  accessories: 'Accessories',
+  other: 'Other',
 };
 
 export function ShopPage() {

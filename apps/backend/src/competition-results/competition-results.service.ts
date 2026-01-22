@@ -122,6 +122,45 @@ export class CompetitionResultsService {
     return counts;
   }
 
+  /**
+   * Get result counts for multiple events in a single query
+   * Returns a map of eventId -> count
+   */
+  async getResultCountsByEventIds(eventIds: string[]): Promise<Record<string, number>> {
+    if (!eventIds || eventIds.length === 0) {
+      return {};
+    }
+
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    // Build the IN clause with properly quoted UUIDs
+    const quotedIds = eventIds.map(id => `'${id}'`).join(',');
+
+    // Use raw SQL for efficient counting with GROUP BY
+    const result = await connection.execute(`
+      SELECT event_id, COUNT(*) as count
+      FROM competition_results
+      WHERE event_id IN (${quotedIds})
+      GROUP BY event_id
+    `);
+
+    // Convert to a map
+    const counts: Record<string, number> = {};
+    for (const row of result) {
+      counts[row.event_id] = parseInt(row.count, 10);
+    }
+
+    // Fill in zeros for events with no results
+    for (const eventId of eventIds) {
+      if (!(eventId in counts)) {
+        counts[eventId] = 0;
+      }
+    }
+
+    return counts;
+  }
+
   async findByCompetitor(competitorId: string): Promise<CompetitionResult[]> {
     const em = this.em.fork();
     return em.find(CompetitionResult, { competitor: competitorId });
@@ -732,24 +771,183 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Recalculate placements for ALL events with competition results
+   * This is used to fix existing data after the placement calculation bug fix
+   */
+  async recalculateAllPlacements(): Promise<{ processed: number; errors: number }> {
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    // Get all distinct event IDs that have competition results
+    this.logger.log('Finding all events with competition results...');
+    const eventRows = await connection.execute(`
+      SELECT DISTINCT event_id
+      FROM competition_results
+      WHERE event_id IS NOT NULL
+    `);
+
+    const eventIds = eventRows.map((r: any) => r.event_id);
+    this.logger.log(`Found ${eventIds.length} events with results to process`);
+
+    let processed = 0;
+    let errors = 0;
+
+    for (const eventId of eventIds) {
+      try {
+        await this.updateEventPoints(eventId);
+        processed++;
+
+        if (processed % 50 === 0) {
+          this.logger.log(`Processed ${processed}/${eventIds.length} events...`);
+        }
+      } catch (err: any) {
+        this.logger.error(`Error processing event ${eventId}: ${err.message}`);
+        errors++;
+      }
+    }
+
+    this.logger.log(`Recalculation complete: ${processed} events processed, ${errors} errors`);
+    return { processed, errors };
+  }
+
+  /**
+   * Link competitor_id on competition results by matching meca_id to memberships
+   * This populates the competitor relationship so we can display profile data (like state)
+   */
+  async linkCompetitorsByMecaId(): Promise<{ linked: number; alreadyLinked: number; noMatch: number }> {
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    this.logger.log('Starting competitor linking by MECA ID...');
+
+    // Get all competition results that have a meca_id but no competitor_id
+    const unlinkedResults = await connection.execute(`
+      SELECT cr.id, cr.meca_id
+      FROM competition_results cr
+      WHERE cr.meca_id IS NOT NULL
+        AND cr.meca_id != '999999'
+        AND cr.meca_id != '0'
+        AND cr.meca_id != ''
+        AND cr.competitor_id IS NULL
+    `);
+
+    this.logger.log(`Found ${unlinkedResults.length} unlinked results with MECA IDs`);
+
+    // Get all memberships with their user_ids and profile state, keyed by meca_id
+    const memberships = await connection.execute(`
+      SELECT DISTINCT ON (m.meca_id) m.meca_id, m.user_id, p.state
+      FROM memberships m
+      JOIN profiles p ON p.id = m.user_id
+      WHERE m.meca_id IS NOT NULL AND m.user_id IS NOT NULL
+      ORDER BY m.meca_id, m.created_at DESC
+    `);
+
+    const mecaIdToProfile = new Map<string, { profileId: string; state: string | null }>();
+    for (const m of memberships) {
+      if (m.meca_id) {
+        mecaIdToProfile.set(m.meca_id.toString(), { profileId: m.user_id, state: m.state || null });
+      }
+    }
+
+    this.logger.log(`Found ${mecaIdToProfile.size} unique MECA ID -> Profile mappings`);
+
+    let linked = 0;
+    let noMatch = 0;
+    const updates: Array<{ id: string; profileId: string; state: string | null }> = [];
+
+    for (const result of unlinkedResults) {
+      const mecaId = result.meca_id?.toString();
+      const profile = mecaIdToProfile.get(mecaId);
+
+      if (profile) {
+        updates.push({ id: result.id, profileId: profile.profileId, state: profile.state });
+        linked++;
+      } else {
+        noMatch++;
+      }
+    }
+
+    // Batch update in chunks of 500
+    const chunkSize = 500;
+    for (let i = 0; i < updates.length; i += chunkSize) {
+      const chunk = updates.slice(i, i + chunkSize);
+      if (chunk.length === 0) continue;
+
+      const competitorCases = chunk.map(u => `WHEN '${u.id}' THEN '${u.profileId}'::uuid`).join(' ');
+      const stateCases = chunk.map(u => `WHEN '${u.id}' THEN ${u.state ? `'${u.state}'` : 'NULL'}`).join(' ');
+      const ids = chunk.map(u => `'${u.id}'`).join(',');
+
+      await connection.execute(`
+        UPDATE competition_results
+        SET competitor_id = CASE id ${competitorCases} END,
+            state_code = CASE id ${stateCases} END
+        WHERE id IN (${ids})
+      `);
+
+      if ((i + chunkSize) % 5000 === 0) {
+        this.logger.log(`Updated ${Math.min(i + chunkSize, updates.length)}/${updates.length} results...`);
+      }
+    }
+
+    // Count already linked
+    const alreadyLinkedResult = await connection.execute(`
+      SELECT COUNT(*) as count FROM competition_results WHERE competitor_id IS NOT NULL
+    `);
+    const alreadyLinked = parseInt(alreadyLinkedResult[0]?.count || '0', 10) - linked;
+
+    this.logger.log(`Linking complete: ${linked} linked, ${alreadyLinked} already linked, ${noMatch} no matching profile`);
+    return { linked, alreadyLinked, noMatch };
+  }
+
+  /**
+   * Populate state_code for all results that have a competitor_id but no state_code
+   */
+  async populateStateFromProfiles(): Promise<{ updated: number }> {
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    this.logger.log('Starting state population from profiles...');
+
+    // Update state_code from profiles for all results that have a linked competitor
+    const result = await connection.execute(`
+      UPDATE competition_results cr
+      SET state_code = p.state
+      FROM profiles p
+      WHERE cr.competitor_id = p.id
+        AND cr.state_code IS NULL
+        AND p.state IS NOT NULL
+    `);
+
+    const updated = result?.rowCount || result?.affectedRows || 0;
+    this.logger.log(`Populated state_code for ${updated} results`);
+
+    return { updated };
+  }
+
+  /**
    * Update points for all results in an event
    * This is the main entry point for recalculating points
    */
   async updateEventPoints(eventId: string): Promise<void> {
     const em = this.em.fork();
+    const connection = em.getConnection();
 
-    // Fetch the event with its multiplier and season (for qualification checks)
-    const event = await em.findOne(Event, { id: eventId }, { populate: ['season'] });
-    if (!event) {
+    // Fetch the event with its multiplier using raw SQL to avoid MikroORM populating Season
+    const eventRows = await connection.execute(
+      `SELECT id, points_multiplier, season_id FROM events WHERE id = '${eventId}'`
+    );
+    if (!eventRows || eventRows.length === 0) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    const multiplier = event.pointsMultiplier || 2; // Default to 2x if not set
+    const eventData = eventRows[0];
+    const multiplier = eventData.points_multiplier || 2; // Default to 2x if not set
+    const seasonId = eventData.season_id;
 
     // Fetch the points configuration for this event's season
     let pointsConfig: PointsConfiguration | null = null;
-    if (event.season?.id) {
-      pointsConfig = await this.pointsConfigService.getConfigForSeason(event.season.id);
+    if (seasonId) {
+      pointsConfig = await this.pointsConfigService.getConfigForSeason(seasonId);
     } else {
       // Fall back to current season config if event has no season
       pointsConfig = await this.pointsConfigService.getConfigForCurrentSeason();
@@ -774,41 +972,37 @@ export class CompetitionResultsService {
     const classes = await em.find(CompetitionClass, { id: { $in: classIds } });
     const classMap = new Map(classes.map(c => [c.id, c]));
 
-    // Group results by class and format
-    const groupedResults = new Map<string, CompetitionResult[]>();
+    // Group results by class and format for placement calculation
+    // Note: ALL results get placements, but only eligible formats get points
+    const groupedResults = new Map<string, { results: CompetitionResult[]; format: string | null; isEligible: boolean }>();
 
     for (const result of results) {
       // Get format from class if available, otherwise from result.format field
-      let format = result.format;
+      let format: string | null = result.format || null;
       const competitionClass = classMap.get(result.classId || '');
       if (competitionClass) {
         format = competitionClass.format;
       }
 
-      // Skip if no format found
-      if (!format) {
-        result.pointsEarned = 0;
-        continue;
-      }
+      // Determine if this format is eligible for points
+      const isEligible = format ? this.isFormatEligible(format) : false;
 
-      // Only include eligible formats
-      if (!this.isFormatEligible(format)) {
-        result.pointsEarned = 0;
-        continue;
-      }
-
-      const key = `${format}-${result.competitionClass}`;
+      // Group by format+class if format exists, otherwise just by class
+      // This ensures all results get placements within their class
+      const key = format ? `${format}-${result.competitionClass}` : `UNKNOWN-${result.competitionClass}`;
       if (!groupedResults.has(key)) {
-        groupedResults.set(key, []);
+        groupedResults.set(key, { results: [], format, isEligible });
       }
-      groupedResults.get(key)!.push(result);
+      groupedResults.get(key)!.results.push(result);
     }
 
     // Refresh the points-eligible MECA IDs cache before processing
     await this.refreshPointsEligibleCache();
 
     // Process each group
-    for (const [key, groupResults] of groupedResults) {
+    for (const [key, group] of groupedResults) {
+      const { results: groupResults, format, isEligible: isFormatEligible } = group;
+
       // Sort by score (descending - higher score is better)
       groupResults.sort((a, b) => b.score - a.score);
 
@@ -817,22 +1011,16 @@ export class CompetitionResultsService {
       for (const result of groupResults) {
         result.placement = currentPlacement;
 
-        // Get MECA ID from result (now stored directly on competition result)
-        const mecaId = result.mecaId;
+        // Only calculate points if the format is eligible for points
+        if (isFormatEligible && format) {
+          // Get MECA ID from result (now stored directly on competition result)
+          const mecaId = result.mecaId;
 
-        // Check eligibility using the new membership-based system
-        // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
-        const isEligible = await this.isMemberEligibleAsync(mecaId);
+          // Check eligibility using the new membership-based system
+          // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
+          const isMemberEligible = await this.isMemberEligibleAsync(mecaId);
 
-        if (isEligible && pointsConfig) {
-          // Get format from class or result
-          let format = result.format;
-          const competitionClass = classMap.get(result.classId || '');
-          if (competitionClass) {
-            format = competitionClass.format;
-          }
-
-          if (format) {
+          if (isMemberEligible && pointsConfig) {
             result.pointsEarned = this.calculatePoints(
               currentPlacement,
               multiplier,
@@ -843,6 +1031,7 @@ export class CompetitionResultsService {
             result.pointsEarned = 0;
           }
         } else {
+          // Format not eligible for points (unknown format or non-points format)
           result.pointsEarned = 0;
         }
 
@@ -855,7 +1044,7 @@ export class CompetitionResultsService {
 
     // Check World Finals qualifications for all affected competitors
     // Tracked per MECA ID + class combination (a competitor can qualify in multiple classes)
-    if (this.worldFinalsService && event.season?.id) {
+    if (this.worldFinalsService && seasonId) {
       const processedCombinations = new Set<string>();
 
       for (const result of results) {
@@ -878,7 +1067,7 @@ export class CompetitionResultsService {
             mecaIdNum,
             result.competitorName,
             result.competitor?.id || null,
-            event.season.id,
+            seasonId,
             result.competitionClass,
           );
         }

@@ -45,24 +45,28 @@ import { TrainingRecordsModule } from './training-records/training-records.modul
 import { ScheduledTasksModule } from './scheduled-tasks/scheduled-tasks.module';
 import { BannersModule } from './banners/banners.module';
 import { PointsConfigurationModule } from './points-configuration/points-configuration.module';
+import { StatesModule } from './states/states.module';
+import { ResultTeamsModule } from './result-teams/result-teams.module';
+import { MemberGalleryModule } from './member-gallery/member-gallery.module';
+import { StandingsModule } from './standings/standings.module';
 
 @Module({
   imports: [
-    // Rate limiting: 1000 requests per minute per IP (generous for SPA with many concurrent requests)
+    // Scheduled tasks (cron jobs for membership expiration, event reminders, etc.)
+    ScheduleModule.forRoot(),
+    // Rate limiting: generous in development, stricter in production
     ThrottlerModule.forRoot([
       {
         name: 'default',
         ttl: 60000, // 1 minute window
-        limit: 1000, // 1000 requests per minute (~17/second average)
+        limit: process.env.NODE_ENV === 'development' ? 1000 : 1000,
       },
       {
         name: 'strict',
         ttl: 60000, // 1 minute window
-        limit: 60, // 60 requests per minute for sensitive endpoints
+        limit: process.env.NODE_ENV === 'development' ? 100 : 60,
       },
     ]),
-    // Scheduled tasks (cron jobs for membership expiration, event reminders, etc.)
-    ScheduleModule.forRoot(),
     DatabaseModule,
     AuthModule,
     EmailModule,
@@ -104,6 +108,10 @@ import { PointsConfigurationModule } from './points-configuration/points-configu
     ScheduledTasksModule,
     BannersModule,
     PointsConfigurationModule,
+    StatesModule,
+    ResultTeamsModule,
+    MemberGalleryModule,
+    StandingsModule,
   ],
   controllers: [AppController],
   providers: [

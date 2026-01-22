@@ -16,6 +16,7 @@ import { Membership } from './memberships.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { MecaIdService } from './meca-id.service';
+import { MembershipSyncService } from './membership-sync.service';
 import { TeamsService } from '../teams/teams.service';
 import { Order } from '../orders/orders.entity';
 import { OrderItem } from '../orders/order-items.entity';
@@ -77,6 +78,8 @@ export class MembershipsService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly mecaIdService: MecaIdService,
+    @Inject(forwardRef(() => MembershipSyncService))
+    private readonly membershipSyncService: MembershipSyncService,
     @Inject(forwardRef(() => TeamsService))
     private readonly teamsService: TeamsService,
     private readonly emailService: EmailService,
@@ -369,6 +372,9 @@ export class MembershipsService {
       }
     }
 
+    // Sync profile membership status to ACTIVE
+    await this.membershipSyncService.setProfileActive(data.userId);
+
     // Send welcome email
     try {
       const user = await em.findOne(Profile, { id: data.userId });
@@ -561,6 +567,9 @@ export class MembershipsService {
         this.logger.error(`Failed to auto-create team for admin-assigned membership ${membership.id}:`, teamError);
       }
     }
+
+    // Sync profile membership status to ACTIVE
+    await this.membershipSyncService.setProfileActive(data.userId);
 
     // Send welcome email
     try {
@@ -904,6 +913,11 @@ export class MembershipsService {
       message += ' This is a complimentary membership (no charge). Invoice and receipt have been created for records.';
     } else {
       message += ' Invoice and payment receipt have been created for records.';
+    }
+
+    // Sync profile membership status to ACTIVE (only if payment is already completed)
+    if (paymentStatus === PaymentStatus.PAID) {
+      await this.membershipSyncService.setProfileActive(data.userId);
     }
 
     return {

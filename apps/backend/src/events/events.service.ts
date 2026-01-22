@@ -22,7 +22,7 @@ export class EventsService {
     return em.find(Event, {}, {
       limit,
       offset,
-      orderBy: { eventDate: 'ASC' }
+      orderBy: { eventDate: 'DESC' }
     });
   }
 
@@ -57,7 +57,7 @@ export class EventsService {
     return em.find(Event, { season: seasonId }, {
       limit,
       offset,
-      orderBy: { eventDate: 'ASC' }
+      orderBy: { eventDate: 'DESC' }
     });
   }
 

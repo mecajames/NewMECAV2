@@ -1,12 +1,32 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { WorldFinalsQualification } from './world-finals-qualification.entity';
+import { FinalsRegistration } from './finals-registration.entity';
+import { FinalsVote } from './finals-vote.entity';
 import { Season } from '../seasons/seasons.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { Notification } from '../notifications/notifications.entity';
 import { EmailService } from '../email/email.service';
+
+// DTOs for registration and voting
+export interface CreateFinalsRegistrationDto {
+  seasonId: string;
+  division?: string;
+  competitionClass?: string;
+}
+
+export interface UpdateFinalsRegistrationDto {
+  division?: string;
+  competitionClass?: string;
+}
+
+export interface CreateFinalsVoteDto {
+  category: string;
+  voteValue: string;
+  details?: Record<string, unknown>;
+}
 
 @Injectable()
 export class WorldFinalsService {
@@ -598,5 +618,285 @@ export class WorldFinalsService {
     await em.flush();
 
     return { newQualifications, updatedQualifications };
+  }
+
+  // ============================================
+  // FINALS REGISTRATION METHODS
+  // ============================================
+
+  /**
+   * Create a finals registration for a user
+   */
+  async createRegistration(
+    userId: string,
+    data: CreateFinalsRegistrationDto,
+  ): Promise<FinalsRegistration> {
+    const em = this.em.fork();
+
+    // Verify season exists
+    const season = await em.findOne(Season, { id: data.seasonId });
+    if (!season) {
+      throw new NotFoundException(`Season with ID ${data.seasonId} not found`);
+    }
+
+    // Check if user already has a registration for this season and class
+    const existing = await em.findOne(FinalsRegistration, {
+      user: userId,
+      season: data.seasonId,
+      competitionClass: data.competitionClass || null,
+    });
+
+    if (existing) {
+      throw new BadRequestException('You already have a registration for this season and class');
+    }
+
+    const registration = em.create(FinalsRegistration, {
+      id: randomUUID(),
+      user: userId,
+      season: data.seasonId,
+      division: data.division,
+      competitionClass: data.competitionClass,
+      registeredAt: new Date(),
+    } as any);
+
+    await em.persistAndFlush(registration);
+    return registration;
+  }
+
+  /**
+   * Get all registrations for a season, optionally filtered by class
+   */
+  async getRegistrationsBySeasonAndClass(
+    seasonId: string,
+    competitionClass?: string,
+  ): Promise<FinalsRegistration[]> {
+    const em = this.em.fork();
+
+    const criteria: any = { season: seasonId };
+    if (competitionClass) {
+      criteria.competitionClass = competitionClass;
+    }
+
+    return em.find(FinalsRegistration, criteria, {
+      populate: ['user', 'season'],
+      orderBy: { registeredAt: 'ASC' },
+    });
+  }
+
+  /**
+   * Get a user's registration for a specific season
+   */
+  async getMyRegistration(userId: string, seasonId: string): Promise<FinalsRegistration | null> {
+    const em = this.em.fork();
+    return em.findOne(FinalsRegistration, {
+      user: userId,
+      season: seasonId,
+    }, {
+      populate: ['season'],
+    });
+  }
+
+  /**
+   * Get all registrations for a user
+   */
+  async getMyRegistrations(userId: string): Promise<FinalsRegistration[]> {
+    const em = this.em.fork();
+    return em.find(FinalsRegistration, { user: userId }, {
+      populate: ['season'],
+      orderBy: { registeredAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Update a registration
+   */
+  async updateRegistration(
+    id: string,
+    userId: string,
+    data: UpdateFinalsRegistrationDto,
+  ): Promise<FinalsRegistration> {
+    const em = this.em.fork();
+
+    const registration = await em.findOne(FinalsRegistration, { id });
+    if (!registration) {
+      throw new NotFoundException(`Registration with ID ${id} not found`);
+    }
+
+    // Verify ownership
+    const registrationUserId = (registration.user as any)?.id || registration.user;
+    if (registrationUserId !== userId) {
+      throw new ForbiddenException('You can only update your own registrations');
+    }
+
+    em.assign(registration, {
+      division: data.division !== undefined ? data.division : registration.division,
+      competitionClass: data.competitionClass !== undefined ? data.competitionClass : registration.competitionClass,
+    });
+
+    await em.flush();
+    return registration;
+  }
+
+  /**
+   * Delete a registration
+   */
+  async deleteRegistration(id: string, userId: string): Promise<void> {
+    const em = this.em.fork();
+
+    const registration = await em.findOne(FinalsRegistration, { id });
+    if (!registration) {
+      throw new NotFoundException(`Registration with ID ${id} not found`);
+    }
+
+    // Verify ownership
+    const registrationUserId = (registration.user as any)?.id || registration.user;
+    if (registrationUserId !== userId) {
+      throw new ForbiddenException('You can only delete your own registrations');
+    }
+
+    await em.removeAndFlush(registration);
+  }
+
+  /**
+   * Get registration statistics for a season
+   */
+  async getRegistrationStats(seasonId: string): Promise<{
+    totalRegistrations: number;
+    byDivision: { division: string; count: number }[];
+    byClass: { competitionClass: string; count: number }[];
+  }> {
+    const em = this.em.fork();
+
+    const registrations = await em.find(FinalsRegistration, { season: seasonId });
+
+    // Group by division
+    const divisionCounts = new Map<string, number>();
+    const classCounts = new Map<string, number>();
+
+    for (const reg of registrations) {
+      if (reg.division) {
+        divisionCounts.set(reg.division, (divisionCounts.get(reg.division) || 0) + 1);
+      }
+      if (reg.competitionClass) {
+        classCounts.set(reg.competitionClass, (classCounts.get(reg.competitionClass) || 0) + 1);
+      }
+    }
+
+    return {
+      totalRegistrations: registrations.length,
+      byDivision: Array.from(divisionCounts.entries())
+        .map(([division, count]) => ({ division, count }))
+        .sort((a, b) => b.count - a.count),
+      byClass: Array.from(classCounts.entries())
+        .map(([competitionClass, count]) => ({ competitionClass, count }))
+        .sort((a, b) => b.count - a.count),
+    };
+  }
+
+  // ============================================
+  // FINALS VOTING METHODS
+  // ============================================
+
+  /**
+   * Submit a vote
+   */
+  async submitVote(voterId: string, data: CreateFinalsVoteDto): Promise<FinalsVote> {
+    const em = this.em.fork();
+
+    // Check if user has already voted in this category
+    const existing = await em.findOne(FinalsVote, {
+      voter: voterId,
+      category: data.category,
+    });
+
+    if (existing) {
+      throw new BadRequestException(`You have already voted in the "${data.category}" category`);
+    }
+
+    const vote = em.create(FinalsVote, {
+      id: randomUUID(),
+      voter: voterId,
+      category: data.category,
+      voteValue: data.voteValue,
+      details: data.details,
+    } as any);
+
+    await em.persistAndFlush(vote);
+    return vote;
+  }
+
+  /**
+   * Check if a user has voted in a category
+   */
+  async hasUserVoted(userId: string, category: string): Promise<boolean> {
+    const em = this.em.fork();
+    const vote = await em.findOne(FinalsVote, { voter: userId, category });
+    return !!vote;
+  }
+
+  /**
+   * Get a user's votes
+   */
+  async getMyVotes(userId: string): Promise<FinalsVote[]> {
+    const em = this.em.fork();
+    return em.find(FinalsVote, { voter: userId }, {
+      orderBy: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Get votes by category (admin only)
+   */
+  async getVotesByCategory(category: string): Promise<FinalsVote[]> {
+    const em = this.em.fork();
+    return em.find(FinalsVote, { category }, {
+      populate: ['voter'],
+      orderBy: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Get vote summary for all categories
+   */
+  async getVoteSummary(): Promise<{
+    totalVotes: number;
+    byCategory: { category: string; count: number; topChoice: string | null }[];
+  }> {
+    const em = this.em.fork();
+
+    const votes = await em.find(FinalsVote, {});
+
+    // Group by category
+    const categoryCounts = new Map<string, { count: number; values: Map<string, number> }>();
+
+    for (const vote of votes) {
+      const categoryData = categoryCounts.get(vote.category) || {
+        count: 0,
+        values: new Map<string, number>(),
+      };
+
+      categoryData.count++;
+      categoryData.values.set(vote.voteValue, (categoryData.values.get(vote.voteValue) || 0) + 1);
+      categoryCounts.set(vote.category, categoryData);
+    }
+
+    const byCategory = Array.from(categoryCounts.entries()).map(([category, data]) => {
+      // Find top choice
+      let topChoice: string | null = null;
+      let maxVotes = 0;
+      for (const [value, count] of data.values) {
+        if (count > maxVotes) {
+          maxVotes = count;
+          topChoice = value;
+        }
+      }
+
+      return { category, count: data.count, topChoice };
+    }).sort((a, b) => b.count - a.count);
+
+    return {
+      totalVotes: votes.length,
+      byCategory,
+    };
   }
 }

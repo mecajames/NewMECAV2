@@ -15,18 +15,21 @@ import {
   ExternalLink,
   ArrowLeft,
 } from 'lucide-react';
-import { ShopOrder, ShopOrderStatus } from '@newmeca/shared';
+import { ShopOrder } from '@newmeca/shared';
 import { shopApi, ShopStats } from '@/shop/shop.api-client';
 import { OrderStatusBadge } from '@/shop/components/OrderStatusBadge';
 
-const statusLabels: Record<ShopOrderStatus, string> = {
-  [ShopOrderStatus.PENDING]: 'Pending',
-  [ShopOrderStatus.PAID]: 'Paid',
-  [ShopOrderStatus.PROCESSING]: 'Processing',
-  [ShopOrderStatus.SHIPPED]: 'Shipped',
-  [ShopOrderStatus.DELIVERED]: 'Delivered',
-  [ShopOrderStatus.CANCELLED]: 'Cancelled',
-  [ShopOrderStatus.REFUNDED]: 'Refunded',
+// Local type to avoid Rollup issues with CommonJS enum re-exports
+type ShopOrderStatus = 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+
+const statusLabels: Record<string, string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+  processing: 'Processing',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded',
 };
 
 export function AdminShopOrdersPage() {

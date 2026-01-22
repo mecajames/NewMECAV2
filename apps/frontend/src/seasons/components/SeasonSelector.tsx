@@ -1,7 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Calendar } from 'lucide-react';
-import { Season } from '@/types/database';
-import { seasonsApi } from '@/seasons';
+import { useSeasons } from '@/shared/contexts';
 
 interface SeasonSelectorProps {
   selectedSeasonId: string;
@@ -20,35 +19,16 @@ export default function SeasonSelector({
   className = '',
   autoSelectCurrent = false,
 }: SeasonSelectorProps) {
-  const [seasons, setSeasons] = useState<Season[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { seasons, currentSeason, loading } = useSeasons();
   const hasAutoSelected = useRef(false);
 
+  // Auto-select current season once when requested and no season is selected
   useEffect(() => {
-    const fetchSeasons = async () => {
-      setLoading(true);
-      try {
-        const data = await seasonsApi.getAll();
-        setSeasons(data as any);
-
-        // Auto-select current season only once on initial mount
-        if (autoSelectCurrent && !hasAutoSelected.current && !selectedSeasonId) {
-          const currentSeason = (data as Season[]).find(s => s.is_current);
-          if (currentSeason) {
-            hasAutoSelected.current = true;
-            onSeasonChange(currentSeason.id);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching seasons:', error);
-        setSeasons([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSeasons();
-  }, [autoSelectCurrent, onSeasonChange]);
+    if (autoSelectCurrent && !selectedSeasonId && currentSeason && !hasAutoSelected.current && !loading) {
+      hasAutoSelected.current = true;
+      onSeasonChange(currentSeason.id);
+    }
+  }, [autoSelectCurrent, selectedSeasonId, currentSeason, onSeasonChange, loading]);
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>

@@ -11,18 +11,18 @@ import {
   Shield,
   Loader2,
 } from 'lucide-react';
-import { ShopProduct, ShopProductCategory } from '@newmeca/shared';
+import { ShopProduct } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
 import { useCart } from '../context/CartContext';
 import { SEOHead, useProductDetailSEO } from '@/shared/seo';
 import type { ProductSEOData } from '@/shared/seo';
 
-const categoryLabels: Record<ShopProductCategory, string> = {
-  [ShopProductCategory.MEASURING_TOOLS]: 'Measuring Tools',
-  [ShopProductCategory.CDS]: 'CDs',
-  [ShopProductCategory.APPAREL]: 'Apparel',
-  [ShopProductCategory.ACCESSORIES]: 'Accessories',
-  [ShopProductCategory.OTHER]: 'Other',
+const categoryLabels: Record<string, string> = {
+  measuring_tools: 'Measuring Tools',
+  cds: 'CDs',
+  apparel: 'Apparel',
+  accessories: 'Accessories',
+  other: 'Other',
 };
 
 export function ProductDetailPage() {

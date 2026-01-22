@@ -45,3 +45,15 @@ export * from "./banners.schema.js";
 
 // Points Configuration
 export * from "./points-configuration.schema.js";
+
+// World Finals
+export * from "./world-finals.schema.js";
+
+// States
+export * from "./states.schema.js";
+
+// Member Gallery
+export * from "./member-gallery.schema.js";
+
+// Standings
+export * from "./standings.schema.js";

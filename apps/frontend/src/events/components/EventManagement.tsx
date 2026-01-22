@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2 } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionResultsApi } from '@/competition-results';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
-
 
 interface EventManagementProps {
   onViewResults?: (eventId: string) => void;
@@ -27,6 +26,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   const [quickFilter, setQuickFilter] = useState<string>('all');
   const [eventResults, setEventResults] = useState<{[key: string]: number}>({});
   const [sendingRatingEmails, setSendingRatingEmails] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [eventsPerPage, setEventsPerPage] = useState(50);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -72,13 +73,23 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
 
   useEffect(() => {
     filterEvents();
+    setCurrentPage(1); // Reset to first page when filters change
   }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter]);
 
+  // Paginate the filtered events
+  const paginatedEvents = useMemo(() => {
+    const startIndex = (currentPage - 1) * eventsPerPage;
+    return filteredEvents.slice(startIndex, startIndex + eventsPerPage);
+  }, [filteredEvents, currentPage, eventsPerPage]);
+
+  const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
+
+  // Only fetch result counts for the current page's events
   useEffect(() => {
-    if (events.length > 0) {
+    if (paginatedEvents.length > 0) {
       fetchResultCounts();
     }
-  }, [events]);
+  }, [paginatedEvents]);
 
   const fetchEvents = async () => {
     try {
@@ -144,8 +155,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     }
 
     // Apply quick filters
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     if (quickFilter === 'recent-upcoming') {
       filtered = filtered.filter(event => {
@@ -154,8 +164,12 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       });
     }
 
-    // Sort by event date descending (most recent first)
-    filtered.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+    // Sort by date descending (newest first, oldest last)
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.event_date).getTime();
+      const dateB = new Date(b.event_date).getTime();
+      return dateB - dateA;
+    });
 
     setFilteredEvents(filtered);
   };
@@ -558,7 +572,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
         </div>
 
         <div className="mt-3 text-xs text-gray-400">
-          Showing {filteredEvents.length} of {events.length} events
+          Showing {((currentPage - 1) * eventsPerPage) + 1}-{Math.min(currentPage * eventsPerPage, filteredEvents.length)} of {filteredEvents.length} events
+          {filteredEvents.length !== events.length && ` (filtered from ${events.length} total)`}
         </div>
       </div>
 
@@ -581,7 +596,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map((event, index) => (
+              {paginatedEvents.map((event, index) => (
                 <tr
                   key={event.id}
                   className={`border-b border-slate-600 ${index % 2 === 0 ? 'bg-slate-800' : 'bg-slate-700'} hover:bg-slate-600 transition-colors`}
@@ -590,7 +605,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   <td className="px-4 py-3 text-sm text-white align-top">
                     {new Date(event.event_date).toLocaleDateString('en-US', {
                       month: 'short',
-                      day: 'numeric'
+                      day: 'numeric',
+                      year: 'numeric'
                     })}
                   </td>
 
@@ -708,6 +724,67 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
               ))}
             </tbody>
           </table>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-t border-slate-600">
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-400">
+                Page {currentPage} of {totalPages || 1}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-400">Show:</label>
+                <select
+                  value={eventsPerPage}
+                  onChange={(e) => {
+                    setEventsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-700 text-white text-sm rounded px-2 py-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                </select>
+                <span className="text-sm text-gray-400">per page</span>
+              </div>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <span className="px-3 py-1 text-sm text-white">
+                  {currentPage}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  Last
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="text-center py-12 bg-slate-700 rounded-lg">

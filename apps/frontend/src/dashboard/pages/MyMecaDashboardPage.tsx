@@ -3363,7 +3363,7 @@ export default function MyMecaDashboardPage() {
 
     // Helper to detect format from result - checks multiple fields
     const getResultFormat = (r: CompetitionResult): string => {
-      // Check direct format field first
+      // Check direct format field first (may exist on some results)
       if ((r as any).format) return (r as any).format;
 
       // Check class.format (from joined CompetitionClass)

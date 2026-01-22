@@ -5,7 +5,7 @@ import { CompetitionFormat } from '@/types/database';
 import { useAuth } from '@/auth';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
-import { competitionFormatsApi, CompetitionFormat as ApiCompetitionFormat } from '@/competition-formats';
+import { competitionFormatsApi, CompetitionFormat as FormatObject } from '@/competition-formats';
 
 export default function ClassesManagementPage() {
   const { user: _user } = useAuth();
@@ -13,7 +13,7 @@ export default function ClassesManagementPage() {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<CompetitionClass[]>([]);
-  const [formats, setFormats] = useState<ApiCompetitionFormat[]>([]);
+  const [formats, setFormats] = useState<FormatObject[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClass, setEditingClass] = useState<CompetitionClass | null>(null);
   const [showForm, setShowForm] = useState(false);

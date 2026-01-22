@@ -25,6 +25,7 @@ import { MembershipsService, AdminAssignMembershipDto, CreateMembershipDto, Admi
 import { Membership } from './memberships.entity';
 import { MecaIdService } from './meca-id.service';
 import { MasterSecondaryService, CreateSecondaryMembershipDto, SecondaryMembershipInfo, MasterMembershipInfo } from './master-secondary.service';
+import { MembershipSyncService } from './membership-sync.service';
 
 @Controller('api/memberships')
 export class MembershipsController {
@@ -34,6 +35,7 @@ export class MembershipsController {
     private readonly membershipsService: MembershipsService,
     private readonly mecaIdService: MecaIdService,
     private readonly masterSecondaryService: MasterSecondaryService,
+    private readonly membershipSyncService: MembershipSyncService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -507,5 +509,20 @@ export class MembershipsController {
     this.logger.log(`Fixed ${fixed} orphaned secondary memberships`);
 
     return { fixed, details };
+  }
+
+  /**
+   * Admin: Manually trigger membership status sync.
+   * This syncs profile.membership_status with actual membership end_dates.
+   * Normally runs automatically at 1:00 AM daily.
+   */
+  @Post('admin/sync-membership-statuses')
+  @HttpCode(HttpStatus.OK)
+  async syncMembershipStatuses(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ activated: number; expired: number }> {
+    await this.requireAdmin(authHeader);
+    this.logger.log('Admin triggered manual membership status sync');
+    return this.membershipSyncService.triggerDailySync();
   }
 }

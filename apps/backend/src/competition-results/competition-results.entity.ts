@@ -28,6 +28,9 @@ export class CompetitionResult {
   @Property({ type: 'text', nullable: true, fieldName: 'meca_id', serializedName: 'meca_id' })
   mecaId?: string;
 
+  @Property({ type: 'text', nullable: true, fieldName: 'state_code', serializedName: 'state_code' })
+  stateCode?: string;
+
   @Property({ type: 'text', fieldName: 'competition_class', serializedName: 'competition_class' })
   competitionClass!: string;
 

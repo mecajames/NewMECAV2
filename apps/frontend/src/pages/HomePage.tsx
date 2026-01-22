@@ -1,63 +1,87 @@
 import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight, Store, Factory, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
-import { siteSettingsApi, SiteSetting } from '@/site-settings';
+import { useSiteSettings } from '@/shared/contexts';
 import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business-listings';
 import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useHomeSEO } from '@/shared/seo';
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { getSetting } = useSiteSettings();
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [currentEventSlide, setCurrentEventSlide] = useState(0);
-  const [heroSettings, setHeroSettings] = useState({
-    image_urls: ['https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920'],
-    title: 'MECACARAUDIO.COM',
-    subtitle: 'The Premier Platform for Car Audio Competition Management',
-    button_text: 'View Events',
-    carousel_speed: 5000,
-    carousel_direction: 'left' as 'left' | 'right' | 'top' | 'bottom',
-  });
-
-  const [youtubeVideos, setYoutubeVideos] = useState({
-    active: false,
-    videos: [
-      { url: '', title: '' },
-      { url: '', title: '' },
-      { url: '', title: '' },
-      { url: '', title: '' },
-    ],
-  });
 
   const [sponsors, setSponsors] = useState<{
     retailers: RetailerListing[];
     manufacturers: ManufacturerListing[];
   }>({ retailers: [], manufacturers: [] });
 
-  const [sponsorCarouselSpeed, setSponsorCarouselSpeed] = useState(30);
+  // Derive hero settings from cached context
+  const heroSettings = useMemo(() => {
+    const defaultImages = ['https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920'];
+
+    let imageUrls: string[] = defaultImages;
+    try {
+      const urlsValue = getSetting('hero_image_urls') || '[]';
+      imageUrls = JSON.parse(urlsValue);
+      if (!Array.isArray(imageUrls)) {
+        imageUrls = [urlsValue];
+      }
+    } catch {
+      const heroImageUrls = getSetting('hero_image_urls');
+      imageUrls = heroImageUrls ? [heroImageUrls] : defaultImages;
+    }
+
+    return {
+      image_urls: imageUrls.length > 0 ? imageUrls : defaultImages,
+      title: getSetting('hero_title') || 'MECACARAUDIO.COM',
+      subtitle: getSetting('hero_subtitle') || 'The Premier Platform for Car Audio Competition Management',
+      button_text: getSetting('hero_button_text') || 'View Events',
+      carousel_speed: parseInt(getSetting('hero_carousel_speed') || '5000'),
+      carousel_direction: (getSetting('hero_carousel_direction') || 'left') as 'left' | 'right' | 'top' | 'bottom',
+    };
+  }, [getSetting]);
+
+  // Derive YouTube settings from cached context
+  const youtubeVideos = useMemo(() => {
+    const videos = [
+      {
+        url: getSetting('youtube_video_1_url') || '',
+        title: getSetting('youtube_video_1_title') || '',
+      },
+      {
+        url: getSetting('youtube_video_2_url') || '',
+        title: getSetting('youtube_video_2_title') || '',
+      },
+      {
+        url: getSetting('youtube_video_3_url') || '',
+        title: getSetting('youtube_video_3_title') || '',
+      },
+      {
+        url: getSetting('youtube_video_4_url') || '',
+        title: getSetting('youtube_video_4_title') || '',
+      },
+    ].filter(video => video.url);
+
+    return {
+      active: getSetting('youtube_section_active') === 'true',
+      videos,
+    };
+  }, [getSetting]);
+
+  // Derive sponsor carousel speed from cached context
+  const sponsorCarouselSpeed = useMemo(() => {
+    return parseInt(getSetting('sponsor_carousel_speed') || '30');
+  }, [getSetting]);
 
   useEffect(() => {
     fetchUpcomingEvents();
-    fetchHeroSettings();
-    fetchYoutubeSettings();
     fetchSponsors();
-    fetchSponsorCarouselSpeed();
   }, []);
-
-  const fetchSponsorCarouselSpeed = async () => {
-    try {
-      const settings = await siteSettingsApi.getAll();
-      const speedSetting = settings.find((s: SiteSetting) => s.setting_key === 'sponsor_carousel_speed');
-      if (speedSetting) {
-        setSponsorCarouselSpeed(parseInt(speedSetting.setting_value) || 30);
-      }
-    } catch (error) {
-      console.error('Error fetching sponsor carousel speed:', error);
-    }
-  };
 
   useEffect(() => {
     if (heroSettings.image_urls.length <= 1) return;
@@ -79,93 +103,6 @@ export default function HomePage() {
 
     return () => clearInterval(interval);
   }, [upcomingEvents.length]);
-
-  const fetchHeroSettings = async () => {
-    try {
-      const data = await siteSettingsApi.getAll();
-
-      // Filter for hero settings
-      const heroKeys = ['hero_image_urls', 'hero_title', 'hero_subtitle', 'hero_button_text', 'hero_carousel_speed', 'hero_carousel_direction'];
-      const heroData = data.filter((setting: SiteSetting) => heroKeys.includes(setting.setting_key));
-
-      if (heroData && heroData.length > 0) {
-        const settings: any = {};
-        heroData.forEach((setting: SiteSetting) => {
-          settings[setting.setting_key] = setting.setting_value;
-        });
-
-        // Parse hero_image_urls as JSON array
-        let imageUrls: string[] = heroSettings.image_urls;
-        try {
-          const urlsValue = settings['hero_image_urls'] || '[]';
-          imageUrls = JSON.parse(urlsValue);
-          if (!Array.isArray(imageUrls)) {
-            imageUrls = [urlsValue];
-          }
-        } catch {
-          imageUrls = settings['hero_image_urls'] ? [settings['hero_image_urls']] : heroSettings.image_urls;
-        }
-
-        setHeroSettings({
-          image_urls: imageUrls.length > 0 ? imageUrls : heroSettings.image_urls,
-          title: settings['hero_title'] || heroSettings.title,
-          subtitle: settings['hero_subtitle'] || heroSettings.subtitle,
-          button_text: settings['hero_button_text'] || heroSettings.button_text,
-          carousel_speed: parseInt(settings['hero_carousel_speed'] || '5000'),
-          carousel_direction: settings['hero_carousel_direction'] || 'left',
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching hero settings:', error);
-    }
-  };
-
-  const fetchYoutubeSettings = async () => {
-    try {
-      const data = await siteSettingsApi.getAll();
-
-      // Filter for YouTube settings
-      const youtubeKeys = [
-        'youtube_section_active',
-        'youtube_video_1_url', 'youtube_video_1_title',
-        'youtube_video_2_url', 'youtube_video_2_title',
-        'youtube_video_3_url', 'youtube_video_3_title',
-        'youtube_video_4_url', 'youtube_video_4_title'
-      ];
-      const youtubeData = data.filter((setting: SiteSetting) => youtubeKeys.includes(setting.setting_key));
-
-      if (youtubeData && youtubeData.length > 0) {
-        const settings: any = {};
-        youtubeData.forEach((setting: SiteSetting) => {
-          settings[setting.setting_key] = setting.setting_value;
-        });
-
-        setYoutubeVideos({
-          active: settings['youtube_section_active'] === 'true',
-          videos: [
-            {
-              url: settings['youtube_video_1_url'] || '',
-              title: settings['youtube_video_1_title'] || '',
-            },
-            {
-              url: settings['youtube_video_2_url'] || '',
-              title: settings['youtube_video_2_title'] || '',
-            },
-            {
-              url: settings['youtube_video_3_url'] || '',
-              title: settings['youtube_video_3_title'] || '',
-            },
-            {
-              url: settings['youtube_video_4_url'] || '',
-              title: settings['youtube_video_4_title'] || '',
-            },
-          ].filter(video => video.url), // Only include videos with URLs
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching YouTube settings:', error);
-    }
-  };
 
   const fetchUpcomingEvents = async () => {
     try {
