@@ -1,0 +1,25 @@
+MECA Complete Backup
+===================
+Timestamp: 20251112_203740
+Date: Wed, Nov 12, 2025  8:37:41 PM
+
+Contents:
+- database.sql: PostgreSQL database dump
+- storage/: Supabase storage files (PDFs, images, etc.)
+
+Database Stats:
+- Size: 360K
+- Lines: 8101
+
+Storage Stats:
+- Size: 37M
+
+User Account:
+- Email: james@mecacaraudio.com
+- MECA ID: 202401
+- Role: admin
+
+To Restore:
+-----------
+1. Database: cat database.sql | docker exec -i supabase_db_NewMECAV2 psql -U postgres -d postgres
+2. Storage: docker cp storage/storage supabase_storage_NewMECAV2:/var/lib/
