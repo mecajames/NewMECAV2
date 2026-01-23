@@ -65,16 +65,16 @@ export class StandingsService {
     limit: number = 100,
     offset: number = 0,
   ): Promise<{ entries: LeaderboardEntry[]; total: number }> {
-    const cacheKey = `season_leaderboard_${seasonId || 'current'}_${limit}_${offset}`;
+    const cacheKey = `season_leaderboard_${seasonId ?? 'all'}_${limit}_${offset}`;
     const cached = this.getCached<{ entries: LeaderboardEntry[]; total: number }>(cacheKey);
     if (cached !== null) return cached;
 
     const em = this.em.fork();
-    const effectiveSeasonId = seasonId || (await this.getCurrentSeasonId());
 
+    // Only filter by season if explicitly provided (not empty string)
     const filter: any = {};
-    if (effectiveSeasonId) {
-      filter.season = effectiveSeasonId;
+    if (seasonId) {
+      filter.season = seasonId;
     }
 
     const results = await em.find(CompetitionResult, filter, {
@@ -102,16 +102,16 @@ export class StandingsService {
     seasonId?: string,
     limit: number = 50,
   ): Promise<LeaderboardEntry[]> {
-    const cacheKey = `format_standings_${format}_${seasonId || 'current'}_${limit}`;
+    const cacheKey = `format_standings_${format}_${seasonId ?? 'all'}_${limit}`;
     const cached = this.getCached<LeaderboardEntry[]>(cacheKey);
     if (cached !== null) return cached;
 
     const em = this.em.fork();
-    const effectiveSeasonId = seasonId || (await this.getCurrentSeasonId());
 
+    // Only filter by season if explicitly provided (not empty string)
     const filter: any = { format: format.toUpperCase() };
-    if (effectiveSeasonId) {
-      filter.season = effectiveSeasonId;
+    if (seasonId) {
+      filter.season = seasonId;
     }
 
     const results = await em.find(CompetitionResult, filter, {
@@ -137,19 +137,19 @@ export class StandingsService {
     seasonId?: string,
     limit: number = 50,
   ): Promise<ClassStandingsEntry[]> {
-    const cacheKey = `class_standings_${format}_${competitionClass}_${seasonId || 'current'}_${limit}`;
+    const cacheKey = `class_standings_${format}_${competitionClass}_${seasonId ?? 'all'}_${limit}`;
     const cached = this.getCached<ClassStandingsEntry[]>(cacheKey);
     if (cached !== null) return cached;
 
     const em = this.em.fork();
-    const effectiveSeasonId = seasonId || (await this.getCurrentSeasonId());
 
+    // Only filter by season if explicitly provided (not empty string)
     const filter: any = {
       format: format.toUpperCase(),
       competitionClass: competitionClass,
     };
-    if (effectiveSeasonId) {
-      filter.season = effectiveSeasonId;
+    if (seasonId) {
+      filter.season = seasonId;
     }
 
     const results = await em.find(CompetitionResult, filter, {
@@ -173,17 +173,16 @@ export class StandingsService {
     seasonId?: string,
     limit: number = 50,
   ): Promise<TeamStandingsEntry[]> {
-    const cacheKey = `team_standings_${seasonId || 'current'}_${limit}`;
+    const cacheKey = `team_standings_${seasonId ?? 'all'}_${limit}`;
     const cached = this.getCached<TeamStandingsEntry[]>(cacheKey);
     if (cached !== null) return cached;
 
     const em = this.em.fork();
-    const effectiveSeasonId = seasonId || (await this.getCurrentSeasonId());
 
-    // Get result teams for this season
+    // Only filter by season if explicitly provided (not empty string)
     const filter: any = {};
-    if (effectiveSeasonId) {
-      filter.result = { season: effectiveSeasonId };
+    if (seasonId) {
+      filter.result = { season: seasonId };
     }
 
     const resultTeams = await em.find(ResultTeam, filter, {
@@ -246,7 +245,7 @@ export class StandingsService {
    * Get standings summary for all formats
    */
   async getFormatSummaries(seasonId?: string): Promise<FormatStandingsSummary[]> {
-    const cacheKey = `format_summaries_${seasonId || 'current'}`;
+    const cacheKey = `format_summaries_${seasonId ?? 'all'}`;
     const cached = this.getCached<FormatStandingsSummary[]>(cacheKey);
     if (cached !== null) return cached;
 
@@ -258,11 +257,11 @@ export class StandingsService {
 
       // Get unique events and competitors for this format
       const em = this.em.fork();
-      const effectiveSeasonId = seasonId || (await this.getCurrentSeasonId());
 
+      // Only filter by season if explicitly provided (not empty string)
       const filter: any = { format };
-      if (effectiveSeasonId) {
-        filter.season = effectiveSeasonId;
+      if (seasonId) {
+        filter.season = seasonId;
       }
 
       const results = await em.find(CompetitionResult, filter);
@@ -297,11 +296,11 @@ export class StandingsService {
     byClass: Array<{ format: string; className: string; points: number; events: number }>;
   } | null> {
     const em = this.em.fork();
-    const effectiveSeasonId = seasonId || (await this.getCurrentSeasonId());
 
+    // Only filter by season if explicitly provided (not empty string)
     const filter: any = { mecaId };
-    if (effectiveSeasonId) {
-      filter.season = effectiveSeasonId;
+    if (seasonId) {
+      filter.season = seasonId;
     }
 
     const results = await em.find(CompetitionResult, filter);
@@ -380,14 +379,14 @@ export class StandingsService {
     seasonId?: string,
   ): Promise<Array<{ format: string; className: string; resultCount: number }>> {
     const em = this.em.fork();
-    const effectiveSeasonId = seasonId || (await this.getCurrentSeasonId());
 
+    // Only filter by season if explicitly provided (not empty string)
     const filter: any = {};
     if (format) {
       filter.format = format.toUpperCase();
     }
-    if (effectiveSeasonId) {
-      filter.season = effectiveSeasonId;
+    if (seasonId) {
+      filter.season = seasonId;
     }
 
     const results = await em.find(CompetitionResult, filter);
