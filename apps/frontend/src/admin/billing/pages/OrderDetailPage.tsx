@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, User, CreditCard, MapPin, XCircle } from 'lucide-react';
-import { billingApi, Order, ordersApi } from '../../../api-client/billing.api-client';
+import { billingApi, Order, ordersApi, invoicesApi } from '../../../api-client/billing.api-client';
 import { OrderStatusBadge } from '../components/BillingStatusBadge';
 import { OrderType, OrderStatus } from '../billing.types';
 
@@ -9,6 +9,8 @@ const orderTypeLabels: Record<OrderType, string> = {
   [OrderType.MEMBERSHIP]: 'Membership',
   [OrderType.EVENT_REGISTRATION]: 'Event Registration',
   [OrderType.MANUAL]: 'Manual',
+  [OrderType.MECA_SHOP]: 'MECA Shop',
+  [OrderType.MERCHANDISE]: 'Merchandise',
 };
 
 export default function OrderDetailPage() {
@@ -17,6 +19,7 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -49,6 +52,21 @@ export default function OrderDetailPage() {
         console.error('Error cancelling order:', err);
         alert('Failed to cancel order');
       }
+    }
+  };
+
+  const handleViewInvoice = async () => {
+    if (!order) return;
+    setViewingInvoice(true);
+    try {
+      // Create invoice from order if it doesn't exist, or get existing one
+      const invoice = await invoicesApi.createFromOrder(order.id);
+      navigate(`/admin/billing/invoices/${invoice.id}`);
+    } catch (err) {
+      console.error('Error viewing invoice:', err);
+      alert('Failed to load invoice. Please try again.');
+    } finally {
+      setViewingInvoice(false);
     }
   };
 
@@ -220,21 +238,51 @@ export default function OrderDetailPage() {
                 <User className="h-5 w-5 text-blue-500" />
                 <h2 className="text-lg font-semibold text-white">Customer</h2>
               </div>
-              {order.user ? (
-                <div className="space-y-2">
-                  <p className="text-white font-medium">
-                    {`${order.user.first_name || ''} ${order.user.last_name || ''}`.trim() || 'No Name'}
-                  </p>
-                  <p className="text-gray-400 text-sm">{order.user.email}</p>
-                  {order.user.meca_id && (
-                    <p className="text-orange-400 text-sm font-medium">
-                      MECA ID: #{order.user.meca_id}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-400">Guest order</p>
-              )}
+              {(() => {
+                const userName = order.user
+                  ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim()
+                  : null;
+                const billingName = order.billingAddress?.name;
+                const customerName = userName || billingName || 'No Name';
+                const hasProfile = order.user?.id;
+                const isGuestOrder = !order.user;
+
+                return order.user ? (
+                  <div className="space-y-2">
+                    {hasProfile ? (
+                      <button
+                        onClick={() => navigate(`/admin/members/${order.user!.id}`)}
+                        className="text-orange-400 hover:text-orange-300 hover:underline font-medium text-left"
+                      >
+                        {customerName}
+                      </button>
+                    ) : (
+                      <p className="text-white font-medium">{customerName}</p>
+                    )}
+                    <p className="text-gray-400 text-sm">{order.user.email}</p>
+                    {order.user.meca_id && (
+                      <p className="text-orange-400 text-sm font-medium">
+                        MECA ID: #{order.user.meca_id}
+                      </p>
+                    )}
+                    {hasProfile && (
+                      <button
+                        onClick={() => navigate(`/admin/members/${order.user!.id}`)}
+                        className="mt-2 w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 text-sm text-white rounded-lg transition-colors"
+                      >
+                        View Full Profile
+                      </button>
+                    )}
+                  </div>
+                ) : isGuestOrder ? (
+                  <div className="space-y-2">
+                    {billingName && <p className="text-white font-medium">{billingName}</p>}
+                    <p className="text-gray-500 text-sm">Guest Order (No account)</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-400">No customer information</p>
+                );
+              })()}
             </div>
 
             {/* Payment Info */}
@@ -280,14 +328,13 @@ export default function OrderDetailPage() {
             )}
 
             {/* Invoice Link */}
-            {order.invoiceId && (
-              <button
-                onClick={() => navigate(`/admin/billing/invoices/${order.invoiceId}`)}
-                className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors text-center"
-              >
-                View Invoice
-              </button>
-            )}
+            <button
+              onClick={handleViewInvoice}
+              disabled={viewingInvoice}
+              className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-center"
+            >
+              {viewingInvoice ? 'Loading Invoice...' : 'View Invoice'}
+            </button>
           </div>
         </div>
       </div>

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Users, Search, Filter, UserPlus, Mail, Phone, ArrowLeft, Eye, UserCog, Trash2, AlertTriangle, Loader2, ChevronDown, ChevronRight, UserMinus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
 import AdminUserWizard from '../components/AdminUserWizard';
+import { Pagination } from '@/shared/components';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -70,6 +71,10 @@ export default function MembersPage() {
   const [debugOrphanedSecondaries, setDebugOrphanedSecondaries] = useState<SecondaryMembershipInfo[]>([]);
   const [debugAllMemberships, setDebugAllMemberships] = useState<any[]>([]);
   const [showDebugPanel, setShowDebugPanel] = useState(false); // Toggle for debug panel
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [membersPerPage, setMembersPerPage] = useState(50);
 
   const toggleMemberExpanded = (memberId: string) => {
     setExpandedMembers(prev => {
@@ -144,11 +149,27 @@ export default function MembersPage() {
 
       // Build a map of user_id -> best membership info
       // Each profile gets their own membership info (including secondaries)
-      const membershipMap = new Map<string, MembershipInfo & { priority: number }>();
+      const membershipMap = new Map<string, MembershipInfo & { priority: number; isUpgradeOnly: boolean }>();
 
       // Also build a map of master membership IDs to their secondaries for the tree view
       const secondariesByMaster = new Map<string, SecondaryMembershipInfo[]>();
 
+      // Track which users have non-upgrade-only memberships
+      const usersWithNonUpgradeMembership = new Set<string>();
+
+      // First pass: identify users who have non-upgrade-only memberships
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (membershipsData || []).forEach((m: any) => {
+        const config = Array.isArray(m.membership_type_configs)
+          ? m.membership_type_configs[0]
+          : m.membership_type_configs;
+        if (!config) return;
+        if (!config.is_upgrade_only) {
+          usersWithNonUpgradeMembership.add(m.user_id);
+        }
+      });
+
+      // Second pass: build membership map
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (membershipsData || []).forEach((m: any) => {
         const config = Array.isArray(m.membership_type_configs)
@@ -156,37 +177,46 @@ export default function MembersPage() {
           : m.membership_type_configs;
         if (!config) return;
 
-        // Skip upgrade-only memberships (like "Upgrade to Team Membership")
-        // These are add-ons to existing memberships, NOT separate member records
+        // Skip upgrade-only memberships ONLY if the user also has a non-upgrade membership
+        // If upgrade-only is their only membership, we should still show it
         const isUpgradeOnly = config.is_upgrade_only === true;
-        if (isUpgradeOnly) {
-          console.log('[MembersPage Debug] Skipping upgrade-only membership:', config.name, m.id);
+        const userHasNonUpgrade = usersWithNonUpgradeMembership.has(m.user_id);
+        if (isUpgradeOnly && userHasNonUpgrade) {
+          console.log('[MembersPage Debug] Skipping upgrade-only membership (user has base membership):', config.name, m.id);
           return;
         }
 
         const isPaid = m.payment_status === 'paid';
         const isSecondary = m.account_type === 'secondary';
         // Priority: paid (0) > pending (1), and master/independent (0) > secondary (10)
+        // Also prefer non-upgrade-only (0) over upgrade-only (5)
         // This ensures master memberships are preferred over secondary memberships
         // when they share the same user_id (has_own_login = false)
         const paymentPriority = isPaid ? 0 : 1;
         const accountPriority = isSecondary ? 10 : 0;
-        const priority = paymentPriority + accountPriority;
+        const upgradePriority = isUpgradeOnly ? 5 : 0;
+        const priority = paymentPriority + accountPriority + upgradePriority;
 
         // Map membership to its profile (user_id)
         // For users with both master and secondary memberships (has_own_login=false),
         // the master membership should be used so secondaries can be attached correctly
         const existing = membershipMap.get(m.user_id);
         if (!existing || priority < existing.priority) {
+          // For "Team Membership" type which is upgrade-only but used as standalone,
+          // treat as if they have team addon (since they purchased the team membership directly)
+          const hasTeamAddon = m.has_team_addon ||
+            (isUpgradeOnly && config.name?.toLowerCase().includes('team') && config.category === 'competitor');
+
           membershipMap.set(m.user_id, {
             id: m.id,
             category: config.category,
-            hasTeamAddon: m.has_team_addon,
+            hasTeamAddon: hasTeamAddon,
             paymentStatus: m.payment_status,
             endDate: m.end_date || undefined,
             accountType: m.account_type,
             secondaries: [], // Will be populated below for masters
             priority,
+            isUpgradeOnly,
           });
         }
 
@@ -436,6 +466,18 @@ export default function MembersPage() {
 
     setFilteredMembers(filtered);
   };
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, sortBy]);
+
+  // Paginated members
+  const totalPages = Math.ceil(filteredMembers.length / membersPerPage);
+  const paginatedMembers = useMemo(() => {
+    const startIndex = (currentPage - 1) * membersPerPage;
+    return filteredMembers.slice(startIndex, startIndex + membersPerPage);
+  }, [filteredMembers, currentPage, membersPerPage]);
 
   const getInitials = (firstName?: string, lastName?: string) => {
     const first = firstName?.[0] || '';
@@ -865,14 +907,14 @@ export default function MembersPage() {
                 </tr>
               </thead>
               <tbody className="bg-slate-800 divide-y divide-slate-700">
-                {filteredMembers.length === 0 ? (
+                {paginatedMembers.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-6 py-12 text-center text-gray-400">
                       No members found matching your criteria.
                     </td>
                   </tr>
                 ) : (
-                  filteredMembers.map((member) => {
+                  paginatedMembers.map((member) => {
                     const hasSecondaries = member.membershipInfo?.secondaries && member.membershipInfo.secondaries.length > 0;
                     const isExpanded = expandedMembers.has(member.id);
 
@@ -1126,6 +1168,16 @@ export default function MembersPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={membersPerPage}
+            totalItems={filteredMembers.length}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={setMembersPerPage}
+          />
         </div>
       </div>
 

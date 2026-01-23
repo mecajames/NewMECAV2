@@ -14,6 +14,8 @@ export enum OrderType {
   MEMBERSHIP = 'membership',
   EVENT_REGISTRATION = 'event_registration',
   MANUAL = 'manual',
+  MECA_SHOP = 'meca_shop',
+  MERCHANDISE = 'merchandise',
 }
 
 export enum OrderItemType {

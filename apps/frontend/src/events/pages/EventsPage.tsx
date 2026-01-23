@@ -7,6 +7,7 @@ import { countries, getStatesForCountry } from '@/utils/countries';
 import { getStorageUrl } from '@/lib/storage';
 import { EventsBanner } from '@/banners';
 import { SEOHead, useEventsListSEO } from '@/shared/seo';
+import { Pagination } from '@/shared/components';
 
 type EventStatus = 'upcoming' | 'completed';
 
@@ -23,6 +24,10 @@ export default function EventsPage() {
   const [selectedMultiplier, setSelectedMultiplier] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState(true);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [eventsPerPage, setEventsPerPage] = useState(50);
 
   // Get states based on selected country
   const availableStates = useMemo(() => {
@@ -132,6 +137,18 @@ export default function EventsPage() {
 
     return result;
   }, [events, filter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate, selectedSeason]);
+
+  // Paginated events
+  const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
+  const paginatedEvents = useMemo(() => {
+    const startIndex = (currentPage - 1) * eventsPerPage;
+    return filteredEvents.slice(startIndex, startIndex + eventsPerPage);
+  }, [filteredEvents, currentPage, eventsPerPage]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -399,12 +416,12 @@ export default function EventsPage() {
           <div className="text-center py-20">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
           </div>
-        ) : filteredEvents.length > 0 ? (
+        ) : paginatedEvents.length > 0 ? (
           <div className="space-y-6">
             {/* Render events in chunks of 4 (2 rows) with banners between */}
-            {Array.from({ length: Math.ceil(filteredEvents.length / 4) }).map((_, chunkIndex) => {
+            {Array.from({ length: Math.ceil(paginatedEvents.length / 4) }).map((_, chunkIndex) => {
               const startIdx = chunkIndex * 4;
-              const chunkEvents = filteredEvents.slice(startIdx, startIdx + 4);
+              const chunkEvents = paginatedEvents.slice(startIdx, startIdx + 4);
 
               return (
                 <div key={`chunk-${chunkIndex}`}>
@@ -575,7 +592,7 @@ export default function EventsPage() {
                   </div>
 
                   {/* Show banner after every 2 rows, but not after the last chunk */}
-                  {chunkIndex < Math.ceil(filteredEvents.length / 4) - 1 && (
+                  {chunkIndex < Math.ceil(paginatedEvents.length / 4) - 1 && (
                     <div className="mt-6">
                       <EventsBanner />
                     </div>
@@ -583,6 +600,18 @@ export default function EventsPage() {
                 </div>
               );
             })}
+
+            {/* Pagination */}
+            <div className="mt-6 rounded-xl overflow-hidden">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                itemsPerPage={eventsPerPage}
+                totalItems={filteredEvents.length}
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={setEventsPerPage}
+              />
+            </div>
           </div>
         ) : (
           <div className="text-center py-20 bg-slate-800 rounded-xl">

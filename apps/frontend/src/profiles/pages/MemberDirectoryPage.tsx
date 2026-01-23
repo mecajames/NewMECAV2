@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Search, Car, Music, User, Award } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
 import { SEOHead, useMemberDirectorySEO } from '@/shared/seo';
+import { Pagination } from '@/shared/components';
 
 export default function MemberDirectoryPage() {
   const navigate = useNavigate();
@@ -11,6 +12,10 @@ export default function MemberDirectoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const seoProps = useMemberDirectorySEO();
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [membersPerPage, setMembersPerPage] = useState(50);
 
   useEffect(() => {
     fetchPublicProfiles();
@@ -29,14 +34,35 @@ export default function MemberDirectoryPage() {
     }
   };
 
-  const filteredProfiles = profiles.filter(profile => {
-    const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.toLowerCase();
-    const mecaId = String(profile.meca_id || '').toLowerCase();
-    const vehicle = (profile.vehicle_info || '').toLowerCase();
-    const search = searchTerm.toLowerCase();
+  const filteredProfiles = useMemo(() => {
+    // Only show active members
+    let result = profiles.filter(profile => profile.membership_status === 'active');
 
-    return fullName.includes(search) || mecaId.includes(search) || vehicle.includes(search);
-  });
+    // Filter by search term
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      result = result.filter(profile => {
+        const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.toLowerCase();
+        const mecaId = String(profile.meca_id || '').toLowerCase();
+        const vehicle = (profile.vehicle_info || '').toLowerCase();
+        return fullName.includes(search) || mecaId.includes(search) || vehicle.includes(search);
+      });
+    }
+
+    return result;
+  }, [profiles, searchTerm]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Paginated profiles
+  const totalPages = Math.ceil(filteredProfiles.length / membersPerPage);
+  const paginatedProfiles = useMemo(() => {
+    const startIndex = (currentPage - 1) * membersPerPage;
+    return filteredProfiles.slice(startIndex, startIndex + membersPerPage);
+  }, [filteredProfiles, currentPage, membersPerPage]);
 
   if (loading) {
     return (
@@ -85,14 +111,15 @@ export default function MemberDirectoryPage() {
         {/* Stats */}
         <div className="mb-8">
           <p className="text-gray-400">
-            Showing {filteredProfiles.length} of {profiles.length} public profiles
+            Showing {filteredProfiles.length} active members
           </p>
         </div>
 
         {/* Profile Grid */}
-        {filteredProfiles.length > 0 ? (
+        {paginatedProfiles.length > 0 ? (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProfiles.map((profile) => (
+            {paginatedProfiles.map((profile) => (
               <div
                 key={profile.id}
                 className="bg-slate-800 rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
@@ -201,6 +228,19 @@ export default function MemberDirectoryPage() {
               </div>
             ))}
           </div>
+
+          {/* Pagination */}
+          <div className="mt-6 rounded-xl overflow-hidden">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              itemsPerPage={membersPerPage}
+              totalItems={filteredProfiles.length}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setMembersPerPage}
+            />
+          </div>
+          </>
         ) : (
           <div className="text-center py-16">
             <Users className="h-16 w-16 text-gray-600 mx-auto mb-4" />

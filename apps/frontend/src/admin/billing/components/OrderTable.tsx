@@ -17,6 +17,8 @@ const orderTypeLabels: Record<OrderType, string> = {
   [OrderType.MEMBERSHIP]: 'Membership',
   [OrderType.EVENT_REGISTRATION]: 'Event Registration',
   [OrderType.MANUAL]: 'Manual',
+  [OrderType.MECA_SHOP]: 'MECA Shop',
+  [OrderType.MERCHANDISE]: 'Merchandise',
 };
 
 export function OrderTable({
@@ -124,20 +126,47 @@ export function OrderTable({
               </td>
               {!compact && (
                 <td className="whitespace-nowrap px-4 py-3">
-                  <div className="text-sm text-gray-300">
-                    {order.user
-                      ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim() ||
-                        order.user.email
-                      : 'Guest'}
-                  </div>
-                  {order.user && (
-                    <div className="text-xs text-gray-500">
-                      {order.user.email}
-                      {order.user.meca_id && (
-                        <span className="ml-2 text-orange-400">#{order.user.meca_id}</span>
-                      )}
-                    </div>
-                  )}
+                  {(() => {
+                    // Get customer name: prefer user name, fallback to billing address name
+                    const userName = order.user
+                      ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim()
+                      : null;
+                    const billingName = order.billingAddress?.name;
+                    const customerName = userName || billingName || (order.user?.email ? order.user.email : 'Guest');
+                    const hasProfile = order.user?.id;
+                    const isGuestOrder = !order.user;
+
+                    return (
+                      <>
+                        {hasProfile ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/admin/members/${order.user!.id}`);
+                            }}
+                            className="text-sm text-orange-400 hover:text-orange-300 hover:underline font-medium text-left"
+                          >
+                            {customerName}
+                          </button>
+                        ) : (
+                          <div className="text-sm text-gray-300">
+                            {customerName}
+                          </div>
+                        )}
+                        {order.user && (
+                          <div className="text-xs text-gray-500">
+                            {order.user.email}
+                            {order.user.meca_id && (
+                              <span className="ml-2 text-orange-400">#{order.user.meca_id}</span>
+                            )}
+                          </div>
+                        )}
+                        {isGuestOrder && (
+                          <div className="text-xs text-gray-500">Guest Order</div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </td>
               )}
               {!compact && (

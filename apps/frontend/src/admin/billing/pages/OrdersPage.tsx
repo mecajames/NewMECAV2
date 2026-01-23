@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, Download } from 'lucide-react';
 import { billingApi, Order, OrderListParams } from '../../../api-client/billing.api-client';
 import { OrderTable } from '../components/OrderTable';
 import { OrderStatus, OrderType } from '../billing.types';
+import { seasonsApi, Season } from '@/seasons';
+import { Pagination } from '@/shared/components';
 
 export default function OrdersPage() {
   const navigate = useNavigate();
@@ -12,7 +14,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 50,
     totalItems: 0,
     totalPages: 0,
   });
@@ -23,17 +25,77 @@ export default function OrdersPage() {
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | ''>('');
   const [typeFilter, setTypeFilter] = useState<OrderType | ''>('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [yearFilter, setYearFilter] = useState<string>('');
+  const [monthFilter, setMonthFilter] = useState<string>('');
+  const [seasonFilter, setSeasonFilter] = useState<string>('');
+  const [seasons, setSeasons] = useState<Season[]>([]);
+
+  // Generate years for filter (last 5 years)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
+  // Months for filter
+  const months = [
+    { value: '1', label: 'January' },
+    { value: '2', label: 'February' },
+    { value: '3', label: 'March' },
+    { value: '4', label: 'April' },
+    { value: '5', label: 'May' },
+    { value: '6', label: 'June' },
+    { value: '7', label: 'July' },
+    { value: '8', label: 'August' },
+    { value: '9', label: 'September' },
+    { value: '10', label: 'October' },
+    { value: '11', label: 'November' },
+    { value: '12', label: 'December' },
+  ];
+
+  // Fetch seasons
+  useEffect(() => {
+    const fetchSeasons = async () => {
+      try {
+        const data = await seasonsApi.getAll();
+        setSeasons(data);
+      } catch (err) {
+        console.error('Error fetching seasons:', err);
+      }
+    };
+    fetchSeasons();
+  }, []);
 
   const fetchOrders = async (params: OrderListParams = {}) => {
     try {
       setLoading(true);
+
+      // Calculate date range based on year/month filters
+      let startDate: string | undefined;
+      let endDate: string | undefined;
+
+      if (yearFilter) {
+        const year = parseInt(yearFilter);
+        if (monthFilter) {
+          const month = parseInt(monthFilter);
+          startDate = new Date(year, month - 1, 1).toISOString();
+          endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+        } else {
+          startDate = new Date(year, 0, 1).toISOString();
+          endDate = new Date(year, 11, 31, 23, 59, 59).toISOString();
+        }
+      } else if (monthFilter) {
+        // Month only - use current year
+        const month = parseInt(monthFilter);
+        startDate = new Date(currentYear, month - 1, 1).toISOString();
+        endDate = new Date(currentYear, month, 0, 23, 59, 59).toISOString();
+      }
+
       const response = await billingApi.getOrders({
         page: params.page || pagination.page,
         limit: params.limit || pagination.limit,
         search: search || undefined,
         status: statusFilter || undefined,
         orderType: typeFilter || undefined,
+        startDate,
+        endDate,
         ...params,
       });
       setOrders(response.data);
@@ -49,7 +111,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders({ page: 1 });
-  }, [statusFilter, typeFilter]);
+  }, [statusFilter, typeFilter, yearFilter, monthFilter, seasonFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +120,11 @@ export default function OrdersPage() {
 
   const handlePageChange = (newPage: number) => {
     fetchOrders({ page: newPage });
+  };
+
+  const handleItemsPerPageChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, limit: newLimit }));
+    fetchOrders({ page: 1, limit: newLimit });
   };
 
   const handleCancelOrder = async (order: Order) => {
@@ -71,6 +138,68 @@ export default function OrdersPage() {
       console.error('Error cancelling order:', err);
       alert('Failed to cancel order');
     }
+  };
+
+  const handleExport = () => {
+    if (orders.length === 0) {
+      alert('No orders to export');
+      return;
+    }
+
+    // Build CSV content
+    const headers = [
+      'Order Number',
+      'Date',
+      'Customer Name',
+      'Customer Email',
+      'MECA ID',
+      'Order Type',
+      'Status',
+      'Items',
+      'Subtotal',
+      'Tax',
+      'Discount',
+      'Total',
+      'Currency',
+    ];
+
+    const rows = orders.map(order => {
+      const userName = order.user
+        ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim()
+        : order.billingAddress?.name || 'Guest';
+
+      return [
+        order.orderNumber,
+        order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '',
+        userName,
+        order.user?.email || '',
+        order.user?.meca_id || '',
+        order.orderType,
+        order.status,
+        order.items.map(i => i.description).join('; '),
+        order.subtotal,
+        order.tax,
+        order.discount,
+        order.total,
+        order.currency,
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `orders-export-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -97,7 +226,7 @@ export default function OrdersPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Search and Filters */}
+        {/* Search and Export */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative">
@@ -119,70 +248,126 @@ export default function OrdersPage() {
           </form>
 
           <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 rounded-md border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-slate-600"
+            onClick={handleExport}
+            disabled={loading || orders.length === 0}
+            className="flex items-center gap-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
           >
-            <Filter className="h-4 w-4" />
-            Filters
+            <Download className="h-4 w-4" />
+            Export CSV
           </button>
         </div>
 
         {/* Filter Panel */}
-        {showFilters && (
-          <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300">
-                  Status
-                </label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as OrderStatus | '')}
-                  className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                >
-                  <option value="">All Statuses</option>
-                  {Object.values(OrderStatus).map((status) => (
-                    <option key={status} value={status}>
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as OrderStatus | '')}
+                className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="">All Statuses</option>
+                {Object.values(OrderStatus).map((status) => (
+                  <option key={status} value={status}>
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300">
-                  Order Type
-                </label>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value as OrderType | '')}
-                  className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                >
-                  <option value="">All Types</option>
-                  {Object.values(OrderType).map((type) => (
-                    <option key={type} value={type}>
-                      {type.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Order Type
+              </label>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as OrderType | '')}
+                className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="">All Types</option>
+                {Object.values(OrderType).map((type) => (
+                  <option key={type} value={type}>
+                    {type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div className="flex items-end">
-                <button
-                  onClick={() => {
-                    setStatusFilter('');
-                    setTypeFilter('');
-                    setSearch('');
-                    fetchOrders({ page: 1 });
-                  }}
-                  className="text-sm text-orange-500 hover:text-orange-400"
-                >
-                  Clear Filters
-                </button>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Season
+              </label>
+              <select
+                value={seasonFilter}
+                onChange={(e) => setSeasonFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="">All Seasons</option>
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Year
+              </label>
+              <select
+                value={yearFilter}
+                onChange={(e) => setYearFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="">All Years</option>
+                {years.map((year) => (
+                  <option key={year} value={year.toString()}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Month
+              </label>
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="">All Months</option>
+                {months.map((month) => (
+                  <option key={month.value} value={month.value}>
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setStatusFilter('');
+                  setTypeFilter('');
+                  setYearFilter('');
+                  setMonthFilter('');
+                  setSeasonFilter('');
+                  setSearch('');
+                  fetchOrders({ page: 1 });
+                }}
+                className="text-sm text-orange-500 hover:text-orange-400"
+              >
+                Clear Filters
+              </button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Error */}
         {error && (
@@ -199,32 +384,16 @@ export default function OrdersPage() {
         />
 
         {/* Pagination */}
-        {!loading && pagination.totalPages > 1 && (
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-400">
-              Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
-              {Math.min(pagination.page * pagination.limit, pagination.totalItems)} of{' '}
-              {pagination.totalItems} orders
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handlePageChange(pagination.page - 1)}
-                disabled={pagination.page === 1}
-                className="rounded-md border border-slate-600 bg-slate-700 p-2 text-gray-300 hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <span className="text-sm text-gray-400">
-                Page {pagination.page} of {pagination.totalPages}
-              </span>
-              <button
-                onClick={() => handlePageChange(pagination.page + 1)}
-                disabled={pagination.page === pagination.totalPages}
-                className="rounded-md border border-slate-600 bg-slate-700 p-2 text-gray-300 hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
+        {!loading && (
+          <div className="mt-6 rounded-xl overflow-hidden">
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              itemsPerPage={pagination.limit}
+              totalItems={pagination.totalItems}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handleItemsPerPageChange}
+            />
           </div>
         )}
       </div>

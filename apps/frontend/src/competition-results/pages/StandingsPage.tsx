@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Trophy, Medal, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, Users } from 'lucide-react';
 import { competitionResultsApi, StandingsEntry, ClassStandingsEntry } from '@/competition-results';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useStandingsSEO } from '@/shared/seo';
+import { Pagination } from '@/shared/components';
 
 type ViewMode = 'overall' | 'byFormat' | 'byClass';
 type SortColumn = 'rank' | 'competitor' | 'mecaId' | 'points' | 'events' | 'placements';
@@ -24,6 +25,10 @@ export default function StandingsPage() {
   const [loading, setLoading] = useState(true);
   const seoProps = useStandingsSEO();
   const [total, setTotal] = useState(0);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   useEffect(() => {
     fetchData();
@@ -120,6 +125,11 @@ export default function StandingsPage() {
       ? <ArrowUp className="h-4 w-4 inline ml-1" />
       : <ArrowDown className="h-4 w-4 inline ml-1" />;
   };
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [viewMode, selectedFormat, selectedClass, selectedSeasonId, searchTerm, sortColumn, sortDirection]);
 
   const getMecaIdDisplay = (mecaId: string | null, isGuest: boolean) => {
     if (isGuest || !mecaId || mecaId === '999999') {
@@ -288,11 +298,14 @@ export default function StandingsPage() {
           </div>
         ) : (() => {
           const displayData = getDisplayData();
+          const totalPages = Math.ceil(displayData.length / itemsPerPage);
+          const startIndex = (currentPage - 1) * itemsPerPage;
+          const paginatedData = displayData.slice(startIndex, startIndex + itemsPerPage);
 
           return displayData.length > 0 ? (
             <>
               <div className="mb-4 text-gray-400">
-                Showing {displayData.length} of {total} competitors
+                Showing {paginatedData.length} of {displayData.length} competitors
               </div>
 
               <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden mb-8">
@@ -339,8 +352,8 @@ export default function StandingsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700">
-                      {displayData.map((entry, index) => {
-                        const rank = entry.rank || index + 1;
+                      {paginatedData.map((entry, index) => {
+                        const rank = entry.rank || (startIndex + index + 1);
                         const isTopThree = rank <= 3;
                         const mecaDisplay = getMecaIdDisplay(entry.mecaId, entry.isGuest);
 
@@ -397,6 +410,18 @@ export default function StandingsPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Pagination */}
+              <div className="mb-8 rounded-xl overflow-hidden">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  itemsPerPage={itemsPerPage}
+                  totalItems={displayData.length}
+                  onPageChange={setCurrentPage}
+                  onItemsPerPageChange={setItemsPerPage}
+                />
               </div>
 
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
