@@ -6,6 +6,8 @@ import { seasonsApi, Season } from '@/seasons';
 import { countries, getStatesForCountry } from '@/utils/countries';
 import { getStorageUrl } from '@/lib/storage';
 import { EventsBanner } from '@/banners';
+import { getAllActiveBanners } from '@/api-client/banners.api-client';
+import { BannerPosition, type PublicBanner } from '@newmeca/shared';
 import { SEOHead, useEventsListSEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
 
@@ -24,10 +26,14 @@ export default function EventsPage() {
   const [selectedMultiplier, setSelectedMultiplier] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [eventsPerPage, setEventsPerPage] = useState(50);
+
+  // Banner ads state - fetch once and distribute
+  const [banners, setBanners] = useState<PublicBanner[]>([]);
 
   // Get states based on selected country
   const availableStates = useMemo(() => {
@@ -40,12 +46,24 @@ export default function EventsPage() {
     setSelectedState('all');
   }, [selectedCountry]);
 
+  // Reset date range filter when main filter changes
+  useEffect(() => {
+    setDateRangeFilter('all');
+  }, [filter]);
+
   useEffect(() => {
     fetchEvents();
   }, [filter, selectedSeason]);
 
   useEffect(() => {
     fetchSeasons();
+  }, []);
+
+  // Fetch all active banners once for distribution across the page
+  useEffect(() => {
+    getAllActiveBanners(BannerPosition.EVENTS_PAGE_TOP)
+      .then(setBanners)
+      .catch(console.error);
   }, []);
 
   const fetchSeasons = async () => {
@@ -94,6 +112,48 @@ export default function EventsPage() {
       result = result.filter(e => e.status === filter);
     }
 
+    // Filter by date range (sub-filter based on status)
+    if (filter !== 'all' && dateRangeFilter !== 'all') {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0); // Start of today
+
+      if (filter === 'upcoming') {
+        // Upcoming events: filter by how far into the future
+        if (dateRangeFilter === 'later') {
+          // More than 180 days from now
+          const cutoffDate = new Date(now);
+          cutoffDate.setDate(cutoffDate.getDate() + 180);
+          result = result.filter(e => new Date(e.event_date) > cutoffDate);
+        } else {
+          // Within X days from now
+          const days = parseInt(dateRangeFilter);
+          const cutoffDate = new Date(now);
+          cutoffDate.setDate(cutoffDate.getDate() + days);
+          result = result.filter(e => {
+            const eventDate = new Date(e.event_date);
+            return eventDate >= now && eventDate <= cutoffDate;
+          });
+        }
+      } else if (filter === 'completed') {
+        // Completed events: filter by how far in the past
+        if (dateRangeFilter === 'longer') {
+          // More than 180 days ago
+          const cutoffDate = new Date(now);
+          cutoffDate.setDate(cutoffDate.getDate() - 180);
+          result = result.filter(e => new Date(e.event_date) < cutoffDate);
+        } else {
+          // Within X days ago
+          const days = parseInt(dateRangeFilter);
+          const cutoffDate = new Date(now);
+          cutoffDate.setDate(cutoffDate.getDate() - days);
+          result = result.filter(e => {
+            const eventDate = new Date(e.event_date);
+            return eventDate <= now && eventDate >= cutoffDate;
+          });
+        }
+      }
+    }
+
     // Filter by country
     if (selectedCountry !== 'all') {
       result = result.filter(e => e.venue_country === selectedCountry);
@@ -124,24 +184,27 @@ export default function EventsPage() {
 
     // Filter by specific date
     if (selectedDate) {
-      const filterDate = new Date(selectedDate);
+      // Parse the selected date (YYYY-MM-DD format from input)
+      const [filterYear, filterMonth, filterDay] = selectedDate.split('-').map(Number);
       result = result.filter(e => {
+        // Parse the event date - handle both ISO strings and date objects
         const eventDate = new Date(e.event_date);
+        // Use local date components to avoid timezone issues
         return (
-          eventDate.getFullYear() === filterDate.getFullYear() &&
-          eventDate.getMonth() === filterDate.getMonth() &&
-          eventDate.getDate() === filterDate.getDate()
+          eventDate.getFullYear() === filterYear &&
+          eventDate.getMonth() + 1 === filterMonth && // getMonth() is 0-indexed
+          eventDate.getDate() === filterDay
         );
       });
     }
 
     return result;
-  }, [events, filter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate]);
+  }, [events, filter, dateRangeFilter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate, selectedSeason]);
+  }, [filter, dateRangeFilter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate, selectedSeason]);
 
   // Paginated events
   const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
@@ -382,16 +445,75 @@ export default function EventsPage() {
                 </button>
               ))}
             </div>
+
+            {/* Date Range Sub-filter - shown when Upcoming or Completed is selected */}
+            {filter === 'upcoming' && (
+              <div className="mt-3 pl-4 border-l-2 border-orange-500">
+                <span className="text-gray-400 text-sm mr-3">Show events within:</span>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {[
+                    { value: 'all', label: 'All Upcoming' },
+                    { value: '30', label: '30 Days' },
+                    { value: '90', label: '90 Days' },
+                    { value: '120', label: '120 Days' },
+                    { value: '180', label: '180 Days' },
+                    { value: 'later', label: 'Later' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setDateRangeFilter(option.value)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                        dateRangeFilter === option.value
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {filter === 'completed' && (
+              <div className="mt-3 pl-4 border-l-2 border-orange-500">
+                <span className="text-gray-400 text-sm mr-3">Show events from:</span>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {[
+                    { value: 'all', label: 'All Completed' },
+                    { value: '30', label: 'Past 30 Days' },
+                    { value: '60', label: 'Past 60 Days' },
+                    { value: '90', label: 'Past 90 Days' },
+                    { value: '120', label: 'Past 120 Days' },
+                    { value: '180', label: 'Past 180 Days' },
+                    { value: 'longer', label: 'Older' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setDateRangeFilter(option.value)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                        dateRangeFilter === option.value
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Results Count */}
           <div className="mt-4 pt-4 border-t border-slate-700">
             <p className="text-gray-400">
               Showing <span className="text-white font-semibold">{filteredEvents.length}</span> event{filteredEvents.length !== 1 ? 's' : ''}
-              {(filter !== 'all' || selectedCountry !== 'all' || selectedState !== 'all' || selectedMultiplier !== 'all' || searchTerm || selectedDate) && (
+              {(filter !== 'all' || dateRangeFilter !== 'all' || selectedCountry !== 'all' || selectedState !== 'all' || selectedMultiplier !== 'all' || searchTerm || selectedDate) && (
                 <button
                   onClick={() => {
                     setFilter('all');
+                    setDateRangeFilter('all');
                     setSelectedCountry('all');
                     setSelectedState('all');
                     setSelectedMultiplier('all');
@@ -410,7 +532,7 @@ export default function EventsPage() {
         </div>
 
         {/* Banner Ad - Below filters, above events */}
-        <EventsBanner />
+        {banners.length > 0 && <EventsBanner banner={banners[0]} />}
 
         {loading ? (
           <div className="text-center py-20">
@@ -433,7 +555,7 @@ export default function EventsPage() {
                 className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1"
               >
                 {event.flyer_url ? (
-                  <div className="h-48 overflow-hidden">
+                  <div className="h-48 overflow-hidden relative">
                     <img
                       src={getStorageUrl(event.flyer_url)}
                       alt={event.title}
@@ -443,45 +565,53 @@ export default function EventsPage() {
                           ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
                           : '50% 50%'
                       }}
+                      onError={(e) => {
+                        // Hide the broken image and show fallback
+                        const target = e.currentTarget;
+                        target.style.display = 'none';
+                        const fallback = target.nextElementSibling as HTMLElement;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
                     />
+                    {/* Fallback shown when image fails to load */}
+                    <div
+                      className="absolute inset-0 bg-slate-700 items-center justify-center"
+                      style={{ display: 'none' }}
+                    >
+                      <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-32 w-auto opacity-50" />
+                    </div>
                   </div>
                 ) : (
-                  <div className="h-48 bg-gradient-to-r from-orange-600 to-red-600 flex items-center justify-center">
-                    <Calendar className="h-20 w-20 text-white opacity-50" />
+                  <div className="h-48 bg-slate-700 flex items-center justify-center">
+                    <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-32 w-auto opacity-50" />
                   </div>
                 )}
 
                 <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <h3 className="text-2xl font-bold text-white flex-1">
+                  {/* Title row with Day, Multiplier, and Status badges on the right */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <h3 className="text-2xl font-bold text-white">
                       {event.title}
                     </h3>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(
-                        event.status
-                      )}`}
-                    >
-                      {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                    </span>
-                  </div>
-
-                  {/* Season, Multiplier, and Day Badges - First Line */}
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {event.day_number && (
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-blue-500/10 text-blue-400 border-blue-500">
-                        Day {event.day_number}
+                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                      {event.day_number && (
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-blue-500/10 text-blue-400 border-blue-500">
+                          Day {event.day_number}
+                        </span>
+                      )}
+                      {event.points_multiplier !== undefined && event.points_multiplier !== null && (
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-orange-500/10 text-orange-400 border-orange-500">
+                          {event.points_multiplier}X Points Event
+                        </span>
+                      )}
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(
+                          event.status
+                        )}`}
+                      >
+                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
                       </span>
-                    )}
-                    {event.season && (
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-teal-500/10 text-teal-400 border-teal-500">
-                        {event.season.year} Season
-                      </span>
-                    )}
-                    {event.points_multiplier !== undefined && event.points_multiplier !== null && (
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-orange-500/10 text-orange-400 border-orange-500">
-                        {event.points_multiplier}X Points Event
-                      </span>
-                    )}
+                    </div>
                   </div>
 
                   {/* Format Badges - Second Line */}
@@ -525,9 +655,20 @@ export default function EventsPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-gray-300">
-                      <MapPin className="h-5 w-5 text-orange-500 flex-shrink-0" />
-                      <span>{event.venue_name}</span>
+                    <div className="flex items-start gap-2 text-gray-300">
+                      <MapPin className="h-5 w-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <div>{event.venue_name}</div>
+                        {(event.venue_address || event.venue_city || event.venue_state) && (
+                          <div className="text-sm text-gray-400">
+                            {event.venue_address && <span>{event.venue_address}</span>}
+                            {event.venue_address && (event.venue_city || event.venue_state) && <span>, </span>}
+                            {event.venue_city && <span>{event.venue_city}</span>}
+                            {event.venue_city && event.venue_state && <span>, </span>}
+                            {event.venue_state && <span>{event.venue_state}</span>}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {event.registration_fee > 0 && (
@@ -592,9 +733,9 @@ export default function EventsPage() {
                   </div>
 
                   {/* Show banner after every 2 rows, but not after the last chunk */}
-                  {chunkIndex < Math.ceil(paginatedEvents.length / 4) - 1 && (
+                  {chunkIndex < Math.ceil(paginatedEvents.length / 4) - 1 && banners.length > 0 && (
                     <div className="mt-6">
-                      <EventsBanner />
+                      <EventsBanner banner={banners[(chunkIndex + 1) % banners.length]} />
                     </div>
                   )}
                 </div>

@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { BannerPosition, type PublicBanner } from '@newmeca/shared';
-import { getActiveBanner, recordBannerEngagement } from '../../api-client/banners.api-client';
+import { useEffect, useState, useRef } from 'react';
+import { type PublicBanner } from '@newmeca/shared';
+import { recordBannerEngagement } from '../../api-client/banners.api-client';
 
 const STORAGE_KEY = 'meca_banner_impressions';
 
@@ -37,45 +37,40 @@ function incrementBannerImpression(bannerId: string): number {
 }
 
 // Check if user has exceeded impression limit for a banner
-function hasExceededUserLimit(bannerId: string, maxImpressions: number): boolean {
+export function hasExceededUserLimit(bannerId: string, maxImpressions: number): boolean {
   if (maxImpressions === 0) return false; // 0 = unlimited
   const impressions = getBannerImpressions();
   return (impressions[bannerId] || 0) >= maxImpressions;
 }
 
-export function EventsBanner() {
-  const [banner, setBanner] = useState<PublicBanner | null>(null);
-  const [loading, setLoading] = useState(true);
+interface EventsBannerProps {
+  banner?: PublicBanner | null;
+}
+
+export function EventsBanner({ banner: propBanner }: EventsBannerProps) {
+  const [banner, setBanner] = useState<PublicBanner | null>(propBanner || null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hidden, setHidden] = useState(false);
   const impressionRecorded = useRef(false);
 
-  const fetchBanner = useCallback(async () => {
-    try {
-      const activeBanner = await getActiveBanner(BannerPosition.EVENTS_PAGE_TOP);
-
-      if (activeBanner) {
-        // Check per-user frequency cap
-        if (hasExceededUserLimit(activeBanner.id, activeBanner.maxImpressionsPerUser)) {
-          // User has seen this banner too many times
-          setHidden(true);
-          setBanner(null);
-          return;
-        }
-      }
-
-      setBanner(activeBanner);
-    } catch (err) {
-      console.error('Banner fetch error:', err);
-      setBanner(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Update banner when prop changes
   useEffect(() => {
-    fetchBanner();
-  }, [fetchBanner]);
+    if (propBanner) {
+      // Check per-user frequency cap
+      if (hasExceededUserLimit(propBanner.id, propBanner.maxImpressionsPerUser)) {
+        setHidden(true);
+        setBanner(null);
+      } else {
+        setBanner(propBanner);
+        setHidden(false);
+      }
+    } else {
+      setBanner(null);
+    }
+    // Reset impression tracking when banner changes
+    impressionRecorded.current = false;
+    setImageLoaded(false);
+  }, [propBanner]);
 
   // Record impression when banner is displayed
   useEffect(() => {
@@ -96,8 +91,8 @@ export function EventsBanner() {
     }
   };
 
-  // Don't render anything while loading, if no banner, or if hidden due to frequency cap
-  if (loading || !banner || hidden) {
+  // Don't render anything if no banner or if hidden due to frequency cap
+  if (!banner || hidden) {
     return null;
   }
 

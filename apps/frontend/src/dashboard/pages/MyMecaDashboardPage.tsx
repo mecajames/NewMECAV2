@@ -9,7 +9,7 @@ import { notificationsApi, Notification } from '@/notifications/notifications.ap
 import { useAuth } from '@/auth';
 import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
 import axios from 'axios';
-import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult } from '@/teams';
+import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
 import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
@@ -57,12 +57,15 @@ export default function MyMecaDashboardPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [teamLoading, setTeamLoading] = useState(true);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
-  const [showAllTeamsModal, setShowAllTeamsModal] = useState(false);
-  const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamError, setTeamError] = useState('');
   const [canCreateTeam, setCanCreateTeam] = useState(false);
   const [_canCreateReason, setCanCreateReason] = useState('');
   const [upgradeEligibility, setUpgradeEligibility] = useState<UpgradeEligibilityResponse | null>(null);
+
+  // Multi-team support
+  const [allTeams, setAllTeams] = useState<MyTeamsResponse>({ ownedTeams: [], memberTeams: [] });
+  const [ownsTeam, setOwnsTeam] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
   // Judge and Event Director state
   const [judgeProfile, setJudgeProfile] = useState<Judge | null>(null);
@@ -144,8 +147,9 @@ export default function MyMecaDashboardPage() {
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
 
   // User's own pending invites/requests state (when not on a team)
-  const [, setMyPendingInvites] = useState<any[]>([]);
-  const [, setMyPendingJoinRequests] = useState<any[]>([]);
+  const [myPendingInvites, setMyPendingInvites] = useState<any[]>([]);
+  const [myPendingJoinRequests, setMyPendingJoinRequests] = useState<any[]>([]);
+  const [cancellingRequest, setCancellingRequest] = useState<string | null>(null);
 
   // Enhanced team form state
   const [newTeam, setNewTeam] = useState<CreateTeamDto>({
@@ -303,12 +307,14 @@ export default function MyMecaDashboardPage() {
   const fetchTeamData = async () => {
     try {
       setTeamLoading(true);
-      const [userTeam, eligibility, upgradeElig, pendingInvites, pendingRequests] = await Promise.all([
+      const [userTeam, eligibility, upgradeElig, pendingInvites, pendingRequests, myTeams, ownsTeamResult] = await Promise.all([
         teamsApi.getTeamByUserId(profile!.id),
         teamsApi.canCreateTeam(),
         teamsApi.canUpgradeToTeam(),
         teamsApi.getMyPendingInvites(),
         teamsApi.getMyPendingRequests(),
+        teamsApi.getMyTeams(),
+        teamsApi.ownsTeam(),
       ]);
       setTeam(userTeam);
       setCanCreateTeam(eligibility.canCreate);
@@ -316,19 +322,18 @@ export default function MyMecaDashboardPage() {
       setUpgradeEligibility(upgradeElig);
       setMyPendingInvites(pendingInvites);
       setMyPendingJoinRequests(pendingRequests);
+      setAllTeams(myTeams);
+      setOwnsTeam(ownsTeamResult.ownsTeam);
+      // Set selectedTeamId to owned team first, or first member team
+      if (!selectedTeamId) {
+        const firstOwnedTeam = myTeams.ownedTeams[0];
+        const firstMemberTeam = myTeams.memberTeams[0];
+        setSelectedTeamId(firstOwnedTeam?.id || firstMemberTeam?.id || userTeam?.id || null);
+      }
     } catch (error) {
       console.error('Error fetching team:', error);
     } finally {
       setTeamLoading(false);
-    }
-  };
-
-  const fetchAllTeams = async () => {
-    try {
-      const teams = await teamsApi.getAllTeams();
-      setAllTeams(teams);
-    } catch (error) {
-      console.error('Error fetching all teams:', error);
     }
   };
 
@@ -516,14 +521,22 @@ export default function MyMecaDashboardPage() {
 
   // Lookup member by MECA ID
   const handleLookupMember = async () => {
-    if (!inviteMecaId.trim()) return;
+    const trimmedId = inviteMecaId.trim();
+    if (!trimmedId) return;
+
+    // Validate that MECA ID is numeric
+    if (!/^\d+$/.test(trimmedId)) {
+      setTeamError('MECA ID must be a number (e.g., 202401)');
+      setLookupResult(null);
+      return;
+    }
 
     setLookingUp(true);
     setLookupResult(null);
     setTeamError('');
 
     try {
-      const result = await teamsApi.lookupMemberByMecaId(inviteMecaId.trim());
+      const result = await teamsApi.lookupMemberByMecaId(trimmedId);
       setLookupResult(result);
     } catch (error: any) {
       setTeamError(error.response?.data?.message || 'Failed to lookup member');
@@ -612,9 +625,23 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  // NOTE: Team invite/request handlers (handleAcceptInvite, handleDeclineInvite,
-  // handleRequestToJoin, handleCancelMyJoinRequest) have been removed as they were unused.
-  // Add them back when the corresponding UI components are implemented.
+  // Cancel my own join request
+  const handleCancelMyJoinRequest = async (teamId: string) => {
+    if (!confirm('Are you sure you want to cancel this join request?')) {
+      return;
+    }
+
+    setCancellingRequest(teamId);
+
+    try {
+      await teamsApi.cancelJoinRequest(teamId);
+      fetchTeamData();
+    } catch (error: any) {
+      setTeamError(error.response?.data?.message || 'Failed to cancel request');
+    } finally {
+      setCancellingRequest(null);
+    }
+  };
 
   // Get role display info
   const getRoleInfo = (role: TeamMemberRole) => {
@@ -1739,6 +1766,10 @@ export default function MyMecaDashboardPage() {
 
       console.log('Team Debug:', { teamId: team.id, myUserId: profile?.id, myMembership, myRole, isOwner, canManageTeam });
 
+      // Calculate total teams the user is on
+      const totalTeamsCount = allTeams.ownedTeams.length + allTeams.memberTeams.length;
+      const allTeamsList = [...allTeams.ownedTeams, ...allTeams.memberTeams];
+
       return (
         <div className="space-y-6">
           {/* Hidden file inputs for team management */}
@@ -1756,6 +1787,47 @@ export default function MyMecaDashboardPage() {
             accept="image/*"
             onChange={handleTeamGalleryUpload}
           />
+
+          {/* Team Switcher - only show if user is on multiple teams */}
+          {totalTeamsCount > 1 && (
+            <div className="bg-slate-800 rounded-xl p-4 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Users className="h-5 w-5 text-orange-500" />
+                  <span className="text-gray-400 text-sm">Viewing team:</span>
+                  <select
+                    value={selectedTeamId || team.id}
+                    onChange={(e) => {
+                      setSelectedTeamId(e.target.value);
+                      const selectedTeam = allTeamsList.find(t => t.id === e.target.value);
+                      if (selectedTeam) {
+                        setTeam(selectedTeam as Team);
+                      }
+                    }}
+                    className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  >
+                    {allTeams.ownedTeams.length > 0 && (
+                      <optgroup label="My Teams (Owner)">
+                        {allTeams.ownedTeams.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {allTeams.memberTeams.length > 0 && (
+                      <optgroup label="Teams I'm On">
+                        {allTeams.memberTeams.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+                <span className="text-gray-500 text-sm">
+                  {totalTeamsCount} team{totalTeamsCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Team Header */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
@@ -2570,6 +2642,47 @@ export default function MyMecaDashboardPage() {
               </div>
             </div>
           )}
+
+          {/* Browse & Join Other Teams - always visible */}
+          <div className="bg-slate-800 rounded-xl p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Search className="h-5 w-5 text-gray-400" />
+                <span className="text-gray-300">Looking to join another team?</span>
+              </div>
+              <button
+                onClick={() => navigate('/teams')}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                <UserPlus className="h-4 w-4" />
+                Browse & Join Other Teams
+              </button>
+            </div>
+          </div>
+
+          {/* Create Your Team CTA - show when user has team membership but doesn't own a team */}
+          {canCreateTeam && !ownsTeam && (
+            <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                    <Crown className="h-5 w-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">Ready to lead your own team?</p>
+                    <p className="text-gray-400 text-sm">You have a team membership - create your own team!</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCreateTeamModal(true)}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Your Team
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -2590,10 +2703,7 @@ export default function MyMecaDashboardPage() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => {
-                fetchAllTeams();
-                setShowAllTeamsModal(true);
-              }}
+              onClick={() => navigate('/teams')}
               className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               <UserPlus className="h-5 w-5" />
@@ -2638,6 +2748,111 @@ export default function MyMecaDashboardPage() {
             </p>
           )}
         </div>
+
+        {/* User's Pending Join Requests */}
+        {myPendingJoinRequests.length > 0 && (
+          <div className="mt-8 pt-8 border-t border-slate-700">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Clock className="h-5 w-5 text-yellow-500" />
+              Your Pending Join Requests ({myPendingJoinRequests.length})
+            </h3>
+            <div className="space-y-3">
+              {myPendingJoinRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center justify-between p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center overflow-hidden">
+                      {request.team?.logoUrl ? (
+                        <img
+                          src={request.team.logoUrl}
+                          alt={request.team?.name || 'Team'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Users className="h-6 w-6 text-orange-500" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">
+                        Team {request.team?.name || 'Unknown'}
+                      </p>
+                      <p className="text-yellow-400 text-sm flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Pending approval
+                      </p>
+                      {request.requestedAt && (
+                        <p className="text-gray-400 text-xs">
+                          Requested {new Date(request.requestedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleCancelMyJoinRequest(request.teamId)}
+                    disabled={cancellingRequest === request.teamId}
+                    className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {cancellingRequest === request.teamId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                    Cancel Request
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* User's Pending Invites */}
+        {myPendingInvites.length > 0 && (
+          <div className="mt-8 pt-8 border-t border-slate-700">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Mail className="h-5 w-5 text-cyan-500" />
+              Invitations to Join ({myPendingInvites.length})
+            </h3>
+            <div className="space-y-3">
+              {myPendingInvites.map((invite) => (
+                <div
+                  key={invite.id}
+                  className="flex items-center justify-between p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center overflow-hidden">
+                      {invite.team?.logoUrl ? (
+                        <img
+                          src={invite.team.logoUrl}
+                          alt={invite.team?.name || 'Team'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Users className="h-6 w-6 text-cyan-500" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">
+                        Team {invite.team?.name || 'Unknown'}
+                      </p>
+                      <p className="text-cyan-400 text-sm">
+                        You've been invited to join!
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/teams/${invite.teamId}`)}
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View Team
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Enhanced Create Team Modal */}
         {showCreateTeamModal && (
@@ -2870,51 +3085,6 @@ export default function MyMecaDashboardPage() {
           </div>
         )}
 
-        {/* Browse Teams Modal */}
-        {showAllTeamsModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Browse Teams</h3>
-                <button
-                  onClick={() => setShowAllTeamsModal(false)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  <XCircle className="h-6 w-6" />
-                </button>
-              </div>
-
-              {allTeams.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                  <p className="text-gray-400">No teams available to join</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {allTeams.map((t) => (
-                    <div
-                      key={t.id}
-                      className="bg-slate-700 rounded-lg p-4 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
-                          <Users className="h-6 w-6 text-orange-500" />
-                        </div>
-                        <div>
-                          <h4 className="text-white font-semibold">{t.name}</h4>
-                          <p className="text-gray-400 text-sm">
-                            {t.members?.length || 1} member{(t.members?.length || 1) !== 1 ? 's' : ''} • Captain: {t.captain?.first_name} {t.captain?.last_name}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-gray-500 text-sm">Contact team captain to join</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     );
   };

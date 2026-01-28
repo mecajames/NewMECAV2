@@ -122,6 +122,41 @@ export class BannersService {
   // =============================================================================
 
   async getActiveBanner(position: BannerPosition): Promise<PublicBanner | null> {
+    const banners = await this.getAllActiveBanners(position);
+
+    if (banners.length === 0) {
+      return null;
+    }
+
+    if (banners.length === 1) {
+      return banners[0];
+    }
+
+    // Multiple banners - use weighted random selection
+    // Note: We need to get the full banner data for weights
+    const em = this.em.fork();
+    const fullBanners = await em.find(Banner, {
+      id: { $in: banners.map(b => b.id) },
+    });
+
+    const totalWeight = fullBanners.reduce((sum, b) => sum + b.rotationWeight, 0);
+    let random = Math.random() * totalWeight;
+
+    for (const banner of fullBanners) {
+      random -= banner.rotationWeight;
+      if (random <= 0) {
+        return banners.find(b => b.id === banner.id) || banners[0];
+      }
+    }
+
+    return banners[0];
+  }
+
+  /**
+   * Get ALL active banners for a position (for rotation across multiple slots on same page)
+   * Returns banners shuffled for fair distribution
+   */
+  async getAllActiveBanners(position: BannerPosition): Promise<PublicBanner[]> {
     const em = this.em.fork();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -138,14 +173,13 @@ export class BannersService {
     });
 
     if (banners.length === 0) {
-      return null;
+      return [];
     }
 
     // Filter out banners that have reached their total impression cap
     const eligibleBanners: Banner[] = [];
     for (const banner of banners) {
       if (banner.maxTotalImpressions > 0) {
-        // Calculate total impressions for this banner
         const totalImpressions = banner.engagements
           .getItems()
           .reduce((sum, e) => sum + e.impressions, 0);
@@ -158,48 +192,16 @@ export class BannersService {
       eligibleBanners.push(banner);
     }
 
-    if (eligibleBanners.length === 0) {
-      return null;
-    }
+    // Shuffle the banners for fair distribution
+    const shuffled = [...eligibleBanners].sort(() => Math.random() - 0.5);
 
-    // If only one banner, return it
-    if (eligibleBanners.length === 1) {
-      const banner = eligibleBanners[0];
-      return {
-        id: banner.id,
-        imageUrl: banner.imageUrl,
-        clickUrl: banner.clickUrl || null,
-        altText: banner.altText || null,
-        maxImpressionsPerUser: banner.maxImpressionsPerUser,
-      };
-    }
-
-    // Multiple banners - use weighted random selection based on rotationWeight
-    const totalWeight = eligibleBanners.reduce((sum, b) => sum + b.rotationWeight, 0);
-    let random = Math.random() * totalWeight;
-
-    for (const banner of eligibleBanners) {
-      random -= banner.rotationWeight;
-      if (random <= 0) {
-        return {
-          id: banner.id,
-          imageUrl: banner.imageUrl,
-          clickUrl: banner.clickUrl || null,
-          altText: banner.altText || null,
-          maxImpressionsPerUser: banner.maxImpressionsPerUser,
-        };
-      }
-    }
-
-    // Fallback to first banner (shouldn't happen)
-    const fallback = eligibleBanners[0];
-    return {
-      id: fallback.id,
-      imageUrl: fallback.imageUrl,
-      clickUrl: fallback.clickUrl || null,
-      altText: fallback.altText || null,
-      maxImpressionsPerUser: fallback.maxImpressionsPerUser,
-    };
+    return shuffled.map(banner => ({
+      id: banner.id,
+      imageUrl: banner.imageUrl,
+      clickUrl: banner.clickUrl || null,
+      altText: banner.altText || null,
+      maxImpressionsPerUser: banner.maxImpressionsPerUser,
+    }));
   }
 
   /**

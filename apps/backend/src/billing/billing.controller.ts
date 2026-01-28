@@ -10,6 +10,9 @@ import {
   Res,
   Header,
   Inject,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { EntityManager } from '@mikro-orm/core';
@@ -31,6 +34,7 @@ import { InvoicesService } from '../invoices/invoices.service';
 import { InvoicePdfService } from '../invoices/pdf/invoice-pdf.service';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
 import { Order } from '../orders/orders.entity';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
 
 /**
  * Billing Controller - Aggregation layer for billing operations
@@ -42,9 +46,26 @@ export class BillingController {
     private readonly ordersService: OrdersService,
     private readonly invoicesService: InvoicesService,
     private readonly pdfService: InvoicePdfService,
+    private readonly supabaseAdmin: SupabaseAdminService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
+
+  // Helper to get current user from auth header
+  private async getCurrentUser(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+
+    return user;
+  }
 
   // ==========================================
   // ORDERS ENDPOINTS
@@ -139,12 +160,13 @@ export class BillingController {
    */
   @Get('my/orders')
   async getMyOrders(
-    @Query('userId') userId: string,
+    @Headers('authorization') authHeader: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    // Note: In production, userId should come from authenticated user
-    return this.ordersService.findByUser(userId, page, limit);
+    // Get userId from authenticated user - users can only access their own orders
+    const user = await this.getCurrentUser(authHeader);
+    return this.ordersService.findByUser(user.id, page, limit);
   }
 
   /**
@@ -152,12 +174,13 @@ export class BillingController {
    */
   @Get('my/invoices')
   async getMyInvoices(
-    @Query('userId') userId: string,
+    @Headers('authorization') authHeader: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    // Note: In production, userId should come from authenticated user
-    return this.invoicesService.findByUser(userId, page, limit);
+    // Get userId from authenticated user - users can only access their own invoices
+    const user = await this.getCurrentUser(authHeader);
+    return this.invoicesService.findByUser(user.id, page, limit);
   }
 
   /**
@@ -165,9 +188,22 @@ export class BillingController {
    */
   @Get('my/invoices/:id/pdf')
   @Header('Content-Type', 'text/html')
-  async getMyInvoicePdf(@Param('id') id: string, @Res() res: Response) {
+  async getMyInvoicePdf(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Res() res: Response,
+  ) {
+    // Verify the user is authenticated
+    const user = await this.getCurrentUser(authHeader);
+
+    // Fetch the invoice
     const invoice = await this.invoicesService.findById(id);
-    // TODO: Verify invoice belongs to authenticated user
+
+    // Verify invoice belongs to the authenticated user
+    if (invoice.user?.id !== user.id) {
+      throw new ForbiddenException('You do not have permission to access this invoice');
+    }
+
     const html = this.pdfService.generateInvoiceHtml(invoice);
     res.send(html);
   }
@@ -389,6 +425,15 @@ export class BillingController {
         total: invoice.total,
       },
     };
+  }
+
+  /**
+   * Fix invoices with null due dates (sets them to their creation date)
+   */
+  @Post('fix/null-due-dates')
+  @HttpCode(HttpStatus.OK)
+  async fixNullDueDates() {
+    return this.invoicesService.fixNullDueDates();
   }
 
   // ==========================================

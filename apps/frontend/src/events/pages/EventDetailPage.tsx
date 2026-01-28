@@ -315,6 +315,11 @@ export default function EventDetailPage() {
               className="w-full max-h-96 object-cover select-none"
               style={{ objectPosition: `${position.x}% ${position.y}%` }}
               draggable={false}
+              onError={(e) => {
+                // Hide the entire flyer container when image fails to load
+                const container = e.currentTarget.closest('.mb-8');
+                if (container) (container as HTMLElement).style.display = 'none';
+              }}
             />
 
             {/* Position editing overlay */}
@@ -499,6 +504,11 @@ export default function EventDetailPage() {
                           objectPosition: event.flyer_image_position
                             ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
                             : '50% 50%'
+                        }}
+                        onError={(e) => {
+                          // Hide the flyer thumbnail section when image fails
+                          const container = e.currentTarget.closest('.relative.cursor-pointer');
+                          if (container) (container as HTMLElement).style.display = 'none';
                         }}
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -771,6 +781,7 @@ export default function EventDetailPage() {
               src={getStorageUrl(event.flyer_url)}
               alt={`${event.title} flyer`}
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onError={() => setShowFlyerLightbox(false)}
             />
           </div>
         </div>

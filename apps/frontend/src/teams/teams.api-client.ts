@@ -139,6 +139,15 @@ export interface CanCreateTeamResponse {
   reason?: string;
 }
 
+export interface MyTeamsResponse {
+  ownedTeams: Team[];
+  memberTeams: Team[];
+}
+
+export interface OwnsTeamResponse {
+  ownsTeam: boolean;
+}
+
 export interface TeamPublicStats {
   topSplScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
   topSqScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
@@ -208,6 +217,26 @@ export const teamsApi = {
         hasTeamMembership: false,
         reason: 'Unable to check eligibility',
       };
+    }
+  },
+
+  // Get all teams the user is associated with (owned and member of)
+  getMyTeams: async (): Promise<MyTeamsResponse> => {
+    try {
+      const response = await axios.get('/api/teams/my-teams');
+      return response.data;
+    } catch {
+      return { ownedTeams: [], memberTeams: [] };
+    }
+  },
+
+  // Check if the user owns any team
+  ownsTeam: async (): Promise<OwnsTeamResponse> => {
+    try {
+      const response = await axios.get('/api/teams/owns-team');
+      return response.data;
+    } catch {
+      return { ownsTeam: false };
     }
   },
 

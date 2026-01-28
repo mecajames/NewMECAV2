@@ -17,7 +17,10 @@ import { useCart } from '../context/CartContext';
 import { SEOHead, useProductDetailSEO } from '@/shared/seo';
 import type { ProductSEOData } from '@/shared/seo';
 
-const categoryLabels: Record<string, string> = {
+// Local type to avoid Rollup issues with CommonJS enum re-exports
+type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
+
+const categoryLabels: Record<ShopProductCategory, string> = {
   measuring_tools: 'Measuring Tools',
   cds: 'CDs',
   apparel: 'Apparel',

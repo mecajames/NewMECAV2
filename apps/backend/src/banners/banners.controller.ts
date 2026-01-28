@@ -64,6 +64,11 @@ export class BannersController {
     return this.bannersService.getActiveBanner(position);
   }
 
+  @Get('banners/active/:position/all')
+  async getAllActiveBanners(@Param('position') position: BannerPosition) {
+    return this.bannersService.getAllActiveBanners(position);
+  }
+
   @Post('banners/engagement')
   @HttpCode(HttpStatus.OK)
   async recordEngagement(@Body() dto: RecordEngagementDto) {

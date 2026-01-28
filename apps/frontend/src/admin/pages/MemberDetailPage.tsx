@@ -40,7 +40,7 @@ import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
 import { profilesApi, ActivityItem, UpcomingEvent } from '@/profiles';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
-import { membershipsApi, Membership, AdminCreateMembershipResult, AddSecondaryModal } from '@/memberships';
+import { membershipsApi, Membership, AdminCreateMembershipResult, AddSecondaryModal, EditSecondaryModal, SecondaryMembershipInfo, RELATIONSHIP_TYPES } from '@/memberships';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs';
 import AdminMembershipWizard from '../components/AdminMembershipWizard';
 import { UserPlus } from 'lucide-react';
@@ -327,11 +327,17 @@ export default function MemberDetailPage() {
 
     setResettingPassword(true);
     try {
+      // Get auth token for admin API call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Not authenticated');
+      }
+
       await profilesApi.resetPassword(memberId!, {
         newPassword: passwordToUse,
         forcePasswordChange: resetForceChange,
         sendEmail: resetSendEmail && emailServiceConfigured,
-      });
+      }, session.access_token);
 
       setShowPasswordResetModal(false);
       setResetPassword('');
@@ -877,7 +883,7 @@ export default function MemberDetailPage() {
             <div className="flex gap-2">
               {hasPermission('manage_users') && (
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setResetPassword(generatePassword());
                     setResetPasswordMode('generated');
                     setResetForceChange(true);
@@ -3425,6 +3431,7 @@ function TeamsTab({ member }: { member: Profile }) {
 }
 
 function MembershipsTab({ member }: { member: Profile }) {
+  const navigate = useNavigate();
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('edit_user');
   const [memberships, setMemberships] = useState<Membership[]>([]);
@@ -3472,6 +3479,10 @@ function MembershipsTab({ member }: { member: Profile }) {
   // Secondary membership modal state
   const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
   const [selectedMasterMembership, setSelectedMasterMembership] = useState<Membership | null>(null);
+  // Secondary memberships data (keyed by master membership ID)
+  const [secondaryMemberships, setSecondaryMemberships] = useState<Record<string, SecondaryMembershipInfo[]>>({});
+  const [showEditSecondaryModal, setShowEditSecondaryModal] = useState(false);
+  const [editingSecondary, setEditingSecondary] = useState<SecondaryMembershipInfo | null>(null);
 
   useEffect(() => {
     fetchMemberships();
@@ -3483,6 +3494,23 @@ function MembershipsTab({ member }: { member: Profile }) {
       setLoading(true);
       const data = await membershipsApi.getAllByUserId(member.id);
       setMemberships(data);
+
+      // Fetch secondary memberships for each membership that could be a master
+      const secondariesMap: Record<string, SecondaryMembershipInfo[]> = {};
+      for (const m of data) {
+        // Only fetch for non-secondary, paid memberships
+        if ((m as any).accountType !== 'secondary' && m.paymentStatus === 'paid') {
+          try {
+            const secondaries = await membershipsApi.getSecondaryMemberships(m.id);
+            if (secondaries.length > 0) {
+              secondariesMap[m.id] = secondaries;
+            }
+          } catch (err) {
+            // Not a master or error - that's ok
+          }
+        }
+      }
+      setSecondaryMemberships(secondariesMap);
     } catch (error) {
       console.error('Error fetching memberships:', error);
     } finally {
@@ -3587,6 +3615,24 @@ function MembershipsTab({ member }: { member: Profile }) {
     fetchMemberships();
     setShowAddSecondaryModal(false);
     setSelectedMasterMembership(null);
+  };
+
+  const handleEditSecondary = (secondary: SecondaryMembershipInfo) => {
+    setEditingSecondary(secondary);
+    setShowEditSecondaryModal(true);
+  };
+
+  const handleSecondaryEdited = () => {
+    fetchMemberships();
+    setShowEditSecondaryModal(false);
+    setEditingSecondary(null);
+  };
+
+  // Helper to get relationship label
+  const getRelationshipLabel = (relationship?: string): string => {
+    if (!relationship) return '';
+    const found = RELATIONSHIP_TYPES.find((r) => r.value === relationship);
+    return found ? found.label : relationship;
   };
 
   const handleSaveEdit = async () => {
@@ -3861,6 +3907,97 @@ function MembershipsTab({ member }: { member: Profile }) {
                   </div>
                 )}
               </div>
+
+              {/* Secondary Memberships Section */}
+              {secondaryMemberships[membership.id] && secondaryMemberships[membership.id].length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-600">
+                  <h4 className="text-sm font-semibold text-purple-400 flex items-center gap-2 mb-3">
+                    <UsersIcon className="h-4 w-4" />
+                    Secondary Members ({secondaryMemberships[membership.id].length})
+                  </h4>
+                  <div className="space-y-2">
+                    {secondaryMemberships[membership.id].map((secondary) => (
+                      <div
+                        key={secondary.id}
+                        className="bg-slate-600/50 rounded-lg p-3 border border-slate-500/50"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-white font-medium">
+                                {secondary.competitorName}
+                              </span>
+                              {secondary.relationshipToMaster && (
+                                <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded">
+                                  {getRelationshipLabel(secondary.relationshipToMaster)}
+                                </span>
+                              )}
+                              {secondary.hasOwnLogin && (
+                                <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded">
+                                  Has Login
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                              {secondary.mecaId && (
+                                <div>
+                                  <span className="text-gray-400">MECA ID: </span>
+                                  <span className="text-orange-400 font-mono font-semibold">
+                                    #{secondary.mecaId}
+                                  </span>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-gray-400">Status: </span>
+                                <span className={secondary.isActive ? 'text-green-400' : 'text-red-400'}>
+                                  {secondary.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                              {(secondary.vehicleMake || secondary.vehicleModel) && (
+                                <div>
+                                  <span className="text-gray-400">Vehicle: </span>
+                                  <span className="text-gray-300">
+                                    {[secondary.vehicleMake, secondary.vehicleModel].filter(Boolean).join(' ')}
+                                    {secondary.vehicleColor && ` (${secondary.vehicleColor})`}
+                                  </span>
+                                </div>
+                              )}
+                              {secondary.vehicleLicensePlate && (
+                                <div>
+                                  <span className="text-gray-400">Plate: </span>
+                                  <span className="text-gray-300 font-mono">{secondary.vehicleLicensePlate}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            {/* View Profile Link - if they have their own login */}
+                            {secondary.hasOwnLogin && secondary.profileId && (
+                              <button
+                                onClick={() => navigate(`/admin/members/${secondary.profileId}`)}
+                                className="p-1.5 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded transition-colors"
+                                title="View secondary's profile"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {/* Edit Secondary */}
+                            {canEdit && (
+                              <button
+                                onClick={() => handleEditSecondary(secondary)}
+                                className="p-1.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded transition-colors"
+                                title="Edit secondary member"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -4187,6 +4324,20 @@ function MembershipsTab({ member }: { member: Profile }) {
           }}
           masterMembershipId={selectedMasterMembership.id}
           onSuccess={handleSecondaryCreated}
+        />
+      )}
+
+      {/* Edit Secondary Modal */}
+      {editingSecondary && (
+        <EditSecondaryModal
+          isOpen={showEditSecondaryModal}
+          onClose={() => {
+            setShowEditSecondaryModal(false);
+            setEditingSecondary(null);
+          }}
+          secondary={editingSecondary}
+          requestingUserId={member.id}
+          onSuccess={handleSecondaryEdited}
         />
       )}
     </div>

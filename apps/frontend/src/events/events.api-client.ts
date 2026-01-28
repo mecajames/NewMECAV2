@@ -1,6 +1,8 @@
 import axios from '@/lib/axios';
+import { supabase } from '@/lib/supabase';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
 
 export type MultiDayResultsMode = 'separate' | 'combined_score' | 'combined_points';
 
@@ -122,6 +124,48 @@ export const eventsApi = {
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to send rating emails: ${error.response?.data?.message || error.message}`);
+    }
+  },
+
+  /**
+   * Upload an event flyer image to Supabase storage
+   * Returns the public URL of the uploaded image
+   */
+  uploadFlyerImage: async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `flyers/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('event-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error) {
+      throw new Error(`Failed to upload image: ${error.message}`);
+    }
+
+    // Return the public URL
+    return `${SUPABASE_URL}/storage/v1/object/public/event-images/${filePath}`;
+  },
+
+  /**
+   * Delete an event flyer image from Supabase storage
+   */
+  deleteFlyerImage: async (imageUrl: string): Promise<void> => {
+    // Extract the path from the URL
+    const match = imageUrl.match(/event-images\/(.+)$/);
+    if (!match) return;
+
+    const filePath = match[1];
+    const { error } = await supabase.storage
+      .from('event-images')
+      .remove([filePath]);
+
+    if (error) {
+      console.error('Failed to delete image:', error.message);
     }
   },
 };

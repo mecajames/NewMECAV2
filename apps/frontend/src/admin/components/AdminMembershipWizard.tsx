@@ -160,10 +160,7 @@ export default function AdminMembershipWizard({
         setError('Please select a manufacturer tier');
         return false;
       }
-      if (selectedMembershipType?.includesTeam && !formData.teamName) {
-        setError('Team name is required for this membership type');
-        return false;
-      }
+      // Team name is now optional for "Competitor + Team" - member creates team after payment
     }
 
     if (currentStep === 'payment') {
@@ -429,23 +426,33 @@ export default function AdminMembershipWizard({
                           <h3 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
                             <Users className="h-5 w-5 text-green-400" />
                             Team Information
+                            <span className="text-sm text-gray-400">(optional)</span>
                           </h3>
+                          <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg mb-4">
+                            <div className="flex items-start gap-3">
+                              <AlertCircle className="h-5 w-5 text-blue-400 mt-0.5" />
+                              <div className="text-sm text-gray-300">
+                                Team will be created by the member from their dashboard after the invoice is <strong className="text-green-400">PAID</strong>.
+                                You may optionally pre-fill the team name and description below.
+                              </div>
+                            </div>
+                          </div>
                           <div className="space-y-4">
                             <div>
                               <label className="block text-sm font-medium text-gray-300 mb-1">
-                                Team Name <span className="text-red-500">*</span>
+                                Team Name <span className="text-gray-500">(optional)</span>
                               </label>
                               <input
                                 type="text"
                                 value={formData.teamName || ''}
                                 onChange={e => updateFormData('teamName', e.target.value)}
-                                placeholder="Enter team name"
+                                placeholder="Leave blank - member will choose when creating team"
                                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                               />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-300 mb-1">
-                                Team Description
+                                Team Description <span className="text-gray-500">(optional)</span>
                               </label>
                               <textarea
                                 value={formData.teamDescription || ''}
@@ -915,12 +922,22 @@ export default function AdminMembershipWizard({
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-400">Team Name:</span>
-                          <span className="text-white">{formData.teamName || 'Not set'}</span>
+                          <span className={formData.teamName ? "text-white" : "text-blue-400"}>
+                            {formData.teamName || 'Member will create after payment'}
+                          </span>
                         </div>
                         {formData.teamDescription && (
                           <div className="flex justify-between">
                             <span className="text-gray-400">Description:</span>
                             <span className="text-white">{formData.teamDescription}</span>
+                          </div>
+                        )}
+                        {!formData.teamName && selectedMembershipType?.includesTeam && (
+                          <div className="pt-2 border-t border-slate-600 mt-2">
+                            <p className="text-blue-400 text-xs flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              Team will be created by member from their dashboard
+                            </p>
                           </div>
                         )}
                       </div>

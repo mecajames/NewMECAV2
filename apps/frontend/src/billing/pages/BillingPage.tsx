@@ -10,10 +10,13 @@ import {
   Users,
   AlertCircle,
   UserPlus,
+  Eye,
+  Pencil,
+  Car,
 } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { billingApi, Order, Invoice } from '../../api-client/billing.api-client';
-import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal } from '@/memberships';
+import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 
 export default function BillingPage() {
   const navigate = useNavigate();
@@ -25,6 +28,8 @@ export default function BillingPage() {
   const [membership, setMembership] = useState<Membership | null>(null);
   const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
   const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
+  const [showEditSecondaryModal, setShowEditSecondaryModal] = useState(false);
+  const [editingSecondary, setEditingSecondary] = useState<SecondaryMembershipInfo | null>(null);
 
   useEffect(() => {
     if (profile?.id) {
@@ -38,8 +43,8 @@ export default function BillingPage() {
     try {
       setLoading(true);
       const [ordersRes, invoicesRes, membershipRes] = await Promise.all([
-        billingApi.getMyOrders(profile.id, { limit: 10 }),
-        billingApi.getMyInvoices(profile.id, { limit: 10 }),
+        billingApi.getMyOrders({ limit: 10 }),
+        billingApi.getMyInvoices({ limit: 10 }),
         membershipsApi.getUserActiveMembership(profile.id),
       ]);
       setOrders(ordersRes.data || []);
@@ -63,8 +68,30 @@ export default function BillingPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const handleEditSecondary = (secondary: SecondaryMembershipInfo) => {
+    setEditingSecondary(secondary);
+    setShowEditSecondaryModal(true);
+  };
+
+  const handleSecondaryEdited = () => {
+    fetchBillingData();
+    setShowEditSecondaryModal(false);
+    setEditingSecondary(null);
+  };
+
+  // Helper to get relationship label
+  const getRelationshipLabel = (relationship?: string): string => {
+    if (!relationship) return '';
+    const found = RELATIONSHIP_TYPES.find((r) => r.value === relationship);
+    return found ? found.label : relationship;
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    // Check for invalid date (Unix epoch usually means null/undefined was passed)
+    if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'N/A';
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -198,60 +225,102 @@ export default function BillingPage() {
                   </button>
                 </div>
                 {secondaryMemberships.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {secondaryMemberships.map((secondary) => (
                       <div
                         key={secondary.id}
-                        className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg"
+                        className="p-4 bg-slate-700/50 rounded-lg border border-slate-600/50"
                       >
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="text-white font-medium">{secondary.competitorName}</p>
-                            <p className="text-gray-400 text-sm">
-                              {secondary.membershipType?.name || 'Membership'}
-                            </p>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <p className="text-white font-medium">{secondary.competitorName}</p>
+                              {secondary.relationshipToMaster && (
+                                <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded">
+                                  {getRelationshipLabel(secondary.relationshipToMaster)}
+                                </span>
+                              )}
+                              {secondary.hasOwnLogin && (
+                                <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded">
+                                  Has Login
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                              <div>
+                                <p className="text-gray-400 text-xs">Membership</p>
+                                <p className="text-gray-200">
+                                  {secondary.membershipType?.name || 'Membership'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-gray-400 text-xs">MECA ID</p>
+                                <p className="text-orange-400 font-medium font-mono">
+                                  {secondary.mecaId ? `#${secondary.mecaId}` : 'Pending'}
+                                </p>
+                              </div>
+                              {(secondary.vehicleMake || secondary.vehicleModel) && (
+                                <div>
+                                  <p className="text-gray-400 text-xs flex items-center gap-1">
+                                    <Car className="h-3 w-3" /> Vehicle
+                                  </p>
+                                  <p className="text-gray-200">
+                                    {[secondary.vehicleMake, secondary.vehicleModel].filter(Boolean).join(' ')}
+                                    {secondary.vehicleColor && ` (${secondary.vehicleColor})`}
+                                  </p>
+                                </div>
+                              )}
+                              {secondary.vehicleLicensePlate && (
+                                <div>
+                                  <p className="text-gray-400 text-xs">License Plate</p>
+                                  <p className="text-gray-200 font-mono">{secondary.vehicleLicensePlate}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-gray-400 text-sm">MECA ID</p>
-                            <p className="text-orange-400 font-medium">
-                              {secondary.mecaId || 'Pending'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`px-2 py-1 text-xs rounded-full ${
-                              secondary.paymentStatus === 'paid'
-                                ? 'bg-green-900/50 text-green-400'
-                                : 'bg-yellow-900/50 text-yellow-400'
-                            }`}
-                          >
-                            {secondary.paymentStatus === 'paid' ? 'Active' : 'Payment Pending'}
-                          </span>
-                          {secondary.paymentStatus !== 'paid' && (
-                            <button
-                              onClick={() => {
-                                // Find the invoice for this secondary membership
-                                const secondaryInvoice = invoices.find(inv =>
-                                  (inv.status === 'sent' || inv.status === 'draft' || inv.status === 'overdue') &&
-                                  inv.items?.some(item =>
-                                    item.description?.toLowerCase().includes(secondary.competitorName.toLowerCase()) ||
-                                    item.referenceId === secondary.id
-                                  )
-                                );
-                                if (secondaryInvoice) {
-                                  navigate(`/pay/invoice/${secondaryInvoice.id}`);
-                                } else {
-                                  // Fallback: switch to invoices tab if we can't find it
-                                  setActiveTab('invoices');
-                                }
-                              }}
-                              className="flex items-center gap-1 px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition-colors"
+                          <div className="flex items-center gap-2 ml-4">
+                            <span
+                              className={`px-2 py-1 text-xs rounded-full ${
+                                secondary.paymentStatus === 'paid'
+                                  ? 'bg-green-900/50 text-green-400'
+                                  : 'bg-yellow-900/50 text-yellow-400'
+                              }`}
                             >
-                              <AlertCircle className="h-3 w-3" />
-                              View Invoice
+                              {secondary.paymentStatus === 'paid' ? 'Active' : 'Payment Pending'}
+                            </span>
+                            {/* Edit Button */}
+                            <button
+                              onClick={() => handleEditSecondary(secondary)}
+                              className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                              title="Edit secondary member"
+                            >
+                              <Pencil className="h-4 w-4" />
                             </button>
-                          )}
+                            {secondary.paymentStatus !== 'paid' && (
+                              <button
+                                onClick={() => {
+                                  // Find the invoice for this secondary membership
+                                  const secondaryInvoice = invoices.find(inv =>
+                                    (inv.status === 'sent' || inv.status === 'draft' || inv.status === 'overdue') &&
+                                    inv.items?.some(item =>
+                                      item.description?.toLowerCase().includes(secondary.competitorName.toLowerCase()) ||
+                                      item.referenceId === secondary.id
+                                    )
+                                  );
+                                  if (secondaryInvoice) {
+                                    navigate(`/pay/invoice/${secondaryInvoice.id}`);
+                                  } else {
+                                    // Fallback: switch to invoices tab if we can't find it
+                                    setActiveTab('invoices');
+                                  }
+                                }}
+                                className="flex items-center gap-1 px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition-colors"
+                              >
+                                <AlertCircle className="h-3 w-3" />
+                                View Invoice
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -411,9 +480,22 @@ export default function BillingPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => billingApi.viewMyInvoicePdf(invoice.id)}
-                          className="p-2 text-gray-400 hover:text-white transition-colors"
-                          title="View PDF"
+                          onClick={() => billingApi.viewMyInvoicePdf(invoice.id).catch(err => {
+                            console.error('Error viewing invoice:', err);
+                            alert('Failed to view invoice. Please try again.');
+                          })}
+                          className="p-2 text-gray-400 hover:text-blue-400 transition-colors"
+                          title="View Invoice"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => billingApi.downloadMyInvoicePdf(invoice.id, invoice.invoiceNumber).catch(err => {
+                            console.error('Error downloading invoice:', err);
+                            alert('Failed to download invoice. Please try again.');
+                          })}
+                          className="p-2 text-gray-400 hover:text-green-400 transition-colors"
+                          title="Download Invoice"
                         >
                           <Download className="h-4 w-4" />
                         </button>
@@ -545,11 +627,26 @@ export default function BillingPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => billingApi.viewMyInvoicePdf(invoice.id)}
-                            className="flex items-center gap-1 text-orange-400 hover:text-orange-300"
+                            onClick={() => billingApi.viewMyInvoicePdf(invoice.id).catch(err => {
+                              console.error('Error viewing invoice:', err);
+                              alert('Failed to view invoice. Please try again.');
+                            })}
+                            className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                            title="View Invoice"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View
+                          </button>
+                          <button
+                            onClick={() => billingApi.downloadMyInvoicePdf(invoice.id, invoice.invoiceNumber).catch(err => {
+                              console.error('Error downloading invoice:', err);
+                              alert('Failed to download invoice. Please try again.');
+                            })}
+                            className="flex items-center gap-1 text-green-400 hover:text-green-300"
+                            title="Download Invoice"
                           >
                             <Download className="h-4 w-4" />
-                            PDF
+                            Download
                           </button>
                         </div>
                       </td>
@@ -572,6 +669,20 @@ export default function BillingPage() {
             // Refresh data to get the latest secondaries from the server
             fetchBillingData();
           }}
+        />
+      )}
+
+      {/* Edit Secondary Modal */}
+      {editingSecondary && profile?.id && (
+        <EditSecondaryModal
+          isOpen={showEditSecondaryModal}
+          onClose={() => {
+            setShowEditSecondaryModal(false);
+            setEditingSecondary(null);
+          }}
+          secondary={editingSecondary}
+          requestingUserId={profile.id}
+          onSuccess={handleSecondaryEdited}
         />
       )}
     </div>

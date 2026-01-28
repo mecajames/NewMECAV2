@@ -224,8 +224,8 @@ export class InvoicesService {
     // Calculate totals
     const { subtotal, total } = this.calculateTotals(data.items);
 
-    // Calculate due date (30 days from now if not specified)
-    const dueDate = data.dueDate ? new Date(data.dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    // Calculate due date (today if not specified - invoices are due immediately unless otherwise specified)
+    const dueDate = data.dueDate ? new Date(data.dueDate) : new Date();
 
     // Create invoice
     const invoice = em.create(Invoice, {
@@ -291,8 +291,8 @@ export class InvoicesService {
     // Generate invoice number
     const invoiceNumber = await this.generateInvoiceNumber(em);
 
-    // Calculate due date (30 days from now)
-    const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    // Due date is today (invoices from orders are due immediately since they're already paid)
+    const dueDate = new Date();
 
     // Build invoice data
     const invoiceData: Partial<Invoice> = {
@@ -460,6 +460,34 @@ export class InvoicesService {
     await em.flush();
 
     return overdueInvoices.length;
+  }
+
+  /**
+   * Fix invoices with null due dates by setting them to their creation date
+   */
+  async fixNullDueDates(): Promise<{ fixed: number; invoiceNumbers: string[] }> {
+    const em = this.em.fork();
+
+    // Find all invoices with null due dates
+    const invoicesWithNullDueDate = await em.find(Invoice, {
+      dueDate: null,
+    });
+
+    const fixedInvoiceNumbers: string[] = [];
+
+    for (const invoice of invoicesWithNullDueDate) {
+      // Set due date to created date, or today if created date is missing
+      const dueDate = invoice.createdAt || new Date();
+      wrap(invoice).assign({ dueDate });
+      fixedInvoiceNumbers.push(invoice.invoiceNumber);
+    }
+
+    await em.flush();
+
+    return {
+      fixed: invoicesWithNullDueDate.length,
+      invoiceNumbers: fixedInvoiceNumbers,
+    };
   }
 
   /**

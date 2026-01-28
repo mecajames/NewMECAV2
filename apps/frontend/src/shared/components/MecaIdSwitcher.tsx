@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Users, User } from 'lucide-react';
-import { membershipsApi, ControlledMecaId } from '@/memberships';
+import { membershipsApi, ControlledMecaId, RELATIONSHIP_TYPES } from '@/memberships';
+
+// Helper to format relationship label
+const getRelationshipLabel = (relationship?: string): string => {
+  if (!relationship) return 'Secondary';
+  const found = RELATIONSHIP_TYPES.find((r) => r.value === relationship);
+  return found ? `Secondary (${found.label})` : `Secondary (${relationship})`;
+};
 
 interface MecaIdSwitcherProps {
   userId: string;
@@ -122,10 +129,10 @@ export function MecaIdSwitcher({
         )}
         <div className="text-left">
           <div className="text-xs text-gray-400">
-            {selectedInfo?.isOwn ? 'My MECA ID' : 'Secondary'}
+            {selectedInfo?.isOwn ? 'My MECA ID' : getRelationshipLabel(selectedInfo?.relationshipToMaster)}
           </div>
           <div className="text-orange-400 font-mono font-bold text-sm">
-            #{selectedMecaId}
+            #{selectedMecaId} - {selectedInfo?.competitorName}
           </div>
         </div>
         <ChevronDown
@@ -160,7 +167,7 @@ export function MecaIdSwitcher({
                     {mecaId.competitorName}
                   </div>
                   <div className="text-xs text-gray-400">
-                    {mecaId.isOwn ? 'Primary (You)' : 'Secondary'}
+                    {mecaId.isOwn ? 'Primary (You)' : getRelationshipLabel(mecaId.relationshipToMaster)}
                   </div>
                 </div>
                 <div className="text-right shrink-0">

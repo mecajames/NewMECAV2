@@ -4,3 +4,4 @@ export { default as MembershipCheckoutPage } from './pages/MembershipCheckoutPag
 export { default as MembershipTypeManagement } from './components/MembershipTypeManagement';
 export { default as TeamUpgradeModal } from './components/TeamUpgradeModal';
 export { AddSecondaryModal } from './components/AddSecondaryModal';
+export { EditSecondaryModal } from './components/EditSecondaryModal';

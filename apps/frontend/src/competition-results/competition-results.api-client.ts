@@ -19,6 +19,7 @@ export interface CompetitionResult {
   classId?: string;
   createdAt: string;
   mecaId?: string;
+  stateCode?: string;
   event?: any;
   competitor?: any;
   updatedBy?: string;
@@ -37,6 +38,7 @@ export interface CompetitionResult {
   class_id?: string;
   created_at?: string;
   meca_id?: string;
+  state_code?: string;
   updated_by?: string;
   updated_at?: string;
   revision_count?: number;

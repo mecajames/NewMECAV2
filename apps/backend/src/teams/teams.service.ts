@@ -1495,4 +1495,85 @@ export class TeamsService {
       members: membersWithUsers,
     };
   }
+
+  /**
+   * Get all teams a user is associated with (owned and member of)
+   * Users can be on multiple teams now
+   */
+  async findAllTeamsByUserId(userId: string): Promise<{
+    ownedTeams: TeamWithMembers[];
+    memberTeams: TeamWithMembers[];
+  }> {
+    const em = this.em.fork();
+
+    // Find teams where user is the owner (captainId)
+    const ownedTeamsRaw = await em.find(Team, { captainId: userId, isActive: true }, {
+      orderBy: { name: 'ASC' },
+    });
+
+    // Find teams where user is a member (but not owner)
+    const memberships = await em.find(TeamMember, { userId, status: 'active' });
+    const memberTeamIds = memberships
+      .map(m => m.teamId)
+      .filter(teamId => !ownedTeamsRaw.some(t => t.id === teamId));
+
+    const memberTeamsRaw = memberTeamIds.length > 0
+      ? await em.find(Team, { id: { $in: memberTeamIds }, isActive: true }, { orderBy: { name: 'ASC' } })
+      : [];
+
+    // Build full team details for owned teams
+    const ownedTeams = await Promise.all(
+      ownedTeamsRaw.map(async (team) => {
+        const owner = await em.findOne(Profile, { id: team.captainId });
+        const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
+        const membersWithUsers = await Promise.all(
+          members.map(m => this.buildMemberWithUser(em, m))
+        );
+        return {
+          ...team,
+          owner: owner ? {
+            id: owner.id,
+            first_name: owner.first_name,
+            last_name: owner.last_name,
+            meca_id: owner.meca_id,
+            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+          } : undefined,
+          members: membersWithUsers,
+        };
+      })
+    );
+
+    // Build full team details for member teams
+    const memberTeams = await Promise.all(
+      memberTeamsRaw.map(async (team) => {
+        const owner = await em.findOne(Profile, { id: team.captainId });
+        const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
+        const membersWithUsers = await Promise.all(
+          members.map(m => this.buildMemberWithUser(em, m))
+        );
+        return {
+          ...team,
+          owner: owner ? {
+            id: owner.id,
+            first_name: owner.first_name,
+            last_name: owner.last_name,
+            meca_id: owner.meca_id,
+            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+          } : undefined,
+          members: membersWithUsers,
+        };
+      })
+    );
+
+    return { ownedTeams, memberTeams };
+  }
+
+  /**
+   * Check if a user owns any team
+   */
+  async userOwnsAnyTeam(userId: string): Promise<boolean> {
+    const em = this.em.fork();
+    const ownedTeam = await em.findOne(Team, { captainId: userId, isActive: true });
+    return !!ownedTeam;
+  }
 }

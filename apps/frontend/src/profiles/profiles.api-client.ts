@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface Profile {
@@ -195,6 +197,14 @@ export const profilesApi = {
     return response.json();
   },
 
+  searchByMecaId: async (mecaId: string): Promise<Profile[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/profiles/search?q=${encodeURIComponent(mecaId)}`);
+    if (!response.ok) throw new Error('Failed to search profiles by MECA ID');
+    const profiles = await response.json() as Profile[];
+    // Filter to exact MECA ID match
+    return profiles.filter(p => p.meca_id === mecaId);
+  },
+
   getPublicProfileById: async (id: string): Promise<Profile> => {
     const response = await fetch(`${API_BASE_URL}/api/profiles/public/${id}`);
     if (!response.ok) throw new Error('Failed to fetch public profile');
@@ -256,21 +266,23 @@ export const profilesApi = {
   },
 
   /**
-   * Checks if email service is configured
+   * Checks if email service is configured (admin only)
    */
   getEmailServiceStatus: async (): Promise<{ configured: boolean }> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/email-service-status`);
-    if (!response.ok) throw new Error('Failed to check email service status');
-    return response.json();
+    const response = await axios.get('/api/profiles/admin/email-service-status');
+    return response.data;
   },
 
   /**
    * Resets a user's password (admin only)
    */
-  resetPassword: async (userId: string, dto: ResetPasswordDto): Promise<{ success: boolean; emailSent: boolean }> => {
+  resetPassword: async (userId: string, dto: ResetPasswordDto, authToken: string): Promise<{ success: boolean; emailSent: boolean }> => {
     const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/reset-password`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
       body: JSON.stringify(dto),
     });
     if (!response.ok) {
@@ -281,14 +293,11 @@ export const profilesApi = {
   },
 
   /**
-   * Clears the force password change flag
+   * Clears the force password change flag (admin only)
    */
   clearForcePasswordChange: async (userId: string): Promise<{ success: boolean }> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/clear-force-password-change`, {
-      method: 'POST',
-    });
-    if (!response.ok) throw new Error('Failed to clear force password change flag');
-    return response.json();
+    const response = await axios.post(`/api/profiles/${userId}/clear-force-password-change`);
+    return response.data;
   },
 
   /**

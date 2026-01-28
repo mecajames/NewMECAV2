@@ -134,16 +134,17 @@ export class CompetitionResultsService {
     const em = this.em.fork();
     const connection = em.getConnection();
 
-    // Build the IN clause with properly quoted UUIDs
-    const quotedIds = eventIds.map(id => `'${id}'`).join(',');
+    // Build parameterized query with placeholders to prevent SQL injection
+    const placeholders = eventIds.map(() => '?').join(',');
 
-    // Use raw SQL for efficient counting with GROUP BY
-    const result = await connection.execute(`
-      SELECT event_id, COUNT(*) as count
-      FROM competition_results
-      WHERE event_id IN (${quotedIds})
-      GROUP BY event_id
-    `);
+    // Use raw SQL for efficient counting with GROUP BY (parameterized for security)
+    const result = await connection.execute(
+      `SELECT event_id, COUNT(*) as count
+       FROM competition_results
+       WHERE event_id IN (${placeholders})
+       GROUP BY event_id`,
+      eventIds
+    );
 
     // Convert to a map
     const counts: Record<string, number> = {};

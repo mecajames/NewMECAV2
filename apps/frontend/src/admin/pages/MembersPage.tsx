@@ -20,10 +20,16 @@ interface SecondaryMembershipInfo {
   masterMembershipId: string;
   hasOwnLogin: boolean;
   userId: string; // Profile ID - either their own (if hasOwnLogin) or master's
+  // Vehicle info for differentiation
+  vehicleLicensePlate?: string;
+  vehicleColor?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
 }
 
 interface MembershipInfo {
   id: string;
+  mecaId?: number; // Membership MECA ID (separate from profile MECA ID)
   category: string;
   hasTeamAddon: boolean;
   paymentStatus: string;
@@ -52,6 +58,10 @@ export default function MembersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'meca_id' | 'created_at'>('name');
   const [showUserWizard, setShowUserWizard] = useState(false);
+
+  // MECA ID range filter
+  const [mecaIdMin, setMecaIdMin] = useState<string>('');
+  const [mecaIdMax, setMecaIdMax] = useState<string>('');
 
   // Delete confirmation state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -96,7 +106,7 @@ export default function MembersPage() {
 
   useEffect(() => {
     filterAndSortMembers();
-  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, sortBy]);
+  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, sortBy, mecaIdMin, mecaIdMax]);
 
   const fetchMembers = async () => {
     try {
@@ -135,6 +145,10 @@ export default function MembersPage() {
           master_membership_id,
           has_own_login,
           created_at,
+          vehicle_license_plate,
+          vehicle_color,
+          vehicle_make,
+          vehicle_model,
           membership_type_configs (
             category,
             is_upgrade_only,
@@ -156,8 +170,10 @@ export default function MembersPage() {
 
       // Track which users have non-upgrade-only memberships
       const usersWithNonUpgradeMembership = new Set<string>();
+      // Track which users have ANY membership with has_team_addon = true
+      const usersWithTeamAddon = new Set<string>();
 
-      // First pass: identify users who have non-upgrade-only memberships
+      // First pass: identify users who have non-upgrade-only memberships AND users with team addons
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (membershipsData || []).forEach((m: any) => {
         const config = Array.isArray(m.membership_type_configs)
@@ -166,6 +182,10 @@ export default function MembersPage() {
         if (!config) return;
         if (!config.is_upgrade_only) {
           usersWithNonUpgradeMembership.add(m.user_id);
+        }
+        // Track if ANY membership for this user has has_team_addon = true
+        if (m.has_team_addon === true) {
+          usersWithTeamAddon.add(m.user_id);
         }
       });
 
@@ -202,13 +222,17 @@ export default function MembersPage() {
         // the master membership should be used so secondaries can be attached correctly
         const existing = membershipMap.get(m.user_id);
         if (!existing || priority < existing.priority) {
-          // For "Team Membership" type which is upgrade-only but used as standalone,
-          // treat as if they have team addon (since they purchased the team membership directly)
+          // Determine hasTeamAddon:
+          // 1. This membership has has_team_addon = true, OR
+          // 2. ANY of the user's memberships has has_team_addon = true (e.g., upgrade purchase), OR
+          // 3. This is a standalone "Team Membership" type (upgrade-only but used as only membership)
           const hasTeamAddon = m.has_team_addon ||
+            usersWithTeamAddon.has(m.user_id) ||
             (isUpgradeOnly && config.name?.toLowerCase().includes('team') && config.category === 'competitor');
 
           membershipMap.set(m.user_id, {
             id: m.id,
+            mecaId: m.meca_id,
             category: config.category,
             hasTeamAddon: hasTeamAddon,
             paymentStatus: m.payment_status,
@@ -234,6 +258,11 @@ export default function MembersPage() {
             masterMembershipId: m.master_membership_id,
             hasOwnLogin: m.has_own_login || false,
             userId: m.user_id,
+            // Vehicle info for differentiation
+            vehicleLicensePlate: m.vehicle_license_plate || undefined,
+            vehicleColor: m.vehicle_color || undefined,
+            vehicleMake: m.vehicle_make || undefined,
+            vehicleModel: m.vehicle_model || undefined,
           };
           const existingSecondaries = secondariesByMaster.get(m.master_membership_id) || [];
           existingSecondaries.push(secondary);
@@ -418,13 +447,49 @@ export default function MembersPage() {
     // Apply search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (member) =>
+      filtered = filtered.filter((member) => {
+        // Search profile fields
+        if (
           member.first_name?.toLowerCase().includes(term) ||
           member.last_name?.toLowerCase().includes(term) ||
           member.email.toLowerCase().includes(term) ||
           member.meca_id?.toString().includes(term)
-      );
+        ) {
+          return true;
+        }
+
+        // Search membership MECA ID (primary membership)
+        if (member.membershipInfo?.mecaId?.toString().includes(term)) {
+          return true;
+        }
+
+        // Search secondary membership MECA IDs
+        if (member.membershipInfo?.secondaries?.some(
+          (secondary) => secondary.mecaId?.toString().includes(term)
+        )) {
+          return true;
+        }
+
+        // Search secondary competitor names
+        if (member.membershipInfo?.secondaries?.some(
+          (secondary) => secondary.competitorName?.toLowerCase().includes(term)
+        )) {
+          return true;
+        }
+
+        // Search secondary vehicle info
+        if (member.membershipInfo?.secondaries?.some(
+          (secondary) =>
+            secondary.vehicleMake?.toLowerCase().includes(term) ||
+            secondary.vehicleModel?.toLowerCase().includes(term) ||
+            secondary.vehicleColor?.toLowerCase().includes(term) ||
+            secondary.vehicleLicensePlate?.toLowerCase().includes(term)
+        )) {
+          return true;
+        }
+
+        return false;
+      });
     }
 
     // Apply role filter (for staff roles)
@@ -450,6 +515,17 @@ export default function MembersPage() {
       filtered = filtered.filter((member) => getDerivedMembershipStatus(member.membershipInfo) === statusFilter);
     }
 
+    // Apply MECA ID range filter
+    if (mecaIdMin || mecaIdMax) {
+      const minId = mecaIdMin ? parseInt(mecaIdMin, 10) : 0;
+      const maxId = mecaIdMax ? parseInt(mecaIdMax, 10) : Infinity;
+      filtered = filtered.filter((member) => {
+        const memberId = parseInt(member.meca_id || '0', 10);
+        if (!member.meca_id || isNaN(memberId)) return false;
+        return memberId >= minId && memberId <= maxId;
+      });
+    }
+
     // Apply sorting
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -470,7 +546,7 @@ export default function MembersPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, sortBy]);
+  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, sortBy, mecaIdMin, mecaIdMax]);
 
   // Paginated members
   const totalPages = Math.ceil(filteredMembers.length / membersPerPage);
@@ -646,7 +722,7 @@ export default function MembersPage() {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, email, or MECA ID..."
+                  placeholder="Search by name, email, MECA ID (profile or membership)..."
                   className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 text-white placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>
@@ -707,6 +783,54 @@ export default function MembersPage() {
                 <option value="expired">Expired</option>
                 <option value="none">None</option>
               </select>
+            </div>
+          </div>
+
+          {/* MECA ID Range Filter */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                MECA ID Range
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={mecaIdMin}
+                  onChange={(e) => setMecaIdMin(e.target.value)}
+                  placeholder="Min ID"
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="number"
+                  value={mecaIdMax}
+                  onChange={(e) => setMecaIdMax(e.target.value)}
+                  placeholder="Max ID"
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setMecaIdMin('701500'); setMecaIdMax('799999'); }}
+                className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm rounded-lg transition-colors"
+                title="New System IDs: 701500-799999"
+              >
+                New System
+              </button>
+              <button
+                onClick={() => { setMecaIdMin(''); setMecaIdMax('701499'); }}
+                className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded-lg transition-colors"
+                title="Legacy IDs: below 701500"
+              >
+                Legacy
+              </button>
+              <button
+                onClick={() => { setMecaIdMin(''); setMecaIdMax(''); }}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 text-sm rounded-lg transition-colors"
+              >
+                Clear
+              </button>
             </div>
           </div>
 
@@ -987,6 +1111,19 @@ export default function MembersPage() {
                             <div className="text-sm font-mono text-white">
                               {member.meca_id || 'N/A'}
                             </div>
+                            {/* Show membership MECA ID if different from profile MECA ID */}
+                            {member.membershipInfo?.mecaId &&
+                             member.membershipInfo.mecaId.toString() !== member.meca_id?.toString() && (
+                              <div className="text-xs font-mono text-cyan-400" title="Membership MECA ID">
+                                M: {member.membershipInfo.mecaId}
+                              </div>
+                            )}
+                            {/* Show secondary membership MECA IDs if any */}
+                            {member.membershipInfo?.secondaries && member.membershipInfo.secondaries.length > 0 && (
+                              <div className="text-xs font-mono text-purple-400" title="Secondary MECA IDs">
+                                +{member.membershipInfo.secondaries.filter(s => s.mecaId).map(s => s.mecaId).join(', ')}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4">
                             <div className="text-sm text-white flex items-center gap-1">
@@ -1119,7 +1256,24 @@ export default function MembersPage() {
                               </div>
                             </td>
                             <td className="px-6 py-3 text-gray-400 text-sm">
-                              —
+                              {/* Vehicle info for differentiation */}
+                              {(secondary.vehicleMake || secondary.vehicleModel || secondary.vehicleColor || secondary.vehicleLicensePlate) ? (
+                                <div className="text-xs space-y-0.5">
+                                  {(secondary.vehicleMake || secondary.vehicleModel) && (
+                                    <div className="text-gray-300">
+                                      {[secondary.vehicleMake, secondary.vehicleModel].filter(Boolean).join(' ')}
+                                    </div>
+                                  )}
+                                  {secondary.vehicleColor && (
+                                    <div className="text-gray-400">Color: {secondary.vehicleColor}</div>
+                                  )}
+                                  {secondary.vehicleLicensePlate && (
+                                    <div className="text-gray-400 font-mono">Plate: {secondary.vehicleLicensePlate}</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span>—</span>
+                              )}
                             </td>
                             <td className="px-6 py-3 whitespace-nowrap">
                               <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">

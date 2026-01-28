@@ -14,9 +14,11 @@ import { EmailService } from '../email/email.service';
 export interface CreateSecondaryMembershipDto {
   masterMembershipId: string;
   membershipTypeConfigId: string;
-  competitorName: string;
+  competitorName?: string; // Optional for 'self' relationship (uses master's name)
+  relationshipToMaster: string; // 'self', 'spouse', 'child', 'sibling', 'friend'
   createLogin: boolean;
   email?: string; // Required if createLogin is true
+  // Vehicle info - required for user-facing forms, optional for admin creation
   vehicleMake?: string;
   vehicleModel?: string;
   vehicleColor?: string;
@@ -40,6 +42,7 @@ export interface SecondaryMembershipInfo {
   id: string;
   mecaId: number | null;
   competitorName: string;
+  relationshipToMaster?: string;
   hasOwnLogin: boolean;
   profileId: string | null;
   membershipType: {
@@ -48,6 +51,11 @@ export interface SecondaryMembershipInfo {
     category: MembershipCategory;
     price: number;
   };
+  // Vehicle info
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
+  vehicleLicensePlate?: string;
   linkedAt: Date | null;
   startDate: Date;
   endDate: Date | null;
@@ -152,6 +160,16 @@ export class MasterSecondaryService {
       throw new BadRequestException('Email is required when creating a login for the secondary');
     }
 
+    // Handle "self" relationship - use master's competitor name
+    let competitorName = dto.competitorName?.trim();
+    if (dto.relationshipToMaster === 'self') {
+      // For "self" relationship, use the master's name
+      competitorName = masterMembership.competitorName || masterMembership.user?.full_name || masterMembership.user?.first_name || 'Unknown';
+      this.logger.log(`Using master's name "${competitorName}" for self-secondary membership`);
+    } else if (!competitorName) {
+      throw new BadRequestException('Competitor name is required for non-self relationships');
+    }
+
     // Get membership type config
     const membershipConfig = await em.findOne(MembershipTypeConfig, { id: dto.membershipTypeConfigId });
     if (!membershipConfig) {
@@ -178,9 +196,9 @@ export class MasterSecondaryService {
 
     const secondaryProfile = new Profile();
     secondaryProfile.email = secondaryEmail;
-    secondaryProfile.first_name = dto.competitorName.split(' ')[0];
-    secondaryProfile.last_name = dto.competitorName.split(' ').slice(1).join(' ') || '';
-    secondaryProfile.full_name = dto.competitorName;
+    secondaryProfile.first_name = competitorName.split(' ')[0];
+    secondaryProfile.last_name = competitorName.split(' ').slice(1).join(' ') || '';
+    secondaryProfile.full_name = competitorName;
     secondaryProfile.isSecondaryAccount = true;
     secondaryProfile.masterProfile = masterMembership.user;
     secondaryProfile.canLogin = dto.createLogin; // New field to track if they can log in
@@ -195,12 +213,15 @@ export class MasterSecondaryService {
     const secondary = new Membership();
     secondary.user = secondaryProfile;
     secondary.membershipTypeConfig = membershipConfig;
-    secondary.competitorName = dto.competitorName;
+    secondary.competitorName = competitorName;
     secondary.accountType = MembershipAccountType.SECONDARY;
     secondary.masterMembership = masterMembership;
     secondary.hasOwnLogin = dto.createLogin;
     secondary.masterBillingProfile = masterMembership.user;
     secondary.linkedAt = new Date();
+
+    // Copy relationship info if provided
+    if (dto.relationshipToMaster) secondary.relationshipToMaster = dto.relationshipToMaster;
 
     // Copy vehicle info if provided
     if (dto.vehicleMake) secondary.vehicleMake = dto.vehicleMake;
@@ -252,7 +273,7 @@ export class MasterSecondaryService {
       currency: 'USD',
       dueDate,
       sentAt: new Date(), // Mark as sent immediately
-      notes: `Secondary membership for ${dto.competitorName}`,
+      notes: `Secondary membership for ${competitorName}`,
       billingAddress: {
         name: `${masterMembership.billingFirstName || ''} ${masterMembership.billingLastName || ''}`.trim(),
         address1: masterMembership.billingAddress || '',
@@ -274,7 +295,7 @@ export class MasterSecondaryService {
     // Create invoice item for the secondary membership
     const invoiceItem = em.create(InvoiceItem, {
       invoice,
-      description: `${membershipConfig.name} - Secondary Membership (${dto.competitorName})`,
+      description: `${membershipConfig.name} - Secondary Membership (${competitorName})`,
       quantity: 1,
       unitPrice: price.toFixed(2),
       total: price.toFixed(2),
@@ -373,6 +394,7 @@ export class MasterSecondaryService {
         id: secondary.id,
         mecaId: secondary.mecaId || null,
         competitorName: secondary.competitorName || secondary.getCompetitorDisplayName(),
+        relationshipToMaster: secondary.relationshipToMaster,
         hasOwnLogin: secondary.hasOwnLogin || false,
         profileId: secondary.hasOwnLogin ? secondary.user.id : null,
         membershipType: {
@@ -381,6 +403,11 @@ export class MasterSecondaryService {
           category: secondary.membershipTypeConfig.category,
           price: Number(secondary.membershipTypeConfig.price),
         },
+        // Vehicle info
+        vehicleMake: secondary.vehicleMake,
+        vehicleModel: secondary.vehicleModel,
+        vehicleColor: secondary.vehicleColor,
+        vehicleLicensePlate: secondary.vehicleLicensePlate,
         linkedAt: secondary.linkedAt || null,
         startDate: secondary.startDate,
         endDate: secondary.endDate || null,
@@ -506,7 +533,18 @@ export class MasterSecondaryService {
   /**
    * Get all MECA IDs controlled by a user (their own + all secondaries)
    */
-  async getControlledMecaIds(userId: string): Promise<Array<{ mecaId: number; membershipId: string; profileId: string; competitorName: string; isOwn: boolean }>> {
+  async getControlledMecaIds(userId: string): Promise<Array<{
+    mecaId: number;
+    membershipId: string;
+    profileId: string;
+    competitorName: string;
+    isOwn: boolean;
+    relationshipToMaster?: string;
+    vehicleMake?: string;
+    vehicleModel?: string;
+    vehicleColor?: string;
+    vehicleLicensePlate?: string;
+  }>> {
     const em = this.em.fork();
 
     // Get user's own memberships that are master or independent
@@ -518,7 +556,18 @@ export class MasterSecondaryService {
       populate: ['user'],
     });
 
-    const result: Array<{ mecaId: number; membershipId: string; profileId: string; competitorName: string; isOwn: boolean }> = [];
+    const result: Array<{
+      mecaId: number;
+      membershipId: string;
+      profileId: string;
+      competitorName: string;
+      isOwn: boolean;
+      relationshipToMaster?: string;
+      vehicleMake?: string;
+      vehicleModel?: string;
+      vehicleColor?: string;
+      vehicleLicensePlate?: string;
+    }> = [];
 
     for (const membership of ownMemberships) {
       if (membership.mecaId) {
@@ -526,8 +575,13 @@ export class MasterSecondaryService {
           mecaId: membership.mecaId,
           membershipId: membership.id,
           profileId: membership.user.id,
-          competitorName: membership.getCompetitorDisplayName(),
+          competitorName: membership.competitorName || membership.getCompetitorDisplayName(),
           isOwn: true,
+          // Include vehicle info for the primary as well
+          vehicleMake: membership.vehicleMake,
+          vehicleModel: membership.vehicleModel,
+          vehicleColor: membership.vehicleColor,
+          vehicleLicensePlate: membership.vehicleLicensePlate,
         });
 
         // If master, also get secondaries
@@ -547,6 +601,11 @@ export class MasterSecondaryService {
                 profileId: secondary.user.id,
                 competitorName: secondary.competitorName || secondary.getCompetitorDisplayName(),
                 isOwn: false,
+                relationshipToMaster: secondary.relationshipToMaster,
+                vehicleMake: secondary.vehicleMake,
+                vehicleModel: secondary.vehicleModel,
+                vehicleColor: secondary.vehicleColor,
+                vehicleLicensePlate: secondary.vehicleLicensePlate,
               });
             }
           }
@@ -660,5 +719,92 @@ export class MasterSecondaryService {
 
     this.logger.log(`Fixed ${fixed} secondary memberships, ${errors.length} errors`);
     return { fixed, errors };
+  }
+
+  /**
+   * Update a secondary membership's details (competitor name, relationship, vehicle info)
+   * This can be called by the master to update their secondary's info
+   */
+  async updateSecondaryDetails(
+    secondaryMembershipId: string,
+    requestingUserId: string,
+    data: {
+      competitorName?: string;
+      relationshipToMaster?: string;
+      vehicleMake?: string;
+      vehicleModel?: string;
+      vehicleColor?: string;
+      vehicleLicensePlate?: string;
+    },
+  ): Promise<Membership> {
+    const em = this.em.fork();
+
+    const secondary = await em.findOne(Membership, { id: secondaryMembershipId }, {
+      populate: ['user', 'masterMembership', 'masterMembership.user', 'membershipTypeConfig'],
+    });
+
+    if (!secondary) {
+      throw new NotFoundException('Secondary membership not found');
+    }
+
+    // Check authorization: either the secondary themselves (if they have login)
+    // or the master can update
+    const isSecondaryOwner = secondary.user?.id === requestingUserId;
+    const isMasterOwner = secondary.masterMembership?.user?.id === requestingUserId;
+
+    if (!isSecondaryOwner && !isMasterOwner) {
+      throw new ForbiddenException('You do not have permission to update this membership');
+    }
+
+    // Update the fields
+    // Handle relationship change to/from "self"
+    if (data.relationshipToMaster !== undefined) {
+      secondary.relationshipToMaster = data.relationshipToMaster;
+
+      // If changing to "self", update competitor name to match master
+      if (data.relationshipToMaster === 'self' && secondary.masterMembership) {
+        const masterName = secondary.masterMembership.competitorName ||
+          secondary.masterMembership.user?.full_name ||
+          secondary.masterMembership.user?.first_name ||
+          'Unknown';
+        secondary.competitorName = masterName;
+        this.logger.log(`Updated secondary ${secondary.id} competitor name to "${masterName}" for self relationship`);
+      }
+    }
+
+    // Only update competitor name if not a "self" relationship
+    if (data.competitorName !== undefined && secondary.relationshipToMaster !== 'self') {
+      secondary.competitorName = data.competitorName.trim();
+    }
+    if (data.vehicleMake !== undefined) {
+      secondary.vehicleMake = data.vehicleMake;
+    }
+    if (data.vehicleModel !== undefined) {
+      secondary.vehicleModel = data.vehicleModel;
+    }
+    if (data.vehicleColor !== undefined) {
+      secondary.vehicleColor = data.vehicleColor;
+    }
+    if (data.vehicleLicensePlate !== undefined) {
+      secondary.vehicleLicensePlate = data.vehicleLicensePlate;
+    }
+
+    // Also update the profile's name if the secondary has their own profile
+    // For "self" relationship, use the competitor name we just set from master
+    const nameToUse = secondary.relationshipToMaster === 'self'
+      ? secondary.competitorName
+      : data.competitorName?.trim();
+
+    if (nameToUse && secondary.user) {
+      const nameParts = nameToUse.split(' ');
+      secondary.user.first_name = nameParts[0] || '';
+      secondary.user.last_name = nameParts.slice(1).join(' ') || '';
+      secondary.user.full_name = nameToUse;
+    }
+
+    await em.flush();
+
+    this.logger.log(`Updated secondary membership ${secondaryMembershipId} details`);
+    return secondary;
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Trophy, Medal, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, Users } from 'lucide-react';
 import { competitionResultsApi, StandingsEntry, ClassStandingsEntry } from '@/competition-results';
 import { SeasonSelector } from '@/seasons';
@@ -24,7 +24,6 @@ export default function StandingsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [loading, setLoading] = useState(true);
   const seoProps = useStandingsSEO();
-  const [total, setTotal] = useState(0);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,7 +67,6 @@ export default function StandingsPage() {
           limit: 100,
         });
         setStandings(response.entries);
-        setTotal(response.total);
       } else if (viewMode === 'byFormat') {
         // Fetch standings by format
         const data = await competitionResultsApi.getStandingsByFormat(
@@ -77,7 +75,6 @@ export default function StandingsPage() {
           100
         );
         setStandings(data);
-        setTotal(data.length);
       } else if (viewMode === 'byClass' && selectedClass) {
         // Fetch standings by class
         const data = await competitionResultsApi.getStandingsByClass(
@@ -87,7 +84,6 @@ export default function StandingsPage() {
           100
         );
         setClassStandings(data);
-        setTotal(data.length);
       }
     } catch (error) {
       console.error('Error fetching standings:', error);

@@ -291,43 +291,59 @@ export const billingApi = {
   // ==========================================
 
   /**
-   * Get current user's orders
+   * Get current user's orders (userId is determined from auth token)
    */
   getMyOrders: async (
-    userId: string,
     params: { page?: number; limit?: number } = {},
   ): Promise<{ data: Order[]; total: number }> => {
     const response = await axios.get('/api/billing/my/orders', {
-      params: { userId, ...params },
+      params,
     });
     return response.data;
   },
 
   /**
-   * Get current user's invoices
+   * Get current user's invoices (userId is determined from auth token)
    */
   getMyInvoices: async (
-    userId: string,
     params: { page?: number; limit?: number } = {},
   ): Promise<{ data: Invoice[]; total: number }> => {
     const response = await axios.get('/api/billing/my/invoices', {
-      params: { userId, ...params },
+      params,
     });
     return response.data;
   },
 
   /**
-   * Get current user's invoice PDF URL
+   * View user's invoice PDF in new tab (with auth)
    */
-  getMyInvoicePdfUrl: (id: string): string => {
-    return `/api/billing/my/invoices/${id}/pdf`;
+  viewMyInvoicePdf: async (id: string): Promise<void> => {
+    const response = await axios.get(`/api/billing/my/invoices/${id}/pdf`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Clean up the URL after a delay to allow the new tab to load
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   },
 
   /**
-   * Open user's invoice PDF in new tab
+   * Download user's invoice PDF (with auth)
    */
-  viewMyInvoicePdf: (id: string): void => {
-    window.open(`/api/billing/my/invoices/${id}/pdf`, '_blank');
+  downloadMyInvoicePdf: async (id: string, invoiceNumber?: string): Promise<void> => {
+    const response = await axios.get(`/api/billing/my/invoices/${id}/pdf`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `invoice-${invoiceNumber || id}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   },
 
   // ==========================================

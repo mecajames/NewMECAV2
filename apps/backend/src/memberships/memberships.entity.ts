@@ -23,6 +23,11 @@ export class Membership {
   @Property({ type: 'text', nullable: true, fieldName: 'competitor_name' })
   competitorName?: string;
 
+  // Relationship to master account holder (spouse, child, sibling, parent, friend, other)
+  // Used to identify/differentiate secondary memberships
+  @Property({ type: 'text', nullable: true, fieldName: 'relationship_to_master' })
+  relationshipToMaster?: string;
+
   // Vehicle information (required for competitor memberships)
   @Property({ type: 'text', nullable: true, fieldName: 'vehicle_license_plate' })
   vehicleLicensePlate?: string;

@@ -48,7 +48,7 @@ export function AdminShopOrdersPage() {
   // Update status modal
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusOrderId, setStatusOrderId] = useState<string | null>(null);
-  const [newStatus, setNewStatus] = useState<ShopOrderStatus>(ShopOrderStatus.PENDING);
+  const [newStatus, setNewStatus] = useState<ShopOrderStatus>('pending');
   const [savingStatus, setSavingStatus] = useState(false);
 
   // Tracking modal
@@ -186,7 +186,7 @@ export function AdminShopOrdersPage() {
   };
 
   const canRefund = (order: ShopOrder) => {
-    return order.status === ShopOrderStatus.PAID || order.status === ShopOrderStatus.PROCESSING;
+    return order.status === 'paid' || order.status === 'processing';
   };
 
   return (

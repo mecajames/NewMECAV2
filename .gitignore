@@ -169,3 +169,13 @@ tmpclaude-f2d9-cwd
 apps/backend/audit-logs/uploads/4bcd117d-c57a-4aad-a6c8-292051f0ee18/977ab63f-ca0a-474d-903d-47349ff64b80_2026-01-15T18-53-31-694Z.tlab
 apps/backend/audit-logs/uploads/6ef3ba03-b8cb-46b4-bee1-7fe7111e9878/c309c2e7-1945-4edc-9bfe-db86c14da004_2026-01-15T18-52-31-138Z.tlab
 apps/backend/audit-logs/uploads/cd8b315a-75b1-4531-8d9d-005fe7ca39cd/d19b32a4-e28a-458c-acdc-746d8462ad7d_2026-01-15T18-56-55-104Z.tlab
+CLAUDE.md
+CLAUDE.md
+backups/dump_development.sql
+backups/dump_legacy.sql
+backups/dump_production.sql
+backups/schema_2026-01-22.sql
+backups/backup-2025-11-13/manifest.txt
+backups/backup-2025-11-13/database.sql
+/backups
+CLAUDE.md

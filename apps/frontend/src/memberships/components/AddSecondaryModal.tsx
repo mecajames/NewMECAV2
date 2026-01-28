@@ -15,6 +15,7 @@ import {
   membershipsApi,
   CreateSecondaryMembershipDto,
   Membership,
+  RELATIONSHIP_TYPES,
 } from '../memberships.api-client';
 import {
   membershipTypeConfigsApi,
@@ -33,6 +34,7 @@ interface AddSecondaryModalProps {
 
 interface FormData {
   competitorName: string;
+  relationshipToMaster: string;
   vehicleMake: string;
   vehicleModel: string;
   vehicleColor: string;
@@ -44,6 +46,7 @@ interface FormData {
 
 const initialFormData: FormData = {
   competitorName: '',
+  relationshipToMaster: '',
   vehicleMake: '',
   vehicleModel: '',
   vehicleColor: '',
@@ -109,10 +112,17 @@ export function AddSecondaryModal({
 
     switch (step) {
       case 'details':
-        if (!formData.competitorName.trim()) {
+        // Relationship is required
+        if (!formData.relationshipToMaster) {
+          setError('Please select a relationship type');
+          return false;
+        }
+        // For non-self relationships, competitor name is required
+        if (formData.relationshipToMaster !== 'self' && !formData.competitorName.trim()) {
           setError('Competitor name is required');
           return false;
         }
+        // Vehicle info is always required (unique vehicle = unique MECA ID)
         if (
           !formData.vehicleMake ||
           !formData.vehicleModel ||
@@ -184,7 +194,11 @@ export function AddSecondaryModal({
     try {
       const dto: CreateSecondaryMembershipDto = {
         membershipTypeConfigId: selectedType.id,
-        competitorName: formData.competitorName.trim(),
+        // For "self" relationship, backend will use master's name
+        competitorName: formData.relationshipToMaster === 'self'
+          ? undefined
+          : formData.competitorName.trim(),
+        relationshipToMaster: formData.relationshipToMaster,
         createLogin: formData.giveLogin,
         email: formData.giveLogin ? formData.email.toLowerCase().trim() : undefined,
         vehicleMake: formData.vehicleMake,
@@ -257,21 +271,48 @@ export function AddSecondaryModal({
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-white flex items-center gap-2">
                 <User className="h-5 w-5 text-blue-400" />
-                Competitor Information
+                Secondary Membership
               </h3>
 
+              {/* Relationship - Required and shown first */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Competitor Name <span className="text-red-500">*</span>
+                  Who is this membership for? <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={formData.competitorName}
-                  onChange={(e) => handleInputChange('competitorName', e.target.value)}
-                  placeholder="Full name of the competitor"
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                />
+                <select
+                  value={formData.relationshipToMaster}
+                  onChange={(e) => handleInputChange('relationshipToMaster', e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="">Select relationship...</option>
+                  {RELATIONSHIP_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+                {formData.relationshipToMaster === 'self' && (
+                  <p className="text-xs text-blue-400 mt-1">
+                    This is for your own additional vehicle. Each vehicle gets its own MECA ID.
+                  </p>
+                )}
               </div>
+
+              {/* Competitor Name - Only show for non-self relationships */}
+              {formData.relationshipToMaster && formData.relationshipToMaster !== 'self' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Competitor Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.competitorName}
+                    onChange={(e) => handleInputChange('competitorName', e.target.value)}
+                    placeholder="Full name of the competitor"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  />
+                </div>
+              )}
 
               <div className="pt-4 border-t border-slate-700">
                 <h4 className="text-md font-medium text-white flex items-center gap-2 mb-4">
@@ -461,9 +502,23 @@ export function AddSecondaryModal({
 
               <div className="bg-slate-700/50 rounded-lg p-4 space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Competitor:</span>
-                  <span className="text-white font-medium">{formData.competitorName}</span>
+                  <span className="text-gray-400">Relationship:</span>
+                  <span className="text-white">
+                    {RELATIONSHIP_TYPES.find(r => r.value === formData.relationshipToMaster)?.label || formData.relationshipToMaster}
+                  </span>
                 </div>
+                {formData.relationshipToMaster !== 'self' && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Competitor:</span>
+                    <span className="text-white font-medium">{formData.competitorName}</span>
+                  </div>
+                )}
+                {formData.relationshipToMaster === 'self' && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Competitor:</span>
+                    <span className="text-blue-400 italic">Same as your account</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-400">Vehicle:</span>
                   <span className="text-white">

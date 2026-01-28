@@ -126,6 +126,45 @@ export async function deleteBanner(id: string): Promise<void> {
 // PUBLIC
 // =============================================================================
 
+// Cache for all active banners to prevent duplicate requests
+const allBannersCache: Map<string, { data: PublicBanner[]; timestamp: number; promise?: Promise<PublicBanner[]> }> = new Map();
+const CACHE_TTL = 30000; // 30 seconds cache
+
+/**
+ * Get ALL active banners for a position (for rotation across multiple slots)
+ */
+export async function getAllActiveBanners(position: BannerPosition): Promise<PublicBanner[]> {
+  const cacheKey = `all_${position}`;
+  const now = Date.now();
+  const cached = allBannersCache.get(cacheKey);
+
+  // Return cached data if still valid
+  if (cached && (now - cached.timestamp) < CACHE_TTL) {
+    if (cached.promise) {
+      return cached.promise;
+    }
+    return cached.data;
+  }
+
+  // Create promise for deduplication of concurrent requests
+  const fetchPromise = axios.get(`${API_BASE_URL}/api/banners/active/${position}/all`)
+    .then(response => {
+      const data = response.data || [];
+      allBannersCache.set(cacheKey, { data, timestamp: Date.now() });
+      return data;
+    })
+    .catch(error => {
+      allBannersCache.delete(cacheKey);
+      throw error;
+    });
+
+  allBannersCache.set(cacheKey, { data: [], timestamp: now, promise: fetchPromise });
+  return fetchPromise;
+}
+
+/**
+ * Get a single active banner (uses weighted random selection on backend)
+ */
 export async function getActiveBanner(position: BannerPosition): Promise<PublicBanner | null> {
   const response = await axios.get(`${API_BASE_URL}/api/banners/active/${position}`);
   return response.data;

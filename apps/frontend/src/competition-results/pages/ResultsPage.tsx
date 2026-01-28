@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
@@ -38,6 +38,44 @@ export default function ResultsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [multiDayEvents, setMultiDayEvents] = useState<Event[]>([]);
   const [isAggregatedView, setIsAggregatedView] = useState(false);
+  const [eventResultCounts, setEventResultCounts] = useState<Record<string, number>>({});
+
+  // Computed list of recent events (past 10 days to capture weekend events)
+  const recentEvents = (() => {
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    tenDaysAgo.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    // Filter for events in the past 10 days and group multi-day finals
+    const recent: Event[] = [];
+    const processedGroups = new Set<string>();
+
+    events.forEach(event => {
+      const eventDate = new Date(event.event_date);
+      if (eventDate < tenDaysAgo || eventDate > today) return;
+
+      // Check if this is a multi-day State/World Finals event
+      if (event.multi_day_group_id &&
+          (event.event_type === 'state_finals' || event.event_type === 'world_finals')) {
+        // Only add one entry per multi-day group
+        if (!processedGroups.has(event.multi_day_group_id)) {
+          processedGroups.add(event.multi_day_group_id);
+          // Find Day 1 of this group
+          const groupEvents = events.filter(e => e.multi_day_group_id === event.multi_day_group_id);
+          const dayOne = groupEvents.find(e => e.day_number === 1) || groupEvents[0];
+          recent.push(dayOne);
+        }
+      } else {
+        recent.push(event);
+      }
+    });
+
+    // Sort by date descending (most recent first)
+    return recent.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+  })();
 
   // Computed list of events for the dropdown - groups multi-day State/World Finals into single entries
   const displayEvents = (() => {
@@ -109,10 +147,26 @@ export default function ResultsPage() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const data = await eventsApi.getAll(1, 1000);
+      // Fetch events and result counts in parallel
+      const [data, resultCounts] = await Promise.all([
+        eventsApi.getAll(1, 1000),
+        competitionResultsApi.getResultCountsByEvent().catch(() => ({} as Record<string, number>))
+      ]);
 
-      // Filter for completed events
-      let filtered = data.filter(e => e.status === 'completed');
+      setEventResultCounts(resultCounts);
+
+      // Filter for completed events only (events that have already happened)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      let filtered = data.filter(e => {
+        // Must be completed status
+        if (e.status !== 'completed') return false;
+        // Event date must be today or earlier
+        const eventDate = new Date(e.event_date);
+        eventDate.setHours(0, 0, 0, 0);
+        return eventDate <= today;
+      });
 
       if (selectedSeasonId) {
         filtered = filtered.filter(e => e.season_id === selectedSeasonId);
@@ -123,13 +177,15 @@ export default function ResultsPage() {
 
       setEvents(filtered);
 
-      // Only auto-select first event if we didn't come from URL with a specific event
+      // Only auto-select if we came from URL with a specific event
       if (eventIdFromUrl && filtered.some(e => e.id === eventIdFromUrl)) {
         // Event from URL exists in the filtered list, keep it selected
         setSelectedEventId(eventIdFromUrl);
-      } else if (filtered.length > 0 && !eventIdFromUrl) {
-        setSelectedEventId(filtered[0].id);
       } else if (filtered.length === 0) {
+        setSelectedEventId('');
+        setResults([]);
+      } else if (!eventIdFromUrl) {
+        // Don't auto-select - let user choose from dropdown
         setSelectedEventId('');
         setResults([]);
       }
@@ -356,24 +412,19 @@ export default function ResultsPage() {
           </p>
         </div>
 
-        {/* Season Filter - Always visible */}
+        {/* Season and Event Selectors - Same Row */}
         <div className="mb-8 bg-slate-800 rounded-xl p-6">
-          <SeasonSelector
-            selectedSeasonId={selectedSeasonId}
-            onSeasonChange={setSelectedSeasonId}
-            showAllOption={true}
-            autoSelectCurrent={true}
-          />
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Season Selector */}
+            <SeasonSelector
+              selectedSeasonId={selectedSeasonId}
+              onSeasonChange={setSelectedSeasonId}
+              showAllOption={true}
+              autoSelectCurrent={true}
+            />
 
-        {loading ? (
-          <div className="text-center py-20">
-            <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-          </div>
-        ) : events.length > 0 ? (
-          <>
-            <div className="mb-8 bg-slate-800 rounded-xl p-6">
-              {/* Event Selector */}
+            {/* Event Selector */}
+            <div>
               <label className="block text-sm font-medium text-gray-300 mb-3">
                 Select Event
               </label>
@@ -382,8 +433,10 @@ export default function ResultsPage() {
                 <select
                   value={selectedEventId}
                   onChange={(e) => setSelectedEventId(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  disabled={loading}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
                 >
+                  <option value="">-- Select an Event --</option>
                   {displayEvents.map((event) => {
                     // Check if this is a combined multi-day State/World Finals event
                     const isMultiDayFinals = event.multi_day_group_id &&
@@ -392,15 +445,29 @@ export default function ResultsPage() {
                       ? events.filter(e => e.multi_day_group_id === event.multi_day_group_id)
                       : [];
 
+                    // Check if event has results - for multi-day, check all days
+                    const hasResults = isMultiDayFinals && groupEvents.length > 0
+                      ? groupEvents.some(e => (eventResultCounts[e.id] || 0) > 0)
+                      : (eventResultCounts[event.id] || 0) > 0;
+
+                    // Style: green for has results, yellow for pending
+                    const optionStyle = hasResults
+                      ? { backgroundColor: '#166534', color: '#fff' } // green-800
+                      : { backgroundColor: '#854d0e', color: '#fff' }; // yellow-800
+
                     return (
-                      <option key={event.id} value={event.id}>
-                        {event.title}
+                      <option
+                        key={event.id}
+                        value={event.id}
+                        style={optionStyle}
+                      >
+                        {hasResults ? '\u2713 ' : '\u25cb '}{event.title}
                         {isMultiDayFinals && groupEvents.length > 1
-                          ? ` (${groupEvents.length}-Day Event)`
+                          ? ` (${groupEvents.length}-Day)`
                           : ` - ${new Date(event.event_date).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
+                              month: 'short',
                               day: 'numeric',
+                              year: 'numeric',
                             })}`
                         }
                       </option>
@@ -409,14 +476,37 @@ export default function ResultsPage() {
                 </select>
               </div>
 
-              {selectedEvent && (() => {
-                // Check if this is an aggregated multi-day State/World Finals
-                const isMultiDayFinals = selectedEvent.multi_day_group_id &&
-                  (selectedEvent.event_type === 'state_finals' || selectedEvent.event_type === 'world_finals');
-                const showDayBadge = selectedEvent.day_number && !isMultiDayFinals;
+              {/* Legend for dropdown colors */}
+              <div className="mt-2 flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1">
+                  <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: '#166534' }}></span>
+                  <span className="text-gray-400">Results Available</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: '#854d0e' }}></span>
+                  <span className="text-gray-400">Results Pending</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-                return (
-                  <div className="mt-4 pt-4 border-t border-slate-700">
+        {loading ? (
+          <div className="text-center py-20">
+            <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
+        ) : events.length > 0 ? (
+          <>
+            {/* Selected Event Info */}
+            {selectedEvent && (
+              <div className="mb-8 bg-slate-800 rounded-xl p-6">
+                {(() => {
+                  // Check if this is an aggregated multi-day State/World Finals
+                  const isMultiDayFinals = selectedEvent.multi_day_group_id &&
+                    (selectedEvent.event_type === 'state_finals' || selectedEvent.event_type === 'world_finals');
+                  const showDayBadge = selectedEvent.day_number && !isMultiDayFinals;
+
+                  return (
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-xl font-semibold text-white mb-1">
@@ -458,43 +548,148 @@ export default function ResultsPage() {
                         View Event
                       </button>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
-              {/* Aggregated Results Banner */}
-              {isAggregatedView && multiDayEvents.length > 1 && (
-                <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Layers className="h-6 w-6 text-purple-400 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-purple-400 font-semibold">
-                        Combined Results from {multiDayEvents.length} Days
-                      </h4>
-                      <p className="text-gray-400 text-sm mt-1">
-                        Showing highest score per competitor per class across all days of this{' '}
-                        {selectedEvent?.event_type === 'world_finals' ? 'World Finals' : 'State Finals'} event.
-                      </p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {multiDayEvents.map((dayEvent) => (
-                          <span
-                            key={dayEvent.id}
-                            className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-700 text-gray-300"
-                          >
-                            Day {dayEvent.day_number}: {new Date(dayEvent.event_date).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </span>
-                        ))}
+                {/* Aggregated Results Banner */}
+                {isAggregatedView && multiDayEvents.length > 1 && (
+                  <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Layers className="h-6 w-6 text-purple-400 flex-shrink-0" />
+                      <div>
+                        <h4 className="text-purple-400 font-semibold">
+                          Combined Results from {multiDayEvents.length} Days
+                        </h4>
+                        <p className="text-gray-400 text-sm mt-1">
+                          Showing highest score per competitor per class across all days of this{' '}
+                          {selectedEvent?.event_type === 'world_finals' ? 'World Finals' : 'State Finals'} event.
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {multiDayEvents.map((dayEvent) => (
+                            <span
+                              key={dayEvent.id}
+                              className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-700 text-gray-300"
+                            >
+                              Day {dayEvent.day_number}: {new Date(dayEvent.event_date).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
-            {resultsLoading ? (
+            {/* Recent Events Section */}
+            {recentEvents.length > 0 && !selectedEventId && (
+              <div className="mb-8 bg-slate-800 rounded-xl p-6">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-orange-500" />
+                  Recent Events (Past 10 Days)
+                </h2>
+                <div className="space-y-3">
+                  {recentEvents.map((event) => {
+                    // Check if this is a combined multi-day State/World Finals event
+                    const isMultiDayFinals = event.multi_day_group_id &&
+                      (event.event_type === 'state_finals' || event.event_type === 'world_finals');
+                    const groupEvents = isMultiDayFinals
+                      ? events.filter(e => e.multi_day_group_id === event.multi_day_group_id)
+                      : [];
+
+                    // Check if event has results
+                    const hasResults = isMultiDayFinals && groupEvents.length > 0
+                      ? groupEvents.some(e => (eventResultCounts[e.id] || 0) > 0)
+                      : (eventResultCounts[event.id] || 0) > 0;
+
+                    // Location display
+                    const location = [event.venue_city, event.venue_state].filter(Boolean).join(', ') || event.venue_name;
+
+                    return (
+                      <div
+                        key={event.id}
+                        className={`flex items-center justify-between p-4 rounded-lg border-l-4 ${
+                          hasResults
+                            ? 'bg-green-900/20 border-green-500'
+                            : 'bg-yellow-900/20 border-yellow-500'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <h3 className="text-lg font-semibold text-white">
+                              {event.title}
+                            </h3>
+                            {isMultiDayFinals && groupEvents.length > 1 && (
+                              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-500/20 text-purple-400 border border-purple-500">
+                                {groupEvents.length}-Day
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              hasResults
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {hasResults ? 'Results Available' : 'Results Pending'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-gray-400 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              {isMultiDayFinals && groupEvents.length > 1
+                                ? `${new Date(groupEvents[0]?.event_date || event.event_date).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })} - ${new Date(groupEvents[groupEvents.length - 1]?.event_date || event.event_date).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  })}`
+                                : new Date(event.event_date).toLocaleDateString('en-US', {
+                                    weekday: 'short',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  })
+                              }
+                            </span>
+                            {location && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                {location}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedEventId(event.id)}
+                          className={`ml-4 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 whitespace-nowrap ${
+                            hasResults
+                              ? 'bg-green-600 hover:bg-green-700 text-white'
+                              : 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                          }`}
+                        >
+                          <Trophy className="h-4 w-4" />
+                          View Results
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!selectedEventId && recentEvents.length === 0 ? (
+              <div className="text-center py-20 bg-slate-800 rounded-xl">
+                <Calendar className="h-20 w-20 text-gray-500 mx-auto mb-4" />
+                <p className="text-gray-400 text-xl">Please select an event from the dropdown above</p>
+                <p className="text-gray-500 mt-2">Choose an event to view its competition results.</p>
+              </div>
+            ) : !selectedEventId ? (
+              null
+            ) : resultsLoading ? (
               <div className="text-center py-20">
                 <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
               </div>
@@ -655,9 +850,18 @@ export default function ResultsPage() {
                                           </div>
                                         </td>
                                         <td className="px-4 py-3">
-                                          <div className={`font-semibold ${mecaDisplay.color}`}>
-                                            {mecaDisplay.text}
-                                          </div>
+                                          {mecaId && mecaId !== '999999' ? (
+                                            <Link
+                                              to={`/results/member/${mecaId}`}
+                                              className={`font-semibold ${mecaDisplay.color} hover:underline hover:text-orange-400 transition-colors`}
+                                            >
+                                              {mecaDisplay.text}
+                                            </Link>
+                                          ) : (
+                                            <div className={`font-semibold ${mecaDisplay.color}`}>
+                                              {mecaDisplay.text}
+                                            </div>
+                                          )}
                                         </td>
                                         {format === 'SPL' && (
                                           <>
@@ -697,7 +901,10 @@ export default function ResultsPage() {
               <div className="text-center py-20 bg-slate-800 rounded-xl">
                 <Trophy className="h-20 w-20 text-gray-500 mx-auto mb-4" />
                 <p className="text-gray-400 text-xl">
-                  No results available for this event yet.
+                  Results have not been entered for this event yet.
+                </p>
+                <p className="text-gray-500 mt-2">
+                  Please check back later or contact the event director.
                 </p>
               </div>
             )}

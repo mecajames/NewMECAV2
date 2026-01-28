@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
 import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
@@ -24,6 +24,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   const [countryFilter, setCountryFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [quickFilter, setQuickFilter] = useState<string>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
   const [eventResults, setEventResults] = useState<{[key: string]: number}>({});
   const [sendingRatingEmails, setSendingRatingEmails] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,6 +66,11 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     multi_day_results_mode: 'separate' as MultiDayResultsMode,
   });
 
+  // State for flyer image upload
+  const [flyerFile, setFlyerFile] = useState<File | null>(null);
+  const [flyerPreview, setFlyerPreview] = useState<string | null>(null);
+  const [uploadingFlyer, setUploadingFlyer] = useState(false);
+
   useEffect(() => {
     fetchEvents();
     fetchEventDirectors();
@@ -74,7 +80,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   useEffect(() => {
     filterEvents();
     setCurrentPage(1); // Reset to first page when filters change
-  }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter]);
+  }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter, monthFilter]);
 
   // Paginate the filtered events
   const paginatedEvents = useMemo(() => {
@@ -123,6 +129,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
 
   const filterEvents = () => {
     let filtered = [...events];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
 
     // Filter by search term
     if (searchTerm) {
@@ -134,8 +142,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       );
     }
 
-    // Filter by status
-    if (statusFilter !== 'all') {
+    // Filter by status (if not using quick filter for pending)
+    if (statusFilter !== 'all' && quickFilter !== 'pending') {
       filtered = filtered.filter(event => event.status === statusFilter);
     }
 
@@ -154,17 +162,31 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       filtered = filtered.filter(event => (event as any).venue_state === stateFilter);
     }
 
-    // Apply quick filters
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-
-    if (quickFilter === 'recent-upcoming') {
+    // Filter by month
+    if (monthFilter !== 'all') {
+      const selectedMonth = parseInt(monthFilter);
       filtered = filtered.filter(event => {
         const eventDate = new Date(event.event_date);
-        return eventDate >= thirtyDaysAgo && event.status !== 'completed';
+        return eventDate.getMonth() === selectedMonth;
       });
     }
 
-    // Sort by date descending (newest first, oldest last)
+    // Apply quick filters
+    if (quickFilter === 'upcoming') {
+      filtered = filtered.filter(event => {
+        const eventDate = new Date(event.event_date);
+        return eventDate >= today;
+      });
+    } else if (quickFilter === 'past') {
+      filtered = filtered.filter(event => {
+        const eventDate = new Date(event.event_date);
+        return eventDate < today;
+      });
+    } else if (quickFilter === 'pending') {
+      filtered = filtered.filter(event => event.status === 'pending');
+    }
+
+    // Sort by date - closest to today first (descending order)
     filtered.sort((a, b) => {
       const dateA = new Date(a.event_date).getTime();
       const dateB = new Date(b.event_date).getTime();
@@ -211,6 +233,22 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       return date.toISOString();
     };
 
+    // Handle flyer image upload if a file was selected
+    let flyerUrl = formData.flyer_url || null;
+    if (flyerFile) {
+      try {
+        setUploadingFlyer(true);
+        flyerUrl = await eventsApi.uploadFlyerImage(flyerFile);
+      } catch (error) {
+        console.error('Error uploading flyer image:', error);
+        alert('Error uploading flyer image. Please try again.');
+        setUploadingFlyer(false);
+        return;
+      } finally {
+        setUploadingFlyer(false);
+      }
+    }
+
     const eventData: any = {
       title: formData.title,
       description: formData.description || null,
@@ -224,7 +262,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       venue_country: formData.venue_country || 'US',
       latitude: formData.latitude ? parseFloat(formData.latitude) : null,
       longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-      flyer_url: formData.flyer_url || null,
+      flyer_url: flyerUrl,
       event_director_id: formData.event_director_id || null,
       season_id: formData.season_id || null,
       status: formData.status,
@@ -288,6 +326,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       setShowModal(false);
       setEditingEvent(null);
       resetForm();
+      setFlyerFile(null);
+      setFlyerPreview(null);
       fetchEvents();
     } catch (error) {
       console.error('Error saving event:', error);
@@ -307,6 +347,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       const minutes = String(date.getMinutes()).padStart(2, '0');
       return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
+
+    // Clear file upload state when editing (will show existing URL if any)
+    setFlyerFile(null);
+    setFlyerPreview(null);
 
     setEditingEvent(event);
     setFormData({
@@ -426,6 +470,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
           onClick={() => {
             setEditingEvent(null);
             resetForm();
+            setFlyerFile(null);
+            setFlyerPreview(null);
             setShowModal(true);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
@@ -518,12 +564,15 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
           </div>
         </div>
 
-        {/* Quick Filter Buttons */}
-        <div className="flex flex-wrap gap-2">
+        {/* Quick Filter Buttons and Month Filter */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setQuickFilter('all')}
+            onClick={() => {
+              setQuickFilter('all');
+              setStatusFilter('all');
+            }}
             className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              quickFilter === 'all'
+              quickFilter === 'all' && statusFilter === 'all'
                 ? 'bg-orange-600 text-white'
                 : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
             }`}
@@ -531,42 +580,76 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
             All Events
           </button>
           <button
-            onClick={() => setQuickFilter('recent-upcoming')}
+            onClick={() => {
+              setQuickFilter('upcoming');
+              setStatusFilter('all');
+            }}
             className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              quickFilter === 'recent-upcoming'
-                ? 'bg-slate-900 text-white'
+              quickFilter === 'upcoming'
+                ? 'bg-green-600 text-white'
                 : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
             }`}
           >
-            Recent & Upcoming
+            Upcoming
           </button>
           <button
             onClick={() => {
-              setStatusFilter('pending');
-              setQuickFilter('all');
+              setQuickFilter('past');
+              setStatusFilter('all');
             }}
             className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              statusFilter === 'pending'
+              quickFilter === 'past'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+            }`}
+          >
+            Past
+          </button>
+          <button
+            onClick={() => {
+              setQuickFilter('pending');
+              setStatusFilter('all');
+            }}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              quickFilter === 'pending'
                 ? 'bg-yellow-600 text-white'
                 : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
             }`}
           >
-            Pending Approval
+            Pending
           </button>
-          {statusFilter !== 'all' && statusFilter !== 'pending' && (
-            <button
-              onClick={() => setStatusFilter('all')}
-              className="px-4 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
+
+          {/* Month Filter Dropdown */}
+          <div className="ml-4 flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-300">Month:</label>
+            <select
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              Clear Status Filter: {statusFilter}
-            </button>
-          )}
-          {statusFilter === 'pending' && (
+              <option value="all">All Months</option>
+              <option value="0">January</option>
+              <option value="1">February</option>
+              <option value="2">March</option>
+              <option value="3">April</option>
+              <option value="4">May</option>
+              <option value="5">June</option>
+              <option value="6">July</option>
+              <option value="7">August</option>
+              <option value="8">September</option>
+              <option value="9">October</option>
+              <option value="10">November</option>
+              <option value="11">December</option>
+            </select>
+          </div>
+
+          {/* Clear filters button when month filter is active */}
+          {monthFilter !== 'all' && (
             <button
-              onClick={() => setStatusFilter('all')}
-              className="px-4 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
+              onClick={() => setMonthFilter('all')}
+              className="px-3 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
             >
-              Clear Pending Filter
+              Clear Month
             </button>
           )}
         </div>
@@ -804,6 +887,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                 onClick={() => {
                   setShowModal(false);
                   setEditingEvent(null);
+                  setFlyerFile(null);
+                  setFlyerPreview(null);
                 }}
                 className="text-gray-400 hover:text-white"
               >
@@ -1044,16 +1129,99 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   />
                 </div>
 
-                <div>
+                {/* Flyer Image Section */}
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Flyer URL
+                    Event Flyer Image
                   </label>
-                  <input
-                    type="url"
-                    value={formData.flyer_url}
-                    onChange={(e) => setFormData({ ...formData, flyer_url: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* File Upload */}
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-2">Upload Image</label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setFlyerFile(file);
+                              // Create preview URL
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setFlyerPreview(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                              // Clear URL input when file is selected
+                              setFormData({ ...formData, flyer_url: '' });
+                            }
+                          }}
+                          className="hidden"
+                          id="flyer-upload"
+                        />
+                        <label
+                          htmlFor="flyer-upload"
+                          className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-slate-700 border border-slate-600 border-dashed rounded-lg text-gray-300 hover:bg-slate-600 hover:border-orange-500 cursor-pointer transition-colors"
+                        >
+                          <Upload className="h-5 w-5" />
+                          {flyerFile ? flyerFile.name : 'Choose file...'}
+                        </label>
+                      </div>
+                      {flyerFile && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFlyerFile(null);
+                            setFlyerPreview(null);
+                          }}
+                          className="mt-2 text-xs text-red-400 hover:text-red-300"
+                        >
+                          Clear selected file
+                        </button>
+                      )}
+                    </div>
+
+                    {/* URL Input */}
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-2">Or Enter URL</label>
+                      <input
+                        type="url"
+                        value={formData.flyer_url}
+                        onChange={(e) => {
+                          setFormData({ ...formData, flyer_url: e.target.value });
+                          // Clear file when URL is entered
+                          if (e.target.value) {
+                            setFlyerFile(null);
+                            setFlyerPreview(null);
+                          }
+                        }}
+                        placeholder="https://example.com/flyer.jpg"
+                        className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        disabled={!!flyerFile}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Image Preview */}
+                  {(flyerPreview || formData.flyer_url) && (
+                    <div className="mt-4">
+                      <label className="block text-xs text-gray-400 mb-2">Preview</label>
+                      <div className="relative w-48 h-32 bg-slate-700 rounded-lg overflow-hidden">
+                        <img
+                          src={flyerPreview || formData.flyer_url}
+                          alt="Flyer preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Upload an image file (PNG, JPG, GIF, WebP - max 5MB) or provide a URL to an existing image.
+                  </p>
                 </div>
 
                 <div>
@@ -1356,15 +1524,25 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                  disabled={uploadingFlyer}
+                  className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-wait text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                  {editingEvent ? 'Update Event' : 'Create Event'}
+                  {uploadingFlyer ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Uploading Image...
+                    </>
+                  ) : (
+                    editingEvent ? 'Update Event' : 'Create Event'
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowModal(false);
                     setEditingEvent(null);
+                    setFlyerFile(null);
+                    setFlyerPreview(null);
                   }}
                   className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                 >

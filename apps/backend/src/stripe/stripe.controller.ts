@@ -16,6 +16,7 @@ import { Request } from 'express';
 import { EntityManager } from '@mikro-orm/core';
 import { StripeService } from './stripe.service';
 import { MembershipsService } from '../memberships/memberships.service';
+import { MasterSecondaryService } from '../memberships/master-secondary.service';
 import { QuickBooksService } from '../quickbooks/quickbooks.service';
 import { EventRegistrationsService, CreateRegistrationDto } from '../event-registrations/event-registrations.service';
 import { OrdersService } from '../orders/orders.service';
@@ -107,6 +108,7 @@ export class StripeController {
   constructor(
     private readonly stripeService: StripeService,
     private readonly membershipsService: MembershipsService,
+    private readonly masterSecondaryService: MasterSecondaryService,
     private readonly quickBooksService: QuickBooksService,
     private readonly eventRegistrationsService: EventRegistrationsService,
     private readonly ordersService: OrdersService,
@@ -932,36 +934,126 @@ export class StripeController {
     userId: string,
     amountPaid: string,
   ): Promise<void> {
-    if (!userId) {
-      console.log('No userId provided, skipping membership activation');
-      return;
-    }
-
     try {
-      // Import Membership entity and PaymentStatus enum
+      const { Invoice } = await import('../invoices/invoices.entity');
       const { Membership } = await import('../memberships/memberships.entity');
-      const { PaymentStatus } = await import('@newmeca/shared');
+      const { PaymentStatus, MembershipAccountType, OrderType, OrderItemType } = await import('@newmeca/shared');
       const em = this.em.fork();
 
-      // Find the most recent pending membership for this user
-      // (created when admin assigned the membership with invoice payment)
-      const pendingMembership = await em.findOne(Membership, {
-        user: userId,
-        paymentStatus: PaymentStatus.PENDING,
+      // Load the invoice with its items and any linked secondary memberships
+      const invoice = await em.findOne(Invoice, { id: invoiceId }, {
+        populate: ['items', 'items.secondaryMembership', 'items.secondaryMembership.user', 'items.secondaryMembership.membershipTypeConfig', 'user'],
       });
 
-      if (pendingMembership) {
-        // Update payment status to paid
-        pendingMembership.paymentStatus = PaymentStatus.PAID;
-        pendingMembership.amountPaid = parseFloat(amountPaid);
-        await em.flush();
-        console.log(`Membership ${pendingMembership.id} activated after invoice payment`);
-      } else {
-        console.log(`No pending membership found for user ${userId} to activate`);
+      if (!invoice) {
+        console.log(`Invoice ${invoiceId} not found for membership activation`);
+        return;
+      }
+
+      // Check for secondary memberships in invoice items
+      for (const item of invoice.items.getItems()) {
+        if (item.secondaryMembership) {
+          const secondary = item.secondaryMembership;
+
+          // Skip if already paid
+          if (secondary.paymentStatus === PaymentStatus.PAID) {
+            console.log(`Secondary membership ${secondary.id} already paid, skipping`);
+            continue;
+          }
+
+          // Use markSecondaryPaid to properly assign MECA ID
+          try {
+            const amount = parseFloat(item.total || amountPaid);
+            await this.masterSecondaryService.markSecondaryPaid(
+              secondary.id,
+              amount,
+              `Invoice-${invoice.invoiceNumber}`,
+            );
+            console.log(`Secondary membership ${secondary.id} activated with MECA ID via invoice payment`);
+
+            // Create an Order for the secondary membership (async, non-blocking)
+            this.createOrderForSecondaryMembership(secondary, invoice, amount).catch((orderError) => {
+              console.error(`Error creating order for secondary membership ${secondary.id}:`, orderError);
+            });
+          } catch (secondaryError) {
+            console.error(`Error activating secondary membership ${secondary.id}:`, secondaryError);
+          }
+        }
+      }
+
+      // Also check for regular (non-secondary) pending memberships for this user
+      if (userId) {
+        const pendingMembership = await em.findOne(Membership, {
+          user: userId,
+          paymentStatus: PaymentStatus.PENDING,
+          accountType: { $ne: MembershipAccountType.SECONDARY },
+        });
+
+        if (pendingMembership) {
+          // For non-secondary memberships, update payment status
+          // MECA ID should already be assigned during creation for admin-assigned memberships
+          pendingMembership.paymentStatus = PaymentStatus.PAID;
+          pendingMembership.amountPaid = parseFloat(amountPaid);
+          await em.flush();
+          console.log(`Membership ${pendingMembership.id} activated after invoice payment`);
+        } else {
+          console.log(`No pending non-secondary membership found for user ${userId}`);
+        }
       }
     } catch (error) {
       console.error('Error activating pending membership:', error);
       // Don't throw - this is non-critical
+    }
+  }
+
+  /**
+   * Create an order for a secondary membership after invoice payment
+   */
+  private async createOrderForSecondaryMembership(
+    secondary: any,
+    invoice: any,
+    amount: number,
+  ): Promise<void> {
+    try {
+      const { OrderType, OrderItemType } = await import('@newmeca/shared');
+
+      // Get the master's billing info from the invoice
+      const billingAddress = invoice.billingAddress || {};
+
+      // Create order for the secondary membership
+      // Bill to the master account (invoice.user is the master)
+      const order = await this.ordersService.createFromPayment({
+        userId: invoice.user?.id,
+        orderType: OrderType.MEMBERSHIP,
+        items: [{
+          description: `${secondary.membershipTypeConfig?.name || 'Membership'} - Secondary (${secondary.competitorName})`,
+          quantity: 1,
+          unitPrice: amount.toFixed(2),
+          itemType: OrderItemType.MEMBERSHIP,
+          referenceId: secondary.id,
+          metadata: {
+            membershipId: secondary.id,
+            isSecondary: true,
+            competitorName: secondary.competitorName,
+            mecaId: secondary.mecaId,
+            invoiceNumber: invoice.invoiceNumber,
+          },
+        }],
+        billingAddress: {
+          name: billingAddress.name || '',
+          address1: billingAddress.address1 || '',
+          city: billingAddress.city || '',
+          state: billingAddress.state || '',
+          postalCode: billingAddress.postalCode || '',
+          country: billingAddress.country || 'USA',
+        },
+        notes: `Secondary membership for ${secondary.competitorName} - Invoice ${invoice.invoiceNumber}`,
+      });
+
+      console.log(`Order ${order.orderNumber} created for secondary membership ${secondary.id}`);
+    } catch (error) {
+      console.error('Error creating order for secondary membership:', error);
+      throw error;
     }
   }
 

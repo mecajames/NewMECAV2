@@ -147,7 +147,7 @@ export function AdminShopProductsPage() {
         name: formData.name,
         description: formData.description || undefined,
         shortDescription: formData.short_description || undefined,
-        category: formData.category,
+        category: formData.category as unknown as CreateShopProductDto['category'],
         price: parseFloat(formData.price) || 0,
         compareAtPrice: formData.compare_at_price ? parseFloat(formData.compare_at_price) : undefined,
         isActive: formData.is_active,

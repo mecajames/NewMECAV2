@@ -50,6 +50,7 @@ export const CompetitionResultSchema = z.object({
   competitorId: z.string().uuid().nullable(),
   competitorName: z.string(),
   mecaId: z.string().nullable(),
+  stateCode: z.string().nullable().optional(),
   competitionClass: z.string(),
   classId: z.string().uuid().nullable(),
   format: z.string().nullable(),

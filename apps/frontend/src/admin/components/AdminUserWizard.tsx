@@ -570,6 +570,7 @@ export default function AdminUserWizard({
           {
             membershipTypeConfigId: selectedMembershipType.id,
             competitorName,
+            relationshipToMaster: 'friend', // Default for admin-created secondaries
             createLogin: formData.giveSecondaryLogin,
             email: formData.giveSecondaryLogin ? formData.email.toLowerCase().trim() : undefined,
             vehicleMake: formData.vehicleMake || undefined,

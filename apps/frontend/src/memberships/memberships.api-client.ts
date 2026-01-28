@@ -191,9 +191,11 @@ export enum MembershipAccountType {
 
 export interface CreateSecondaryMembershipDto {
   membershipTypeConfigId: string;
-  competitorName: string;
+  competitorName?: string; // Optional for 'self' relationship (uses master's name)
+  relationshipToMaster: string; // 'self', 'spouse', 'child', 'sibling', 'friend'
   createLogin: boolean;
   email?: string;
+  // Vehicle info - required for user-facing forms (validated in UI), optional for admin
   vehicleMake?: string;
   vehicleModel?: string;
   vehicleColor?: string;
@@ -202,10 +204,31 @@ export interface CreateSecondaryMembershipDto {
   teamDescription?: string;
 }
 
+export interface UpdateSecondaryDetailsDto {
+  competitorName?: string;
+  relationshipToMaster?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
+  vehicleLicensePlate?: string;
+}
+
+// Relationship types for secondary memberships
+// "Self" = same person, different vehicle (unique MECA ID per vehicle)
+// Others = different person sharing master's billing
+export const RELATIONSHIP_TYPES = [
+  { value: 'self', label: 'Self (Another Vehicle)' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'child', label: 'Child' },
+  { value: 'sibling', label: 'Sibling' },
+  { value: 'friend', label: 'Friend' },
+] as const;
+
 export interface SecondaryMembershipInfo {
   id: string;
   mecaId: number | string | null;
   competitorName: string;
+  relationshipToMaster?: string;
   hasOwnLogin: boolean;
   profileId: string | null;
   membershipType: {
@@ -214,6 +237,11 @@ export interface SecondaryMembershipInfo {
     category: string;
     price: number;
   };
+  // Vehicle info
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
+  vehicleLicensePlate?: string;
   linkedAt: string | null;
   startDate: string;
   endDate: string | null;
@@ -236,6 +264,11 @@ export interface ControlledMecaId {
   profileId: string;
   competitorName: string;
   isOwn: boolean;
+  relationshipToMaster?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
+  vehicleLicensePlate?: string;
 }
 
 export interface TeamUpgradeDetails {
@@ -543,5 +576,21 @@ export const membershipsApi = {
   isSecondaryProfile: async (profileId: string): Promise<boolean> => {
     const response = await axios.get(`/api/memberships/profile/${profileId}/is-secondary`);
     return response.data.isSecondary;
+  },
+
+  /**
+   * Update a secondary membership's details (competitor name, relationship, vehicle info)
+   * Can be called by the secondary owner or the master
+   */
+  updateSecondaryDetails: async (
+    secondaryMembershipId: string,
+    requestingUserId: string,
+    data: UpdateSecondaryDetailsDto,
+  ): Promise<Membership> => {
+    const response = await axios.put(`/api/memberships/${secondaryMembershipId}/secondary-details`, {
+      requestingUserId,
+      ...data,
+    });
+    return response.data;
   },
 };

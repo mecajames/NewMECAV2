@@ -799,8 +799,8 @@ export class MembershipsService {
 
       // Always create Invoice for all payment types (for records)
       const invoiceNumber = `INV-${new Date().getFullYear()}-ADMIN-${Date.now().toString().slice(-6)}`;
+      // Due date is today - invoices are due immediately (except manufacturer invoices which can be customized)
       const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 30); // 30 days to pay
 
       // For Credit Card/Invoice: DRAFT status (awaiting payment)
       // For all other methods (Cash, Check, Complimentary): PAID status

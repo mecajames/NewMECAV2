@@ -273,19 +273,35 @@ export default function HomePage() {
                           onClick={() => navigate(`/events/${event.id}`)}
                         >
                           {event.flyer_url ? (
-                            <img
-                              src={event.flyer_url}
-                              alt={event.title}
-                              className="w-full h-48 object-cover"
-                              style={{
-                                objectPosition: event.flyer_image_position
-                                  ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
-                                  : '50% 50%'
-                              }}
-                            />
+                            <div className="relative">
+                              <img
+                                src={getStorageUrl(event.flyer_url)}
+                                alt={event.title}
+                                className="w-full h-48 object-cover"
+                                style={{
+                                  objectPosition: event.flyer_image_position
+                                    ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
+                                    : '50% 50%'
+                                }}
+                                onError={(e) => {
+                                  // Hide the broken image and show fallback
+                                  const target = e.currentTarget;
+                                  target.style.display = 'none';
+                                  const fallback = target.nextElementSibling as HTMLElement;
+                                  if (fallback) fallback.style.display = 'flex';
+                                }}
+                              />
+                              {/* Fallback shown when image fails to load */}
+                              <div
+                                className="absolute inset-0 w-full h-48 bg-slate-700 items-center justify-center"
+                                style={{ display: 'none' }}
+                              >
+                                <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-28 w-auto opacity-50" />
+                              </div>
+                            </div>
                           ) : (
-                            <div className="w-full h-48 bg-gradient-to-r from-orange-600 to-red-600 flex items-center justify-center">
-                              <Calendar className="h-16 w-16 text-white opacity-50" />
+                            <div className="w-full h-48 bg-slate-700 flex items-center justify-center">
+                              <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-28 w-auto opacity-50" />
                             </div>
                           )}
                           <div className="p-6">

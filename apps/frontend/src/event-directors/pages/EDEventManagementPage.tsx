@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, MapPin, Users, ClipboardCheck, FileText,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useAuth } from '@/auth';
+import { Pagination } from '@/shared/components';
 
 // Local storage key for ED's completed assignments tracking (shared with EventDirectorAssignments)
 const COMPLETED_ASSIGNMENTS_KEY = 'ed_completed_assignments';
@@ -137,7 +138,7 @@ export default function EDEventManagementPage() {
   // QR Scanner state
   const [showScanner, setShowScanner] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
-  const [currentScanRegistrationId, setCurrentScanRegistrationId] = useState<string | null>(null);
+  const [_currentScanRegistrationId, setCurrentScanRegistrationId] = useState<string | null>(null);
 
   // Results
   const [results, setResults] = useState<ResultEntry[]>([]);
@@ -164,7 +165,12 @@ export default function EDEventManagementPage() {
   const [selectedFormat, setSelectedFormat] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [resultsSearchTerm, setResultsSearchTerm] = useState('');
+  const [selectedMembershipFilter, setSelectedMembershipFilter] = useState<'all' | 'active' | 'expired' | 'non-member'>('all');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Pagination state for results
+  const [resultsPage, setResultsPage] = useState(1);
+  const [resultsPerPage, setResultsPerPage] = useState(50);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -397,7 +403,7 @@ export default function EDEventManagementPage() {
   const handleUndoCheckIn = async (registrationId: string) => {
     try {
       // Call the update endpoint to set checkedIn to false
-      await eventRegistrationsApi.update(registrationId, { checkedIn: false, checkedInAt: null });
+      await eventRegistrationsApi.update(registrationId, { checkedIn: false, checkedInAt: undefined });
       await fetchRegistrations();
     } catch (error) {
       console.error('Error undoing check-in:', error);
@@ -570,7 +576,7 @@ export default function EDEventManagementPage() {
     try {
       await competitionResultsApi.create({
         event_id: eventId,
-        profile_id: currentEntry.competitor_id || null,
+        competitor_id: currentEntry.competitor_id || undefined,
         competitor_name: currentEntry.competitor_name,
         meca_id: mecaId,
         class_id: currentEntry.class_id,
@@ -779,18 +785,49 @@ export default function EDEventManagementPage() {
     setUploading(false);
   };
 
-  const filteredResults = results.filter(r => {
-    if (selectedFormat && r.format !== selectedFormat) return false;
-    if (selectedClass && r.class_id !== selectedClass) return false;
-    if (resultsSearchTerm) {
-      const search = resultsSearchTerm.toLowerCase();
-      return (
-        r.meca_id?.toLowerCase().includes(search) ||
-        r.competitor_name?.toLowerCase().includes(search)
-      );
-    }
-    return true;
-  });
+  const filteredResults = useMemo(() => {
+    return results.filter(r => {
+      if (selectedFormat && r.format !== selectedFormat) return false;
+      if (selectedClass && r.class_id !== selectedClass) return false;
+
+      // Membership filter
+      if (selectedMembershipFilter !== 'all') {
+        if (selectedMembershipFilter === 'non-member') {
+          // Non-member = MECA ID is 999999 or empty
+          if (r.meca_id && r.meca_id !== '999999') return false;
+        } else if (selectedMembershipFilter === 'active') {
+          // Active = has valid membership
+          if (!r.membership_status || r.membership_status !== 'active') return false;
+        } else if (selectedMembershipFilter === 'expired') {
+          // Expired = has MECA ID but expired membership
+          if (r.meca_id === '999999' || !r.meca_id) return false;
+          if (r.membership_status === 'active') return false;
+        }
+      }
+
+      if (resultsSearchTerm) {
+        const search = resultsSearchTerm.toLowerCase();
+        return (
+          r.meca_id?.toLowerCase().includes(search) ||
+          r.competitor_name?.toLowerCase().includes(search)
+        );
+      }
+      return true;
+    });
+  }, [results, selectedFormat, selectedClass, selectedMembershipFilter, resultsSearchTerm]);
+
+  // Paginated results
+  const paginatedResults = useMemo(() => {
+    const startIndex = (resultsPage - 1) * resultsPerPage;
+    return filteredResults.slice(startIndex, startIndex + resultsPerPage);
+  }, [filteredResults, resultsPage, resultsPerPage]);
+
+  const totalResultsPages = Math.ceil(filteredResults.length / resultsPerPage);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setResultsPage(1);
+  }, [selectedFormat, selectedClass, selectedMembershipFilter, resultsSearchTerm]);
 
   const filteredRegistrations = registrations.filter(reg => {
     if (!registrationSearchTerm) return true;
@@ -1600,7 +1637,7 @@ export default function EDEventManagementPage() {
               </div>
 
               {/* Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <select
                   value={selectedFormat}
                   onChange={(e) => setSelectedFormat(e.target.value)}
@@ -1621,6 +1658,16 @@ export default function EDEventManagementPage() {
                     <option key={c.id} value={c.id}>{c.abbreviation} - {c.name}</option>
                   ))}
                 </select>
+                <select
+                  value={selectedMembershipFilter}
+                  onChange={(e) => setSelectedMembershipFilter(e.target.value as 'all' | 'active' | 'expired' | 'non-member')}
+                  className="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
+                >
+                  <option value="all">All Membership Status</option>
+                  <option value="active">Active Members</option>
+                  <option value="expired">Expired Members</option>
+                  <option value="non-member">Non-Members</option>
+                </select>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
@@ -1640,9 +1687,12 @@ export default function EDEventManagementPage() {
                 </div>
               ) : filteredResults.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
-                  No results entered yet. Use the form above to add results.
+                  {results.length === 0
+                    ? 'No results entered yet. Use the form above to add results.'
+                    : 'No results match your filters.'}
                 </div>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -1660,7 +1710,7 @@ export default function EDEventManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredResults.map(result => (
+                      {paginatedResults.map(result => (
                         <tr
                           key={result.id}
                           className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${getMembershipRowClass(result.membership_status)}`}
@@ -1692,6 +1742,21 @@ export default function EDEventManagementPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination */}
+                {filteredResults.length > 0 && (
+                  <div className="mt-4">
+                    <Pagination
+                      currentPage={resultsPage}
+                      totalPages={totalResultsPages}
+                      itemsPerPage={resultsPerPage}
+                      totalItems={filteredResults.length}
+                      onPageChange={setResultsPage}
+                      onItemsPerPageChange={setResultsPerPage}
+                    />
+                  </div>
+                )}
+                </>
               )}
             </div>
           )}

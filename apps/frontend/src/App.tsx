@@ -16,7 +16,7 @@ import MECAQuickStartGuidePage from '@/pages/MECAQuickStartGuidePage';
 // Feature pages
 import { LoginPage, ChangePasswordPage } from '@/auth';
 import { EventsPage, EventDetailPage } from '@/events';
-import { ResultsPage, LeaderboardPage, StandingsPage } from '@/competition-results';
+import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage } from '@/competition-results';
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
 import { DashboardPage, MyMecaDashboardPage, AdminDashboardPage } from '@/dashboard';
 import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage } from '@/profiles';
@@ -101,6 +101,7 @@ function App() {
               <Route path="/events/:eventId/register" element={<Suspense fallback={<PageLoader />}><EventRegistrationCheckoutPage /></Suspense>} />
               <Route path="/events/:eventId/check-in" element={<EventCheckInPage />} />
               <Route path="/results" element={<ResultsPage />} />
+              <Route path="/results/member/:mecaId" element={<MemberResultsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/standings" element={<StandingsPage />} />
               <Route path="/rulebooks" element={<RulebooksPage />} />

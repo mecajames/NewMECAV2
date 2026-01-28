@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft } from 'lucide-react';
+import { Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft, Users, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/auth';
-import { profilesApi } from '@/profiles';
+import { profilesApi, Profile as ProfileType } from '@/profiles';
+import { membershipsApi, ControlledMecaId, Membership, RELATIONSHIP_TYPES } from '@/memberships';
+import { MecaIdSwitcher } from '@/shared/components';
 import { supabase } from '@/lib/supabase';
 
 export default function PublicProfilePage() {
@@ -16,22 +18,120 @@ export default function PublicProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Form state
+  // Profile switching state (for managing secondary profiles)
+  const [controlledMecaIds, setControlledMecaIds] = useState<ControlledMecaId[]>([]);
+  const [isViewingSecondary, setIsViewingSecondary] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<ProfileType | null>(null);
+  const [selectedMembership, setSelectedMembership] = useState<Membership | null>(null);
+  const [primaryMembership, setPrimaryMembership] = useState<Membership | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Form state - Profile fields
   const [isPublic, setIsPublic] = useState(false);
   const [vehicleInfo, setVehicleInfo] = useState('');
   const [carAudioSystem, setCarAudioSystem] = useState('');
   const [profileImages, setProfileImages] = useState<string[]>([]);
   const [selectedProfilePicture, setSelectedProfilePicture] = useState<string | null>(null);
 
+  // Required vehicle fields (per membership/MECA ID)
+  const [vehicleMake, setVehicleMake] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+  const [vehicleLicensePlate, setVehicleLicensePlate] = useState('');
+  const [competitorName, setCompetitorName] = useState('');
+  const [relationshipToMaster, setRelationshipToMaster] = useState('');
+
+  // Load controlled MECA IDs and primary membership
   useEffect(() => {
-    if (profile) {
+    const loadControlledMecaIds = async () => {
+      if (!profile?.id) return;
+      try {
+        const mecaIds = await membershipsApi.getControlledMecaIds(profile.id);
+        setControlledMecaIds(mecaIds);
+
+        // Load primary membership data for vehicle info
+        const ownMecaId = mecaIds.find(m => m.isOwn);
+        if (ownMecaId) {
+          const membership = await membershipsApi.getById(ownMecaId.membershipId);
+          setPrimaryMembership(membership);
+          // Initialize primary vehicle fields
+          setVehicleMake(membership.vehicleMake || '');
+          setVehicleModel(membership.vehicleModel || '');
+          setVehicleColor(membership.vehicleColor || '');
+          setVehicleLicensePlate(membership.vehicleLicensePlate || '');
+          setCompetitorName(membership.competitorName || `${profile.first_name || ''} ${profile.last_name || ''}`.trim());
+        }
+      } catch (error) {
+        console.error('Failed to load controlled MECA IDs:', error);
+      }
+    };
+    loadControlledMecaIds();
+  }, [profile?.id]);
+
+  // Initialize form data when profile loads or changes
+  useEffect(() => {
+    if (profile && !isViewingSecondary) {
       setIsPublic(profile.is_public || false);
       setVehicleInfo(profile.vehicle_info || '');
       setCarAudioSystem(profile.car_audio_system || '');
       setProfileImages(profile.profile_images || []);
       setSelectedProfilePicture(profile.profile_picture_url || null);
     }
-  }, [profile]);
+  }, [profile, isViewingSecondary]);
+
+  // Handle switching between profiles
+  const handleProfileSwitch = async (_mecaId: number, membershipId: string, profileId: string, _competitorName: string) => {
+    // Check if switching back to own profile
+    const ownMecaId = controlledMecaIds.find(m => m.isOwn);
+    const isOwnProfile = ownMecaId && ownMecaId.profileId === profileId;
+
+    if (isOwnProfile) {
+      setIsViewingSecondary(false);
+      setSelectedProfile(null);
+      setSelectedMembership(null);
+      return;
+    }
+
+    // Find the controlled MECA ID info (which now includes relationshipToMaster)
+    // We use membershipId to find the info rather than mecaId
+    const selectedMecaInfo = controlledMecaIds.find(m => m.membershipId === membershipId);
+
+    // Loading secondary profile
+    setLoadingProfile(true);
+    setIsViewingSecondary(true);
+
+    try {
+      // Load the secondary's profile
+      const secondaryProfile = await profilesApi.getById(profileId);
+      setSelectedProfile(secondaryProfile);
+
+      // Load the membership for vehicle info
+      const membership = await membershipsApi.getById(membershipId);
+      setSelectedMembership(membership);
+
+      // Initialize form with secondary's data
+      setIsPublic(secondaryProfile.is_public || false);
+      setVehicleInfo(secondaryProfile.vehicle_info || '');
+      setCarAudioSystem(secondaryProfile.car_audio_system || '');
+      setProfileImages(secondaryProfile.profile_images || []);
+      setSelectedProfilePicture(secondaryProfile.profile_picture_url || null);
+      setVehicleMake(membership.vehicleMake || selectedMecaInfo?.vehicleMake || '');
+      setVehicleModel(membership.vehicleModel || selectedMecaInfo?.vehicleModel || '');
+      setVehicleColor(membership.vehicleColor || selectedMecaInfo?.vehicleColor || '');
+      setVehicleLicensePlate(membership.vehicleLicensePlate || selectedMecaInfo?.vehicleLicensePlate || '');
+      setCompetitorName(membership.competitorName || selectedMecaInfo?.competitorName || `${secondaryProfile.first_name || ''} ${secondaryProfile.last_name || ''}`.trim());
+      // Get relationshipToMaster from controlled MECA IDs data
+      setRelationshipToMaster(selectedMecaInfo?.relationshipToMaster || '');
+    } catch (error) {
+      console.error('Failed to load secondary profile:', error);
+      setError('Failed to load secondary profile. Please try again.');
+      setIsViewingSecondary(false);
+      setSelectedProfile(null);
+      setSelectedMembership(null);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -100,14 +200,35 @@ export default function PublicProfilePage() {
   };
 
   const handleSave = async () => {
-    if (!profile) return;
+    // Validate required fields
+    const targetProfile = isViewingSecondary ? selectedProfile : profile;
+    const targetMembership = isViewingSecondary ? selectedMembership : primaryMembership;
+
+    if (!targetProfile) return;
+
+    // Vehicle info is required for all profiles with MECA ID
+    if (targetMembership) {
+      if (!competitorName.trim()) {
+        setError('Competitor name is required');
+        return;
+      }
+      if (!vehicleMake.trim() || !vehicleModel.trim()) {
+        setError('Vehicle make and model are required for competition');
+        return;
+      }
+      if (!vehicleLicensePlate.trim()) {
+        setError('Vehicle license plate is required for competition');
+        return;
+      }
+    }
 
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await profilesApi.update(profile.id, {
+      // Save profile public data
+      await profilesApi.update(targetProfile.id, {
         is_public: isPublic,
         vehicle_info: vehicleInfo,
         car_audio_system: carAudioSystem,
@@ -115,8 +236,39 @@ export default function PublicProfilePage() {
         profile_picture_url: selectedProfilePicture || undefined,
       });
 
-      // Refresh the profile in context
-      if (refreshProfile) {
+      // Save vehicle info for the membership
+      if (targetMembership && profile) {
+        if (isViewingSecondary) {
+          // For secondary profiles, use updateSecondaryDetails
+          await membershipsApi.updateSecondaryDetails(
+            targetMembership.id,
+            profile.id, // Master is the requesting user
+            {
+              competitorName: competitorName.trim(),
+              relationshipToMaster: relationshipToMaster || undefined,
+              vehicleMake: vehicleMake.trim(),
+              vehicleModel: vehicleModel.trim(),
+              vehicleColor: vehicleColor.trim() || undefined,
+              vehicleLicensePlate: vehicleLicensePlate.trim(),
+            }
+          );
+        } else {
+          // For primary profile, use updateVehicleInfo
+          await membershipsApi.updateVehicleInfo(targetMembership.id, {
+            vehicleMake: vehicleMake.trim(),
+            vehicleModel: vehicleModel.trim(),
+            vehicleColor: vehicleColor.trim() || undefined,
+            vehicleLicensePlate: vehicleLicensePlate.trim(),
+          });
+          // Also update competitor name via the membership update
+          await membershipsApi.update(targetMembership.id, {
+            competitorName: competitorName.trim(),
+          });
+        }
+      }
+
+      // Refresh the profile in context (only for own profile)
+      if (!isViewingSecondary && refreshProfile) {
         await refreshProfile();
       }
 
@@ -129,6 +281,8 @@ export default function PublicProfilePage() {
       setSaving(false);
     }
   };
+
+  const hasMultipleMecaIds = controlledMecaIds.length > 1;
 
   if (!profile || !user) {
     return (
@@ -146,6 +300,22 @@ export default function PublicProfilePage() {
     );
   }
 
+  // Loading state when switching profiles
+  if (loadingProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-orange-500 mx-auto mb-4" />
+          <p className="text-gray-400">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentProfileName = isViewingSecondary && selectedProfile
+    ? `${selectedProfile.first_name || ''} ${selectedProfile.last_name || ''}`.trim() || competitorName
+    : `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -161,9 +331,65 @@ export default function PublicProfilePage() {
           </button>
         </div>
 
+        {/* Profile Switcher for Master Accounts */}
+        {hasMultipleMecaIds && (
+          <div className="mb-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-purple-400" />
+                <div>
+                  <p className="text-sm font-medium text-white">Manage Public Profiles</p>
+                  <p className="text-xs text-gray-400">
+                    Select a MECA ID to manage that competitor's public profile
+                  </p>
+                </div>
+              </div>
+              <MecaIdSwitcher
+                userId={profile.id}
+                onMecaIdChange={handleProfileSwitch}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Secondary Profile Banner */}
+        {isViewingSecondary && selectedProfile && (
+          <div className="mb-6 p-4 bg-purple-500/10 rounded-lg border border-purple-500/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-purple-400" />
+                <div>
+                  <p className="text-sm font-medium text-purple-300">
+                    Managing Secondary Member's Public Profile
+                  </p>
+                  <p className="text-white font-medium">
+                    {currentProfileName} {selectedMembership?.mecaId && `(#${selectedMembership.mecaId})`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsViewingSecondary(false);
+                  setSelectedProfile(null);
+                  setSelectedMembership(null);
+                }}
+                className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg text-sm transition-colors"
+              >
+                Back to My Profile
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Public Profile</h1>
-          <p className="text-gray-400">Manage how other MECA members see your profile</p>
+          <h1 className="text-4xl font-bold text-white mb-2">
+            {isViewingSecondary ? `${currentProfileName}'s Public Profile` : 'Public Profile'}
+          </h1>
+          <p className="text-gray-400">
+            {isViewingSecondary
+              ? 'Manage how this competitor appears to other MECA members'
+              : 'Manage how other MECA members see your profile'}
+          </p>
         </div>
 
         {error && (
@@ -213,6 +439,143 @@ export default function PublicProfilePage() {
               </button>
             </div>
           </div>
+
+          {/* Competitor Information */}
+          {(primaryMembership || (isViewingSecondary && selectedMembership)) && (
+            <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Competitor Information</h2>
+                  <p className="text-gray-400 text-sm">
+                    {isViewingSecondary
+                      ? 'Required information for this competitor'
+                      : 'Your name as it will appear in results and standings'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className={isViewingSecondary ? '' : 'md:col-span-2'}>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Competitor Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={competitorName}
+                    onChange={(e) => setCompetitorName(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
+                    placeholder="Full name as it will appear in results"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    This name will appear in competition results, standings, and Top 10 lists
+                  </p>
+                </div>
+
+                {isViewingSecondary && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Relationship to You
+                    </label>
+                    <select
+                      value={relationshipToMaster}
+                      onChange={(e) => setRelationshipToMaster(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
+                    >
+                      <option value="">Select relationship...</option>
+                      {RELATIONSHIP_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Helps identify this membership (e.g., "Spouse", "Child")
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Required Vehicle Details */}
+          {(primaryMembership || (isViewingSecondary && selectedMembership)) && (
+            <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-orange-500/30">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Car className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Required Vehicle Details</h2>
+                  <p className="text-gray-400 text-sm">This information is required for competition entry</p>
+                </div>
+              </div>
+
+              <div className="mb-4 p-3 bg-orange-500/10 rounded-lg border border-orange-500/30 flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-orange-400 shrink-0 mt-0.5" />
+                <p className="text-orange-300 text-sm">
+                  Vehicle make, model, and license plate are required for all competitors to participate in MECA events.
+                  Your MECA ID will not be activated until this information is complete.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Vehicle Make <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={vehicleMake}
+                    onChange={(e) => setVehicleMake(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
+                    placeholder="e.g., Toyota, Honda, Ford"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Vehicle Model <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={vehicleModel}
+                    onChange={(e) => setVehicleModel(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
+                    placeholder="e.g., Camry, Civic, F-150"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Vehicle Color
+                  </label>
+                  <input
+                    type="text"
+                    value={vehicleColor}
+                    onChange={(e) => setVehicleColor(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
+                    placeholder="e.g., Blue, Red, Black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    License Plate <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={vehicleLicensePlate}
+                    onChange={(e) => setVehicleLicensePlate(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-mono"
+                    placeholder="e.g., ABC1234"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Profile Images */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">

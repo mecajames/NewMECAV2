@@ -157,6 +157,28 @@ export class TeamsController {
     return this.teamsService.findByUserId(userId);
   }
 
+  // Get all teams the user is associated with (owned and member of)
+  @Get('my-teams')
+  async getMyTeams(@Headers() headers: any): Promise<{
+    ownedTeams: Team[];
+    memberTeams: Team[];
+  }> {
+    const userId = this.getUserId(headers);
+    return this.teamsService.findAllTeamsByUserId(userId);
+  }
+
+  // Check if the user owns any team
+  @Get('owns-team')
+  async ownsTeam(@Headers() headers: any): Promise<{ ownsTeam: boolean }> {
+    try {
+      const userId = this.getUserId(headers);
+      const ownsTeam = await this.teamsService.userOwnsAnyTeam(userId);
+      return { ownsTeam };
+    } catch {
+      return { ownsTeam: false };
+    }
+  }
+
   // Get my pending invites (must be before :id route)
   @Get('my-invites')
   async getMyPendingInvites(@Headers() headers: any): Promise<any[]> {

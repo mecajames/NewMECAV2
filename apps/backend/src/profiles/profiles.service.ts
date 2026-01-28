@@ -59,8 +59,8 @@ export class ProfilesService {
   }
 
   /**
-   * Generates the next MECA ID. New users start from 700800.
-   * Existing users from old system may have different ID ranges.
+   * Generates the next MECA ID. New memberships start from 701501 (after 701500).
+   * Valid MECA ID range is 701500-799999 (NEW SYSTEM range).
    */
   async generateNextMecaId(): Promise<string> {
     const em = this.em.fork();
@@ -72,15 +72,15 @@ export class ProfilesService {
       fields: ['meca_id']
     });
 
-    // Extract numeric MECA IDs
+    // Extract numeric MECA IDs - only consider NEW SYSTEM range (701500-799999)
     const numericIds = profiles
       .map(p => parseInt(p.meca_id || '0', 10))
-      .filter(id => !isNaN(id) && id >= 701500); // Only consider IDs in the new range (starting from 701500)
+      .filter(id => !isNaN(id) && id >= 701500 && id < 800000);
 
     // Find the highest ID in the new range
-    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 701499;
+    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 701500;
 
-    // Return next ID (starts at 701500)
+    // Return next ID (starts at 701501)
     return String(maxId + 1);
   }
 

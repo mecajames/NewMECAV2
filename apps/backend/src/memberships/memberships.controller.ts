@@ -382,12 +382,44 @@ export class MembershipsController {
   }
 
   /**
+   * Update a secondary membership's details (competitor name, relationship, vehicle info)
+   * Can be called by the secondary owner or the master
+   */
+  @Put(':id/secondary-details')
+  async updateSecondaryDetails(
+    @Param('id') secondaryMembershipId: string,
+    @Body() data: {
+      requestingUserId: string;
+      competitorName?: string;
+      relationshipToMaster?: string;
+      vehicleMake?: string;
+      vehicleModel?: string;
+      vehicleColor?: string;
+      vehicleLicensePlate?: string;
+    },
+  ): Promise<Membership> {
+    const { requestingUserId, ...updateData } = data;
+    return this.masterSecondaryService.updateSecondaryDetails(secondaryMembershipId, requestingUserId, updateData);
+  }
+
+  /**
    * Get all MECA IDs controlled by a user (their own + all secondaries)
    */
   @Get('user/:userId/controlled-meca-ids')
   async getControlledMecaIds(
     @Param('userId') userId: string,
-  ): Promise<Array<{ mecaId: number; membershipId: string; competitorName: string; isOwn: boolean }>> {
+  ): Promise<Array<{
+    mecaId: number;
+    membershipId: string;
+    profileId: string;
+    competitorName: string;
+    isOwn: boolean;
+    relationshipToMaster?: string;
+    vehicleMake?: string;
+    vehicleModel?: string;
+    vehicleColor?: string;
+    vehicleLicensePlate?: string;
+  }>> {
     return this.masterSecondaryService.getControlledMecaIds(userId);
   }
 

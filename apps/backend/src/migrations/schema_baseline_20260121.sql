@@ -659,13 +659,16 @@ ALTER FUNCTION "public"."get_leaderboard"() OWNER TO "postgres";
 
 CREATE OR REPLACE FUNCTION "public"."get_next_meca_id"() RETURNS integer
     LANGUAGE "plpgsql"
-    SET "search_path" TO ''
+    SET "search_path" TO 'public'
     AS $$
       DECLARE
         next_id INTEGER;
       BEGIN
-        -- Only consider MECA IDs >= 700500 (ignore legacy IDs below this threshold)
-        SELECT COALESCE(MAX(meca_id), 700499) + 1 INTO next_id FROM memberships WHERE meca_id >= 700500;
+        -- New memberships start at 701501 (after 701500)
+        -- Range: 701500-799999 (NEW SYSTEM range)
+        SELECT COALESCE(MAX(meca_id), 701500) + 1 INTO next_id
+        FROM memberships
+        WHERE meca_id >= 701500 AND meca_id < 800000;
         RETURN next_id;
       END;
       $$;
