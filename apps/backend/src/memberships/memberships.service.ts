@@ -1163,4 +1163,157 @@ export class MembershipsService {
 
     return membership;
   }
+
+  /**
+   * Super Admin: Override MECA ID on an existing membership
+   * This bypasses normal MECA ID assignment rules
+   * Use with extreme caution - only for correcting errors or restoring old IDs
+   */
+  async superAdminOverrideMecaId(
+    membershipId: string,
+    newMecaId: number,
+    adminUserId: string,
+    reason: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const em = this.em.fork();
+
+    // Find the membership
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    const oldMecaId = membership.mecaId;
+
+    // Check if the new MECA ID is already in use by another membership
+    const existingMembership = await em.findOne(Membership, {
+      mecaId: newMecaId,
+      id: { $ne: membershipId },
+    });
+
+    if (existingMembership) {
+      throw new BadRequestException(`MECA ID ${newMecaId} is already assigned to another membership (${existingMembership.id})`);
+    }
+
+    // Update the MECA ID
+    membership.mecaId = newMecaId;
+
+    // Also update the profile's meca_id if this is the user's primary membership
+    if (membership.user) {
+      membership.user.meca_id = String(newMecaId);
+    }
+
+    // Create audit history record
+    try {
+      const { MecaIdHistory } = await import('./meca-id-history.entity');
+      const historyRecord = new MecaIdHistory();
+      historyRecord.mecaId = newMecaId;
+      historyRecord.membership = membership;
+      historyRecord.profile = membership.user;
+      historyRecord.assignedAt = new Date();
+      historyRecord.notes = `SUPER ADMIN OVERRIDE by ${adminUserId}: Changed from ${oldMecaId || 'none'} to ${newMecaId}. Reason: ${reason}`;
+      em.persist(historyRecord);
+    } catch (historyError) {
+      this.logger.error('Failed to create MECA ID history record:', historyError);
+      // Don't fail the override if history creation fails
+    }
+
+    await em.flush();
+
+    this.logger.warn(`MECA ID OVERRIDE COMPLETE: Membership ${membershipId} changed from ${oldMecaId} to ${newMecaId}`);
+
+    return {
+      success: true,
+      membership,
+      message: `MECA ID successfully changed from ${oldMecaId || 'none'} to ${newMecaId}`,
+    };
+  }
+
+  /**
+   * Super Admin: Renew a membership but force keeping the old MECA ID
+   * This bypasses the 90-day rule that would normally assign a new ID
+   */
+  async renewMembershipKeepMecaId(
+    userId: string,
+    membershipTypeConfigId: string,
+    forcedMecaId: number,
+    adminUserId: string,
+    reason: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const em = this.em.fork();
+
+    // Check if the MECA ID is already in use by an ACTIVE membership
+    const existingActive = await em.findOne(Membership, {
+      mecaId: forcedMecaId,
+      paymentStatus: PaymentStatus.PAID,
+      endDate: { $gt: new Date() },
+    });
+
+    if (existingActive) {
+      throw new BadRequestException(`MECA ID ${forcedMecaId} is already assigned to an active membership`);
+    }
+
+    // Get the membership type config
+    const membershipTypeConfig = await em.findOne(MembershipTypeConfig, { id: membershipTypeConfigId });
+    if (!membershipTypeConfig) {
+      throw new NotFoundException('Membership type configuration not found');
+    }
+
+    // Get the user
+    const user = await em.findOne(Profile, { id: userId });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Calculate dates
+    const now = new Date();
+    const endDate = new Date(now);
+    endDate.setFullYear(endDate.getFullYear() + 1);
+
+    // Create the new membership with the forced MECA ID
+    const newMembership = new Membership();
+    newMembership.user = user;
+    newMembership.membershipTypeConfig = membershipTypeConfig;
+    newMembership.mecaId = forcedMecaId;
+    newMembership.startDate = now;
+    newMembership.endDate = endDate;
+    newMembership.paymentStatus = PaymentStatus.PAID;
+    newMembership.amountPaid = parseFloat(String(membershipTypeConfig.price));
+    newMembership.competitorName = user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    newMembership.hasTeamAddon = false;
+
+    em.persist(newMembership);
+
+    // Update the profile's MECA ID
+    user.meca_id = String(forcedMecaId);
+    user.membership_status = 'active';
+
+    // Create audit history record
+    try {
+      const { MecaIdHistory } = await import('./meca-id-history.entity');
+      const historyRecord = new MecaIdHistory();
+      historyRecord.mecaId = forcedMecaId;
+      historyRecord.membership = newMembership;
+      historyRecord.profile = user;
+      historyRecord.assignedAt = new Date();
+      historyRecord.reactivatedAt = new Date();
+      historyRecord.notes = `SUPER ADMIN 90-DAY OVERRIDE by ${adminUserId}: Forced MECA ID ${forcedMecaId} on renewal. Reason: ${reason}`;
+      em.persist(historyRecord);
+    } catch (historyError) {
+      this.logger.error('Failed to create MECA ID history record:', historyError);
+    }
+
+    await em.flush();
+
+    this.logger.warn(`90-DAY RULE OVERRIDE COMPLETE: New membership ${newMembership.id} created with forced MECA ID ${forcedMecaId}`);
+
+    return {
+      success: true,
+      membership: newMembership,
+      message: `Membership created with MECA ID ${forcedMecaId} (90-day rule bypassed)`,
+    };
+  }
 }
