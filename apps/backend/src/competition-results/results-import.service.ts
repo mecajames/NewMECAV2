@@ -7,7 +7,7 @@ export class ResultsImportService {
   /**
    * Parse Excel file (.xlsx) and extract competition results
    * Expected format:
-   * - Sheet1: Member ID, Name (Optional), Team, State, Class, Score, Points
+   * - Sheet1: Member ID, Name (Optional), Team, State, Class, Score, Points, Wattage, Frequency
    * - Internal Values: Division, Class, Abbreviation (optional, for reference)
    */
   parseExcelFile(buffer: Buffer): ParsedResult[] {
@@ -51,6 +51,8 @@ export class ResultsImportService {
         const classAbbr = row['Class'] || '';
         const score = parseFloat(row['Score']) || 0;
         const points = row['Points'] !== undefined ? parseInt(row['Points']) : undefined;
+        const wattageRaw = row['Wattage'] || row['Power'] || row['Power Wattage'];
+        const frequencyRaw = row['Frequency'] || row['Freq'] || row['Hz'];
 
         if (!classAbbr) {
           throw new BadRequestException(`Row ${index + 2}: Missing class`);
@@ -59,6 +61,14 @@ export class ResultsImportService {
         if (!score && score !== 0) {
           throw new BadRequestException(`Row ${index + 2}: Missing or invalid score`);
         }
+
+        // Parse wattage and frequency
+        const wattage = wattageRaw !== undefined && wattageRaw !== '' && wattageRaw !== null
+          ? parseInt(wattageRaw.toString())
+          : undefined;
+        const frequency = frequencyRaw !== undefined && frequencyRaw !== '' && frequencyRaw !== null
+          ? parseInt(frequencyRaw.toString())
+          : undefined;
 
         // Look up full class name from Internal Values if available
         const classInfo = classMap.get(classAbbr);
@@ -71,6 +81,8 @@ export class ResultsImportService {
           score,
           points,
           format: classInfo?.division,
+          wattage: isNaN(wattage as number) ? undefined : wattage,
+          frequency: isNaN(frequency as number) ? undefined : frequency,
         };
       });
 

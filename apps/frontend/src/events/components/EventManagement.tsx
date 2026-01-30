@@ -1,19 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Calendar, Plus, CreditCard as Edit, Trash2, X, MapPin, DollarSign, Users, Search, Filter, TrendingUp } from 'lucide-react';
-import { eventsApi, Event } from '@/events';
+import { useEffect, useState, useMemo } from 'react';
+import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
+import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionResultsApi } from '@/competition-results';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
-import { useNavigate } from 'react-router-dom';
-
 
 interface EventManagementProps {
   onViewResults?: (eventId: string) => void;
 }
 
 export default function EventManagement({ onViewResults }: EventManagementProps = {}) {
-  const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [eventDirectors, setEventDirectors] = useState<Profile[]>([]);
@@ -27,7 +24,11 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   const [countryFilter, setCountryFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [quickFilter, setQuickFilter] = useState<string>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
   const [eventResults, setEventResults] = useState<{[key: string]: number}>({});
+  const [sendingRatingEmails, setSendingRatingEmails] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [eventsPerPage, setEventsPerPage] = useState(50);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -49,7 +50,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     registration_fee: '0',
     member_entry_fee: '',
     non_member_entry_fee: '',
-    has_gate_fee: false,
+    has_gate_fee: '' as '' | 'yes' | 'no',
     gate_fee: '',
     formats: [] as string[],
     points_multiplier: '1',
@@ -57,7 +58,18 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     number_of_days: '1',
     day2_date: '',
     day3_date: '',
+    // Per-day multipliers for multi-day events
+    day1_multiplier: '2',
+    day2_multiplier: '2',
+    day3_multiplier: '2',
+    // How to calculate results for multi-day events
+    multi_day_results_mode: 'separate' as MultiDayResultsMode,
   });
+
+  // State for flyer image upload
+  const [flyerFile, setFlyerFile] = useState<File | null>(null);
+  const [flyerPreview, setFlyerPreview] = useState<string | null>(null);
+  const [uploadingFlyer, setUploadingFlyer] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -67,13 +79,23 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
 
   useEffect(() => {
     filterEvents();
-  }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter]);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter, monthFilter]);
 
+  // Paginate the filtered events
+  const paginatedEvents = useMemo(() => {
+    const startIndex = (currentPage - 1) * eventsPerPage;
+    return filteredEvents.slice(startIndex, startIndex + eventsPerPage);
+  }, [filteredEvents, currentPage, eventsPerPage]);
+
+  const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
+
+  // Only fetch result counts for the current page's events
   useEffect(() => {
-    if (events.length > 0) {
+    if (paginatedEvents.length > 0) {
       fetchResultCounts();
     }
-  }, [events]);
+  }, [paginatedEvents]);
 
   const fetchEvents = async () => {
     try {
@@ -95,20 +117,20 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   };
 
   const fetchResultCounts = async () => {
-    const counts: {[key: string]: number} = {};
-    for (const event of events) {
-      try {
-        const results = await competitionResultsApi.getByEvent(event.id);
-        counts[event.id] = results.length;
-      } catch (error) {
-        counts[event.id] = 0;
-      }
+    try {
+      // Use the bulk endpoint to get all counts in a single call
+      const counts = await competitionResultsApi.getResultCountsByEvent();
+      setEventResults(counts);
+    } catch (error) {
+      console.error('Error fetching result counts:', error);
+      setEventResults({});
     }
-    setEventResults(counts);
   };
 
   const filterEvents = () => {
     let filtered = [...events];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
 
     // Filter by search term
     if (searchTerm) {
@@ -120,8 +142,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       );
     }
 
-    // Filter by status
-    if (statusFilter !== 'all') {
+    // Filter by status (if not using quick filter for pending)
+    if (statusFilter !== 'all' && quickFilter !== 'pending') {
       filtered = filtered.filter(event => event.status === statusFilter);
     }
 
@@ -140,19 +162,36 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       filtered = filtered.filter(event => (event as any).venue_state === stateFilter);
     }
 
-    // Apply quick filters
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    if (quickFilter === 'recent-upcoming') {
+    // Filter by month
+    if (monthFilter !== 'all') {
+      const selectedMonth = parseInt(monthFilter);
       filtered = filtered.filter(event => {
         const eventDate = new Date(event.event_date);
-        return eventDate >= thirtyDaysAgo && event.status !== 'completed';
+        return eventDate.getMonth() === selectedMonth;
       });
     }
 
-    // Sort by event date descending (most recent first)
-    filtered.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+    // Apply quick filters
+    if (quickFilter === 'upcoming') {
+      filtered = filtered.filter(event => {
+        const eventDate = new Date(event.event_date);
+        return eventDate >= today;
+      });
+    } else if (quickFilter === 'past') {
+      filtered = filtered.filter(event => {
+        const eventDate = new Date(event.event_date);
+        return eventDate < today;
+      });
+    } else if (quickFilter === 'pending') {
+      filtered = filtered.filter(event => event.status === 'pending');
+    }
+
+    // Sort by date - closest to today first (descending order)
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.event_date).getTime();
+      const dateB = new Date(b.event_date).getTime();
+      return dateB - dateA;
+    });
 
     setFilteredEvents(filtered);
   };
@@ -194,6 +233,22 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       return date.toISOString();
     };
 
+    // Handle flyer image upload if a file was selected
+    let flyerUrl = formData.flyer_url || null;
+    if (flyerFile) {
+      try {
+        setUploadingFlyer(true);
+        flyerUrl = await eventsApi.uploadFlyerImage(flyerFile);
+      } catch (error) {
+        console.error('Error uploading flyer image:', error);
+        alert('Error uploading flyer image. Please try again.');
+        setUploadingFlyer(false);
+        return;
+      } finally {
+        setUploadingFlyer(false);
+      }
+    }
+
     const eventData: any = {
       title: formData.title,
       description: formData.description || null,
@@ -207,7 +262,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       venue_country: formData.venue_country || 'US',
       latitude: formData.latitude ? parseFloat(formData.latitude) : null,
       longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-      flyer_url: formData.flyer_url || null,
+      flyer_url: flyerUrl,
       event_director_id: formData.event_director_id || null,
       season_id: formData.season_id || null,
       status: formData.status,
@@ -215,7 +270,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: parseFloat(formData.registration_fee),
       member_entry_fee: formData.member_entry_fee ? parseFloat(formData.member_entry_fee) : null,
       non_member_entry_fee: formData.non_member_entry_fee ? parseFloat(formData.non_member_entry_fee) : null,
-      has_gate_fee: formData.has_gate_fee,
+      has_gate_fee: formData.has_gate_fee === 'yes',
       gate_fee: formData.gate_fee ? parseFloat(formData.gate_fee) : null,
       formats: formData.formats.length > 0 ? formData.formats : null,
       points_multiplier: parseInt(formData.points_multiplier),
@@ -243,8 +298,25 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
             dayDates.push(convertToISO(formData.day3_date)!);
           }
 
+          // Collect per-day multipliers
+          const dayMultipliers: number[] = [parseInt(formData.day1_multiplier)];
+          if (numberOfDays >= 2) {
+            dayMultipliers.push(parseInt(formData.day2_multiplier));
+          }
+          if (numberOfDays >= 3) {
+            dayMultipliers.push(parseInt(formData.day3_multiplier));
+          }
+
           console.log('📤 FRONTEND - Creating multi-day event:', numberOfDays, 'days');
-          await eventsApi.createMultiDay(eventData, numberOfDays, dayDates);
+          console.log('📤 FRONTEND - Day multipliers:', dayMultipliers);
+          console.log('📤 FRONTEND - Results mode:', formData.multi_day_results_mode);
+          await eventsApi.createMultiDay(
+            eventData,
+            numberOfDays,
+            dayDates,
+            dayMultipliers,
+            formData.multi_day_results_mode
+          );
         } else {
           console.log('📤 FRONTEND - Creating new event');
           await eventsApi.create(eventData);
@@ -254,6 +326,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       setShowModal(false);
       setEditingEvent(null);
       resetForm();
+      setFlyerFile(null);
+      setFlyerPreview(null);
       fetchEvents();
     } catch (error) {
       console.error('Error saving event:', error);
@@ -273,6 +347,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       const minutes = String(date.getMinutes()).padStart(2, '0');
       return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
+
+    // Clear file upload state when editing (will show existing URL if any)
+    setFlyerFile(null);
+    setFlyerPreview(null);
 
     setEditingEvent(event);
     setFormData({
@@ -296,11 +374,18 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: event.registration_fee?.toString() || '0',
       member_entry_fee: (event as any).member_entry_fee?.toString() || '',
       non_member_entry_fee: (event as any).non_member_entry_fee?.toString() || '',
-      has_gate_fee: (event as any).has_gate_fee || false,
+      has_gate_fee: (event as any).has_gate_fee ? 'yes' : 'no',
       gate_fee: (event as any).gate_fee?.toString() || '',
       formats: event.formats || [],
       points_multiplier: (event as any).points_multiplier?.toString() || '1',
       event_type: (event as any).event_type || 'standard',
+      number_of_days: '1', // When editing, always show as single day (multi-day creates separate events)
+      day2_date: '',
+      day3_date: '',
+      day1_multiplier: (event as any).day1_multiplier?.toString() || '2',
+      day2_multiplier: (event as any).day2_multiplier?.toString() || '2',
+      day3_multiplier: (event as any).day3_multiplier?.toString() || '2',
+      multi_day_results_mode: (event as any).multi_day_results_mode || 'separate',
     });
     setShowModal(true);
   };
@@ -339,7 +424,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       registration_fee: '0',
       member_entry_fee: '',
       non_member_entry_fee: '',
-      has_gate_fee: false,
+      has_gate_fee: '',
       gate_fee: '',
       points_multiplier: '1',
       event_type: 'standard',
@@ -347,7 +432,34 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       number_of_days: '1',
       day2_date: '',
       day3_date: '',
+      day1_multiplier: '2',
+      day2_multiplier: '2',
+      day3_multiplier: '2',
+      multi_day_results_mode: 'separate',
     });
+  };
+
+  const handleSendRatingEmails = async (eventId: string, eventTitle: string) => {
+    if (!confirm(`Send rating request emails to all participants of "${eventTitle}"?`)) {
+      return;
+    }
+
+    setSendingRatingEmails(eventId);
+    try {
+      const result = await eventsApi.sendRatingEmails(eventId);
+      if (result.sent > 0) {
+        alert(`Rating emails sent successfully!\n\nSent: ${result.sent}\nFailed: ${result.failed}${result.errors.length > 0 ? `\n\nErrors:\n${result.errors.slice(0, 5).join('\n')}` : ''}`);
+      } else if (result.errors.length > 0) {
+        alert(`No emails sent.\n\n${result.errors[0]}`);
+      } else {
+        alert('No emails were sent. There may be no eligible participants.');
+      }
+    } catch (error) {
+      console.error('Error sending rating emails:', error);
+      alert(`Error sending rating emails: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setSendingRatingEmails(null);
+    }
   };
 
   return (
@@ -358,6 +470,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
           onClick={() => {
             setEditingEvent(null);
             resetForm();
+            setFlyerFile(null);
+            setFlyerPreview(null);
             setShowModal(true);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
@@ -450,12 +564,15 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
           </div>
         </div>
 
-        {/* Quick Filter Buttons */}
-        <div className="flex flex-wrap gap-2">
+        {/* Quick Filter Buttons and Month Filter */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setQuickFilter('all')}
+            onClick={() => {
+              setQuickFilter('all');
+              setStatusFilter('all');
+            }}
             className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              quickFilter === 'all'
+              quickFilter === 'all' && statusFilter === 'all'
                 ? 'bg-orange-600 text-white'
                 : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
             }`}
@@ -463,48 +580,83 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
             All Events
           </button>
           <button
-            onClick={() => setQuickFilter('recent-upcoming')}
+            onClick={() => {
+              setQuickFilter('upcoming');
+              setStatusFilter('all');
+            }}
             className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              quickFilter === 'recent-upcoming'
-                ? 'bg-slate-900 text-white'
+              quickFilter === 'upcoming'
+                ? 'bg-green-600 text-white'
                 : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
             }`}
           >
-            Recent & Upcoming
+            Upcoming
           </button>
           <button
             onClick={() => {
-              setStatusFilter('pending');
-              setQuickFilter('all');
+              setQuickFilter('past');
+              setStatusFilter('all');
             }}
             className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-              statusFilter === 'pending'
+              quickFilter === 'past'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
+            }`}
+          >
+            Past
+          </button>
+          <button
+            onClick={() => {
+              setQuickFilter('pending');
+              setStatusFilter('all');
+            }}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              quickFilter === 'pending'
                 ? 'bg-yellow-600 text-white'
                 : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
             }`}
           >
-            Pending Approval
+            Pending
           </button>
-          {statusFilter !== 'all' && statusFilter !== 'pending' && (
-            <button
-              onClick={() => setStatusFilter('all')}
-              className="px-4 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
+
+          {/* Month Filter Dropdown */}
+          <div className="ml-4 flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-300">Month:</label>
+            <select
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              Clear Status Filter: {statusFilter}
-            </button>
-          )}
-          {statusFilter === 'pending' && (
+              <option value="all">All Months</option>
+              <option value="0">January</option>
+              <option value="1">February</option>
+              <option value="2">March</option>
+              <option value="3">April</option>
+              <option value="4">May</option>
+              <option value="5">June</option>
+              <option value="6">July</option>
+              <option value="7">August</option>
+              <option value="8">September</option>
+              <option value="9">October</option>
+              <option value="10">November</option>
+              <option value="11">December</option>
+            </select>
+          </div>
+
+          {/* Clear filters button when month filter is active */}
+          {monthFilter !== 'all' && (
             <button
-              onClick={() => setStatusFilter('all')}
-              className="px-4 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
+              onClick={() => setMonthFilter('all')}
+              className="px-3 py-2 rounded text-sm font-medium transition-colors bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500"
             >
-              Clear Pending Filter
+              Clear Month
             </button>
           )}
         </div>
 
         <div className="mt-3 text-xs text-gray-400">
-          Showing {filteredEvents.length} of {events.length} events
+          Showing {((currentPage - 1) * eventsPerPage) + 1}-{Math.min(currentPage * eventsPerPage, filteredEvents.length)} of {filteredEvents.length} events
+          {filteredEvents.length !== events.length && ` (filtered from ${events.length} total)`}
         </div>
       </div>
 
@@ -527,7 +679,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map((event, index) => (
+              {paginatedEvents.map((event, index) => (
                 <tr
                   key={event.id}
                   className={`border-b border-slate-600 ${index % 2 === 0 ? 'bg-slate-800' : 'bg-slate-700'} hover:bg-slate-600 transition-colors`}
@@ -536,7 +688,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   <td className="px-4 py-3 text-sm text-white align-top">
                     {new Date(event.event_date).toLocaleDateString('en-US', {
                       month: 'short',
-                      day: 'numeric'
+                      day: 'numeric',
+                      year: 'numeric'
                     })}
                   </td>
 
@@ -618,7 +771,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
 
                   {/* Actions */}
                   <td className="px-4 py-3 align-top">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => handleEdit(event)}
                         className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs transition-colors"
@@ -633,12 +786,88 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                       >
                         Delete
                       </button>
+                      {event.status === 'completed' && (
+                        <button
+                          onClick={() => handleSendRatingEmails(event.id, event.title)}
+                          disabled={sendingRatingEmails === event.id}
+                          className="flex items-center gap-1 px-3 py-1 bg-orange-600 hover:bg-orange-500 disabled:bg-orange-800 disabled:cursor-wait text-white rounded text-xs transition-colors"
+                          title="Send Rating Request Emails"
+                        >
+                          {sendingRatingEmails === event.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Mail className="h-3 w-3" />
+                          )}
+                          Ratings
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-t border-slate-600">
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-400">
+                Page {currentPage} of {totalPages || 1}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-400">Show:</label>
+                <select
+                  value={eventsPerPage}
+                  onChange={(e) => {
+                    setEventsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-700 text-white text-sm rounded px-2 py-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                </select>
+                <span className="text-sm text-gray-400">per page</span>
+              </div>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <span className="px-3 py-1 text-sm text-white">
+                  {currentPage}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+                >
+                  Last
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="text-center py-12 bg-slate-700 rounded-lg">
@@ -658,6 +887,8 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                 onClick={() => {
                   setShowModal(false);
                   setEditingEvent(null);
+                  setFlyerFile(null);
+                  setFlyerPreview(null);
                 }}
                 className="text-gray-400 hover:text-white"
               >
@@ -802,6 +1033,24 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   />
                 </div>
 
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Country *
+                  </label>
+                  <select
+                    value={formData.venue_country}
+                    onChange={(e) => setFormData({ ...formData, venue_country: e.target.value, venue_state: '' })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    required
+                  >
+                    {countries.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     City
@@ -842,7 +1091,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   )}
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     {getPostalCodeLabel(formData.venue_country)}
                   </label>
@@ -852,24 +1101,6 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     onChange={(e) => setFormData({ ...formData, venue_postal_code: e.target.value })}
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Country *
-                  </label>
-                  <select
-                    value={formData.venue_country}
-                    onChange={(e) => setFormData({ ...formData, venue_country: e.target.value, venue_state: '' })}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    required
-                  >
-                    {countries.map((country) => (
-                      <option key={country.code} value={country.code}>
-                        {country.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div>
@@ -898,16 +1129,99 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   />
                 </div>
 
-                <div>
+                {/* Flyer Image Section */}
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Flyer URL
+                    Event Flyer Image
                   </label>
-                  <input
-                    type="url"
-                    value={formData.flyer_url}
-                    onChange={(e) => setFormData({ ...formData, flyer_url: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* File Upload */}
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-2">Upload Image</label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setFlyerFile(file);
+                              // Create preview URL
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setFlyerPreview(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                              // Clear URL input when file is selected
+                              setFormData({ ...formData, flyer_url: '' });
+                            }
+                          }}
+                          className="hidden"
+                          id="flyer-upload"
+                        />
+                        <label
+                          htmlFor="flyer-upload"
+                          className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-slate-700 border border-slate-600 border-dashed rounded-lg text-gray-300 hover:bg-slate-600 hover:border-orange-500 cursor-pointer transition-colors"
+                        >
+                          <Upload className="h-5 w-5" />
+                          {flyerFile ? flyerFile.name : 'Choose file...'}
+                        </label>
+                      </div>
+                      {flyerFile && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFlyerFile(null);
+                            setFlyerPreview(null);
+                          }}
+                          className="mt-2 text-xs text-red-400 hover:text-red-300"
+                        >
+                          Clear selected file
+                        </button>
+                      )}
+                    </div>
+
+                    {/* URL Input */}
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-2">Or Enter URL</label>
+                      <input
+                        type="url"
+                        value={formData.flyer_url}
+                        onChange={(e) => {
+                          setFormData({ ...formData, flyer_url: e.target.value });
+                          // Clear file when URL is entered
+                          if (e.target.value) {
+                            setFlyerFile(null);
+                            setFlyerPreview(null);
+                          }
+                        }}
+                        placeholder="https://example.com/flyer.jpg"
+                        className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        disabled={!!flyerFile}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Image Preview */}
+                  {(flyerPreview || formData.flyer_url) && (
+                    <div className="mt-4">
+                      <label className="block text-xs text-gray-400 mb-2">Preview</label>
+                      <div className="relative w-48 h-32 bg-slate-700 rounded-lg overflow-hidden">
+                        <img
+                          src={flyerPreview || formData.flyer_url}
+                          alt="Flyer preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Upload an image file (PNG, JPG, GIF, WebP - max 5MB) or provide a URL to an existing image.
+                  </p>
                 </div>
 
                 <div>
@@ -1003,26 +1317,102 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Points Multiplier *
-                  </label>
-                  <select
-                    required
-                    value={formData.points_multiplier}
-                    onChange={(e) => setFormData({ ...formData, points_multiplier: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    <option value="0">0X - Non-competitive (exhibitions, judging events)</option>
-                    <option value="1">1X - Local events (single-day local shows)</option>
-                    <option value="2">2X - Regional events (standard competitive events)</option>
-                    <option value="3">3X - State/Major events (state championships)</option>
-                    <option value="4">4X - Championship events (national finals, world finals)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Determines points awarded: 1st=5pts, 2nd=4pts, 3rd=3pts, 4th=2pts, 5th=1pt × multiplier
-                  </p>
-                </div>
+                {/* Points Multiplier - show single select for single-day, per-day for multi-day */}
+                {parseInt(formData.number_of_days) === 1 || editingEvent ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Points Multiplier *
+                    </label>
+                    <select
+                      required
+                      value={formData.points_multiplier}
+                      onChange={(e) => setFormData({ ...formData, points_multiplier: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="1">1X - Local events</option>
+                      <option value="2">2X - Regional events</option>
+                      <option value="3">3X - State/Major events</option>
+                      <option value="4">4X - Championship events</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Determines points awarded: 1st=5pts, 2nd=4pts, 3rd=3pts, 4th=2pts, 5th=1pt × multiplier
+                    </p>
+                  </div>
+                ) : (
+                  <div className="md:col-span-2 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Per-Day Points Multipliers
+                      </label>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Day 1</label>
+                          <select
+                            value={formData.day1_multiplier}
+                            onChange={(e) => setFormData({ ...formData, day1_multiplier: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          >
+                            <option value="1">1X</option>
+                            <option value="2">2X</option>
+                            <option value="3">3X</option>
+                            <option value="4">4X</option>
+                          </select>
+                        </div>
+                        {parseInt(formData.number_of_days) >= 2 && (
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Day 2</label>
+                            <select
+                              value={formData.day2_multiplier}
+                              onChange={(e) => setFormData({ ...formData, day2_multiplier: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                              <option value="1">1X</option>
+                              <option value="2">2X</option>
+                              <option value="3">3X</option>
+                              <option value="4">4X</option>
+                            </select>
+                          </div>
+                        )}
+                        {parseInt(formData.number_of_days) >= 3 && (
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Day 3</label>
+                            <select
+                              value={formData.day3_multiplier}
+                              onChange={(e) => setFormData({ ...formData, day3_multiplier: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                              <option value="1">1X</option>
+                              <option value="2">2X</option>
+                              <option value="3">3X</option>
+                              <option value="4">4X</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Set different point multipliers for each day of the event
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Multi-Day Results Mode
+                      </label>
+                      <select
+                        value={formData.multi_day_results_mode}
+                        onChange={(e) => setFormData({ ...formData, multi_day_results_mode: e.target.value as MultiDayResultsMode })}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      >
+                        <option value="separate">Separate - Each day calculated independently</option>
+                        <option value="combined_score">Combined Score - Sum scores across days, then calculate points</option>
+                        <option value="combined_points">Combined Points - Calculate each day's points, then sum totals</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Determines how results and points are calculated across event days
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -1103,7 +1493,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   <select
                     value={formData.has_gate_fee}
                     onChange={(e) =>
-                      setFormData({ ...formData, has_gate_fee: e.target.value })
+                      setFormData({ ...formData, has_gate_fee: e.target.value as '' | 'yes' | 'no' })
                     }
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
@@ -1134,15 +1524,25 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                  disabled={uploadingFlyer}
+                  className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-wait text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                  {editingEvent ? 'Update Event' : 'Create Event'}
+                  {uploadingFlyer ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Uploading Image...
+                    </>
+                  ) : (
+                    editingEvent ? 'Update Event' : 'Create Event'
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowModal(false);
                     setEditingEvent(null);
+                    setFlyerFile(null);
+                    setFlyerPreview(null);
                   }}
                   className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                 >

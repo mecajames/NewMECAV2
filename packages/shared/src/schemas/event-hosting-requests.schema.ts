@@ -8,7 +8,7 @@ import {
   IndoorOutdoorSchema,
   SenderRoleSchema,
   RecipientTypeSchema,
-} from './enums.schema';
+} from './enums.schema.js';
 
 // Create Event Hosting Request DTO (API format with snake_case)
 export const CreateEventHostingRequestApiSchema = z.object({

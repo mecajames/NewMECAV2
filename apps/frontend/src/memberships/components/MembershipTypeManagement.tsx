@@ -22,11 +22,14 @@ export default function MembershipTypeManagement() {
     category: MembershipCategory.COMPETITOR,
     tier: undefined,
     price: 0,
+    teamAddonPrice: undefined,
+    includesTeam: false,
     currency: 'USD',
     benefits: [],
     isActive: true,
     isFeatured: false,
     showOnPublicSite: true,
+    isUpgradeOnly: false,
     displayOrder: 0,
   });
 
@@ -72,6 +75,8 @@ export default function MembershipTypeManagement() {
       category: config.category,
       tier: config.tier,
       price: config.price,
+      teamAddonPrice: config.teamAddonPrice,
+      includesTeam: config.includesTeam || false,
       currency: config.currency || 'USD',
       benefits: config.benefits || [],
       requiredFields: config.requiredFields,
@@ -79,6 +84,7 @@ export default function MembershipTypeManagement() {
       isActive: config.isActive,
       isFeatured: config.isFeatured,
       showOnPublicSite: config.showOnPublicSite,
+      isUpgradeOnly: config.isUpgradeOnly || false,
       displayOrder: config.displayOrder,
       stripePriceId: config.stripePriceId,
       stripeProductId: config.stripeProductId,
@@ -118,11 +124,14 @@ export default function MembershipTypeManagement() {
       category: MembershipCategory.COMPETITOR,
       tier: undefined,
       price: 0,
+      teamAddonPrice: undefined,
+      includesTeam: false,
       currency: 'USD',
       benefits: [],
       isActive: true,
       isFeatured: false,
       showOnPublicSite: true,
+      isUpgradeOnly: false,
       displayOrder: 0,
     });
     setEditingConfig(null);
@@ -302,6 +311,25 @@ export default function MembershipTypeManagement() {
                 />
               </div>
 
+              {/* Team Add-on Price - only for Competitor category */}
+              {formData.category === MembershipCategory.COMPETITOR && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Team Add-on Price
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.teamAddonPrice || ''}
+                    onChange={(e) => setFormData({ ...formData, teamAddonPrice: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="25.00 (optional)"
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Price to add team functionality to this membership</p>
+                </div>
+              )}
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Description
@@ -389,6 +417,26 @@ export default function MembershipTypeManagement() {
                   className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-orange-600 focus:ring-orange-500"
                 />
                 <span>Show on Public Site</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-gray-300 cursor-pointer" title="When checked, this membership includes team creation automatically (e.g., Competitor w/Team)">
+                <input
+                  type="checkbox"
+                  checked={formData.includesTeam || false}
+                  onChange={(e) => setFormData({ ...formData, includesTeam: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-green-600 focus:ring-green-500"
+                />
+                <span>Includes Team</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-gray-300 cursor-pointer" title="When checked, this membership type only shows as an upgrade option (not on main membership page or admin create)">
+                <input
+                  type="checkbox"
+                  checked={formData.isUpgradeOnly || false}
+                  onChange={(e) => setFormData({ ...formData, isUpgradeOnly: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-purple-600 focus:ring-purple-500"
+                />
+                <span>Upgrade Only</span>
               </label>
             </div>
 

@@ -4,7 +4,7 @@ import {
   PaymentMethodSchema,
   PaymentStatusSchema,
   MembershipTypeSchema,
-} from './enums.schema';
+} from './enums.schema.js';
 
 // Create Payment DTO
 export const CreatePaymentSchema = z.object({

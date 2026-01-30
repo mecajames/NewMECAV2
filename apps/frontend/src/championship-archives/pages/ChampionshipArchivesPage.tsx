@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { Trophy, Calendar } from 'lucide-react';
 import { championshipArchivesApi, ChampionshipArchive } from '@/championship-archives';
 import { useAuth } from '@/auth';
+import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 
 export default function ChampionshipArchivesPage() {
   const { user } = useAuth();
   const [archives, setArchives] = useState<ChampionshipArchive[]>([]);
   const [loading, setLoading] = useState(true);
   const isAdmin = user?.role === 'admin';
+  const seoProps = useStaticPageSEO('championshipArchives');
 
   useEffect(() => {
     fetchArchives();
@@ -26,18 +28,20 @@ export default function ChampionshipArchivesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      {/* Hero Image */}
-      <div className="relative w-full h-[350px] md:h-[500px] lg:h-[600px] overflow-hidden flex items-center justify-center" style={{ backgroundColor: '#1a0a05' }}>
-        <img
-          src="/championship-archive-hero.png"
-          alt="Championship Archives"
-          className="w-full h-auto max-h-full object-contain"
-        />
-        <div className="absolute inset-0 bg-black/20" />
-        <div className="absolute bottom-0 left-0 right-0 pb-4 md:pb-6">
-          <div className="relative z-10 text-center px-4">
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Championship Archives</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
+        {/* Hero Image */}
+        <div className="relative w-full h-[350px] md:h-[500px] lg:h-[600px] overflow-hidden flex items-center justify-center" style={{ backgroundColor: '#1a0a05' }}>
+          <img
+            src="/championship-archive-hero.png"
+            alt="Championship Archives"
+            className="w-full h-auto max-h-full object-contain"
+          />
+          <div className="absolute inset-0 bg-black/20" />
+          <div className="absolute bottom-0 left-0 right-0 pb-4 md:pb-6">
+            <div className="relative z-10 text-center px-4">
+              <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Championship Archives</h1>
             <p className="text-lg md:text-xl text-white/90">Celebrating Excellence Since 1997</p>
           </div>
         </div>
@@ -122,10 +126,11 @@ export default function ChampionshipArchivesPage() {
                   <div className="absolute inset-0 border-2 border-transparent group-hover:border-orange-500 rounded-xl transition-all pointer-events-none" />
                 </Link>
               ))}
-            </div>
-          </>
-        )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

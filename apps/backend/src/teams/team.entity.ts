@@ -1,5 +1,6 @@
-import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { Membership } from '../memberships/memberships.entity';
 
 // Team types for categorization
 export enum TeamType {
@@ -26,6 +27,10 @@ export class Team {
 
   @Property({ type: 'text', nullable: true, fieldName: 'logo_url' })
   logoUrl?: string;
+
+  // The membership that owns this team (for competitor teams with add-on, or retailer/manufacturer teams)
+  @ManyToOne(() => Membership, { nullable: true, fieldName: 'membership_id' })
+  membership?: Membership;
 
   @Property({ type: 'uuid', fieldName: 'captain_id' })
   captainId!: string;
@@ -60,6 +65,10 @@ export class Team {
   // Gallery images (up to 6 images for team gallery)
   @Property({ type: 'json', fieldName: 'gallery_images', nullable: true })
   galleryImages?: string[];
+
+  // Cover image position for header display (x, y as percentages 0-100)
+  @Property({ type: 'json', nullable: true, fieldName: 'cover_image_position' })
+  coverImagePosition?: { x: number; y: number };
 
   @Property({ type: 'boolean', default: true, fieldName: 'is_active' })
   isActive: boolean = true;

@@ -1,7 +1,10 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from '@/auth';
+import { HelmetProvider } from 'react-helmet-async';
+import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
-import { Navbar, Footer, ScrollToTop } from '@/shared/components';
+import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
+import { Navbar, Footer, ScrollToTop, ImpersonationBanner } from '@/shared/components';
 // Static pages
 import HomePage from '@/pages/HomePage';
 import ContactPage from '@/pages/ContactPage';
@@ -11,19 +14,30 @@ import TermsAndConditionsPage from '@/pages/TermsAndConditionsPage';
 import CompetitionGuidesPage from '@/pages/CompetitionGuidesPage';
 import MECAQuickStartGuidePage from '@/pages/MECAQuickStartGuidePage';
 // Feature pages
-import { LoginPage } from '@/auth';
+import { LoginPage, ChangePasswordPage, AuthCallbackPage } from '@/auth';
 import { EventsPage, EventDetailPage } from '@/events';
-import { ResultsPage, LeaderboardPage, StandingsPage } from '@/competition-results';
+import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage } from '@/competition-results';
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
 import { DashboardPage, MyMecaDashboardPage, AdminDashboardPage } from '@/dashboard';
 import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage } from '@/profiles';
-import { MembershipPage, MembershipCheckoutPage } from '@/memberships';
+import { TeamDirectoryPage, TeamPublicProfilePage } from '@/teams';
+import { RetailerDirectoryPage, RetailerProfilePage, ManufacturerDirectoryPage, ManufacturerProfilePage, ManufacturerPartnerInfoPage } from '@/business-listings';
+import { MembershipPage } from '@/memberships';
 import { HostEventPage } from '@/event-hosting-requests';
 import { ClassCalculatorPage, ClassesManagementPage } from '@/competition-classes';
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
-import { BillingPage } from '@/billing';
-import { MembersPage, MemberDetailPage, AdminTicketsPage } from '@/admin';
+import { BillingPage, InvoicePaymentPage } from '@/billing';
+import { JudgeApplicationPage, JudgesDirectoryPage, JudgeProfilePage, JudgeAssignmentsPage } from '@/judges';
+import { EventDirectorApplicationPage, EventDirectorsDirectoryPage, EventDirectorProfilePage, EventDirectorAssignmentsPage, EDHostingRequestsPage, EDSubmitEventPage, EDEventManagementPage } from '@/event-directors';
+import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage, EventRegistrationDetailPage, BusinessListingsAdminPage, JudgeApplicationsAdminPage, JudgeApplicationDetailPage, EventDirectorApplicationsAdminPage, EventDirectorApplicationDetailPage, JudgesAdminPage, AdminJudgeDetailPage, EventDirectorsAdminPage, AdminEventDirectorDetailPage, RatingsAdminPage, NotificationsAdminPage, WorldFinalsAdminPage } from '@/admin';
+import { AchievementsAdminPage } from '@/achievements';
+import { BillingDashboardPage, OrdersPage as AdminOrdersPage, InvoicesPage as AdminInvoicesPage, RevenueReportsPage, OrderDetailPage, InvoiceDetailPage } from '@/admin/billing';
 import { SeasonManagementPage } from '@/seasons';
+import {
+  MyRegistrationsPage,
+  EventCheckInPage,
+  CheckInHubPage,
+} from '@/event-registrations';
 import { FormatManagementPage } from '@/competition-formats';
 import { MembershipTypeManagementPage } from '@/membership-type-configs';
 // Ticket pages
@@ -35,23 +49,60 @@ import {
   GuestTicketViewPage,
   GuestTicketAccessPage,
 } from '@/tickets';
+// Shop
+import { CartProvider } from '@/shop/context/CartContext';
+import { ShopPage } from '@/shop/pages/ShopPage';
+import { ProductDetailPage } from '@/shop/pages/ProductDetailPage';
+import { CartPage } from '@/shop/pages/CartPage';
+import { CheckoutPage } from '@/shop/pages/CheckoutPage';
+import { OrderConfirmationPage } from '@/shop/pages/OrderConfirmationPage';
+import { OrderHistoryPage } from '@/shop/pages/OrderHistoryPage';
+import { OrderDetailPage as ShopOrderDetailPage } from '@/shop/pages/OrderDetailPage';
+import { AdminShopProductsPage } from '@/admin/pages/AdminShopProductsPage';
+import { AdminShopOrdersPage } from '@/admin/pages/AdminShopOrdersPage';
+import AdvertisersAdminPage from '@/admin/pages/AdvertisersAdminPage';
+import BannersAdminPage from '@/admin/pages/BannersAdminPage';
+import BannerAnalyticsPage from '@/admin/pages/BannerAnalyticsPage';
+import PointsConfigurationPage from '@/admin/pages/PointsConfigurationPage';
+
+// Lazy load checkout pages to avoid loading Stripe until needed
+const EventRegistrationCheckoutPage = lazy(() => import('@/event-registrations/pages/EventRegistrationCheckoutPage'));
+const MembershipCheckoutPage = lazy(() => import('@/memberships/pages/MembershipCheckoutPage'));
+
+// Loading fallback for lazy-loaded pages
+const PageLoader = () => (
+  <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+    <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+  </div>
+);
 
 function App() {
   return (
-    <AuthProvider>
-      <ReCaptchaProvider version="v2">
-        <BrowserRouter>
-          <ScrollToTop />
+    <HelmetProvider>
+      <AuthProvider>
+        <SiteSettingsProvider>
+          <SeasonsProvider>
+            <CartProvider>
+              <ReCaptchaProvider version="v2">
+                <BrowserRouter>
+                  <ScrollToTop />
+          <ImpersonationBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
+            <ForcePasswordChangeGuard>
             <div className="flex-1">
               <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
+              <Route path="/change-password" element={<ChangePasswordPage />} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:eventId" element={<EventDetailPage />} />
+              <Route path="/events/:eventId/register" element={<Suspense fallback={<PageLoader />}><EventRegistrationCheckoutPage /></Suspense>} />
+              <Route path="/events/:eventId/check-in" element={<EventCheckInPage />} />
               <Route path="/results" element={<ResultsPage />} />
+              <Route path="/results/member/:mecaId" element={<MemberResultsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/standings" element={<StandingsPage />} />
               <Route path="/rulebooks" element={<RulebooksPage />} />
@@ -70,9 +121,38 @@ function App() {
               <Route path="/competition-guides" element={<CompetitionGuidesPage />} />
               <Route path="/competition-guides/quick-start" element={<MECAQuickStartGuidePage />} />
 
+              {/* Public Invoice Payment Route */}
+              <Route path="/pay/invoice/:invoiceId" element={<InvoicePaymentPage />} />
+
               {/* Public Member Directory Routes */}
               <Route path="/members" element={<MemberDirectoryPage />} />
               <Route path="/members/:id" element={<MemberProfilePage />} />
+
+              {/* Public Team Directory Routes */}
+              <Route path="/teams" element={<TeamDirectoryPage />} />
+              <Route path="/teams/:id" element={<TeamPublicProfilePage />} />
+
+              {/* Public Business Directory Routes */}
+              <Route path="/retailers" element={<RetailerDirectoryPage />} />
+              <Route path="/retailers/:id" element={<RetailerProfilePage />} />
+              <Route path="/manufacturers" element={<ManufacturerDirectoryPage />} />
+              <Route path="/manufacturers/:id" element={<ManufacturerProfilePage />} />
+              <Route path="/manufacturer-membership" element={<ManufacturerPartnerInfoPage />} />
+
+              {/* Public Judges Directory Routes */}
+              <Route path="/judges" element={<JudgesDirectoryPage />} />
+              <Route path="/judges/apply" element={<JudgeApplicationPage />} />
+              <Route path="/judges/assignments" element={<JudgeAssignmentsPage />} />
+              <Route path="/judges/:id" element={<JudgeProfilePage />} />
+
+              {/* Public Event Directors Directory Routes */}
+              <Route path="/event-directors" element={<EventDirectorsDirectoryPage />} />
+              <Route path="/event-directors/apply" element={<EventDirectorApplicationPage />} />
+              <Route path="/event-directors/assignments" element={<EventDirectorAssignmentsPage />} />
+              <Route path="/event-directors/hosting-requests" element={<EDHostingRequestsPage />} />
+              <Route path="/event-directors/submit-event" element={<EDSubmitEventPage />} />
+              <Route path="/event-directors/event/:eventId" element={<EDEventManagementPage />} />
+              <Route path="/event-directors/:id" element={<EventDirectorProfilePage />} />
 
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
@@ -82,7 +162,10 @@ function App() {
               <Route path="/public-profile" element={<PublicProfilePage />} />
               <Route path="/billing" element={<BillingPage />} />
               <Route path="/membership" element={<MembershipPage />} />
-              <Route path="/membership/checkout/:membershipId" element={<MembershipCheckoutPage />} />
+              <Route path="/membership/checkout/:membershipId" element={<Suspense fallback={<PageLoader />}><MembershipCheckoutPage /></Suspense>} />
+              <Route path="/apply/judge" element={<JudgeApplicationPage />} />
+              <Route path="/apply/event-director" element={<EventDirectorApplicationPage />} />
+              <Route path="/my-registrations" element={<MyRegistrationsPage />} />
 
               {/* Support Ticket Routes (Authenticated) */}
               <Route path="/tickets" element={<TicketsPage />} />
@@ -103,16 +186,66 @@ function App() {
               <Route path="/admin/membership-types" element={<MembershipTypeManagementPage />} />
               <Route path="/admin/tickets" element={<AdminTicketsPage />} />
               <Route path="/admin/tickets/:id" element={<AdminTicketsPage />} />
+              <Route path="/admin/event-registrations" element={<EventRegistrationsPage />} />
+              <Route path="/admin/event-registrations/:id" element={<EventRegistrationDetailPage />} />
+              <Route path="/admin/check-in" element={<CheckInHubPage />} />
+              <Route path="/admin/business-listings" element={<BusinessListingsAdminPage />} />
+              <Route path="/admin/judge-applications" element={<JudgeApplicationsAdminPage />} />
+              <Route path="/admin/judge-applications/:id" element={<JudgeApplicationDetailPage />} />
+              <Route path="/admin/event-director-applications" element={<EventDirectorApplicationsAdminPage />} />
+              <Route path="/admin/event-director-applications/:id" element={<EventDirectorApplicationDetailPage />} />
+              <Route path="/admin/judges" element={<JudgesAdminPage />} />
+              <Route path="/admin/judges/:id" element={<AdminJudgeDetailPage />} />
+              <Route path="/admin/event-directors" element={<EventDirectorsAdminPage />} />
+              <Route path="/admin/event-directors/:id" element={<AdminEventDirectorDetailPage />} />
+              <Route path="/admin/ratings" element={<RatingsAdminPage />} />
+              <Route path="/admin/notifications" element={<NotificationsAdminPage />} />
+              <Route path="/admin/world-finals" element={<WorldFinalsAdminPage />} />
+              <Route path="/admin/achievements" element={<AchievementsAdminPage />} />
+
+              {/* Admin Billing Routes */}
+              <Route path="/admin/billing" element={<BillingDashboardPage />} />
+              <Route path="/admin/billing/orders" element={<AdminOrdersPage />} />
+              <Route path="/admin/billing/orders/:id" element={<OrderDetailPage />} />
+              <Route path="/admin/billing/invoices" element={<AdminInvoicesPage />} />
+              <Route path="/admin/billing/invoices/:id" element={<InvoiceDetailPage />} />
+              <Route path="/admin/billing/revenue" element={<RevenueReportsPage />} />
+
+              {/* Shop Routes */}
+              <Route path="/shop" element={<ShopPage />} />
+              <Route path="/shop/products/:id" element={<ProductDetailPage />} />
+              <Route path="/shop/cart" element={<CartPage />} />
+              <Route path="/shop/checkout" element={<CheckoutPage />} />
+              <Route path="/shop/orders" element={<OrderHistoryPage />} />
+              <Route path="/shop/orders/:id" element={<ShopOrderDetailPage />} />
+              <Route path="/shop/orders/:id/confirmation" element={<OrderConfirmationPage />} />
+
+              {/* Admin Shop Routes */}
+              <Route path="/admin/shop/products" element={<AdminShopProductsPage />} />
+              <Route path="/admin/shop/orders" element={<AdminShopOrdersPage />} />
+
+              {/* Admin Banner Routes */}
+              <Route path="/admin/advertisers" element={<AdvertisersAdminPage />} />
+              <Route path="/admin/banners" element={<BannersAdminPage />} />
+              <Route path="/admin/banners/analytics" element={<BannerAnalyticsPage />} />
+
+              {/* Admin Points Configuration */}
+              <Route path="/admin/points-configuration" element={<PointsConfigurationPage />} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
+            </ForcePasswordChangeGuard>
           <Footer />
         </div>
-        </BrowserRouter>
-      </ReCaptchaProvider>
-    </AuthProvider>
+                </BrowserRouter>
+              </ReCaptchaProvider>
+            </CartProvider>
+          </SeasonsProvider>
+        </SiteSettingsProvider>
+      </AuthProvider>
+    </HelmetProvider>
   );
 }
 

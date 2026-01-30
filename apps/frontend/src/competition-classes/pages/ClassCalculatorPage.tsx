@@ -1,6 +1,7 @@
 import { Circle, Square as SquareIcon, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 
 export default function ClassCalculatorPage() {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export default function ClassCalculatorPage() {
   const [wattage, setWattage] = useState<number>(0);
   const [totalConeArea, setTotalConeArea] = useState<number | null>(null);
   const [pressureClass, setPressureClass] = useState<number | null>(null);
+  const seoProps = useStaticPageSEO('classCalculator');
 
   useEffect(() => {
     calculateClass();
@@ -95,10 +97,12 @@ export default function ClassCalculatorPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold text-white mb-4">SPL Class Calculator</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
+        <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h1 className="text-5xl font-bold text-white mb-4">SPL Class Calculator</h1>
           <p className="text-xl text-white/90 max-w-4xl mx-auto">
             MECA Sound Pressure League Classes factor in both the overall total cone area of
             your subwoofers and the actual wattage of your amplifiers.
@@ -330,10 +334,11 @@ export default function ClassCalculatorPage() {
               >
                 Contact Us
               </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   Headers,
@@ -43,6 +44,7 @@ interface UpdateTeamDto {
   is_public?: boolean;
   requires_approval?: boolean;
   gallery_images?: string[];
+  cover_image_position?: { x: number; y: number };
 }
 
 interface AddMemberDto {
@@ -93,6 +95,27 @@ export class TeamsController {
     return this.teamsService.findAll();
   }
 
+  // Public endpoint - get all public teams for directory
+  @Get('public')
+  async getPublicTeams(): Promise<Team[]> {
+    return this.teamsService.findAllPublicTeams();
+  }
+
+  // Public endpoint - get public team by ID
+  @Get('public/:id')
+  async getPublicTeamById(@Param('id') id: string): Promise<Team | null> {
+    return this.teamsService.getPublicTeamById(id);
+  }
+
+  // Public endpoint - get team stats (optionally filtered by season)
+  @Get('public/:id/stats')
+  async getTeamPublicStats(
+    @Param('id') id: string,
+    @Query('seasonId') seasonId?: string,
+  ): Promise<any> {
+    return this.teamsService.getTeamPublicStats(id, seasonId);
+  }
+
   @Get('can-create')
   async canCreateTeam(@Headers() headers: any): Promise<{ canCreate: boolean; reason?: string }> {
     try {
@@ -132,6 +155,28 @@ export class TeamsController {
   async getMyTeam(@Headers() headers: any): Promise<Team | null> {
     const userId = this.getUserId(headers);
     return this.teamsService.findByUserId(userId);
+  }
+
+  // Get all teams the user is associated with (owned and member of)
+  @Get('my-teams')
+  async getMyTeams(@Headers() headers: any): Promise<{
+    ownedTeams: Team[];
+    memberTeams: Team[];
+  }> {
+    const userId = this.getUserId(headers);
+    return this.teamsService.findAllTeamsByUserId(userId);
+  }
+
+  // Check if the user owns any team
+  @Get('owns-team')
+  async ownsTeam(@Headers() headers: any): Promise<{ ownsTeam: boolean }> {
+    try {
+      const userId = this.getUserId(headers);
+      const ownsTeam = await this.teamsService.userOwnsAnyTeam(userId);
+      return { ownsTeam };
+    } catch {
+      return { ownsTeam: false };
+    }
   }
 
   // Get my pending invites (must be before :id route)
@@ -211,6 +256,7 @@ export class TeamsController {
         isPublic: data.is_public,
         requiresApproval: data.requires_approval,
         galleryImages: data.gallery_images,
+        coverImagePosition: data.cover_image_position,
       },
       userId,
     );

@@ -25,7 +25,12 @@
     "migration:pending": "mikro-orm migration:pending",
     "schema:update": "mikro-orm schema:update --run",
     "schema:drop": "mikro-orm schema:drop --run",
-    "cache:clear": "mikro-orm cache:clear"
+    "cache:clear": "mikro-orm cache:clear",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
+    "test:stripe": "jest --testPathPatterns stripe"
   },
   "keywords": [
     "meca",
@@ -60,9 +65,16 @@
     "rxjs": "^7.8.2",
     "stripe": "^17.5.0",
     "twilio": "^5.3.6",
-    "uuid": "^13.0.0",
+    "uuid": "^9.0.0",
     "xlsx": "^0.18.5",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "qrcode": "~1.5.4",
+    "canvas": "~3.2.0",
+    "@nestjs/throttler": "~6.5.0",
+    "nodemailer": "~7.0.12",
+    "@nestjs/schedule": "~6.1.0",
+    "pg": "~8.16.3",
+    "mysql2": "~3.16.0"
   },
   "devDependencies": {
     "@mikro-orm/cli": "^6.6.1",
@@ -74,11 +86,19 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.19.1",
-    "@types/uuid": "^11.0.0",
+    "@types/uuid": "^9.0.0",
     "@typescript-eslint/eslint-plugin": "^8.19.1",
     "@typescript-eslint/parser": "^8.19.1",
     "eslint": "^9.17.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "@types/qrcode": "~1.5.6",
+    "@types/nodemailer": "~7.0.5",
+    "@types/pg": "~8.16.0",
+    "@supabase/supabase-js": "~2.90.1",
+    "ts-node": "~10.9.2",
+    "jest": "~30.2.0",
+    "@types/jest": "~30.0.0",
+    "ts-jest": "~29.4.6"
   }
 }

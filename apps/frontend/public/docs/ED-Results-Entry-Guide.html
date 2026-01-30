@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Director Results Entry Guide - MECA</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .logo {
+      font-size: 1rem;
+      color: #f97316;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    h1 {
+      color: #f97316;
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #94a3b8;
+      font-size: 1rem;
+    }
+    .section {
+      background: #334155;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    h2 {
+      color: #f97316;
+      font-size: 1.3rem;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2 .icon {
+      font-size: 1.5rem;
+    }
+    h3 {
+      color: #22c55e;
+      font-size: 1.1rem;
+      margin: 16px 0 12px 0;
+    }
+    p {
+      margin-bottom: 12px;
+    }
+    ul, ol {
+      margin-left: 24px;
+      margin-bottom: 12px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .step-card {
+      background: #475569;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 12px 0;
+      border-left: 4px solid #f97316;
+    }
+    .step-number {
+      display: inline-block;
+      background: #f97316;
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 28px;
+      font-weight: bold;
+      margin-right: 12px;
+    }
+    .tip-box {
+      background: #1e3a5f;
+      border-left: 4px solid #3b82f6;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .tip-box strong {
+      color: #3b82f6;
+    }
+    .warning-box {
+      background: #7c2d12;
+      border-left: 4px solid #ef4444;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .warning-box strong {
+      color: #ef4444;
+    }
+    .success-box {
+      background: #14532d;
+      border-left: 4px solid #22c55e;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .success-box strong {
+      color: #22c55e;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #475569;
+    }
+    th {
+      background: #475569;
+      color: #f97316;
+    }
+    tr:nth-child(even) {
+      background: #3d4f63;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .status-active {
+      background: #22c55e;
+      color: #052e16;
+    }
+    .status-expired {
+      background: #ef4444;
+      color: white;
+    }
+    .status-guest {
+      background: #6b7280;
+      color: white;
+    }
+    .quick-ref {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 16px 0;
+    }
+    .quick-ref-item {
+      background: #1e293b;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .quick-ref-item .label {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+    .quick-ref-item .value {
+      color: #f97316;
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+    .close-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #475569;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    .close-btn:hover {
+      background: #64748b;
+    }
+    @media (max-width: 600px) {
+      .container {
+        padding: 0 10px;
+      }
+      h1 {
+        font-size: 1.5rem;
+      }
+      .close-btn {
+        position: static;
+        display: block;
+        margin: 0 auto 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button class="close-btn" onclick="window.close()">Close Guide</button>
+
+  <div class="container">
+    <div class="header">
+      <div class="logo">MECA</div>
+      <h1>Results Entry Guide</h1>
+      <p class="subtitle">For Event Directors</p>
+    </div>
+
+    <!-- QUICK REFERENCE -->
+    <div class="section">
+      <h2><span class="icon">&#9889;</span> Quick Reference</h2>
+      <div class="quick-ref">
+        <div class="quick-ref-item">
+          <div class="label">Non-Member Code</div>
+          <div class="value">999999</div>
+        </div>
+        <div class="quick-ref-item">
+          <div class="label">Points: Top 5 Only</div>
+          <div class="value">5-4-3-2-1</div>
+        </div>
+        <div class="quick-ref-item">
+          <div class="label">MECA ID Length</div>
+          <div class="value">6 digits</div>
+        </div>
+        <div class="quick-ref-item">
+          <div class="label">Auto-Recalculates</div>
+          <div class="value">Yes</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="section">
+      <h2><span class="icon">&#128196;</span> Overview</h2>
+      <p>You have three ways to enter competition results:</p>
+      <ol>
+        <li><strong>Manual Entry</strong> - Enter results one at a time (best for small events or corrections)</li>
+        <li><strong>Excel Import</strong> - Upload results from a spreadsheet (best for larger events)</li>
+        <li><strong>TermLab Import</strong> - Upload directly from TermLab software (SPL events)</li>
+      </ol>
+
+      <div class="success-box">
+        <strong>Good News!</strong> The system automatically:
+        <ul style="margin-top: 8px; margin-bottom: 0;">
+          <li>Looks up members by MECA ID</li>
+          <li>Calculates placements based on scores</li>
+          <li>Calculates points for active members</li>
+          <li>Tracks all changes for audit purposes</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- MANUAL ENTRY -->
+    <div class="section">
+      <h2><span class="icon">&#9997;</span> Manual Entry</h2>
+
+      <div class="step-card">
+        <span class="step-number">1</span>
+        <strong>Enter MECA ID or Name</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          Type the competitor's 6-digit MECA ID, OR type their full name.
+          The system will automatically look them up.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">2</span>
+        <strong>Select Format & Class</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          Choose the competition format (SPL, SQL, etc.) and then select the class.
+          Classes are filtered by the event's season.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">3</span>
+        <strong>Enter Score, Wattage & Frequency</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          Enter the competitor's score. <strong>For SPL classes, Wattage and Frequency are required</strong> (except for Dueling Demos classes).
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">4</span>
+        <strong>Click Save Result</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          The result is saved and points are automatically calculated.
+        </p>
+      </div>
+
+      <h3>Understanding Member Status</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>What You See</th>
+            <th>What It Means</th>
+            <th>Earns Points?</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-badge status-active">Active</span> Green border</td>
+            <td>Member has valid, paid membership</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td><span class="status-badge status-expired">Expired</span> Red border/text</td>
+            <td>Membership has expired</td>
+            <td>No</td>
+          </tr>
+          <tr>
+            <td><span class="status-badge status-guest">999999</span> No indicator</td>
+            <td>Non-member (guest competitor)</td>
+            <td>No</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tip-box">
+        <strong>Tip:</strong> If a competitor's name shows in red with "(Expired)", they can still compete but won't earn points. Encourage them to renew their membership!
+      </div>
+    </div>
+
+    <!-- EXCEL IMPORT -->
+    <div class="section">
+      <h2><span class="icon">&#128202;</span> Excel Import</h2>
+
+      <div class="step-card">
+        <span class="step-number">1</span>
+        <strong>Download the Template</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          Click "Download Template" to get the official MECA Excel template.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">2</span>
+        <strong>Fill in Your Results</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          Enter your event results in the spreadsheet. Required columns: <strong>Class</strong> and <strong>Score</strong>.
+          Optional: Member ID, Name, Wattage, Frequency.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">3</span>
+        <strong>Upload the File</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          Click "Choose File" or drag your .xlsx file into the upload area.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">4</span>
+        <strong>Confirm Import</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          Review any warnings, then click to import. Points will be calculated automatically.
+        </p>
+      </div>
+
+      <h3>Excel Column Reference</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Column</th>
+            <th>Required?</th>
+            <th>Example</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Name</td>
+            <td><strong>Yes</strong></td>
+            <td>John Smith</td>
+          </tr>
+          <tr>
+            <td>Member ID</td>
+            <td>No</td>
+            <td>202401</td>
+          </tr>
+          <tr>
+            <td>Class</td>
+            <td><strong>Yes</strong></td>
+            <td>Dedicated X</td>
+          </tr>
+          <tr>
+            <td>Score</td>
+            <td><strong>Yes</strong></td>
+            <td>155.2</td>
+          </tr>
+          <tr>
+            <td>Wattage</td>
+            <td>SPL*</td>
+            <td>6000</td>
+          </tr>
+          <tr>
+            <td>Frequency</td>
+            <td>SPL*</td>
+            <td>45</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><em>* Wattage and Frequency are required for SPL classes (except Dueling Demos). If missing, you'll be prompted to complete them.</em></p>
+
+      <div class="tip-box">
+        <strong>MECA ID Handling:</strong>
+        <ul style="margin-top: 8px; margin-bottom: 0;">
+          <li>If Member ID is provided, the system verifies it matches the name</li>
+          <li>If Member ID is blank but the name matches an existing member, you'll be asked to confirm before the ID is auto-populated</li>
+          <li>If no match is found, the result is recorded with MECA ID <strong>999999</strong> (non-member)</li>
+        </ul>
+      </div>
+
+      <h3>Import Review Modal</h3>
+      <p>When you upload a file, you'll see a review modal showing all parsed results. This modal allows you to:</p>
+      <ul>
+        <li><strong>Confirm Name Matches:</strong> When the system finds a potential match for a competitor name, click "Use" to accept the matched MECA ID or "Ignore" to record as non-member</li>
+        <li><strong>Complete Missing Data:</strong> For SPL classes (except Dueling Demos), enter missing wattage and frequency values directly in the modal</li>
+        <li><strong>Skip Entries:</strong> Click "Skip" on any row to exclude it from import. Skipped entries can be added later using manual entry</li>
+      </ul>
+      <div class="warning-box" style="margin-top: 12px;">
+        <strong>Important:</strong> Results missing required data (name, class, score) or incomplete wattage/frequency for SPL classes will NOT be imported unless you complete the data or mark them as skipped.
+      </div>
+    </div>
+
+    <!-- TERMLAB IMPORT -->
+    <div class="section">
+      <h2><span class="icon">&#128190;</span> TermLab Import</h2>
+
+      <p>If you use TermLab software for SPL competitions, you can import results directly.</p>
+
+      <div class="step-card">
+        <span class="step-number">1</span>
+        <strong>Export from TermLab</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          In TermLab, export your event results to a .tlab file.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">2</span>
+        <strong>Upload the .tlab File</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          In the TermLab Import tab, select or drag your .tlab file.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <span class="step-number">3</span>
+        <strong>Confirm Import</strong>
+        <p style="margin-top: 8px; margin-bottom: 0;">
+          The system will parse the file and import all results. Points are calculated automatically.
+        </p>
+      </div>
+
+      <div class="tip-box">
+        <strong>Note:</strong> TermLab files are always imported as SPL format. The system will extract competitor names, scores, wattage, frequency, and MECA IDs from the file.
+      </div>
+    </div>
+
+    <!-- AFTER IMPORTING -->
+    <div class="section">
+      <h2><span class="icon">&#10003;</span> After Entering Results</h2>
+
+      <h3>Review Your Results</h3>
+      <p>After entering or importing results, they appear in the "Event Results" table below. You can:</p>
+      <ul>
+        <li><strong>Filter</strong> by format or class using the dropdowns</li>
+        <li><strong>Search</strong> by MECA ID or name</li>
+        <li><strong>Sort</strong> by clicking column headers</li>
+        <li><strong>Edit</strong> a result by clicking the edit icon (you'll need to provide a reason)</li>
+        <li><strong>Delete</strong> a result by clicking the trash icon (you'll need to provide a reason)</li>
+      </ul>
+
+      <h3>Recalculate Points</h3>
+      <p>If you need to recalculate all placements and points:</p>
+      <ol>
+        <li>Click the <strong>"Recalculate All Points"</strong> button</li>
+        <li>The system will re-sort by score, assign placements, and calculate points</li>
+        <li>This is useful if you made multiple edits or imported additional results</li>
+      </ol>
+
+      <div class="warning-box">
+        <strong>Important:</strong> All changes (edits, deletes) require a reason and are logged for audit purposes.
+        Please provide accurate reasons for any modifications.
+      </div>
+    </div>
+
+    <!-- POINTS EXPLAINED -->
+    <div class="section">
+      <h2><span class="icon">&#127942;</span> How Points Work</h2>
+
+      <p>Points are awarded to the <strong>top 5 competitors</strong> in each class:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Place</th>
+            <th>Standard Event</th>
+            <th>2X Event</th>
+            <th>3X Event</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1st</td>
+            <td>5 points</td>
+            <td>10 points</td>
+            <td>15 points</td>
+          </tr>
+          <tr>
+            <td>2nd</td>
+            <td>4 points</td>
+            <td>8 points</td>
+            <td>12 points</td>
+          </tr>
+          <tr>
+            <td>3rd</td>
+            <td>3 points</td>
+            <td>6 points</td>
+            <td>9 points</td>
+          </tr>
+          <tr>
+            <td>4th</td>
+            <td>2 points</td>
+            <td>4 points</td>
+            <td>6 points</td>
+          </tr>
+          <tr>
+            <td>5th</td>
+            <td>1 point</td>
+            <td>2 points</td>
+            <td>3 points</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Who Gets Points?</h3>
+      <ul>
+        <li><strong>Active members only</strong> - Must have a valid, paid MECA membership</li>
+        <li><strong>Top 5 only</strong> - 6th place and below receive 0 points</li>
+        <li><strong>Guests (999999)</strong> - Can compete but earn 0 points</li>
+        <li><strong>Expired members</strong> - Can compete but earn 0 points until they renew</li>
+      </ul>
+    </div>
+
+    <!-- COMMON QUESTIONS -->
+    <div class="section">
+      <h2><span class="icon">&#10067;</span> Common Questions</h2>
+
+      <h3>What if a competitor isn't found?</h3>
+      <p>If you type a MECA ID and the member isn't found:</p>
+      <ul>
+        <li>Double-check the MECA ID for typos</li>
+        <li>The competitor might not be registered in the system</li>
+        <li>Enter their name and use MECA ID <strong>999999</strong> for non-members</li>
+      </ul>
+
+      <h3>Can non-members compete?</h3>
+      <p>Yes! Non-members can compete at MECA events. They just won't earn points toward season standings. Enter them with MECA ID <strong>999999</strong> or leave the MECA ID blank.</p>
+
+      <h3>What if I make a mistake?</h3>
+      <p>No problem! You can edit or delete any result. Just click the edit or delete icon next to the result. You'll be asked to provide a reason for the change.</p>
+
+      <h3>Why is someone showing 0 points when they placed 1st?</h3>
+      <p>Check their membership status:</p>
+      <ul>
+        <li>Their membership may be expired (shows in red)</li>
+        <li>They may be entered as a non-member (999999)</li>
+        <li>Their membership type may not be points-eligible</li>
+      </ul>
+
+      <h3>How do I see the full class names?</h3>
+      <p>The dropdown shows class abbreviations. Hover over or select a class to see it applied. The full class name is stored with the result.</p>
+    </div>
+
+    <!-- NEED HELP -->
+    <div class="section">
+      <h2><span class="icon">&#128172;</span> Need Help?</h2>
+      <p>If you're having trouble or have questions:</p>
+      <ul>
+        <li>Contact MECA Support for technical issues</li>
+        <li>Check with your Regional Coordinator for event-related questions</li>
+        <li>Review the full documentation in the Admin Guide for detailed information</li>
+      </ul>
+    </div>
+
+    <p style="text-align: center; margin-top: 40px; color: #64748b;">
+      MECA - Mobile Electronics Competition Association<br>
+      Last updated: January 2026
+    </p>
+  </div>
+</body>
+</html>

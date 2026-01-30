@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results Entry System - MECA Documentation</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      color: #f97316;
+      font-size: 2rem;
+    }
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 40px;
+    }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #f97316;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .section {
+      background: #334155;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    h2 {
+      color: #f97316;
+      font-size: 1.4rem;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #475569;
+    }
+    h3 {
+      color: #22c55e;
+      font-size: 1.1rem;
+      margin: 16px 0 12px 0;
+    }
+    h4 {
+      color: #3b82f6;
+      font-size: 1rem;
+      margin: 12px 0 8px 0;
+    }
+    p {
+      margin-bottom: 12px;
+    }
+    ul, ol {
+      margin-left: 24px;
+      margin-bottom: 12px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .highlight {
+      background: #475569;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #f97316;
+    }
+    .status-box {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin: 4px;
+    }
+    .status-active {
+      background: #22c55e;
+      color: #052e16;
+    }
+    .status-expired {
+      background: #ef4444;
+      color: #fff;
+    }
+    .status-none {
+      background: #6b7280;
+      color: #fff;
+    }
+    .code-block {
+      background: #1e293b;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .flow-diagram {
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .flow-number {
+      background: #f97316;
+      color: #fff;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .arrow {
+      text-align: center;
+      color: #f97316;
+      font-size: 1.5rem;
+      margin: 8px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #475569;
+    }
+    th {
+      background: #475569;
+      color: #f97316;
+    }
+    tr:nth-child(even) {
+      background: #3d4f63;
+    }
+    .warning {
+      background: #7c2d12;
+      border-left-color: #ef4444;
+    }
+    .info {
+      background: #1e3a5f;
+      border-left-color: #3b82f6;
+    }
+    .success {
+      background: #14532d;
+      border-left-color: #22c55e;
+    }
+    .tab-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab-button {
+      padding: 10px 20px;
+      background: #475569;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      color: #94a3b8;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab-button.active {
+      background: #f97316;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Documentation Index</a>
+
+    <h1>Results Entry System</h1>
+    <p class="subtitle">Complete Guide to Manual Entry, Excel Import & TermLab Import</p>
+
+    <!-- OVERVIEW -->
+    <div class="section">
+      <h2>Overview</h2>
+      <p>
+        The MECA Competition Results Entry system provides three methods for recording competition results.
+        Each method includes automatic member lookup, membership validation, class matching, and points calculation.
+      </p>
+
+      <div class="highlight">
+        <strong>Entry Methods:</strong>
+        <ul style="margin-top: 8px; margin-bottom: 0;">
+          <li><strong>Manual Entry</strong> - Enter individual results one at a time with real-time member lookup</li>
+          <li><strong>Excel Import</strong> - Bulk import from .xlsx spreadsheet files using the MECA template</li>
+          <li><strong>TermLab Import</strong> - Direct import from TermLab software .tlab export files</li>
+        </ul>
+      </div>
+
+      <p>All three methods share the same business logic for:</p>
+      <ul>
+        <li>Member lookup and validation</li>
+        <li>Membership status verification (points eligibility)</li>
+        <li>Competition class matching</li>
+        <li>Automatic points calculation and placement assignment</li>
+      </ul>
+    </div>
+
+    <!-- MANUAL ENTRY -->
+    <div class="section">
+      <h2>1. Manual Entry</h2>
+      <p>Manual entry allows administrators and event directors to enter results one at a time with real-time feedback.</p>
+
+      <h3>Required Fields</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>MECA ID</td>
+            <td>Optional</td>
+            <td>Member's MECA ID number. Leave blank for non-members.</td>
+          </tr>
+          <tr>
+            <td>Name</td>
+            <td><strong>Yes</strong></td>
+            <td>Competitor's full name. Auto-populates if MECA ID found.</td>
+          </tr>
+          <tr>
+            <td>Format</td>
+            <td><strong>Yes</strong></td>
+            <td>Competition format: SPL, SQL, Show and Shine, or Ride the Light</td>
+          </tr>
+          <tr>
+            <td>Class</td>
+            <td><strong>Yes</strong></td>
+            <td>Competition class (filtered by format and event season)</td>
+          </tr>
+          <tr>
+            <td>Score</td>
+            <td><strong>Yes</strong></td>
+            <td>Competition score (decimal number)</td>
+          </tr>
+          <tr>
+            <td>Wattage</td>
+            <td><strong>Required for SPL*</strong></td>
+            <td>System wattage in watts. Required for all SPL classes except Dueling Demos.</td>
+          </tr>
+          <tr>
+            <td>Frequency</td>
+            <td><strong>Required for SPL*</strong></td>
+            <td>Test frequency in Hz (typically 40-60 Hz). Required for all SPL classes except Dueling Demos.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>MECA ID Lookup Flow</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div>User enters MECA ID (requires 4+ characters to trigger lookup)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div>System searches member profiles for exact MECA ID match</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div>If found: retrieves name and checks membership status (active/expired)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">4</span>
+          <div>Name field auto-populates with visual status indicator</div>
+        </div>
+      </div>
+
+      <h3>Name Lookup Flow (Alternative)</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div>User types competitor name in the Name field</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div>System searches for <strong>exact full name match</strong> (case-insensitive)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div>If active member found: MECA ID auto-populates</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">4</span>
+          <div>If expired/not found: MECA ID set to <code>999999</code> (non-member code)</div>
+        </div>
+      </div>
+
+      <h3>Visual Status Indicators</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Name Field Appearance</th>
+            <th>Points Eligible</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-box status-active">Active</span></td>
+            <td>White text, green border, "(Active)" label</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-expired">Expired</span></td>
+            <td>Red text, red border, "(Expired)" label</td>
+            <td>No - 0 points</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-none">Not Found</span></td>
+            <td>Normal white text, no border</td>
+            <td>No - 0 points</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Save Process</h3>
+      <ol>
+        <li>Validates all required fields are filled</li>
+        <li>Ensures non-members (MECA ID 999999) have points set to 0</li>
+        <li>Creates competition result record in database</li>
+        <li>Creates audit log entry with session tracking</li>
+        <li><strong>Automatically recalculates points</strong> for all results in the event</li>
+        <li>Refreshes the results list to show updated placements and points</li>
+      </ol>
+    </div>
+
+    <!-- EXCEL IMPORT -->
+    <div class="section">
+      <h2>2. Excel Import</h2>
+      <p>Excel import allows bulk importing of results from a .xlsx spreadsheet file.</p>
+
+      <h3>File Requirements</h3>
+      <ul>
+        <li>File format: <code>.xlsx</code> (Excel 2007+)</li>
+        <li>First sheet (Sheet1) contains the results data</li>
+        <li>Optional second sheet "Internal Values" for class abbreviation mapping</li>
+      </ul>
+
+      <h3>Sheet1 - Required Columns</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Column Name</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Name (Optional) or Name</td>
+            <td><strong>Yes</strong></td>
+            <td>Competitor's full name (always required)</td>
+          </tr>
+          <tr>
+            <td>Member ID</td>
+            <td>No</td>
+            <td>MECA ID number. If blank, system will attempt name matching or use 999999.</td>
+          </tr>
+          <tr>
+            <td>Class</td>
+            <td><strong>Yes</strong></td>
+            <td>Class abbreviation or full name (e.g., "DDX" or "Dedicated X")</td>
+          </tr>
+          <tr>
+            <td>Score</td>
+            <td><strong>Yes</strong></td>
+            <td>Competition score as a number</td>
+          </tr>
+          <tr>
+            <td>Points</td>
+            <td>No</td>
+            <td>Pre-calculated points (will be recalculated after import)</td>
+          </tr>
+          <tr>
+            <td>Wattage / Power / Power Wattage</td>
+            <td><strong>SPL*</strong></td>
+            <td>System wattage. Required for SPL classes (except Dueling Demos).</td>
+          </tr>
+          <tr>
+            <td>Frequency / Freq / Hz</td>
+            <td><strong>SPL*</strong></td>
+            <td>Test frequency. Required for SPL classes (except Dueling Demos).</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><em>* Wattage and Frequency are required for all SPL classes except Dueling Demos. If missing from uploaded file, a modal will prompt for completion.</em></p>
+
+      <h3>Internal Values Sheet (Optional)</h3>
+      <p>Maps class abbreviations to full class names:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Abbreviation</th>
+            <th>Division</th>
+            <th>Class</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>DDX</td>
+            <td>SPL</td>
+            <td>Dedicated X</td>
+          </tr>
+          <tr>
+            <td>DDMK</td>
+            <td>SPL</td>
+            <td>Dedicated MK</td>
+          </tr>
+          <tr>
+            <td>SQC</td>
+            <td>SQL</td>
+            <td>SQ Competitor</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Import Process Flow</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div><strong>File Parsing:</strong> System reads Excel file and extracts data from Sheet1</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div><strong>Class Mapping:</strong> If "Internal Values" sheet exists, loads class abbreviation mappings</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div><strong>Validation:</strong> Each row validated for required fields (Name, Class, Score)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">4</span>
+          <div><strong>Member Lookup:</strong> For each row, system searches for name match in existing members</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">5</span>
+          <div><strong>Confirmation Modal:</strong> If name matches are found, user is asked to confirm each match before MECA ID is populated</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">6</span>
+          <div><strong>Missing Data Modal:</strong> If SPL class results are missing wattage/frequency, user is prompted to complete them (or skip)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">7</span>
+          <div><strong>Class Matching:</strong> Class name matched to database (case-insensitive)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">8</span>
+          <div><strong>Result Creation:</strong> Only confirmed/complete results are saved with audit logging</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">9</span>
+          <div><strong>Points Recalculation:</strong> All event results recalculated for placements and points</div>
+        </div>
+      </div>
+
+      <div class="highlight warning">
+        <strong>Skipped Entries:</strong> If a user clicks "Skip" on a confirmation or missing data modal, that result will NOT be imported. The user can enter skipped results later using manual entry.
+      </div>
+
+      <h3>Import Review Modal</h3>
+      <p>When you upload a file, the system displays a <strong>Review Modal</strong> showing all parsed results before import. This modal enables:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Description</th>
+            <th>Business Logic</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Name Match Confirmation</strong></td>
+            <td>When a name matches an existing member but no MECA ID was provided, system asks for confirmation</td>
+            <td>Click "Use" to assign the matched MECA ID, or "Ignore" to record as non-member (999999)</td>
+          </tr>
+          <tr>
+            <td><strong>Missing Data Completion</strong></td>
+            <td>SPL class results missing wattage/frequency show inline input fields</td>
+            <td>Enter the missing values directly in the modal. Required for all SPL classes except Dueling Demos</td>
+          </tr>
+          <tr>
+            <td><strong>Skip Functionality</strong></td>
+            <td>Any row can be marked as "Skip"</td>
+            <td>Skipped entries are excluded from import. User can enter these manually later</td>
+          </tr>
+          <tr>
+            <td><strong>Validation Errors</strong></td>
+            <td>Rows missing required fields (Name, Class, Score) are auto-flagged</td>
+            <td>Invalid rows cannot be imported - they must be fixed in the source file</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="highlight info">
+        <strong>Import Button Status:</strong> The "Import Results" button shows a count of how many results will be imported. It is disabled if no valid, confirmed results are ready.
+      </div>
+
+      <h3>Download Template</h3>
+      <p>Click the <strong>"Download Template"</strong> button in the Excel Import tab to get the official MECA template file (<code>MecaEventResults_Template.xlsx</code>).</p>
+    </div>
+
+    <!-- TERMLAB IMPORT -->
+    <div class="section">
+      <h2>3. TermLab Import</h2>
+      <p>TermLab import allows direct import from TermLab software export files (.tlab format).</p>
+
+      <div class="highlight info">
+        <strong>Important:</strong> TermLab files are <strong>always SPL format</strong>. The system automatically sets the format to SPL for all TermLab imports.
+      </div>
+
+      <h3>File Format</h3>
+      <p>TermLab .tlab files are CSV-formatted with quoted fields. Each result line contains:</p>
+      <div class="code-block">
+"Class Name",format_code,"30",power_limit,score,"id","Competitor Name","wattage","","","0","meca_id","","frequency","placement"
+      </div>
+
+      <h3>Field Positions</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Position</th>
+            <th>Field</th>
+            <th>Example</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0</td>
+            <td>Class Name</td>
+            <td>"Dedicated X"</td>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>Format Code</td>
+            <td>"SPL"</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Power Limit</td>
+            <td>"6000"</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Score</td>
+            <td>"155.2"</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>Competitor Name</td>
+            <td>"John Smith"</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>Wattage</td>
+            <td>"3500"</td>
+          </tr>
+          <tr>
+            <td>11</td>
+            <td>MECA ID</td>
+            <td>"202401"</td>
+          </tr>
+          <tr>
+            <td>13</td>
+            <td>Frequency</td>
+            <td>"45"</td>
+          </tr>
+          <tr>
+            <td>14</td>
+            <td>Placement</td>
+            <td>"1"</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Import Process</h3>
+      <p>The TermLab import follows the same processing logic as Excel import:</p>
+      <ol>
+        <li>Parse .tlab file line by line (skipping headers and metadata)</li>
+        <li>Extract fields from each CSV line</li>
+        <li>Match MECA ID to active memberships (Competitor, Retailer, Manufacturer)</li>
+        <li>Fall back to name matching if MECA ID not found</li>
+        <li>Match class names to database classes</li>
+        <li>Create results with audit logging</li>
+        <li>Recalculate all points and placements</li>
+      </ol>
+
+      <div class="highlight warning">
+        <strong>Note:</strong> TermLab MECA IDs may be empty (stored as "0" or blank). The system will attempt to match by competitor name in these cases.
+      </div>
+    </div>
+
+    <!-- MEMBER MATCHING BUSINESS LOGIC -->
+    <div class="section">
+      <h2>Member Matching Business Logic</h2>
+      <p>All three entry methods use the same member matching algorithm:</p>
+
+      <h3>Scenario 1: MECA ID Provided</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div>Search active memberships for exact MECA ID match</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div><strong>If found in active memberships:</strong> Use membership data, mark as points-eligible</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div><strong>If NOT found:</strong> Fall back to profile lookup (backward compatibility)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">4</span>
+          <div>Keep original MECA ID but mark as NOT points-eligible</div>
+        </div>
+      </div>
+
+      <h3>Scenario 2: No MECA ID, Name Provided</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div>Search active memberships by competitor name (exact match)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div><strong>If found:</strong> Use membership MECA ID, mark as points-eligible</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div><strong>If NOT found:</strong> Fall back to profile name matching</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">4</span>
+          <div><strong>Still not found:</strong> Set MECA ID to <code>999999</code> (non-member)</div>
+        </div>
+      </div>
+
+      <h3>Points-Eligible Membership Types</h3>
+      <p>Only these membership categories can earn competition points:</p>
+      <ul>
+        <li><strong>Competitor</strong> - Standard competitor membership</li>
+        <li><strong>Retailer</strong> - Retail business membership</li>
+        <li><strong>Manufacturer</strong> - Manufacturing business membership</li>
+      </ul>
+      <p>Additionally, the membership must be:</p>
+      <ul>
+        <li>Payment status: <strong>PAID</strong></li>
+        <li>Not expired (end_date is null or in the future)</li>
+      </ul>
+    </div>
+
+    <!-- CLASS MATCHING -->
+    <div class="section">
+      <h2>Competition Class Matching</h2>
+      <p>The system attempts to match imported class names to database classes using multiple strategies:</p>
+
+      <h3>Matching Priority</h3>
+      <ol>
+        <li><strong>Exact Match (Case-Insensitive):</strong> Class name and format must both match</li>
+        <li><strong>Class Name Mappings Table:</strong> Lookup in <code>class_name_mappings</code> for alternate names</li>
+        <li><strong>Unmatched:</strong> Logged as warning, class_id left null (shows as "Unknown")</li>
+      </ol>
+
+      <h3>Season Filtering</h3>
+      <p>In Manual Entry, the class dropdown is filtered by:</p>
+      <ul>
+        <li>Selected event's season (classes are season-specific)</li>
+        <li>Selected format (SPL, SQL, etc.)</li>
+      </ul>
+
+      <div class="highlight info">
+        <strong>Admin Note:</strong> If classes frequently fail to match, consider adding entries to the <code>class_name_mappings</code> table to map common variations (e.g., "Ded X" &rarr; "Dedicated X").
+      </div>
+    </div>
+
+    <!-- POINTS CALCULATION -->
+    <div class="section">
+      <h2>Points Calculation</h2>
+      <p>Points are automatically calculated after any result entry, update, or import.</p>
+
+      <h3>Points Structure</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Placement</th>
+            <th>1X Event</th>
+            <th>2X Event</th>
+            <th>3X Event</th>
+            <th>4X Event*</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1st Place</td>
+            <td>5</td>
+            <td>10</td>
+            <td>15</td>
+            <td>20</td>
+          </tr>
+          <tr>
+            <td>2nd Place</td>
+            <td>4</td>
+            <td>8</td>
+            <td>12</td>
+            <td>19</td>
+          </tr>
+          <tr>
+            <td>3rd Place</td>
+            <td>3</td>
+            <td>6</td>
+            <td>9</td>
+            <td>18</td>
+          </tr>
+          <tr>
+            <td>4th Place</td>
+            <td>2</td>
+            <td>4</td>
+            <td>6</td>
+            <td>17</td>
+          </tr>
+          <tr>
+            <td>5th Place</td>
+            <td>1</td>
+            <td>2</td>
+            <td>3</td>
+            <td>16</td>
+          </tr>
+          <tr>
+            <td>6th+ Place</td>
+            <td colspan="4" style="text-align: center;">0 points</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><em>*4X events (Championship) use a special scoring structure: 20, 19, 18, 17, 16</em></p>
+
+      <h3>Points Eligibility Rules</h3>
+      <ul>
+        <li>Only <strong>top 5 placements</strong> receive points (no exceptions)</li>
+        <li>Only <strong>active paid memberships</strong> (Competitor, Retailer, Manufacturer) are eligible</li>
+        <li>Only <strong>eligible formats</strong> receive points: SPL, SQL, SSI, MK</li>
+        <li>MECA ID <code>999999</code> (non-member code) always receives 0 points</li>
+        <li>MECA IDs starting with <code>99</code> (test entries) receive 0 points</li>
+        <li>Events with multiplier <code>0</code> are non-competitive (no points)</li>
+      </ul>
+
+      <h3>Recalculate All Points</h3>
+      <p>The "Recalculate All Points" button:</p>
+      <ol>
+        <li>Groups all results by format and class</li>
+        <li>Sorts each group by score (descending)</li>
+        <li>Assigns placements (1, 2, 3...)</li>
+        <li>Verifies membership eligibility for each competitor</li>
+        <li>Calculates points based on placement and event multiplier</li>
+        <li>Updates World Finals qualification status</li>
+        <li>Triggers achievement checks for linked competitors</li>
+      </ol>
+    </div>
+
+    <!-- AUDIT LOGGING -->
+    <div class="section">
+      <h2>Audit Logging</h2>
+      <p>All result operations are tracked in the audit system for accountability.</p>
+
+      <h3>Tracked Operations</h3>
+      <ul>
+        <li><strong>Create:</strong> New result added (manual or import)</li>
+        <li><strong>Update:</strong> Existing result modified (requires modification reason)</li>
+        <li><strong>Delete:</strong> Result removed (requires deletion reason)</li>
+      </ul>
+
+      <h3>Session Tracking</h3>
+      <p>Each entry session is tracked with:</p>
+      <ul>
+        <li>Session ID</li>
+        <li>Event ID</li>
+        <li>User ID (who made the entries)</li>
+        <li>Entry method (manual, excel, termlab)</li>
+        <li>Format (if applicable)</li>
+        <li>File path (for imports)</li>
+        <li>Result count</li>
+        <li>Start/end timestamps</li>
+      </ul>
+
+      <h3>Viewing Audit Logs</h3>
+      <p>Click the "View Audit Log" button in the results entry interface to see the full history of changes for the selected event.</p>
+    </div>
+
+    <!-- TROUBLESHOOTING -->
+    <div class="section">
+      <h2>Troubleshooting</h2>
+
+      <h3>Member Not Found by MECA ID</h3>
+      <ul>
+        <li>Verify MECA ID is at least 4 characters</li>
+        <li>Check for typos in the MECA ID</li>
+        <li>Verify the member exists in the system</li>
+        <li>Check if their membership is active and paid</li>
+      </ul>
+
+      <h3>Class Not Matching</h3>
+      <ul>
+        <li>Check class name spelling (case-insensitive)</li>
+        <li>Verify the class exists for the selected season</li>
+        <li>Check if a mapping exists in class_name_mappings table</li>
+        <li>Contact admin to add missing class mappings</li>
+      </ul>
+
+      <h3>Points Not Calculating</h3>
+      <ul>
+        <li>Verify competitor has active, paid membership</li>
+        <li>Check membership type is Competitor, Retailer, or Manufacturer</li>
+        <li>Verify format is eligible (SPL, SQL, SSI, MK)</li>
+        <li>Check event multiplier is not 0</li>
+        <li>Try clicking "Recalculate All Points"</li>
+      </ul>
+
+      <h3>Import Errors</h3>
+      <ul>
+        <li>For Excel: Verify file is .xlsx format</li>
+        <li>Check all required columns (Class, Score) are present</li>
+        <li>Look for error messages identifying specific rows</li>
+        <li>For TermLab: Verify file is valid .tlab export</li>
+      </ul>
+    </div>
+
+    <!-- TECHNICAL REFERENCE -->
+    <div class="section">
+      <h2>Technical Reference</h2>
+
+      <h3>Frontend Components</h3>
+      <ul>
+        <li><code>ResultsEntryNew.tsx</code> - Admin results entry interface</li>
+        <li><code>EDEventManagementPage.tsx</code> - Event Director results entry</li>
+      </ul>
+
+      <h3>Backend Services</h3>
+      <ul>
+        <li><code>competition-results.service.ts</code> - Main results service (CRUD, points calculation)</li>
+        <li><code>results-import.service.ts</code> - File parsing (Excel, TermLab)</li>
+        <li><code>competition-results.controller.ts</code> - API endpoints</li>
+        <li><code>audit.service.ts</code> - Audit logging</li>
+      </ul>
+
+      <h3>Key Database Tables</h3>
+      <ul>
+        <li><code>competition_results</code> - Result records</li>
+        <li><code>competition_classes</code> - Class definitions (season-specific)</li>
+        <li><code>class_name_mappings</code> - Class name variations</li>
+        <li><code>memberships</code> - Membership records</li>
+        <li><code>results_audit_sessions</code> - Audit sessions</li>
+        <li><code>results_audit_logs</code> - Individual audit entries</li>
+      </ul>
+    </div>
+
+    <p style="text-align: center; margin-top: 40px; color: #64748b;">
+      Last updated: January 2026
+    </p>
+  </div>
+</body>
+</html>

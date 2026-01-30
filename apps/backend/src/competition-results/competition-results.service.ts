@@ -1,6 +1,6 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Optional, Logger } from '@nestjs/common';
 import { EntityManager, Reference, wrap } from '@mikro-orm/core';
-import { MembershipStatus } from '@newmeca/shared';
+import { MembershipStatus, MembershipCategory, PaymentStatus } from '@newmeca/shared';
 import { CompetitionResult } from './competition-results.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
@@ -8,16 +8,31 @@ import { CompetitionClass } from '../competition-classes/competition-classes.ent
 import { ClassNameMapping } from '../class-name-mappings/class-name-mappings.entity';
 import { Season } from '../seasons/seasons.entity';
 import { AuditService } from '../audit/audit.service';
+import { Membership } from '../memberships/memberships.entity';
+import { WorldFinalsService } from '../world-finals/world-finals.service';
+import { AchievementsService } from '../achievements/achievements.service';
+import { PointsConfigurationService } from '../points-configuration/points-configuration.service';
+import { PointsConfiguration } from '../points-configuration/points-configuration.entity';
 
 @Injectable()
 export class CompetitionResultsService {
   private currentSessionId: string | null = null;
   private manualEntryResults: any[] = [];
 
+  // Cache for points-eligible MECA IDs to avoid repeated DB queries
+  private pointsEligibleMecaIds: Set<number> = new Set();
+  private pointsEligibleCacheTimestamp: number = 0;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  private readonly logger = new Logger(CompetitionResultsService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly auditService: AuditService,
+    private readonly pointsConfigService: PointsConfigurationService,
+    @Optional() private readonly worldFinalsService?: WorldFinalsService,
+    @Optional() private readonly achievementsService?: AchievementsService,
   ) {}
 
   /**
@@ -87,6 +102,66 @@ export class CompetitionResultsService {
     });
   }
 
+  /**
+   * Get result counts for all events in a single efficient query
+   * Returns a map of eventId -> count
+   */
+  async getResultCountsByEvent(): Promise<Record<string, number>> {
+    const em = this.em.fork();
+
+    // Use raw query for efficient GROUP BY count
+    const results = await em.getConnection().execute(
+      `SELECT event_id, COUNT(*) as count FROM competition_results GROUP BY event_id`
+    );
+
+    const counts: Record<string, number> = {};
+    for (const row of results) {
+      counts[row.event_id] = parseInt(row.count, 10);
+    }
+
+    return counts;
+  }
+
+  /**
+   * Get result counts for multiple events in a single query
+   * Returns a map of eventId -> count
+   */
+  async getResultCountsByEventIds(eventIds: string[]): Promise<Record<string, number>> {
+    if (!eventIds || eventIds.length === 0) {
+      return {};
+    }
+
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    // Build parameterized query with placeholders to prevent SQL injection
+    const placeholders = eventIds.map(() => '?').join(',');
+
+    // Use raw SQL for efficient counting with GROUP BY (parameterized for security)
+    const result = await connection.execute(
+      `SELECT event_id, COUNT(*) as count
+       FROM competition_results
+       WHERE event_id IN (${placeholders})
+       GROUP BY event_id`,
+      eventIds
+    );
+
+    // Convert to a map
+    const counts: Record<string, number> = {};
+    for (const row of result) {
+      counts[row.event_id] = parseInt(row.count, 10);
+    }
+
+    // Fill in zeros for events with no results
+    for (const eventId of eventIds) {
+      if (!(eventId in counts)) {
+        counts[eventId] = 0;
+      }
+    }
+
+    return counts;
+  }
+
   async findByCompetitor(competitorId: string): Promise<CompetitionResult[]> {
     const em = this.em.fork();
     return em.find(CompetitionResult, { competitor: competitorId });
@@ -128,6 +203,14 @@ export class CompetitionResultsService {
 
     // Capture event_id for points recalculation
     const eventId = (data as any).event_id;
+
+    // Auto-populate season_id from event if not provided
+    if (eventId && !(data as any).season_id) {
+      const event = await em.findOne(Event, { id: eventId }, { populate: ['season'] });
+      if (event?.season) {
+        (data as any).season_id = event.season.id;
+      }
+    }
 
     // Handle event_id by creating a Reference
     if ((data as any).event_id !== undefined) {
@@ -460,8 +543,16 @@ export class CompetitionResultsService {
 
     // Build the query filter
     const filter: any = {};
+    let effectiveSeasonId = seasonId;
+
     if (seasonId) {
       filter.season = seasonId;
+    } else {
+      // Get current season for qualification status
+      const currentSeason = await em.findOne(Season, { isCurrent: true });
+      if (currentSeason) {
+        effectiveSeasonId = currentSeason.id;
+      }
     }
 
     // Fetch all results with the filter
@@ -469,14 +560,19 @@ export class CompetitionResultsService {
       populate: ['competitor']
     });
 
-    // Aggregate results by competitor
+    // Aggregate results by MECA ID (per-membership, not per-user)
+    // This allows users with multiple memberships to have separate leaderboard entries
     const aggregated = new Map<string, any>();
 
     for (const result of results) {
-      const competitorKey = result.competitor?.id || result.competitorName;
+      // Use MECA ID as the primary key for aggregation
+      // Fall back to competitor name for guests (999999) to group by name
+      const mecaId = result.mecaId;
+      const isGuest = !mecaId || mecaId === '999999' || mecaId === '0';
+      const aggregationKey = isGuest ? `guest_${result.competitorName}` : `meca_${mecaId}`;
 
-      if (!aggregated.has(competitorKey)) {
-        aggregated.set(competitorKey, {
+      if (!aggregated.has(aggregationKey)) {
+        aggregated.set(aggregationKey, {
           competitor_id: result.competitor?.id || '',
           competitor_name: result.competitorName,
           total_points: 0,
@@ -484,12 +580,13 @@ export class CompetitionResultsService {
           first_place: 0,
           second_place: 0,
           third_place: 0,
-          meca_id: result.mecaId || result.competitor?.meca_id,
-          membership_expiry: result.competitor?.membership_expiry,
+          meca_id: isGuest ? null : mecaId,
+          is_guest: isGuest,
+          is_qualified: false, // Will be updated below
         });
       }
 
-      const entry = aggregated.get(competitorKey);
+      const entry = aggregated.get(aggregationKey);
       entry.total_points += result.pointsEarned || 0;
       entry.events_participated += 1;
 
@@ -498,57 +595,139 @@ export class CompetitionResultsService {
       if (result.placement === 3) entry.third_place += 1;
     }
 
+    // Get qualification statuses for all MECA IDs
+    if (effectiveSeasonId && this.worldFinalsService) {
+      const mecaIds = Array.from(aggregated.values())
+        .filter(e => e.meca_id)
+        .map(e => parseInt(e.meca_id, 10))
+        .filter(id => !isNaN(id));
+
+      if (mecaIds.length > 0) {
+        const qualificationStatuses = await this.worldFinalsService.getQualificationStatuses(
+          mecaIds,
+          effectiveSeasonId
+        );
+
+        // Update entries with qualification status
+        for (const entry of aggregated.values()) {
+          if (entry.meca_id) {
+            const mecaIdNum = parseInt(entry.meca_id, 10);
+            if (!isNaN(mecaIdNum)) {
+              entry.is_qualified = qualificationStatuses.get(mecaIdNum) || false;
+            }
+          }
+        }
+      }
+    }
+
     // Convert to array and sort by total points descending
+    // Guests (no points) will naturally be at the bottom
     return Array.from(aggregated.values())
       .sort((a, b) => b.total_points - a.total_points);
   }
 
   /**
    * Calculate points for a single result based on placement and event multiplier
+   * Uses the configurable points system from the database
    *
-   * Point Structure (NO points awarded below 5th place for ANY event type):
-   * 1X Single Point Event: 1st=5, 2nd=4, 3rd=3, 4th=2, 5th=1
-   * 2X Double Points Event: 1st=10, 2nd=8, 3rd=6, 4th=4, 5th=2
-   * 3X Triple Points Event (SOUNDFEST): 1st=15, 2nd=12, 3rd=9, 4th=6, 5th=3
-   * 4X Points Event (SQ, Install, RTA, SQ2/SQ2+): 1st=20, 2nd=19, 3rd=18, 4th=17, 5th=16
+   * Standard Events (1X, 2X, 3X): Base points × multiplier (only top 5)
+   * 4X Events: Special fixed points per placement (configurable)
+   * Extended 4X: Optional participation points for placements 6th-50th (when enabled)
+   *
+   * @param placement - The competitor's placement (1st, 2nd, etc.)
+   * @param multiplier - The event's points multiplier (0, 1, 2, 3, or 4)
+   * @param format - The competition format (e.g., 'SPL', 'SQL')
+   * @param config - The points configuration for the season
+   * @returns The calculated points
    */
-  private calculatePoints(placement: number, multiplier: number, format: string): number {
-    // No points for multiplier 0 (non-competitive events)
-    if (multiplier === 0) {
-      return 0;
-    }
-
-    // Only top 5 placements receive points - NO exceptions
-    if (placement < 1 || placement > 5) {
-      return 0;
-    }
-
-    // 4X Points Event - Special scoring (SQ, Install, RTA, SQ2/SQ2+)
-    if (multiplier === 4) {
-      const fourXPoints: { [key: number]: number } = {
-        1: 20,
-        2: 19,
-        3: 18,
-        4: 17,
-        5: 16,
-      };
-      return fourXPoints[placement] || 0;
-    }
-
-    // Standard events (1X, 2X, 3X) - Base points × multiplier
-    const basePoints: { [key: number]: number } = {
-      1: 5,
-      2: 4,
-      3: 3,
-      4: 2,
-      5: 1,
-    };
-
-    return (basePoints[placement] || 0) * multiplier;
+  private calculatePoints(placement: number, multiplier: number, format: string, config: PointsConfiguration): number {
+    // Delegate to the PointsConfigurationService for consistent calculation
+    return this.pointsConfigService.calculatePoints(placement, multiplier, config);
   }
 
   /**
-   * Check if a member is eligible for points
+   * Refresh the cache of points-eligible MECA IDs from the memberships table.
+   * Only Competitor, Retailer, and Manufacturer memberships with active paid status are eligible.
+   */
+  private async refreshPointsEligibleCache(): Promise<void> {
+    const now = Date.now();
+    if (now - this.pointsEligibleCacheTimestamp < this.CACHE_TTL_MS) {
+      return; // Cache is still valid
+    }
+
+    const em = this.em.fork();
+    const today = new Date();
+
+    // Points-eligible categories
+    const pointsEligibleCategories = [
+      MembershipCategory.COMPETITOR,
+      MembershipCategory.RETAIL,
+      MembershipCategory.MANUFACTURER,
+    ];
+
+    // Find all active, paid memberships with MECA IDs in eligible categories
+    const memberships = await em.find(
+      Membership,
+      {
+        mecaId: { $ne: null },
+        paymentStatus: PaymentStatus.PAID,
+        membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
+        $or: [{ endDate: null }, { endDate: { $gt: today } }],
+      },
+      {
+        populate: ['membershipTypeConfig'],
+      }
+    );
+
+    // Update the cache
+    this.pointsEligibleMecaIds = new Set(memberships.map(m => m.mecaId!));
+    this.pointsEligibleCacheTimestamp = now;
+  }
+
+  /**
+   * Check if a MECA ID is eligible for points.
+   *
+   * Points eligibility rules:
+   * 1. MECA ID must be assigned (not null, 0, or 999999)
+   * 2. MECA ID must belong to an active, paid Competitor, Retailer, or Manufacturer membership
+   * 3. Membership must not be expired
+   * 4. Test/Special entries (IDs starting with 99) are not eligible
+   */
+  private async isMemberEligibleAsync(mecaId: string | undefined): Promise<boolean> {
+    // Guest competitors (999999) are not eligible
+    if (mecaId === '999999') {
+      return false;
+    }
+
+    // Unassigned (0 or null) are not eligible
+    if (!mecaId || mecaId === '0') {
+      return false;
+    }
+
+    // Test/Special entries starting with 99 are not eligible
+    if (mecaId.startsWith('99')) {
+      return false;
+    }
+
+    // Parse MECA ID as number
+    const mecaIdNum = parseInt(mecaId, 10);
+    if (isNaN(mecaIdNum)) {
+      return false;
+    }
+
+    // Refresh cache if needed
+    await this.refreshPointsEligibleCache();
+
+    // Check if this MECA ID is in our points-eligible set
+    return this.pointsEligibleMecaIds.has(mecaIdNum);
+  }
+
+  /**
+   * Check if a member is eligible for points (synchronous version for backward compatibility).
+   * This version does basic validation but doesn't check membership database.
+   * Use isMemberEligibleAsync for full eligibility checking.
+   *
+   * @deprecated Use isMemberEligibleAsync for full membership-based eligibility checking
    */
   private isMemberEligible(
     mecaId: string | undefined,
@@ -593,19 +772,192 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Recalculate placements for ALL events with competition results
+   * This is used to fix existing data after the placement calculation bug fix
+   */
+  async recalculateAllPlacements(): Promise<{ processed: number; errors: number }> {
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    // Get all distinct event IDs that have competition results
+    this.logger.log('Finding all events with competition results...');
+    const eventRows = await connection.execute(`
+      SELECT DISTINCT event_id
+      FROM competition_results
+      WHERE event_id IS NOT NULL
+    `);
+
+    const eventIds = eventRows.map((r: any) => r.event_id);
+    this.logger.log(`Found ${eventIds.length} events with results to process`);
+
+    let processed = 0;
+    let errors = 0;
+
+    for (const eventId of eventIds) {
+      try {
+        await this.updateEventPoints(eventId);
+        processed++;
+
+        if (processed % 50 === 0) {
+          this.logger.log(`Processed ${processed}/${eventIds.length} events...`);
+        }
+      } catch (err: any) {
+        this.logger.error(`Error processing event ${eventId}: ${err.message}`);
+        errors++;
+      }
+    }
+
+    this.logger.log(`Recalculation complete: ${processed} events processed, ${errors} errors`);
+    return { processed, errors };
+  }
+
+  /**
+   * Link competitor_id on competition results by matching meca_id to memberships
+   * This populates the competitor relationship so we can display profile data (like state)
+   */
+  async linkCompetitorsByMecaId(): Promise<{ linked: number; alreadyLinked: number; noMatch: number }> {
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    this.logger.log('Starting competitor linking by MECA ID...');
+
+    // Get all competition results that have a meca_id but no competitor_id
+    const unlinkedResults = await connection.execute(`
+      SELECT cr.id, cr.meca_id
+      FROM competition_results cr
+      WHERE cr.meca_id IS NOT NULL
+        AND cr.meca_id != '999999'
+        AND cr.meca_id != '0'
+        AND cr.meca_id != ''
+        AND cr.competitor_id IS NULL
+    `);
+
+    this.logger.log(`Found ${unlinkedResults.length} unlinked results with MECA IDs`);
+
+    // Get all memberships with their user_ids and profile state, keyed by meca_id
+    const memberships = await connection.execute(`
+      SELECT DISTINCT ON (m.meca_id) m.meca_id, m.user_id, p.state
+      FROM memberships m
+      JOIN profiles p ON p.id = m.user_id
+      WHERE m.meca_id IS NOT NULL AND m.user_id IS NOT NULL
+      ORDER BY m.meca_id, m.created_at DESC
+    `);
+
+    const mecaIdToProfile = new Map<string, { profileId: string; state: string | null }>();
+    for (const m of memberships) {
+      if (m.meca_id) {
+        mecaIdToProfile.set(m.meca_id.toString(), { profileId: m.user_id, state: m.state || null });
+      }
+    }
+
+    this.logger.log(`Found ${mecaIdToProfile.size} unique MECA ID -> Profile mappings`);
+
+    let linked = 0;
+    let noMatch = 0;
+    const updates: Array<{ id: string; profileId: string; state: string | null }> = [];
+
+    for (const result of unlinkedResults) {
+      const mecaId = result.meca_id?.toString();
+      const profile = mecaIdToProfile.get(mecaId);
+
+      if (profile) {
+        updates.push({ id: result.id, profileId: profile.profileId, state: profile.state });
+        linked++;
+      } else {
+        noMatch++;
+      }
+    }
+
+    // Batch update in chunks of 500
+    const chunkSize = 500;
+    for (let i = 0; i < updates.length; i += chunkSize) {
+      const chunk = updates.slice(i, i + chunkSize);
+      if (chunk.length === 0) continue;
+
+      const competitorCases = chunk.map(u => `WHEN '${u.id}' THEN '${u.profileId}'::uuid`).join(' ');
+      const stateCases = chunk.map(u => `WHEN '${u.id}' THEN ${u.state ? `'${u.state}'` : 'NULL'}`).join(' ');
+      const ids = chunk.map(u => `'${u.id}'`).join(',');
+
+      await connection.execute(`
+        UPDATE competition_results
+        SET competitor_id = CASE id ${competitorCases} END,
+            state_code = CASE id ${stateCases} END
+        WHERE id IN (${ids})
+      `);
+
+      if ((i + chunkSize) % 5000 === 0) {
+        this.logger.log(`Updated ${Math.min(i + chunkSize, updates.length)}/${updates.length} results...`);
+      }
+    }
+
+    // Count already linked
+    const alreadyLinkedResult = await connection.execute(`
+      SELECT COUNT(*) as count FROM competition_results WHERE competitor_id IS NOT NULL
+    `);
+    const alreadyLinked = parseInt(alreadyLinkedResult[0]?.count || '0', 10) - linked;
+
+    this.logger.log(`Linking complete: ${linked} linked, ${alreadyLinked} already linked, ${noMatch} no matching profile`);
+    return { linked, alreadyLinked, noMatch };
+  }
+
+  /**
+   * Populate state_code for all results that have a competitor_id but no state_code
+   */
+  async populateStateFromProfiles(): Promise<{ updated: number }> {
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    this.logger.log('Starting state population from profiles...');
+
+    // Update state_code from profiles for all results that have a linked competitor
+    const result = await connection.execute(`
+      UPDATE competition_results cr
+      SET state_code = p.state
+      FROM profiles p
+      WHERE cr.competitor_id = p.id
+        AND cr.state_code IS NULL
+        AND p.state IS NOT NULL
+    `);
+
+    const updated = result?.rowCount || result?.affectedRows || 0;
+    this.logger.log(`Populated state_code for ${updated} results`);
+
+    return { updated };
+  }
+
+  /**
    * Update points for all results in an event
    * This is the main entry point for recalculating points
    */
   async updateEventPoints(eventId: string): Promise<void> {
     const em = this.em.fork();
+    const connection = em.getConnection();
 
-    // Fetch the event with its multiplier
-    const event = await em.findOne(Event, { id: eventId });
-    if (!event) {
+    // Fetch the event with its multiplier using raw SQL to avoid MikroORM populating Season
+    const eventRows = await connection.execute(
+      `SELECT id, points_multiplier, season_id FROM events WHERE id = '${eventId}'`
+    );
+    if (!eventRows || eventRows.length === 0) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    const multiplier = event.pointsMultiplier || 2; // Default to 2x if not set
+    const eventData = eventRows[0];
+    const multiplier = eventData.points_multiplier || 2; // Default to 2x if not set
+    const seasonId = eventData.season_id;
+
+    // Fetch the points configuration for this event's season
+    let pointsConfig: PointsConfiguration | null = null;
+    if (seasonId) {
+      pointsConfig = await this.pointsConfigService.getConfigForSeason(seasonId);
+    } else {
+      // Fall back to current season config if event has no season
+      pointsConfig = await this.pointsConfigService.getConfigForCurrentSeason();
+    }
+
+    // If still no config, log warning and use hardcoded defaults
+    if (!pointsConfig) {
+      this.logger.warn(`No points configuration found for event ${eventId}, using hardcoded defaults`);
+    }
 
     // Fetch all results for this event, populated with competitor and class info
     const results = await em.find(
@@ -621,38 +973,37 @@ export class CompetitionResultsService {
     const classes = await em.find(CompetitionClass, { id: { $in: classIds } });
     const classMap = new Map(classes.map(c => [c.id, c]));
 
-    // Group results by class and format
-    const groupedResults = new Map<string, CompetitionResult[]>();
+    // Group results by class and format for placement calculation
+    // Note: ALL results get placements, but only eligible formats get points
+    const groupedResults = new Map<string, { results: CompetitionResult[]; format: string | null; isEligible: boolean }>();
 
     for (const result of results) {
       // Get format from class if available, otherwise from result.format field
-      let format = result.format;
+      let format: string | null = result.format || null;
       const competitionClass = classMap.get(result.classId || '');
       if (competitionClass) {
         format = competitionClass.format;
       }
 
-      // Skip if no format found
-      if (!format) {
-        result.pointsEarned = 0;
-        continue;
-      }
+      // Determine if this format is eligible for points
+      const isEligible = format ? this.isFormatEligible(format) : false;
 
-      // Only include eligible formats
-      if (!this.isFormatEligible(format)) {
-        result.pointsEarned = 0;
-        continue;
-      }
-
-      const key = `${format}-${result.competitionClass}`;
+      // Group by format+class if format exists, otherwise just by class
+      // This ensures all results get placements within their class
+      const key = format ? `${format}-${result.competitionClass}` : `UNKNOWN-${result.competitionClass}`;
       if (!groupedResults.has(key)) {
-        groupedResults.set(key, []);
+        groupedResults.set(key, { results: [], format, isEligible });
       }
-      groupedResults.get(key)!.push(result);
+      groupedResults.get(key)!.results.push(result);
     }
 
+    // Refresh the points-eligible MECA IDs cache before processing
+    await this.refreshPointsEligibleCache();
+
     // Process each group
-    for (const [key, groupResults] of groupedResults) {
+    for (const [key, group] of groupedResults) {
+      const { results: groupResults, format, isEligible: isFormatEligible } = group;
+
       // Sort by score (descending - higher score is better)
       groupResults.sort((a, b) => b.score - a.score);
 
@@ -661,37 +1012,27 @@ export class CompetitionResultsService {
       for (const result of groupResults) {
         result.placement = currentPlacement;
 
-        // Get competitor's membership info if available
-        let mecaId = result.mecaId;
-        let membershipExpiry: Date | undefined;
-        let membershipStatus: string | undefined;
+        // Only calculate points if the format is eligible for points
+        if (isFormatEligible && format) {
+          // Get MECA ID from result (now stored directly on competition result)
+          const mecaId = result.mecaId;
 
-        if (result.competitor) {
-          await em.populate(result, ['competitor']);
-          mecaId = result.competitor.meca_id || mecaId;
-          membershipExpiry = result.competitor.membership_expiry;
-          membershipStatus = result.competitor.membership_status;
-        }
+          // Check eligibility using the new membership-based system
+          // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
+          const isMemberEligible = await this.isMemberEligibleAsync(mecaId);
 
-        // Check eligibility and calculate points
-        if (this.isMemberEligible(mecaId, membershipExpiry, membershipStatus)) {
-          // Get format from class or result
-          let format = result.format;
-          const competitionClass = classMap.get(result.classId || '');
-          if (competitionClass) {
-            format = competitionClass.format;
-          }
-
-          if (format) {
+          if (isMemberEligible && pointsConfig) {
             result.pointsEarned = this.calculatePoints(
               currentPlacement,
               multiplier,
-              format
+              format,
+              pointsConfig
             );
           } else {
             result.pointsEarned = 0;
           }
         } else {
+          // Format not eligible for points (unknown format or non-points format)
           result.pointsEarned = 0;
         }
 
@@ -701,6 +1042,99 @@ export class CompetitionResultsService {
 
     // Persist all changes
     await em.flush();
+
+    // Check World Finals qualifications for all affected competitors
+    // Tracked per MECA ID + class combination (a competitor can qualify in multiple classes)
+    if (this.worldFinalsService && seasonId) {
+      const processedCombinations = new Set<string>();
+
+      for (const result of results) {
+        // Skip guests
+        if (!result.mecaId || result.mecaId === '999999' || result.mecaId === '0') {
+          continue;
+        }
+
+        // Skip already-processed MECA ID + class combinations
+        const comboKey = `${result.mecaId}:${result.competitionClass}`;
+        if (processedCombinations.has(comboKey)) {
+          continue;
+        }
+        processedCombinations.add(comboKey);
+
+        // Check if this competitor qualifies in this class
+        const mecaIdNum = parseInt(result.mecaId, 10);
+        if (!isNaN(mecaIdNum)) {
+          await this.worldFinalsService.checkAndUpdateQualification(
+            mecaIdNum,
+            result.competitorName,
+            result.competitor?.id || null,
+            seasonId,
+            result.competitionClass,
+          );
+        }
+      }
+    }
+
+    // Check achievements for all results with linked competitors
+    if (this.achievementsService) {
+      for (const result of results) {
+        if (result.competitor?.id) {
+          try {
+            await this.achievementsService.checkAndAwardAchievements(result.id);
+          } catch (error) {
+            this.logger.warn(`Failed to check achievements for result ${result.id}: ${error}`);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Recalculate points for all events in a season
+   * Used when points configuration is changed
+   */
+  async recalculateSeasonPoints(seasonId: string): Promise<{ events_processed: number; results_updated: number; duration_ms: number }> {
+    const startTime = Date.now();
+    const em = this.em.fork();
+
+    // Verify season exists
+    const season = await em.findOne(Season, { id: seasonId });
+    if (!season) {
+      throw new NotFoundException(`Season with ID ${seasonId} not found`);
+    }
+
+    // Get all events for this season
+    const events = await em.find(Event, { season: seasonId });
+
+    this.logger.log(`Recalculating points for ${events.length} events in season ${season.name}`);
+
+    let eventsProcessed = 0;
+    let totalResultsUpdated = 0;
+
+    for (const event of events) {
+      try {
+        // Count results before update for tracking
+        const resultCount = await em.count(CompetitionResult, { event: event.id });
+
+        await this.updateEventPoints(event.id);
+
+        eventsProcessed++;
+        totalResultsUpdated += resultCount;
+
+        this.logger.debug(`Recalculated points for event ${event.title} (${resultCount} results)`);
+      } catch (error) {
+        this.logger.error(`Failed to recalculate points for event ${event.id}: ${error}`);
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    this.logger.log(`Season points recalculation complete: ${eventsProcessed} events, ${totalResultsUpdated} results in ${duration}ms`);
+
+    return {
+      events_processed: eventsProcessed,
+      results_updated: totalResultsUpdated,
+      duration_ms: duration,
+    };
   }
 
   /**
@@ -748,12 +1182,44 @@ export class CompetitionResultsService {
       await this.auditService.updateSessionFilePath(session.id, filePath);
     }
 
-    // Fetch all profiles
+    // Fetch all profiles (for backward compatibility with name matching)
     const profiles = await em.find(Profile, {});
     const today = new Date();
 
     // Fetch all competition classes to match class names
     const competitionClasses = await em.find(CompetitionClass, {});
+
+    // Fetch all active memberships with MECA IDs for the new membership-based system
+    // Points-eligible categories: Competitor, Retailer, Manufacturer
+    const pointsEligibleCategories = [
+      MembershipCategory.COMPETITOR,
+      MembershipCategory.RETAIL,
+      MembershipCategory.MANUFACTURER,
+    ];
+
+    const activeMemberships = await em.find(
+      Membership,
+      {
+        mecaId: { $ne: null },
+        paymentStatus: PaymentStatus.PAID,
+        membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
+        $or: [{ endDate: null }, { endDate: { $gt: today } }],
+      },
+      {
+        populate: ['membershipTypeConfig', 'user'],
+      }
+    );
+
+    // Create a map for quick MECA ID lookups
+    const mecaIdToMembership = new Map<number, Membership>();
+    for (const membership of activeMemberships) {
+      if (membership.mecaId) {
+        mecaIdToMembership.set(membership.mecaId, membership);
+      }
+    }
+
+    // Also refresh the points-eligible cache
+    await this.refreshPointsEligibleCache();
 
     for (const result of parsedResults) {
       try {
@@ -762,67 +1228,77 @@ export class CompetitionResultsService {
         let competitorId: string | null = null;
         let hasValidActiveMembership = false; // Track if they have active membership
 
-        // Helper function to check if membership is active
-        const hasActiveMembership = (profile: Profile): boolean => {
-          if (profile.membership_status !== MembershipStatus.ACTIVE) {
-            return false;
-          }
-
-          // If no expiry date, treat as active (no expiration)
-          if (!profile.membership_expiry) {
-            return true;
-          }
-
-          // If expiry exists, check if it's in the future
-          return new Date(profile.membership_expiry) > today;
-        };
-
         // SCENARIO 1: MECA ID provided in file
         if (result.memberID && result.memberID !== '999999') {
-          const profile = profiles.find(p => p.meca_id === result.memberID);
+          const mecaIdNum = parseInt(result.memberID, 10);
+          const membership = !isNaN(mecaIdNum) ? mecaIdToMembership.get(mecaIdNum) : undefined;
 
-          if (profile && hasActiveMembership(profile)) {
-            // Valid active member - use system data
-            finalMecaId = profile.meca_id || null;
-            finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || result.name;
-            competitorId = profile.id;
+          if (membership) {
+            // Valid active member with points-eligible membership
+            finalMecaId = membership.mecaId!.toString();
+            // Use competitor name from membership if available, otherwise use profile name
+            finalName = membership.getCompetitorDisplayName() || result.name;
+            competitorId = membership.user?.id || null;
             hasValidActiveMembership = true; // ✅ Active membership confirmed
           } else {
-            // Member not in system or expired - KEEP the file MECA ID but don't assign points
+            // MECA ID not found in active memberships - check profile for backward compatibility
+            const profile = profiles.find(p => p.meca_id === result.memberID);
             finalMecaId = result.memberID; // Keep the MECA ID from file
-            finalName = result.name; // Use name from file
-            competitorId = null;
-            hasValidActiveMembership = false; // ❌ No active membership (no points)
+            if (profile) {
+              finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || result.name;
+              competitorId = profile.id;
+            } else {
+              finalName = result.name;
+              competitorId = null;
+            }
+            hasValidActiveMembership = false; // ❌ No active points-eligible membership
           }
         }
         // SCENARIO 2: No MECA ID, but name provided - try to match by name
         else if (!result.memberID || result.memberID === '999999') {
           if (result.name) {
-            // Try to find active member by name
+            // Try to find active member by name from memberships first
             const nameParts = result.name.trim().split(/\s+/);
-            const firstName = nameParts[0];
-            const lastName = nameParts.slice(1).join(' ');
+            const firstName = nameParts[0]?.toLowerCase();
+            const lastName = nameParts.slice(1).join(' ')?.toLowerCase();
 
-            const profile = profiles.find(p => {
-              const matchesName =
-                (p.first_name?.toLowerCase() === firstName?.toLowerCase() &&
-                 p.last_name?.toLowerCase() === lastName?.toLowerCase()) ||
-                `${p.first_name} ${p.last_name}`.toLowerCase() === result.name.toLowerCase();
-              return matchesName && hasActiveMembership(p);
+            // Search in active memberships by competitor name
+            const matchedMembership = activeMemberships.find(m => {
+              const competitorName = m.getCompetitorDisplayName()?.toLowerCase();
+              return competitorName === result.name.toLowerCase() ||
+                     (m.competitorName?.toLowerCase() === result.name.toLowerCase());
             });
 
-            if (profile) {
-              // Found active member by name - use system data
-              finalMecaId = profile.meca_id || '999999';
-              finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
-              competitorId = profile.id;
+            if (matchedMembership) {
+              // Found active member by name in memberships
+              finalMecaId = matchedMembership.mecaId!.toString();
+              finalName = matchedMembership.getCompetitorDisplayName() || result.name;
+              competitorId = matchedMembership.user?.id || null;
               hasValidActiveMembership = true; // ✅ Active membership confirmed
             } else {
-              // No match found - use 999999
-              finalMecaId = '999999';
-              finalName = result.name;
-              competitorId = null;
-              hasValidActiveMembership = false; // ❌ No active membership
+              // Fall back to profile matching
+              const profile = profiles.find(p => {
+                const matchesName =
+                  (p.first_name?.toLowerCase() === firstName &&
+                   p.last_name?.toLowerCase() === lastName) ||
+                  `${p.first_name} ${p.last_name}`.toLowerCase() === result.name.toLowerCase();
+                return matchesName;
+              });
+
+              if (profile && profile.meca_id) {
+                // Found profile - check if their MECA ID is points-eligible
+                const mecaIdNum = parseInt(profile.meca_id, 10);
+                hasValidActiveMembership = !isNaN(mecaIdNum) && this.pointsEligibleMecaIds.has(mecaIdNum);
+                finalMecaId = profile.meca_id;
+                finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+                competitorId = profile.id;
+              } else {
+                // No match found - use 999999
+                finalMecaId = '999999';
+                finalName = result.name;
+                competitorId = null;
+                hasValidActiveMembership = false; // ❌ No active membership
+              }
             }
           } else {
             // No name and no MECA ID - skip or error
@@ -862,8 +1338,7 @@ export class CompetitionResultsService {
           }
         }
 
-        // Only assign points if they have VALID ACTIVE membership
-        // This means: MECA ID is not 999999 AND membership_status is 'active' AND not expired
+        // Points are only assigned if MECA ID belongs to an active Competitor, Retailer, or Manufacturer membership
         const pointsEarned = hasValidActiveMembership ? (result.points || 0) : 0;
 
         await this.create({
@@ -898,6 +1373,183 @@ export class CompetitionResultsService {
       message: `Successfully imported ${imported} of ${parsedResults.length} results`,
       imported,
       errors,
+    };
+  }
+
+  /**
+   * Check if wattage/frequency is required for a given format and class
+   * Required for all SPL classes except Dueling Demos
+   */
+  private isWattageFrequencyRequired(format: string, className: string): boolean {
+    if (!format || format.toUpperCase() !== 'SPL') return false;
+    const exemptClasses = ['dueling demos'];
+    const classLower = (className || '').toLowerCase();
+    return !exemptClasses.some(exempt => classLower.includes(exempt));
+  }
+
+  /**
+   * Parse and validate results from a file before importing
+   * Returns parsed data with flags for name matches needing confirmation and missing required fields
+   */
+  async parseAndValidate(
+    eventId: string,
+    parsedResults: any[]
+  ): Promise<{
+    results: Array<{
+      index: number;
+      data: any;
+      nameMatch?: {
+        matchedMecaId: string;
+        matchedName: string;
+        matchedCompetitorId: string | null;
+        confidence: 'exact' | 'partial';
+      };
+      missingFields: string[];
+      isValid: boolean;
+      validationErrors: string[];
+    }>;
+    totalCount: number;
+    needsNameConfirmation: number;
+    needsDataCompletion: number;
+  }> {
+    const em = this.em.fork();
+    const today = new Date();
+
+    // Fetch active memberships for name matching
+    const pointsEligibleCategories = [
+      MembershipCategory.COMPETITOR,
+      MembershipCategory.RETAIL,
+      MembershipCategory.MANUFACTURER,
+    ];
+
+    const activeMemberships = await em.find(
+      Membership,
+      {
+        mecaId: { $ne: null },
+        paymentStatus: PaymentStatus.PAID,
+        membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
+        $or: [{ endDate: null }, { endDate: { $gt: today } }],
+      },
+      {
+        populate: ['membershipTypeConfig', 'user'],
+      }
+    );
+
+    // Also fetch profiles for fallback matching
+    const profiles = await em.find(Profile, {});
+
+    const results: Array<{
+      index: number;
+      data: any;
+      nameMatch?: {
+        matchedMecaId: string;
+        matchedName: string;
+        matchedCompetitorId: string | null;
+        confidence: 'exact' | 'partial';
+      };
+      missingFields: string[];
+      isValid: boolean;
+      validationErrors: string[];
+    }> = [];
+
+    let needsNameConfirmation = 0;
+    let needsDataCompletion = 0;
+
+    for (let i = 0; i < parsedResults.length; i++) {
+      const result = parsedResults[i];
+      const validationErrors: string[] = [];
+      const missingFields: string[] = [];
+      let nameMatch: {
+        matchedMecaId: string;
+        matchedName: string;
+        matchedCompetitorId: string | null;
+        confidence: 'exact' | 'partial';
+      } | undefined = undefined;
+
+      // Validate required fields
+      if (!result.name || result.name.trim() === '') {
+        validationErrors.push('Name is required');
+      }
+      if (!result.class || result.class.trim() === '') {
+        validationErrors.push('Class is required');
+      }
+      if (result.score === undefined || result.score === null || result.score === '') {
+        validationErrors.push('Score is required');
+      }
+
+      // Check for wattage/frequency requirement (SPL classes except Dueling Demos)
+      const format = result.format || 'SPL';
+      if (this.isWattageFrequencyRequired(format, result.class)) {
+        if (!result.wattage) {
+          missingFields.push('wattage');
+        }
+        if (!result.frequency) {
+          missingFields.push('frequency');
+        }
+      }
+
+      // Check for name match when MECA ID is not provided
+      if ((!result.memberID || result.memberID === '999999' || result.memberID === '0') && result.name) {
+        const nameLower = result.name.toLowerCase().trim();
+
+        // Search in active memberships by competitor name
+        const matchedMembership = activeMemberships.find(m => {
+          const competitorName = m.getCompetitorDisplayName()?.toLowerCase().trim();
+          return competitorName === nameLower ||
+                 (m.competitorName?.toLowerCase().trim() === nameLower);
+        });
+
+        if (matchedMembership) {
+          nameMatch = {
+            matchedMecaId: matchedMembership.mecaId!.toString(),
+            matchedName: matchedMembership.getCompetitorDisplayName() || result.name,
+            matchedCompetitorId: matchedMembership.user?.id || null,
+            confidence: 'exact',
+          };
+          needsNameConfirmation++;
+        } else {
+          // Fall back to profile matching
+          const profile = profiles.find(p => {
+            const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase().trim();
+            return fullName === nameLower;
+          });
+
+          if (profile && profile.meca_id) {
+            nameMatch = {
+              matchedMecaId: profile.meca_id,
+              matchedName: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+              matchedCompetitorId: profile.id,
+              confidence: 'exact',
+            };
+            needsNameConfirmation++;
+          }
+        }
+      }
+
+      if (missingFields.length > 0) {
+        needsDataCompletion++;
+      }
+
+      const isValid = validationErrors.length === 0;
+
+      results.push({
+        index: i,
+        data: {
+          ...result,
+          format: format,
+        },
+        nameMatch,
+        missingFields,
+        isValid,
+        validationErrors,
+      });
+    }
+
+    return {
+      results,
+      totalCount: parsedResults.length,
+      needsNameConfirmation,
+      needsDataCompletion,
     };
   }
 
@@ -1046,7 +1698,7 @@ export class CompetitionResultsService {
       await this.auditService.updateSessionFilePath(session.id, filePath);
     }
 
-    // Fetch all profiles
+    // Fetch all profiles (for backward compatibility with name matching)
     const profiles = await em.find(Profile, {});
     const today = new Date();
 
@@ -1056,16 +1708,37 @@ export class CompetitionResultsService {
     // Get existing results for this event (for replacement)
     const existingResults = await em.find(CompetitionResult, { event: eventId });
 
-    // Helper function to check if membership is active
-    const hasActiveMembership = (profile: Profile): boolean => {
-      if (profile.membership_status !== MembershipStatus.ACTIVE) {
-        return false;
+    // Fetch all active memberships with MECA IDs for the new membership-based system
+    // Points-eligible categories: Competitor, Retailer, Manufacturer
+    const pointsEligibleCategories = [
+      MembershipCategory.COMPETITOR,
+      MembershipCategory.RETAIL,
+      MembershipCategory.MANUFACTURER,
+    ];
+
+    const activeMemberships = await em.find(
+      Membership,
+      {
+        mecaId: { $ne: null },
+        paymentStatus: PaymentStatus.PAID,
+        membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
+        $or: [{ endDate: null }, { endDate: { $gt: today } }],
+      },
+      {
+        populate: ['membershipTypeConfig', 'user'],
       }
-      if (!profile.membership_expiry) {
-        return true;
+    );
+
+    // Create a map for quick MECA ID lookups
+    const mecaIdToMembership = new Map<number, Membership>();
+    for (const membership of activeMemberships) {
+      if (membership.mecaId) {
+        mecaIdToMembership.set(membership.mecaId, membership);
       }
-      return new Date(profile.membership_expiry) > today;
-    };
+    }
+
+    // Refresh the points-eligible cache
+    await this.refreshPointsEligibleCache();
 
     for (let i = 0; i < parsedResults.length; i++) {
       const result = parsedResults[i];
@@ -1087,17 +1760,26 @@ export class CompetitionResultsService {
 
         // SCENARIO 1: MECA ID provided in file
         if (result.memberID && result.memberID !== '999999') {
-          const profile = profiles.find(p => p.meca_id === result.memberID);
+          const mecaIdNum = parseInt(result.memberID, 10);
+          const membership = !isNaN(mecaIdNum) ? mecaIdToMembership.get(mecaIdNum) : undefined;
 
-          if (profile && hasActiveMembership(profile)) {
-            finalMecaId = profile.meca_id || null;
-            finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || result.name;
-            competitorId = profile.id;
+          if (membership) {
+            // Valid active member with points-eligible membership
+            finalMecaId = membership.mecaId!.toString();
+            finalName = membership.getCompetitorDisplayName() || result.name;
+            competitorId = membership.user?.id || null;
             hasValidActiveMembership = true;
           } else {
+            // MECA ID not found in active memberships - check profile for backward compatibility
+            const profile = profiles.find(p => p.meca_id === result.memberID);
             finalMecaId = result.memberID;
-            finalName = result.name;
-            competitorId = null;
+            if (profile) {
+              finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || result.name;
+              competitorId = profile.id;
+            } else {
+              finalName = result.name;
+              competitorId = null;
+            }
             hasValidActiveMembership = false;
           }
         }
@@ -1105,27 +1787,43 @@ export class CompetitionResultsService {
         else if (!result.memberID || result.memberID === '999999') {
           if (result.name) {
             const nameParts = result.name.trim().split(/\s+/);
-            const firstName = nameParts[0];
-            const lastName = nameParts.slice(1).join(' ');
+            const firstName = nameParts[0]?.toLowerCase();
+            const lastName = nameParts.slice(1).join(' ')?.toLowerCase();
 
-            const profile = profiles.find(p => {
-              const matchesName =
-                (p.first_name?.toLowerCase() === firstName?.toLowerCase() &&
-                 p.last_name?.toLowerCase() === lastName?.toLowerCase()) ||
-                `${p.first_name} ${p.last_name}`.toLowerCase() === result.name.toLowerCase();
-              return matchesName && hasActiveMembership(p);
+            // Search in active memberships by competitor name first
+            const matchedMembership = activeMemberships.find(m => {
+              const competitorName = m.getCompetitorDisplayName()?.toLowerCase();
+              return competitorName === result.name.toLowerCase() ||
+                     (m.competitorName?.toLowerCase() === result.name.toLowerCase());
             });
 
-            if (profile) {
-              finalMecaId = profile.meca_id || '999999';
-              finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
-              competitorId = profile.id;
+            if (matchedMembership) {
+              finalMecaId = matchedMembership.mecaId!.toString();
+              finalName = matchedMembership.getCompetitorDisplayName() || result.name;
+              competitorId = matchedMembership.user?.id || null;
               hasValidActiveMembership = true;
             } else {
-              finalMecaId = '999999';
-              finalName = result.name;
-              competitorId = null;
-              hasValidActiveMembership = false;
+              // Fall back to profile matching
+              const profile = profiles.find(p => {
+                const matchesName =
+                  (p.first_name?.toLowerCase() === firstName &&
+                   p.last_name?.toLowerCase() === lastName) ||
+                  `${p.first_name} ${p.last_name}`.toLowerCase() === result.name.toLowerCase();
+                return matchesName;
+              });
+
+              if (profile && profile.meca_id) {
+                const mecaIdNum = parseInt(profile.meca_id, 10);
+                hasValidActiveMembership = !isNaN(mecaIdNum) && this.pointsEligibleMecaIds.has(mecaIdNum);
+                finalMecaId = profile.meca_id;
+                finalName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+                competitorId = profile.id;
+              } else {
+                finalMecaId = '999999';
+                finalName = result.name;
+                competitorId = null;
+                hasValidActiveMembership = false;
+              }
             }
           } else {
             finalMecaId = '999999';
@@ -1156,6 +1854,7 @@ export class CompetitionResultsService {
           }
         }
 
+        // Points are only assigned if MECA ID belongs to an active Competitor, Retailer, or Manufacturer membership
         const pointsEarned = hasValidActiveMembership ? (result.points || 0) : 0;
 
         // If resolution is 'replace', find and update existing record

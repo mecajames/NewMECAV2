@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL - DATABASE PROTECTION (DO NOT IGNORE)
+
+**NEVER RUN DESTRUCTIVE DATABASE COMMANDS. THIS IS AN ABSOLUTE RULE.**
+
+The following commands are FORBIDDEN and must NEVER be executed:
+- `npx supabase db reset` - DESTROYS ALL DATA
+- `npx supabase db push --force` - CAN DESTROY DATA
+- `DROP TABLE`, `DROP DATABASE`, `TRUNCATE` - DESTROYS DATA
+- Any command that deletes, resets, or wipes database data
+
+If a migration needs to be run, ONLY use:
+- Direct `ALTER TABLE` statements via a Node.js script
+- `rushx migration:up` from apps/backend (applies migrations without reset)
+
+**ASK THE USER BEFORE running ANY database-related command.**
+
+This rule exists because Claude has destroyed this database multiple times by running destructive commands without permission.
+
+---
+
 ## Project Overview
 
 NewMECA V2 is a full-stack application for MECA (Mobile Electronics Competition Association) car audio competitions. It's a Rush monorepo with three packages:

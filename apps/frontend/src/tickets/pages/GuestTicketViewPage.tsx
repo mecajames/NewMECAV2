@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  Ticket,
   AlertTriangle,
   Loader2,
   XCircle,
@@ -141,14 +140,17 @@ export function GuestTicketViewPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-3xl mx-auto px-4">
-        {/* Back Link */}
-        <Link
-          to="/support/guest"
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Support
-        </Link>
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-400">Support Ticket</h2>
+          <Link
+            to="/support/guest"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Support
+          </Link>
+        </div>
 
         {/* Ticket Header */}
         <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-6">

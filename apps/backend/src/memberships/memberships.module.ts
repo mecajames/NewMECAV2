@@ -1,10 +1,16 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MembershipsController } from './memberships.controller';
 import { MembershipsService } from './memberships.service';
+import { MecaIdService } from './meca-id.service';
+import { MasterSecondaryService } from './master-secondary.service';
+import { MembershipSyncService } from './membership-sync.service';
+import { TeamsModule } from '../teams/teams.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
+  imports: [forwardRef(() => TeamsModule), AuthModule],
   controllers: [MembershipsController],
-  providers: [MembershipsService],
-  exports: [MembershipsService],
+  providers: [MembershipsService, MecaIdService, MasterSecondaryService, MembershipSyncService],
+  exports: [MembershipsService, MecaIdService, MasterSecondaryService, MembershipSyncService],
 })
 export class MembershipsModule {}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Plus, Edit, Trash2, Check, X, ArrowLeft, Copy } from 'lucide-react';
+import { Calendar, Plus, Edit, Trash2, Check, ArrowLeft, Copy, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Season, CompetitionFormat } from '@/types/database';
 import { seasonsApi } from '@/seasons';
@@ -21,7 +21,7 @@ const formatDateString = (dateString: string): string => {
 };
 
 export default function SeasonManagementPage() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const navigate = useNavigate();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +40,7 @@ export default function SeasonManagementPage() {
     end_date: '',
     is_current: false,
     is_next: false,
+    qualification_points_threshold: null as number | null,
   });
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export default function SeasonManagementPage() {
           end_date: formData.end_date,
           is_current: formData.is_current,
           is_next: formData.is_next,
+          qualification_points_threshold: formData.qualification_points_threshold,
         });
       } else {
         await seasonsApi.create({
@@ -76,6 +78,7 @@ export default function SeasonManagementPage() {
           end_date: formData.end_date,
           is_current: formData.is_current,
           is_next: formData.is_next,
+          qualification_points_threshold: formData.qualification_points_threshold,
         });
       }
       resetForm();
@@ -94,6 +97,7 @@ export default function SeasonManagementPage() {
       end_date: season.end_date ? season.end_date.split('T')[0] : '',
       is_current: season.is_current ?? false,
       is_next: season.is_next ?? false,
+      qualification_points_threshold: (season as any).qualification_points_threshold ?? null,
     });
     setShowForm(true);
   };
@@ -137,6 +141,7 @@ export default function SeasonManagementPage() {
       end_date: '',
       is_current: false,
       is_next: false,
+      qualification_points_threshold: null,
     });
     setEditingSeason(null);
     setShowForm(false);
@@ -293,6 +298,29 @@ export default function SeasonManagementPage() {
                     className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Trophy className="h-4 w-4 text-yellow-400" />
+                      World Finals Qualification Points Threshold
+                    </div>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.qualification_points_threshold ?? ''}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      qualification_points_threshold: e.target.value ? parseInt(e.target.value) : null
+                    })}
+                    placeholder="Leave empty if no World Finals qualification for this season"
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Competitors who earn this many points or more will qualify for World Finals and receive notifications.
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center gap-6">
@@ -427,6 +455,7 @@ export default function SeasonManagementPage() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Year</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Name</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Dates</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">WF Threshold</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Status</th>
                   <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">Actions</th>
                 </tr>
@@ -438,6 +467,16 @@ export default function SeasonManagementPage() {
                     <td className="px-6 py-4 text-gray-300">{season.name}</td>
                     <td className="px-6 py-4 text-gray-300 text-sm">
                       {formatDateString(season.start_date)} - {formatDateString(season.end_date)}
+                    </td>
+                    <td className="px-6 py-4">
+                      {(season as any).qualification_points_threshold ? (
+                        <span className="flex items-center gap-1 text-yellow-400 font-semibold">
+                          <Trophy className="h-4 w-4" />
+                          {(season as any).qualification_points_threshold} pts
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">

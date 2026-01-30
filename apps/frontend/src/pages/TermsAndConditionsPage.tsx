@@ -1,9 +1,15 @@
+import { SEOHead, useStaticPageSEO } from '@/shared/seo';
+
 export default function TermsAndConditionsPage() {
+  const seoProps = useStaticPageSEO('termsAndConditions');
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">MECA Terms and Conditions</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-12">
+            <h1 className="text-4xl font-bold text-white mb-4">MECA Terms and Conditions</h1>
           <p className="text-gray-400">Last updated: November 16, 2025</p>
         </div>
 
@@ -346,9 +352,10 @@ export default function TermsAndConditionsPage() {
               <span className="text-gray-300">mecacaraudio [at] gmail [dot] com</span>
             </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

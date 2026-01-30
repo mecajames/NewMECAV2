@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Season, CompetitionClass, CompetitionFormat } from '@/types/database';
+import { CompetitionFormat } from '@/types/database';
 import { useAuth } from '@/auth';
-import { seasonsApi } from '@/seasons';
-import { competitionClassesApi } from '@/competition-classes';
-import { competitionFormatsApi, CompetitionFormat as ApiCompetitionFormat } from '@/competition-formats';
+import { seasonsApi, Season } from '@/seasons';
+import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
+import { competitionFormatsApi, CompetitionFormat as FormatObject } from '@/competition-formats';
 
 export default function ClassesManagementPage() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const navigate = useNavigate();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<CompetitionClass[]>([]);
-  const [formats, setFormats] = useState<ApiCompetitionFormat[]>([]);
+  const [formats, setFormats] = useState<FormatObject[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClass, setEditingClass] = useState<CompetitionClass | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -47,7 +47,7 @@ export default function ClassesManagementPage() {
   // Auto-select current season when seasons are loaded
   useEffect(() => {
     if (seasons.length > 0 && !selectedSeasonId) {
-      const currentSeason = seasons.find(s => s.is_current);
+      const currentSeason = seasons.find(s => s.isCurrent);
       if (currentSeason) {
         setSelectedSeasonId(currentSeason.id);
       } else {
@@ -190,7 +190,7 @@ export default function ClassesManagementPage() {
     setFormData({
       name: classItem.name,
       abbreviation: classItem.abbreviation,
-      format: classItem.format,
+      format: classItem.format as CompetitionFormat,
       season_id: classItem.season_id,
       is_active: classItem.is_active,
       display_order: classItem.display_order,
@@ -273,7 +273,7 @@ export default function ClassesManagementPage() {
   };
 
   const resetForm = () => {
-    const currentSeason = seasons.find(s => s.is_current);
+    const currentSeason = seasons.find(s => s.isCurrent);
     setFormData({
       name: '',
       abbreviation: '',
@@ -342,7 +342,7 @@ export default function ClassesManagementPage() {
                 <option value="">Select Season</option>
                 {seasons.map((season) => (
                   <option key={season.id} value={season.id}>
-                    {season.name} {season.is_current ? '(Current)' : ''} {season.is_next ? '(Next)' : ''}
+                    {season.name} {season.isCurrent ? '(Current)' : ''} {season.isNext ? '(Next)' : ''}
                   </option>
                 ))}
               </select>

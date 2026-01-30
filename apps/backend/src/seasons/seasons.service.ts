@@ -36,10 +36,16 @@ export class SeasonsService {
     if ((data as any).end_date !== undefined) transformedData.endDate = (data as any).end_date;
     if ((data as any).is_current !== undefined) transformedData.isCurrent = (data as any).is_current;
     if ((data as any).is_next !== undefined) transformedData.isNext = (data as any).is_next;
+    if ((data as any).qualification_points_threshold !== undefined) {
+      transformedData.qualificationPointsThreshold = (data as any).qualification_points_threshold;
+    }
 
     // Copy fields that don't need transformation
     if (data.year !== undefined) transformedData.year = data.year;
     if (data.name !== undefined) transformedData.name = data.name;
+    if ((data as any).qualificationPointsThreshold !== undefined) {
+      transformedData.qualificationPointsThreshold = (data as any).qualificationPointsThreshold;
+    }
 
     // If this season is marked as current or next, unmark others
     if (transformedData.isCurrent) {
@@ -69,10 +75,16 @@ export class SeasonsService {
     if ((data as any).end_date !== undefined) transformedData.endDate = (data as any).end_date;
     if ((data as any).is_current !== undefined) transformedData.isCurrent = (data as any).is_current;
     if ((data as any).is_next !== undefined) transformedData.isNext = (data as any).is_next;
+    if ((data as any).qualification_points_threshold !== undefined) {
+      transformedData.qualificationPointsThreshold = (data as any).qualification_points_threshold;
+    }
 
     // Copy fields that don't need transformation
     if (data.year !== undefined) transformedData.year = data.year;
     if (data.name !== undefined) transformedData.name = data.name;
+    if ((data as any).qualificationPointsThreshold !== undefined) {
+      transformedData.qualificationPointsThreshold = (data as any).qualificationPointsThreshold;
+    }
 
     // If updating to current or next, unmark others
     if (transformedData.isCurrent) {

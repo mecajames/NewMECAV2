@@ -3,6 +3,7 @@ import { FileText, Download, Calendar, Tag } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { siteSettingsApi } from '@/site-settings';
+import { getStorageUrl } from '@/lib/storage';
 
 export default function RulebookDetailPage() {
   const { rulebookId } = useParams<{ rulebookId: string }>();
@@ -93,7 +94,7 @@ export default function RulebookDetailPage() {
           <div className="p-8">
             <div className="mb-6">
               <a
-                href={rulebook.pdfUrl}
+                href={getStorageUrl(rulebook.pdfUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
@@ -105,7 +106,7 @@ export default function RulebookDetailPage() {
 
             <div className="bg-slate-900 rounded-lg p-4">
               <iframe
-                src={rulebook.pdfUrl}
+                src={getStorageUrl(rulebook.pdfUrl)}
                 style={{ width: pdfViewerWidth, height: pdfViewerHeight }}
                 className="rounded"
                 title={rulebook.title}

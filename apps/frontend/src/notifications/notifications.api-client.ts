@@ -20,16 +20,24 @@ export interface Notification {
 
 export const notificationsApi = {
   getUserNotifications: async (userId: string, limit: number = 10): Promise<Notification[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/notifications?userId=${userId}&limit=${limit}`);
-    if (!response.ok) throw new Error('Failed to fetch notifications');
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/notifications?userId=${userId}&limit=${limit}`);
+      if (!response.ok) return []; // Fail gracefully
+      return response.json();
+    } catch {
+      return []; // Fail gracefully on network errors
+    }
   },
 
   getUnreadCount: async (userId: string): Promise<number> => {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/unread-count?userId=${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch unread count');
-    const data = await response.json();
-    return data.count;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/unread-count?userId=${userId}`);
+      if (!response.ok) return 0; // Fail gracefully
+      const data = await response.json();
+      return data.count;
+    } catch {
+      return 0; // Fail gracefully on network errors
+    }
   },
 
   getNotification: async (id: string): Promise<Notification> => {

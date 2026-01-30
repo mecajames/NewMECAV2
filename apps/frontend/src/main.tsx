@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import './test-db';
 // Initialize axios interceptors for user authentication
 import './lib/axios';
 

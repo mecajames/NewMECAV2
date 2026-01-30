@@ -25,6 +25,16 @@ export class MembershipTypeConfig {
   @Property({ type: 'decimal', precision: 10, scale: 2 })
   price!: number;
 
+  // Price to add team functionality to a competitor membership (pro-rated on upgrade)
+  @Property({ type: 'decimal', precision: 10, scale: 2, nullable: true, fieldName: 'team_addon_price' })
+  teamAddonPrice?: number;
+
+  // Whether this membership type includes team functionality automatically
+  // Used for "Competitor w/Team" type memberships where team is included in the price
+  // Retailer and Manufacturer always get team (by category), this is for Competitor variants
+  @Property({ type: 'boolean', fieldName: 'includes_team', default: false })
+  includesTeam: boolean = false;
+
   @Property({ type: 'varchar', length: 3, nullable: true })
   currency?: string;
 

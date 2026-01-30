@@ -56,7 +56,7 @@ export function TicketStaffManagement() {
   const [showUserSearchDropdown, setShowUserSearchDropdown] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ProfileSearchResult | null>(null);
   const userSearchRef = useRef<HTMLDivElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({

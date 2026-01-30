@@ -1,11 +1,16 @@
 import { Link } from 'react-router-dom';
+import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 
 export default function PrivacyPolicyPage() {
+  const seoProps = useStaticPageSEO('privacyPolicy');
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Privacy Policy</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-12">
+            <h1 className="text-4xl font-bold text-white mb-4">Privacy Policy</h1>
           <p className="text-gray-400">Last updated: November 16, 2025</p>
         </div>
 
@@ -487,9 +492,10 @@ export default function PrivacyPolicyPage() {
               Based on the applicable laws of your country, you may have the right to request access to the personal information we collect from you, change that information, or delete it in some circumstances. To request to review, update, or delete your personal information, please visit <Link to="/contact" className="text-orange-500 hover:text-orange-400">our contact page</Link>.
 </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

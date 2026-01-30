@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Testing Guide: Secondary Memberships</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        .test-case {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #3b82f6;
+        }
+
+        .test-case.critical {
+            border-left-color: #ef4444;
+        }
+
+        .test-case.high {
+            border-left-color: #f97316;
+        }
+
+        .test-case.medium {
+            border-left-color: #eab308;
+        }
+
+        .test-case.low {
+            border-left-color: #22c55e;
+        }
+
+        .test-case h4 {
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .test-id {
+            font-family: 'Courier New', monospace;
+            background: #f1f5f9;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .priority-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .priority-badge.critical {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .priority-badge.high {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+
+        .priority-badge.medium {
+            background: #fef9c3;
+            color: #854d0e;
+        }
+
+        .priority-badge.low {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .test-section {
+            margin: 15px 0;
+        }
+
+        .test-section-title {
+            font-weight: bold;
+            color: #334155;
+            margin-bottom: 8px;
+        }
+
+        .test-steps {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+
+        .test-steps li {
+            counter-increment: step-counter;
+            padding: 8px 0 8px 35px;
+            position: relative;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+
+        .test-steps li:last-child {
+            border-bottom: none;
+        }
+
+        .test-steps li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 24px;
+            height: 24px;
+            background: #ea580c;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .expected-result {
+            background: #dcfce7;
+            border: 1px solid #22c55e;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .expected-result::before {
+            content: "✓ Expected Result: ";
+            font-weight: bold;
+            color: #166534;
+        }
+
+        .checklist {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .checklist ul {
+            list-style: none;
+        }
+
+        .checklist li {
+            padding: 10px 0 10px 35px;
+            position: relative;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .checklist li:last-child {
+            border-bottom: none;
+        }
+
+        .checklist li::before {
+            content: "☐";
+            position: absolute;
+            left: 5px;
+            top: 10px;
+            font-size: 1.2rem;
+            color: #64748b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        .test-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .test-summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .summary-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .summary-card .count {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .summary-card.critical .count { color: #ef4444; }
+        .summary-card.high .count { color: #f97316; }
+        .summary-card.medium .count { color: #eab308; }
+        .summary-card.low .count { color: #22c55e; }
+    </style>
+</head>
+<body>
+    <h1>QA Testing Guide</h1>
+    <p class="subtitle">Secondary Memberships Feature - MECA Competition System</p>
+
+    <div class="test-summary">
+        <div class="summary-card critical">
+            <div class="count">5</div>
+            <div>Critical Tests</div>
+        </div>
+        <div class="summary-card high">
+            <div class="count">6</div>
+            <div>High Priority</div>
+        </div>
+        <div class="summary-card medium">
+            <div class="count">4</div>
+            <div>Medium Priority</div>
+        </div>
+        <div class="summary-card low">
+            <div class="count">3</div>
+            <div>Low Priority</div>
+        </div>
+    </div>
+
+    <div class="toc">
+        <h3>Table of Contents</h3>
+        <ul>
+            <li><a href="#prerequisites">Test Environment Prerequisites</a></li>
+            <li><a href="#critical">1. Critical Path Tests</a></li>
+            <li><a href="#admin">2. Admin Workflow Tests</a></li>
+            <li><a href="#user">3. User Dashboard Tests</a></li>
+            <li><a href="#billing">4. Billing & Payment Tests</a></li>
+            <li><a href="#edge">5. Edge Cases & Error Handling</a></li>
+            <li><a href="#regression">6. Regression Checklist</a></li>
+        </ul>
+    </div>
+
+    <!-- PREREQUISITES -->
+    <h2 id="prerequisites">Test Environment Prerequisites</h2>
+
+    <div class="info-box">
+        <h4>Required Test Data</h4>
+        <ul style="margin-left: 20px; margin-top: 10px;">
+            <li><strong>Admin Account:</strong> User with admin role for testing admin workflows</li>
+            <li><strong>Master Account:</strong> User with PAID membership (will become master)</li>
+            <li><strong>Independent Account:</strong> User with PAID independent membership</li>
+            <li><strong>Test Email Addresses:</strong> 3-4 valid email addresses for secondary accounts with login</li>
+        </ul>
+    </div>
+
+    <div class="info-box warning">
+        <h4>Before You Begin</h4>
+        <ul style="margin-left: 20px; margin-top: 10px;">
+            <li>Ensure backend is running: <code>rushx dev</code> from apps/backend</li>
+            <li>Ensure frontend is running: <code>rushx dev</code> from apps/frontend</li>
+            <li>Database migrations are applied: <code>rushx migration:up</code></li>
+            <li>Clear browser cache/cookies for fresh testing</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- CRITICAL PATH TESTS -->
+    <h2 id="critical">1. Critical Path Tests</h2>
+    <p style="color: #64748b; margin-bottom: 20px;">These tests must pass for the feature to be considered functional</p>
+
+    <div class="test-case critical">
+        <h4>
+            <span class="test-id">TC-001</span>
+            Create Secondary Membership (Admin)
+            <span class="priority-badge critical">Critical</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Prerequisites:</div>
+            <p>Logged in as Admin, have a user with PAID membership</p>
+        </div>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Navigate to <code>/admin/members</code></li>
+                <li>Click "Add User" button</li>
+                <li>Select "Membership User"</li>
+                <li>Enter user details (email, name, password)</li>
+                <li>On "Secondary Option" step, select "Yes - this is a secondary membership"</li>
+                <li>Search for a master account by email or MECA ID</li>
+                <li>Select the master from search results</li>
+                <li>Choose "No" for give own login</li>
+                <li>Complete membership type selection</li>
+                <li>Enter competitor name and vehicle info</li>
+                <li>Select payment method (e.g., "Cash")</li>
+                <li>Click "Create Secondary Membership"</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Secondary membership created with PENDING status. Master membership shows account type as MASTER. Secondary appears in master's secondary list.
+        </div>
+    </div>
+
+    <div class="test-case critical">
+        <h4>
+            <span class="test-id">TC-002</span>
+            MECA ID Assignment on Payment
+            <span class="priority-badge critical">Critical</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Prerequisites:</div>
+            <p>Secondary membership exists with PENDING status (from TC-001)</p>
+        </div>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Navigate to the secondary membership detail page</li>
+                <li>Click "Mark as Paid" or process payment</li>
+                <li>Enter payment amount and transaction ID (if applicable)</li>
+                <li>Confirm payment</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Secondary membership status changes to PAID. A unique MECA ID is assigned to the secondary. MECA ID is different from the master's MECA ID.
+        </div>
+    </div>
+
+    <div class="test-case critical">
+        <h4>
+            <span class="test-id">TC-003</span>
+            Secondary with Own Login
+            <span class="priority-badge critical">Critical</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Prerequisites:</div>
+            <p>Logged in as Admin, have a master account, have unused email address</p>
+        </div>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Create a secondary membership following TC-001 steps</li>
+                <li>At "Give own login" step, select "Yes"</li>
+                <li>Enter a unique email address for the secondary</li>
+                <li>Complete membership creation</li>
+                <li>Log out of admin account</li>
+                <li>Log in with the secondary's email (password may need reset)</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Secondary can log in with their own credentials. Dashboard shows NO billing section/tab. Secondary can view their profile and competition results. Secondary cannot access invoices or payment methods.
+        </div>
+    </div>
+
+    <div class="test-case critical">
+        <h4>
+            <span class="test-id">TC-004</span>
+            MECA ID Switcher for Master
+            <span class="priority-badge critical">Critical</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Prerequisites:</div>
+            <p>Master account with at least 2 paid secondary memberships</p>
+        </div>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Log in as the master account holder</li>
+                <li>Navigate to My MECA dashboard</li>
+                <li>Locate the MECA ID switcher dropdown in the header</li>
+                <li>Click the dropdown</li>
+                <li>Verify all MECA IDs are listed (master's own + secondaries)</li>
+                <li>Select a secondary's MECA ID</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Dashboard shows data for the selected MECA ID. Dropdown shows current selection. Master can see competition results for the selected secondary.
+        </div>
+    </div>
+
+    <div class="test-case critical">
+        <h4>
+            <span class="test-id">TC-005</span>
+            Upgrade Secondary to Independent
+            <span class="priority-badge critical">Critical</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Prerequisites:</div>
+            <p>Secondary membership with PAID status</p>
+        </div>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Log in as Admin</li>
+                <li>Navigate to the secondary's member detail page</li>
+                <li>Click "Upgrade to Independent" action</li>
+                <li>Confirm the upgrade</li>
+                <li>Verify the membership details</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Account type changes from SECONDARY to INDEPENDENT. The same MECA ID is preserved. Master relationship is removed. If secondary had own login, their billing access is now enabled.
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ADMIN WORKFLOW TESTS -->
+    <h2 id="admin">2. Admin Workflow Tests</h2>
+
+    <div class="test-case high">
+        <h4>
+            <span class="test-id">TC-006</span>
+            Master Search Functionality
+            <span class="priority-badge high">High</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Start creating a secondary membership (Admin wizard)</li>
+                <li>At secondary option step, select "Yes"</li>
+                <li>In search field, enter master's email</li>
+                <li>Verify results appear</li>
+                <li>Clear and search by MECA ID</li>
+                <li>Verify same master appears</li>
+                <li>Clear and search by partial name</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Search works by email, MECA ID, and name. Results show MECA ID, name, and email. Only PAID memberships appear in results. SECONDARY memberships do NOT appear (can't be master).
+        </div>
+    </div>
+
+    <div class="test-case high">
+        <h4>
+            <span class="test-id">TC-007</span>
+            View Secondary List on Master Detail
+            <span class="priority-badge high">High</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Navigate to Admin &rarr; Members</li>
+                <li>Click on a user who has master status</li>
+                <li>Scroll to "Secondary Memberships" section</li>
+                <li>Verify all secondaries are listed</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Table shows: MECA ID, Name, Type, Has Login, Status, Actions. Each secondary has View, Remove, and Upgrade buttons. Counter shows "X of 10 secondaries".
+        </div>
+    </div>
+
+    <div class="test-case high">
+        <h4>
+            <span class="test-id">TC-008</span>
+            Remove Secondary from Master
+            <span class="priority-badge high">High</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Navigate to master's member detail page</li>
+                <li>In Secondary Memberships section, click "Remove" on a secondary</li>
+                <li>Confirm the removal</li>
+                <li>Navigate to the former secondary's detail page</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Secondary removed from list. Former secondary now shows INDEPENDENT account type. MECA ID is preserved. No data loss occurred.
+        </div>
+    </div>
+
+    <div class="test-case medium">
+        <h4>
+            <span class="test-id">TC-009</span>
+            Add Secondary Button Visibility
+            <span class="priority-badge medium">Medium</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Navigate to a user with PENDING membership</li>
+                <li>Look for "Add Secondary" button</li>
+                <li>Navigate to a user with PAID membership</li>
+                <li>Look for "Add Secondary" button</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            "Add Secondary" button is NOT visible for PENDING memberships. "Add Secondary" button IS visible for PAID memberships.
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- USER DASHBOARD TESTS -->
+    <h2 id="user">3. User Dashboard Tests</h2>
+
+    <div class="test-case high">
+        <h4>
+            <span class="test-id">TC-010</span>
+            User Adds Secondary from Dashboard
+            <span class="priority-badge high">High</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Prerequisites:</div>
+            <p>Logged in as user with PAID independent membership</p>
+        </div>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Navigate to My MECA dashboard</li>
+                <li>In "My Memberships" section, click "Add Secondary"</li>
+                <li>Complete the Add Secondary modal wizard</li>
+                <li>Submit and pay for the secondary</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            User's account type changes to MASTER. New secondary appears in their secondaries list. MECA ID switcher appears in header.
+        </div>
+    </div>
+
+    <div class="test-case high">
+        <h4>
+            <span class="test-id">TC-011</span>
+            Secondary Cannot See Billing
+            <span class="priority-badge high">High</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Prerequisites:</div>
+            <p>Secondary account with own login</p>
+        </div>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Log in as secondary account</li>
+                <li>Navigate through all dashboard tabs</li>
+                <li>Try to access /billing directly via URL</li>
+                <li>Look for any billing/payment related UI</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            No billing tab visible in navigation. Direct URL access shows message "Billing managed by [Master Name]". No payment buttons or invoice links visible.
+        </div>
+    </div>
+
+    <div class="test-case medium">
+        <h4>
+            <span class="test-id">TC-012</span>
+            Secondary Can Edit Own Profile
+            <span class="priority-badge medium">Medium</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Log in as secondary with own login</li>
+                <li>Navigate to Profile section</li>
+                <li>Edit profile details (name, phone, etc.)</li>
+                <li>Edit vehicle information</li>
+                <li>Save changes</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Secondary can edit their own profile. Changes are saved successfully. Vehicle information updates correctly.
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- BILLING TESTS -->
+    <h2 id="billing">4. Billing & Payment Tests</h2>
+
+    <div class="test-case high">
+        <h4>
+            <span class="test-id">TC-013</span>
+            Secondary Invoice Goes to Master
+            <span class="priority-badge high">High</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Create a secondary with Credit Card payment method</li>
+                <li>Check where the invoice was sent</li>
+                <li>View the invoice details</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Invoice email sent to master's email address. Invoice shows master as billing contact. Invoice line item shows secondary's name and MECA ID.
+        </div>
+    </div>
+
+    <div class="test-case medium">
+        <h4>
+            <span class="test-id">TC-014</span>
+            Independent Renewal Dates
+            <span class="priority-badge medium">Medium</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Create two secondaries on different dates</li>
+                <li>View each secondary's membership details</li>
+                <li>Check start and end dates</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Each secondary has their own independent start/end dates. Renewal dates are not tied to master's renewal. Master would receive separate renewal invoices.
+        </div>
+    </div>
+
+    <div class="test-case low">
+        <h4>
+            <span class="test-id">TC-015</span>
+            Complimentary Secondary
+            <span class="priority-badge low">Low</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Create secondary with "Complimentary" payment method</li>
+                <li>Enter reason for complimentary membership</li>
+                <li>Complete creation</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Secondary created with PAID status ($0). MECA ID assigned immediately. No invoice generated.
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- EDGE CASES -->
+    <h2 id="edge">5. Edge Cases & Error Handling</h2>
+
+    <div class="test-case medium">
+        <h4>
+            <span class="test-id">TC-016</span>
+            Max Secondaries Limit
+            <span class="priority-badge medium">Medium</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Create a master with 10 secondaries</li>
+                <li>Try to add an 11th secondary</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Error message displayed: "Maximum of 10 secondary memberships allowed". Add Secondary button should be disabled or show limit reached.
+        </div>
+    </div>
+
+    <div class="test-case low">
+        <h4>
+            <span class="test-id">TC-017</span>
+            Duplicate Email Prevention
+            <span class="priority-badge low">Low</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Create secondary with own login using email "test@example.com"</li>
+                <li>Try to create another secondary with same email</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Error message: "A profile with this email already exists".
+        </div>
+    </div>
+
+    <div class="test-case low">
+        <h4>
+            <span class="test-id">TC-018</span>
+            Cannot Add Secondary to Secondary
+            <span class="priority-badge low">Low</span>
+        </h4>
+
+        <div class="test-section">
+            <div class="test-section-title">Test Steps:</div>
+            <ol class="test-steps">
+                <li>Search for a SECONDARY membership in master search</li>
+                <li>Try to select it as master</li>
+            </ol>
+        </div>
+
+        <div class="expected-result">
+            Secondary memberships do not appear in master search results. API returns error if attempted directly.
+        </div>
+    </div>
+
+    <!-- REGRESSION CHECKLIST -->
+    <h2 id="regression">6. Regression Checklist</h2>
+
+    <div class="checklist">
+        <h3 style="border-left: none; padding-left: 0; margin-top: 0;">Existing Functionality</h3>
+        <ul>
+            <li>Standard user creation still works (non-secondary)</li>
+            <li>Standard membership purchase still works</li>
+            <li>Invoice generation works for regular memberships</li>
+            <li>MECA ID assignment works for regular memberships</li>
+            <li>Event registration still works</li>
+            <li>Competition results still display correctly</li>
+            <li>Member search/listing works correctly</li>
+            <li>Profile editing works for regular users</li>
+        </ul>
+    </div>
+
+    <div class="checklist">
+        <h3 style="border-left: none; padding-left: 0; margin-top: 0;">API Endpoints</h3>
+        <ul>
+            <li>POST /memberships/:id/upgrade-to-master - Returns 200</li>
+            <li>POST /memberships/:id/secondaries - Creates secondary correctly</li>
+            <li>GET /memberships/:id/secondaries - Returns list</li>
+            <li>GET /memberships/:id/master-info - Returns master info with secondaries</li>
+            <li>DELETE /memberships/:id/secondaries/:secondaryId - Removes correctly</li>
+            <li>POST /memberships/:id/upgrade-to-independent - Upgrades correctly</li>
+            <li>GET /memberships/user/:userId/controlled-meca-ids - Returns all IDs</li>
+        </ul>
+    </div>
+
+    <div class="info-box">
+        <h4>Test Sign-Off</h4>
+        <table style="margin-top: 15px; box-shadow: none;">
+            <tr>
+                <td><strong>Tested By:</strong></td>
+                <td>________________________</td>
+                <td><strong>Date:</strong></td>
+                <td>________________________</td>
+            </tr>
+            <tr>
+                <td><strong>Environment:</strong></td>
+                <td>________________________</td>
+                <td><strong>Browser:</strong></td>
+                <td>________________________</td>
+            </tr>
+            <tr>
+                <td><strong>Pass/Fail:</strong></td>
+                <td colspan="3">________________________</td>
+            </tr>
+            <tr>
+                <td><strong>Notes:</strong></td>
+                <td colspan="3">________________________</td>
+            </tr>
+        </table>
+    </div>
+
+    <footer>
+        <p>MECA Competition System - QA Testing Guide for Secondary Memberships</p>
+        <p style="font-size: 0.9rem; margin-top: 5px;">Generated: December 2025</p>
+    </footer>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EventStatusSchema, EventTypeSchema } from './enums.schema';
+import { EventStatusSchema, EventTypeSchema, MultiDayResultsModeSchema } from './enums.schema.js';
 
 // Create Event DTO (API format with snake_case)
 export const CreateEventApiSchema = z.object({
@@ -25,9 +25,12 @@ export const CreateEventApiSchema = z.object({
   non_member_entry_fee: z.number().min(0).optional(),
   has_gate_fee: z.boolean().optional(),
   gate_fee: z.number().min(0).optional(),
-  points_multiplier: z.number().int().min(0).max(4).optional(),
+  points_multiplier: z.number().int().min(1).max(4).optional(),
   event_type: EventTypeSchema.optional(),
   formats: z.array(z.string()).optional(),
+  multi_day_group_id: z.string().uuid().optional(),
+  day_number: z.number().int().min(1).optional(),
+  multi_day_results_mode: MultiDayResultsModeSchema.optional(),
 });
 export type CreateEventApiDto = z.infer<typeof CreateEventApiSchema>;
 
@@ -55,9 +58,12 @@ export const CreateEventSchema = z.object({
   nonMemberEntryFee: z.number().min(0).optional(),
   hasGateFee: z.boolean().optional(),
   gateFee: z.number().min(0).optional(),
-  pointsMultiplier: z.number().int().min(0).max(4).optional(),
+  pointsMultiplier: z.number().int().min(1).max(4).optional(),
   eventType: EventTypeSchema.optional(),
   formats: z.array(z.string()).optional(),
+  multiDayGroupId: z.string().uuid().optional(),
+  dayNumber: z.number().int().min(1).optional(),
+  multiDayResultsMode: MultiDayResultsModeSchema.optional(),
 });
 export type CreateEventDto = z.infer<typeof CreateEventSchema>;
 
@@ -91,6 +97,7 @@ export const EventSchema = z.object({
   formats: z.array(z.string()).nullable(),
   multiDayGroupId: z.string().uuid().nullable(),
   dayNumber: z.number().int().nullable(),
+  multiDayResultsMode: MultiDayResultsModeSchema.nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -105,6 +112,10 @@ export const CreateMultiDayEventSchema = z.object({
   data: CreateEventApiSchema,
   numberOfDays: z.number().int().min(1).max(3),
   dayDates: z.array(z.string().datetime()),
+  // Per-day points multipliers (1-4). If not provided, uses data.points_multiplier for all days.
+  dayMultipliers: z.array(z.number().int().min(1).max(4)).optional(),
+  // How to calculate results for multi-day events
+  multiDayResultsMode: MultiDayResultsModeSchema.optional(),
 });
 export type CreateMultiDayEventDto = z.infer<typeof CreateMultiDayEventSchema>;
 

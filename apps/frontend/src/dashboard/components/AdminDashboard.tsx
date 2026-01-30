@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, Trophy, Plus, CreditCard as Edit, DollarSign, BookOpen, Image as ImageIcon, Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket } from 'lucide-react';
+import {
+  Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
+  Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
+  Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
+  ShoppingCart, Package, Megaphone, Building2, BarChart3
+} from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
 import RulebookManagement from '@/rulebooks/components/RulebookManagement';
@@ -14,10 +19,26 @@ import { eventRegistrationsApi } from '@/event-registrations';
 
 type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
 
+interface AdminAction {
+  icon: any;
+  title: string;
+  description: string;
+  action: string;
+  color: string;
+  navigateTo?: string;
+}
+
+interface AdminSection {
+  id: string;
+  icon: any;
+  title: string;
+  actions: AdminAction[];
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<AdminView>('overview');
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [_selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
@@ -25,10 +46,27 @@ export default function AdminDashboard() {
     totalMembers: 0,
   });
   const [loading, setLoading] = useState(true);
+  // Load expanded sections from localStorage, default to all collapsed
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('adminDashboardExpandedSections');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
 
   useEffect(() => {
     fetchStats();
   }, []);
+
+  // Save expanded sections to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('adminDashboardExpandedSections', JSON.stringify(expandedSections));
+  }, [expandedSections]);
 
   const fetchStats = async () => {
     try {
@@ -57,130 +95,353 @@ export default function AdminDashboard() {
     }
   };
 
-  const adminActions = [
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+
+  const handleActionClick = (action: AdminAction) => {
+    if (action.navigateTo) {
+      // Open static HTML files in a new tab
+      if (action.navigateTo.endsWith('.html')) {
+        window.open(action.navigateTo, '_blank');
+      } else {
+        navigate(action.navigateTo);
+      }
+    } else {
+      setCurrentView(action.action as AdminView);
+    }
+  };
+
+  // Define admin sections with grouped actions
+  const adminSections: AdminSection[] = [
     {
+      id: 'events',
       icon: Calendar,
-      title: 'Manage Events',
-      description: 'Create, edit, and manage competition events',
-      action: 'events' as AdminView,
-      color: 'orange',
-      navigateTo: undefined,
+      title: 'Event Management',
+      actions: [
+        {
+          icon: Calendar,
+          title: 'Manage Events',
+          description: 'Create, edit, and manage competition events',
+          action: 'events',
+          color: 'orange',
+        },
+        {
+          icon: Trophy,
+          title: 'Enter Results',
+          description: 'Add and manage competition results',
+          action: 'results',
+          color: 'yellow',
+        },
+        {
+          icon: ClipboardList,
+          title: 'Event Registrations',
+          description: 'Manage event registrations and check-ins',
+          action: 'event-registrations',
+          color: 'emerald',
+          navigateTo: '/admin/event-registrations',
+        },
+        {
+          icon: QrCode,
+          title: 'QR Check-In',
+          description: 'Scan competitor QR codes at events',
+          action: 'qr-checkin',
+          color: 'cyan',
+          navigateTo: '/admin/check-in',
+        },
+      ],
     },
     {
-      icon: Trophy,
-      title: 'Enter Results',
-      description: 'Add and manage competition results',
-      action: 'results' as AdminView,
-      color: 'yellow',
-      navigateTo: undefined,
-    },
-    {
-      icon: BookOpen,
-      title: 'Manage Rulebooks',
-      description: 'Upload and manage rulebook PDFs',
-      action: 'rulebooks' as AdminView,
-      color: 'purple',
-      navigateTo: undefined,
-    },
-    {
-      icon: ImageIcon,
-      title: 'Media Library',
-      description: 'Manage images, videos, and documents',
-      action: 'media' as AdminView,
-      color: 'pink',
-      navigateTo: undefined,
-    },
-    {
-      icon: Settings,
-      title: 'Site Settings',
-      description: 'Configure homepage and site-wide settings',
-      action: 'settings' as AdminView,
-      color: 'indigo',
-      navigateTo: undefined,
-    },
-    {
+      id: 'members',
       icon: Users,
-      title: 'Manage Members',
-      description: 'View and manage member accounts and roles',
-      action: 'users' as AdminView,
-      color: 'blue',
-      navigateTo: '/admin/members',
+      title: 'User & Member Management',
+      actions: [
+        {
+          icon: Users,
+          title: 'Manage Members',
+          description: 'View and manage member accounts and roles',
+          action: 'users',
+          color: 'blue',
+          navigateTo: '/admin/members',
+        },
+        {
+          icon: CreditCard,
+          title: 'Memberships',
+          description: 'Manage membership purchases and renewals',
+          action: 'memberships',
+          color: 'green',
+          navigateTo: '/admin/membership-types',
+        },
+        {
+          icon: DollarSign,
+          title: 'Billing',
+          description: 'Manage orders, invoices, and revenue',
+          action: 'billing',
+          color: 'lime',
+          navigateTo: '/admin/billing',
+        },
+      ],
     },
     {
-      icon: DollarSign,
-      title: 'Memberships',
-      description: 'Manage membership purchases and renewals',
-      action: 'memberships' as AdminView,
-      color: 'green',
-      navigateTo: '/admin/membership-types',
+      id: 'competition',
+      icon: Trophy,
+      title: 'Competition Setup',
+      actions: [
+        {
+          icon: Award,
+          title: 'Classes Management',
+          description: 'Manage competition classes and formats',
+          action: 'classes',
+          color: 'cyan',
+          navigateTo: '/admin/classes',
+        },
+        {
+          icon: Tags,
+          title: 'Format Management',
+          description: 'Manage competition format types',
+          action: 'formats',
+          color: 'violet',
+          navigateTo: '/admin/formats',
+        },
+        {
+          icon: Link2,
+          title: 'Class Mappings',
+          description: 'Map imported class names to official classes',
+          action: 'class-mappings',
+          color: 'amber',
+        },
+        {
+          icon: BookOpen,
+          title: 'Manage Rulebooks',
+          description: 'Upload and manage rulebook PDFs',
+          action: 'rulebooks',
+          color: 'purple',
+        },
+        {
+          icon: CalendarCheck,
+          title: 'Season Management',
+          description: 'Manage competition seasons and dates',
+          action: 'seasons',
+          color: 'teal',
+          navigateTo: '/admin/seasons',
+        },
+        {
+          icon: Trophy,
+          title: 'World Finals',
+          description: 'Manage qualified competitors and invitations',
+          action: 'world-finals',
+          color: 'yellow',
+          navigateTo: '/admin/world-finals',
+        },
+        {
+          icon: Award,
+          title: 'Achievements',
+          description: 'Manage dB clubs and achievement badges',
+          action: 'achievements',
+          color: 'orange',
+          navigateTo: '/admin/achievements',
+        },
+        {
+          icon: BarChart3,
+          title: 'Points Configuration',
+          description: 'Configure point values for competition placements',
+          action: 'points-config',
+          color: 'rose',
+          navigateTo: '/admin/points-configuration',
+        },
+      ],
     },
     {
-      icon: CalendarCheck,
-      title: 'Season Management',
-      description: 'Manage competition seasons and dates',
-      action: 'seasons' as AdminView,
-      color: 'teal',
-      navigateTo: '/admin/seasons',
+      id: 'applications',
+      icon: FileCheck,
+      title: 'Applications & Approvals',
+      actions: [
+        {
+          icon: Gavel,
+          title: 'Judge Applications',
+          description: 'Review and approve judge applications',
+          action: 'judge-applications',
+          color: 'indigo',
+          navigateTo: '/admin/judge-applications',
+        },
+        {
+          icon: UserCheck,
+          title: 'Manage Judges',
+          description: 'Manage approved judges and assignments',
+          action: 'judges',
+          color: 'violet',
+          navigateTo: '/admin/judges',
+        },
+        {
+          icon: FileCheck,
+          title: 'Event Director Applications',
+          description: 'Review and approve ED applications',
+          action: 'ed-applications',
+          color: 'fuchsia',
+          navigateTo: '/admin/event-director-applications',
+        },
+        {
+          icon: Briefcase,
+          title: 'Manage Event Directors',
+          description: 'Manage approved EDs and assignments',
+          action: 'event-directors',
+          color: 'purple',
+          navigateTo: '/admin/event-directors',
+        },
+        {
+          icon: Star,
+          title: 'Ratings Analytics',
+          description: 'View ratings for judges and event directors',
+          action: 'ratings',
+          color: 'yellow',
+          navigateTo: '/admin/ratings',
+        },
+        {
+          icon: Mail,
+          title: 'Hosting Requests',
+          description: 'Manage event hosting requests and inquiries',
+          action: 'hosting-requests',
+          color: 'rose',
+        },
+      ],
     },
     {
-      icon: Award,
-      title: 'Classes Management',
-      description: 'Manage competition classes and formats',
-      action: 'classes' as AdminView,
-      color: 'cyan',
-      navigateTo: '/admin/classes',
+      id: 'tools',
+      icon: Settings,
+      title: 'Tools & Support',
+      actions: [
+        {
+          icon: Ticket,
+          title: 'Support Tickets',
+          description: 'Manage member support tickets and inquiries',
+          action: 'tickets',
+          color: 'sky',
+          navigateTo: '/admin/tickets',
+        },
+        {
+          icon: Bell,
+          title: 'Notifications Center',
+          description: 'View all member notifications and messages',
+          action: 'notifications',
+          color: 'amber',
+          navigateTo: '/admin/notifications',
+        },
+        {
+          icon: ImageIcon,
+          title: 'Media Library',
+          description: 'Manage images, videos, and documents',
+          action: 'media',
+          color: 'pink',
+        },
+        {
+          icon: Settings,
+          title: 'Site Settings',
+          description: 'Configure homepage and site-wide settings',
+          action: 'settings',
+          color: 'slate',
+        },
+        {
+          icon: BookOpen,
+          title: 'Documentation',
+          description: 'View system documentation and guides',
+          action: 'documentation',
+          color: 'emerald',
+          navigateTo: '/docs/index.html',
+        },
+      ],
     },
     {
-      icon: Link2,
-      title: 'Class Mappings',
-      description: 'Map imported class names to official classes',
-      action: 'class-mappings' as AdminView,
-      color: 'amber',
-      navigateTo: undefined,
+      id: 'business',
+      icon: Store,
+      title: 'Business Directory',
+      actions: [
+        {
+          icon: Store,
+          title: 'Business Listings',
+          description: 'Manage retailer and manufacturer listings',
+          action: 'business-listings',
+          color: 'orange',
+          navigateTo: '/admin/business-listings',
+        },
+      ],
     },
     {
-      icon: Tags,
-      title: 'Format Management',
-      description: 'Manage competition format types',
-      action: 'formats' as AdminView,
-      color: 'violet',
-      navigateTo: '/admin/formats',
+      id: 'shop',
+      icon: ShoppingCart,
+      title: 'MECA Shop',
+      actions: [
+        {
+          icon: Package,
+          title: 'Manage Products',
+          description: 'Add, edit, and manage shop products',
+          action: 'shop-products',
+          color: 'emerald',
+          navigateTo: '/admin/shop/products',
+        },
+        {
+          icon: ShoppingCart,
+          title: 'Shop Orders',
+          description: 'View and manage customer orders',
+          action: 'shop-orders',
+          color: 'blue',
+          navigateTo: '/admin/shop/orders',
+        },
+      ],
     },
     {
-      icon: Mail,
-      title: 'Hosting Requests',
-      description: 'Manage event hosting requests and inquiries',
-      action: 'hosting-requests' as AdminView,
-      color: 'rose',
-      navigateTo: undefined,
-    },
-    {
-      icon: Ticket,
-      title: 'Support Tickets',
-      description: 'Manage member support tickets and inquiries',
-      action: 'tickets' as AdminView,
-      color: 'sky',
-      navigateTo: '/admin/tickets',
+      id: 'advertising',
+      icon: Megaphone,
+      title: 'Advertising',
+      actions: [
+        {
+          icon: Building2,
+          title: 'Advertisers',
+          description: 'Manage advertiser contacts and details',
+          action: 'advertisers',
+          color: 'orange',
+          navigateTo: '/admin/advertisers',
+        },
+        {
+          icon: ImageIcon,
+          title: 'Banner Ads',
+          description: 'Create and manage banner advertisements',
+          action: 'banners',
+          color: 'purple',
+          navigateTo: '/admin/banners',
+        },
+        {
+          icon: BarChart3,
+          title: 'Banner Analytics',
+          description: 'View banner impressions and click rates',
+          action: 'banner-analytics',
+          color: 'cyan',
+          navigateTo: '/admin/banners/analytics',
+        },
+      ],
     },
   ];
 
-  const getColorClasses = (color: string) => {
-    const colors: { [key: string]: string } = {
-      orange: 'bg-orange-500/10 text-orange-500 hover:bg-orange-500/20',
-      yellow: 'bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20',
-      blue: 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20',
-      green: 'bg-green-500/10 text-green-500 hover:bg-green-500/20',
-      purple: 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20',
-      pink: 'bg-pink-500/10 text-pink-500 hover:bg-pink-500/20',
-      indigo: 'bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20',
-      teal: 'bg-teal-500/10 text-teal-500 hover:bg-teal-500/20',
-      cyan: 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20',
-      violet: 'bg-violet-500/10 text-violet-500 hover:bg-violet-500/20',
-      rose: 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20',
-      amber: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20',
-      sky: 'bg-sky-500/10 text-sky-500 hover:bg-sky-500/20',
+  const getIconColorClass = (color: string) => {
+    const colors: Record<string, string> = {
+      orange: 'text-orange-500',
+      yellow: 'text-yellow-500',
+      blue: 'text-blue-500',
+      green: 'text-green-500',
+      purple: 'text-purple-500',
+      pink: 'text-pink-500',
+      indigo: 'text-indigo-500',
+      teal: 'text-teal-500',
+      cyan: 'text-cyan-500',
+      violet: 'text-violet-500',
+      rose: 'text-rose-500',
+      amber: 'text-amber-500',
+      sky: 'text-sky-500',
+      emerald: 'text-emerald-500',
+      lime: 'text-lime-500',
+      fuchsia: 'text-fuchsia-500',
+      slate: 'text-slate-400',
     };
-    return colors[color] || colors.orange;
+    return colors[color] || 'text-slate-400';
   };
 
   const renderView = () => {
@@ -213,105 +474,111 @@ export default function AdminDashboard() {
           </div>
         );
       default:
-        return (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-              <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                    <Users className="h-6 w-6 text-blue-500" />
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-sm">Total Users</p>
-                    <p className="text-white font-semibold text-2xl">{stats.totalUsers}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center">
-                    <Calendar className="h-6 w-6 text-orange-500" />
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-sm">Total Events</p>
-                    <p className="text-white font-semibold text-2xl">{stats.totalEvents}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                    <Trophy className="h-6 w-6 text-yellow-500" />
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-sm">Registrations</p>
-                    <p className="text-white font-semibold text-2xl">
-                      {stats.totalRegistrations}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                    <DollarSign className="h-6 w-6 text-green-500" />
-                  </div>
-                  <div>
-                    <p className="text-gray-400 text-sm">Active Members</p>
-                    <p className="text-white font-semibold text-2xl">{stats.totalMembers}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-white mb-6">Quick Actions</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {adminActions.map((action) => (
-                  <button
-                    key={action.action}
-                    onClick={() => {
-                      if (action.navigateTo) {
-                        navigate(action.navigateTo);
-                      } else {
-                        setCurrentView(action.action);
-                      }
-                    }}
-                    className={`bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left`}
-                  >
-                    <div
-                      className={`w-12 h-12 rounded-full ${getColorClasses(
-                        action.color
-                      )} flex items-center justify-center mb-4`}
-                    >
-                      <action.icon className="h-6 w-6" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-white mb-2">
-                      {action.title}
-                    </h3>
-                    <p className="text-gray-400 text-sm">{action.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl p-8 text-center">
-              <h3 className="text-2xl font-bold text-white mb-4">
-                Full Administrative Control
-              </h3>
-              <p className="text-gray-400 mb-6">
-                As an administrator, you have complete access to all system features and
-                data. Use the quick actions above or the navigation menu to manage your
-                platform.
-              </p>
-            </div>
-          </>
-        );
+        return renderOverview();
     }
   };
+
+  const renderOverview = () => (
+    <>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-slate-400 text-sm">Total Users</p>
+              <p className="text-2xl font-bold text-white mt-1">{stats.totalUsers}</p>
+            </div>
+            <Users className="h-8 w-8 text-blue-500" />
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-slate-400 text-sm">Total Events</p>
+              <p className="text-2xl font-bold text-white mt-1">{stats.totalEvents}</p>
+            </div>
+            <Calendar className="h-8 w-8 text-orange-500" />
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-slate-400 text-sm">Registrations</p>
+              <p className="text-2xl font-bold text-white mt-1">{stats.totalRegistrations}</p>
+            </div>
+            <Trophy className="h-8 w-8 text-yellow-500" />
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-slate-400 text-sm">Active Members</p>
+              <p className="text-2xl font-bold text-white mt-1">{stats.totalMembers}</p>
+            </div>
+            <DollarSign className="h-8 w-8 text-green-500" />
+          </div>
+        </div>
+      </div>
+
+      {/* Management Sections */}
+      <h2 className="text-xl font-bold text-white mb-4">Management Sections</h2>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {adminSections.map((section) => {
+          const isExpanded = expandedSections[section.id];
+          const SectionIcon = section.icon;
+
+          return (
+            <div key={section.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+              {/* Section Header */}
+              <button
+                onClick={() => toggleSection(section.id)}
+                className="w-full flex items-center justify-between p-4 hover:bg-slate-700/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <SectionIcon className="h-5 w-5 text-slate-400" />
+                  <div className="text-left">
+                    <h3 className="text-white font-semibold">{section.title}</h3>
+                    <p className="text-slate-400 text-sm">{section.actions.length} actions</p>
+                  </div>
+                </div>
+                {isExpanded ? (
+                  <ChevronUp className="h-5 w-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-slate-400" />
+                )}
+              </button>
+
+              {/* Section Content */}
+              {isExpanded && (
+                <div className="border-t border-slate-700 bg-slate-800/50">
+                  {section.actions.map((action) => {
+                    const ActionIcon = action.icon;
+                    return (
+                      <button
+                        key={action.action}
+                        onClick={() => handleActionClick(action)}
+                        className="w-full flex items-center gap-3 p-4 hover:bg-slate-700/50 transition-colors text-left border-b border-slate-700/50 last:border-b-0"
+                      >
+                        <ActionIcon className={`h-5 w-5 ${getIconColorClass(action.color)} flex-shrink-0`} />
+                        <div>
+                          <p className="text-white font-medium">{action.title}</p>
+                          <p className="text-slate-400 text-sm">{action.description}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
