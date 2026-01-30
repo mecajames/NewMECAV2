@@ -326,7 +326,8 @@
         <li><a href="#special-roles">12. Special Role IDs (Judges, EDs)</a></li>
         <li><a href="#database">13. Database Implementation</a></li>
         <li><a href="#business-logic-summary">14. Business Logic Summary</a></li>
-        <li><a href="#troubleshooting">15. Troubleshooting</a></li>
+        <li><a href="#super-admin">15. Super Admin MECA ID Override (Protected)</a></li>
+        <li><a href="#troubleshooting">16. Troubleshooting</a></li>
       </ul>
     </div>
 
@@ -1036,7 +1037,7 @@ $$ <span class="function">LANGUAGE</span> plpgsql;
       </tr>
       <tr>
         <td><strong>Renewal > 90 days</strong></td>
-        <td>Gets a new MECA ID (old one is retired)</td>
+        <td>Gets a new MECA ID (old one is retired) — <em>Admin can override with password</em></td>
       </tr>
       <tr>
         <td><strong>Secondary Member</strong></td>
@@ -1135,11 +1136,133 @@ $$ <span class="function">LANGUAGE</span> plpgsql;
         <li><strong>Multiple membership types:</strong> Each type gets its own ID (Competitor vs Retailer)</li>
         <li><strong>Self secondary:</strong> Uses master's name automatically, gets unique ID for vehicle</li>
         <li><strong>Legacy renewal after 90 days:</strong> Gets NEW ID in 701500+ range, not their legacy ID</li>
-        <li><strong>Admin manual override:</strong> Can reassign IDs but should create history record</li>
+        <li><strong>Super Admin override:</strong> Password-protected endpoints allow bypassing 90-day rule or changing MECA IDs (audit trail created automatically)</li>
       </ul>
     </div>
 
-    <h2 id="troubleshooting">15. Troubleshooting</h2>
+    <h2 id="super-admin">15. Super Admin MECA ID Override (Protected)</h2>
+    <p>In exceptional circumstances, administrators may need to override the standard MECA ID assignment rules. These operations require <strong>both admin role AND a special password</strong> for security.</p>
+
+    <div class="card warning">
+      <h4>⚠️ Password-Protected Operations</h4>
+      <p>The following operations are protected by a special Super Admin password. This password should only be known by authorized personnel (e.g., Mick or designated admins).</p>
+      <ul>
+        <li>Overriding a MECA ID on an existing membership</li>
+        <li>Bypassing the 90-day rule when renewing</li>
+      </ul>
+      <p><strong>Security:</strong> All Super Admin operations are logged in the <code>meca_id_history</code> table with the admin's user ID and reason for the change.</p>
+    </div>
+
+    <h3>15.1 Override MECA ID on Existing Membership</h3>
+    <div class="card">
+      <h4>Use Case</h4>
+      <p>When a member needs a different MECA ID assigned to their existing membership (e.g., correcting an import error, honoring a legacy ID promise).</p>
+
+      <h4>Requirements</h4>
+      <ul>
+        <li>User must have <span class="badge badge-purple">Admin</span> role</li>
+        <li>Must provide Super Admin password</li>
+        <li>Must provide a reason (logged for audit)</li>
+        <li>New MECA ID must not already be in use</li>
+      </ul>
+
+      <h4>API Endpoint</h4>
+      <div class="code-block">
+<span class="function">PUT</span> /api/memberships/:id/admin/override-meca-id
+
+<span class="comment">// Request body:</span>
+{
+  <span class="string">"newMecaId"</span>: <span class="number">500123</span>,
+  <span class="string">"superAdminPassword"</span>: <span class="string">"[PROTECTED]"</span>,
+  <span class="string">"reason"</span>: <span class="string">"Restoring legacy ID per member request"</span>
+}
+      </div>
+    </div>
+
+    <h3>15.2 Renew Membership Keeping Old MECA ID (After 90 Days)</h3>
+    <div class="card">
+      <h4>Use Case</h4>
+      <p>When a member's membership has expired for more than 90 days but they have a valid reason to keep their old MECA ID (e.g., medical absence, military deployment, administrative error).</p>
+
+      <h4>Requirements</h4>
+      <ul>
+        <li>User must have <span class="badge badge-purple">Admin</span> role</li>
+        <li>Must provide Super Admin password</li>
+        <li>Must provide a reason (logged for audit)</li>
+        <li>Previous MECA ID must exist and belong to this user's previous membership</li>
+        <li>Previous MECA ID must not be currently in use by an active membership</li>
+      </ul>
+
+      <h4>API Endpoint</h4>
+      <div class="code-block">
+<span class="function">POST</span> /api/memberships/admin/renew-keep-meca-id
+
+<span class="comment">// Request body:</span>
+{
+  <span class="string">"userId"</span>: <span class="string">"uuid-of-member"</span>,
+  <span class="string">"membershipTypeConfigId"</span>: <span class="string">"uuid-of-membership-type"</span>,
+  <span class="string">"previousMecaId"</span>: <span class="number">701523</span>,
+  <span class="string">"superAdminPassword"</span>: <span class="string">"[PROTECTED]"</span>,
+  <span class="string">"reason"</span>: <span class="string">"Medical leave - doctor's note on file"</span>
+}
+      </div>
+    </div>
+
+    <h3>Audit Trail</h3>
+    <div class="card info">
+      <h4>History Record for Super Admin Operations</h4>
+      <p>All Super Admin override operations create a detailed history record:</p>
+      <div class="code-block">
+<span class="comment">// Example meca_id_history record for override:</span>
+{
+  <span class="string">"meca_id"</span>: <span class="number">500123</span>,
+  <span class="string">"membership_id"</span>: <span class="string">"membership-uuid"</span>,
+  <span class="string">"notes"</span>: <span class="string">"SUPER ADMIN OVERRIDE by admin-uuid: Changed from 701500 to 500123. Reason: Restoring legacy ID per member request"</span>,
+  <span class="string">"created_at"</span>: <span class="string">"2026-01-27T..."</span>
+}
+      </div>
+    </div>
+
+    <h3>Code Locations</h3>
+    <table>
+      <tr>
+        <th>File</th>
+        <th>Function</th>
+        <th>Purpose</th>
+      </tr>
+      <tr>
+        <td><code>memberships.controller.ts</code></td>
+        <td><code>overrideMecaId()</code></td>
+        <td>Endpoint for ID override</td>
+      </tr>
+      <tr>
+        <td><code>memberships.controller.ts</code></td>
+        <td><code>renewKeepMecaId()</code></td>
+        <td>Endpoint for renewal with same ID</td>
+      </tr>
+      <tr>
+        <td><code>memberships.service.ts</code></td>
+        <td><code>superAdminOverrideMecaId()</code></td>
+        <td>Override logic with validation</td>
+      </tr>
+      <tr>
+        <td><code>memberships.service.ts</code></td>
+        <td><code>renewMembershipKeepMecaId()</code></td>
+        <td>Renewal logic bypassing 90-day rule</td>
+      </tr>
+      <tr>
+        <td><code>memberships.api-client.ts</code></td>
+        <td><code>superAdminOverrideMecaId()</code></td>
+        <td>Frontend API method</td>
+      </tr>
+      <tr>
+        <td><code>memberships.api-client.ts</code></td>
+        <td><code>superAdminRenewKeepMecaId()</code></td>
+        <td>Frontend API method</td>
+      </tr>
+    </table>
+
+    <h2 id="troubleshooting">16. Troubleshooting</h2>
 
     <h3>Member has no MECA ID after payment</h3>
     <div class="card">
@@ -1183,7 +1306,15 @@ $$ <span class="function">LANGUAGE</span> plpgsql;
     <h3>Member wants their old MECA ID back (after 90 days)</h3>
     <div class="card">
       <p><strong>Policy:</strong> After 90 days, MECA IDs cannot be reclaimed through the normal system.</p>
-      <p><strong>Admin override (if absolutely necessary):</strong></p>
+      <p><strong>Super Admin Override (Recommended):</strong></p>
+      <ol>
+        <li>Navigate to the member's detail page in Admin</li>
+        <li>Use the "Override MECA ID" feature (requires Super Admin password)</li>
+        <li>Enter the previous MECA ID and provide a reason</li>
+        <li>The system automatically validates and creates an audit trail</li>
+      </ol>
+      <p>See <a href="#super-admin">Section 15: Super Admin MECA ID Override</a> for full details.</p>
+      <p><strong>Manual Database Fix (Legacy/Emergency):</strong></p>
       <ol>
         <li>Verify no other membership is using that MECA ID</li>
         <li>Manually update the membership's <code>meca_id</code> field</li>

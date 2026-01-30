@@ -3484,6 +3484,15 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [showEditSecondaryModal, setShowEditSecondaryModal] = useState(false);
   const [editingSecondary, setEditingSecondary] = useState<SecondaryMembershipInfo | null>(null);
 
+  // Super Admin MECA ID Override modal state
+  const [showMecaIdOverrideModal, setShowMecaIdOverrideModal] = useState(false);
+  const [overrideMembership, setOverrideMembership] = useState<Membership | null>(null);
+  const [overrideNewMecaId, setOverrideNewMecaId] = useState('');
+  const [overridePassword, setOverridePassword] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideLoading, setOverrideLoading] = useState(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchMemberships();
     fetchMembershipTypes();
@@ -3628,6 +3637,59 @@ function MembershipsTab({ member }: { member: Profile }) {
     setEditingSecondary(null);
   };
 
+  // Super Admin MECA ID Override handlers
+  const handleOpenMecaIdOverride = (membership: Membership) => {
+    setOverrideMembership(membership);
+    setOverrideNewMecaId(membership.mecaId?.toString() || '');
+    setOverridePassword('');
+    setOverrideReason('');
+    setOverrideError(null);
+    setShowMecaIdOverrideModal(true);
+  };
+
+  const handleMecaIdOverrideSubmit = async () => {
+    if (!overrideMembership) return;
+
+    // Validation
+    if (!overrideNewMecaId.trim()) {
+      setOverrideError('Please enter a MECA ID');
+      return;
+    }
+    const newMecaId = parseInt(overrideNewMecaId.trim(), 10);
+    if (isNaN(newMecaId) || newMecaId <= 0) {
+      setOverrideError('MECA ID must be a positive number');
+      return;
+    }
+    if (!overridePassword.trim()) {
+      setOverrideError('Please enter the Super Admin password');
+      return;
+    }
+    if (!overrideReason.trim()) {
+      setOverrideError('Please provide a reason for this override');
+      return;
+    }
+
+    setOverrideLoading(true);
+    setOverrideError(null);
+    try {
+      const result = await membershipsApi.superAdminOverrideMecaId(
+        overrideMembership.id,
+        newMecaId,
+        overridePassword.trim(),
+        overrideReason.trim()
+      );
+      alert(result.message || 'MECA ID updated successfully!');
+      setShowMecaIdOverrideModal(false);
+      setOverrideMembership(null);
+      fetchMemberships();
+    } catch (error: any) {
+      console.error('Error overriding MECA ID:', error);
+      setOverrideError(error.response?.data?.message || 'Failed to override MECA ID');
+    } finally {
+      setOverrideLoading(false);
+    }
+  };
+
   // Helper to get relationship label
   const getRelationshipLabel = (relationship?: string): string => {
     if (!relationship) return '';
@@ -3768,13 +3830,26 @@ function MembershipsTab({ member }: { member: Profile }) {
                     {getStatusBadge(membership)}
                   </div>
                   <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                    {/* MECA ID - prominently displayed */}
+                    {/* MECA ID - prominently displayed with admin override option */}
                     {membership.mecaId && (
-                      <div className="col-span-2 mb-2">
+                      <div className="col-span-2 mb-2 flex items-center gap-2">
                         <span className="text-gray-400">MECA ID: </span>
                         <span className="text-orange-400 font-mono font-semibold text-lg">
                           #{membership.mecaId}
                         </span>
+                        {canEdit && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenMecaIdOverride(membership);
+                            }}
+                            className="ml-2 px-2 py-1 text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 rounded flex items-center gap-1"
+                            title="Super Admin: Override MECA ID"
+                          >
+                            <Key size={12} />
+                            Override
+                          </button>
+                        )}
                       </div>
                     )}
                     <div>
@@ -4339,6 +4414,103 @@ function MembershipsTab({ member }: { member: Profile }) {
           requestingUserId={member.id}
           onSuccess={handleSecondaryEdited}
         />
+      )}
+
+      {/* Super Admin MECA ID Override Modal */}
+      {showMecaIdOverrideModal && overrideMembership && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-purple-500/30">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield className="text-purple-400" size={24} />
+              <h3 className="text-lg font-bold text-white">Super Admin: Override MECA ID</h3>
+            </div>
+
+            <div className="bg-yellow-900/30 border border-yellow-600/50 rounded-lg p-3 mb-4">
+              <p className="text-yellow-300 text-sm">
+                <AlertTriangle className="inline mr-1" size={14} />
+                This action bypasses normal MECA ID rules. An audit record will be created.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Current MECA ID</label>
+                <div className="px-3 py-2 bg-slate-700 rounded text-orange-400 font-mono">
+                  #{overrideMembership.mecaId || 'Not assigned'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">New MECA ID *</label>
+                <input
+                  type="number"
+                  value={overrideNewMecaId}
+                  onChange={(e) => setOverrideNewMecaId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white font-mono focus:border-purple-500 focus:outline-none"
+                  placeholder="Enter new MECA ID"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Super Admin Password *</label>
+                <input
+                  type="password"
+                  value={overridePassword}
+                  onChange={(e) => setOverridePassword(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:border-purple-500 focus:outline-none"
+                  placeholder="Enter password"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Reason for Override *</label>
+                <textarea
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:border-purple-500 focus:outline-none resize-none"
+                  rows={3}
+                  placeholder="Explain why this override is necessary..."
+                />
+              </div>
+
+              {overrideError && (
+                <div className="p-3 bg-red-900/30 border border-red-600 rounded text-red-300 text-sm">
+                  {overrideError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowMecaIdOverrideModal(false);
+                    setOverrideMembership(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded"
+                  disabled={overrideLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleMecaIdOverrideSubmit}
+                  className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded flex items-center justify-center gap-2"
+                  disabled={overrideLoading}
+                >
+                  {overrideLoading ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={16} />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Key size={16} />
+                      Override MECA ID
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

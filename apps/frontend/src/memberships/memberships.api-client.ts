@@ -593,4 +593,47 @@ export const membershipsApi = {
     });
     return response.data;
   },
+
+  // ============================================================
+  // SUPER ADMIN MECA ID OPERATIONS (requires special password)
+  // ============================================================
+
+  /**
+   * Super Admin: Override MECA ID on an existing membership
+   * Requires admin role + super admin password
+   */
+  superAdminOverrideMecaId: async (
+    membershipId: string,
+    newMecaId: number,
+    superAdminPassword: string,
+    reason: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> => {
+    const response = await axios.put(`/api/memberships/${membershipId}/admin/override-meca-id`, {
+      newMecaId,
+      superAdminPassword,
+      reason,
+    });
+    return response.data;
+  },
+
+  /**
+   * Super Admin: Renew membership but keep old MECA ID (bypass 90-day rule)
+   * Requires admin role + super admin password
+   */
+  superAdminRenewKeepMecaId: async (
+    userId: string,
+    membershipTypeConfigId: string,
+    previousMecaId: number,
+    superAdminPassword: string,
+    reason: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> => {
+    const response = await axios.post('/api/memberships/admin/renew-keep-meca-id', {
+      userId,
+      membershipTypeConfigId,
+      previousMecaId,
+      superAdminPassword,
+      reason,
+    });
+    return response.data;
+  },
 };

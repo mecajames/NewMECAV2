@@ -557,4 +557,99 @@ export class MembershipsController {
     this.logger.log('Admin triggered manual membership status sync');
     return this.membershipSyncService.triggerDailySync();
   }
+
+  // Super Admin password for protected MECA ID operations
+  private readonly SUPER_ADMIN_PASSWORD = '*cvStFU@yxEb6QQg';
+
+  /**
+   * Super Admin: Override MECA ID on a membership
+   * Requires admin role + special password
+   * Used for:
+   * - Reassigning an old MECA ID to a member (after 90 days)
+   * - Manually correcting MECA ID assignment errors
+   */
+  @Put(':id/admin/override-meca-id')
+  @HttpCode(HttpStatus.OK)
+  async overrideMecaId(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      newMecaId: number;
+      superAdminPassword: string;
+      reason: string;
+    },
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    // Require admin role
+    const { profile } = await this.requireAdmin(authHeader);
+
+    // Validate super admin password
+    if (data.superAdminPassword !== this.SUPER_ADMIN_PASSWORD) {
+      throw new ForbiddenException('Invalid super admin password');
+    }
+
+    if (!data.newMecaId || data.newMecaId < 1) {
+      throw new BadRequestException('Valid MECA ID is required');
+    }
+
+    if (!data.reason || data.reason.trim().length < 10) {
+      throw new BadRequestException('A reason (at least 10 characters) is required for MECA ID override');
+    }
+
+    this.logger.warn(`SUPER ADMIN OVERRIDE: Admin ${profile?.email} overriding MECA ID for membership ${membershipId} to ${data.newMecaId}. Reason: ${data.reason}`);
+
+    const result = await this.membershipsService.superAdminOverrideMecaId(
+      membershipId,
+      data.newMecaId,
+      profile?.id || 'unknown',
+      data.reason,
+    );
+
+    return result;
+  }
+
+  /**
+   * Super Admin: Force keep same MECA ID when renewing after 90 days
+   * Requires admin role + special password
+   * Bypasses the 90-day rule that normally assigns a new MECA ID
+   */
+  @Post('admin/renew-keep-meca-id')
+  @HttpCode(HttpStatus.CREATED)
+  async renewKeepMecaId(
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      userId: string;
+      membershipTypeConfigId: string;
+      previousMecaId: number;
+      superAdminPassword: string;
+      reason: string;
+    },
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    // Require admin role
+    const { profile } = await this.requireAdmin(authHeader);
+
+    // Validate super admin password
+    if (data.superAdminPassword !== this.SUPER_ADMIN_PASSWORD) {
+      throw new ForbiddenException('Invalid super admin password');
+    }
+
+    if (!data.previousMecaId || data.previousMecaId < 1) {
+      throw new BadRequestException('Previous MECA ID is required');
+    }
+
+    if (!data.reason || data.reason.trim().length < 10) {
+      throw new BadRequestException('A reason (at least 10 characters) is required for 90-day rule override');
+    }
+
+    this.logger.warn(`SUPER ADMIN OVERRIDE: Admin ${profile?.email} creating renewal with forced MECA ID ${data.previousMecaId} for user ${data.userId}. Reason: ${data.reason}`);
+
+    const result = await this.membershipsService.renewMembershipKeepMecaId(
+      data.userId,
+      data.membershipTypeConfigId,
+      data.previousMecaId,
+      profile?.id || 'unknown',
+      data.reason,
+    );
+
+    return result;
+  }
 }
