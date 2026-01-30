@@ -68,9 +68,49 @@ function StripePaymentForm({
       });
 
       if (error) {
-        setPaymentError(error.message || 'Payment failed. Please try again.');
-      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        onSuccess(paymentIntent.id);
+        // Handle specific error types
+        if (error.type === 'card_error' || error.type === 'validation_error') {
+          setPaymentError(error.message || 'Card validation failed. Please check your card details.');
+        } else {
+          setPaymentError(error.message || 'Payment failed. Please try again.');
+        }
+      } else if (paymentIntent) {
+        // Handle different payment intent statuses
+        switch (paymentIntent.status) {
+          case 'succeeded':
+            onSuccess(paymentIntent.id);
+            break;
+          case 'processing':
+            // Payment is being processed asynchronously (e.g., bank debits)
+            setPaymentError(
+              'Your payment is being processed. You will receive a confirmation email once completed.'
+            );
+            // Still call onSuccess - the webhook will handle final confirmation
+            onSuccess(paymentIntent.id);
+            break;
+          case 'requires_action':
+            // 3D Secure authentication is needed - Stripe handles this automatically
+            // with redirect: 'if_required', but if we get here, something went wrong
+            setPaymentError(
+              'Additional authentication is required. Please complete the verification process.'
+            );
+            break;
+          case 'requires_payment_method':
+            // Payment method failed, user needs to provide a new one
+            setPaymentError(
+              'Your payment method was declined. Please try a different card or payment method.'
+            );
+            break;
+          case 'requires_confirmation':
+            // Rare case - payment needs to be confirmed again
+            setPaymentError('Please try submitting your payment again.');
+            break;
+          case 'canceled':
+            setPaymentError('The payment was canceled. Please try again.');
+            break;
+          default:
+            setPaymentError(`Payment status: ${paymentIntent.status}. Please contact support if this persists.`);
+        }
       } else {
         setPaymentError('Payment was not completed. Please try again.');
       }
@@ -153,7 +193,20 @@ export default function StripePaymentWrapper({
   onBack,
 }: StripePaymentWrapperProps) {
   if (!stripePromise) {
-    return null;
+    return (
+      <div className="p-6 bg-red-500/10 border border-red-500 rounded-lg">
+        <p className="text-red-500 text-center">
+          Payment system is not configured. Please contact support.
+        </p>
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-4 w-full px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+        >
+          Go Back
+        </button>
+      </div>
+    );
   }
 
   return (

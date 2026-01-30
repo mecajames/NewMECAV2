@@ -25,7 +25,12 @@
     "migration:pending": "mikro-orm migration:pending",
     "schema:update": "mikro-orm schema:update --run",
     "schema:drop": "mikro-orm schema:drop --run",
-    "cache:clear": "mikro-orm cache:clear"
+    "cache:clear": "mikro-orm cache:clear",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
+    "test:stripe": "jest --testPathPatterns stripe"
   },
   "keywords": [
     "meca",
@@ -91,6 +96,9 @@
     "@types/nodemailer": "~7.0.5",
     "@types/pg": "~8.16.0",
     "@supabase/supabase-js": "~2.90.1",
-    "ts-node": "~10.9.2"
+    "ts-node": "~10.9.2",
+    "jest": "~30.2.0",
+    "@types/jest": "~30.0.0",
+    "ts-jest": "~29.4.6"
   }
 }

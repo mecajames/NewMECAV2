@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import Stripe from 'stripe';
 import { CreatePaymentIntentDto, PaymentIntentResult } from '@newmeca/shared';
 
 @Injectable()
 export class StripeService {
+  private readonly logger = new Logger(StripeService.name);
   private stripe: Stripe | null = null;
 
   constructor() {
@@ -50,7 +51,7 @@ export class StripeService {
         paymentIntentId: paymentIntent.id,
       };
     } catch (error) {
-      console.error('Stripe createPaymentIntent error:', error);
+      this.logger.error('Stripe createPaymentIntent error:', error);
       if (error instanceof Stripe.errors.StripeError) {
         throw new BadRequestException(error.message);
       }
@@ -67,7 +68,7 @@ export class StripeService {
     try {
       return await stripe.paymentIntents.retrieve(paymentIntentId);
     } catch (error) {
-      console.error('Stripe getPaymentIntent error:', error);
+      this.logger.error('Stripe getPaymentIntent error:', error);
       if (error instanceof Stripe.errors.StripeError) {
         throw new BadRequestException(error.message);
       }
@@ -88,7 +89,7 @@ export class StripeService {
     try {
       return stripe.webhooks.constructEvent(payload, signature, webhookSecret);
     } catch (error) {
-      console.error('Stripe webhook verification error:', error);
+      this.logger.error('Stripe webhook verification error:', error);
       throw new BadRequestException('Invalid webhook signature');
     }
   }
@@ -116,7 +117,7 @@ export class StripeService {
         name: name,
       });
     } catch (error) {
-      console.error('Stripe findOrCreateCustomer error:', error);
+      this.logger.error('Stripe findOrCreateCustomer error:', error);
       if (error instanceof Stripe.errors.StripeError) {
         throw new BadRequestException(error.message);
       }
@@ -137,7 +138,7 @@ export class StripeService {
         metadata: reason ? { reason } : undefined,
       });
     } catch (error) {
-      console.error('Stripe createRefund error:', error);
+      this.logger.error('Stripe createRefund error:', error);
       if (error instanceof Stripe.errors.StripeError) {
         throw new BadRequestException(error.message);
       }

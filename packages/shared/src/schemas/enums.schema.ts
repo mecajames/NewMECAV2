@@ -118,6 +118,18 @@ export enum PaymentType {
   OTHER = 'other',
 }
 
+/**
+ * Stripe-specific payment types used in webhook metadata routing.
+ * These map to the `paymentType` field in Stripe PaymentIntent metadata.
+ */
+export enum StripePaymentType {
+  MEMBERSHIP = 'membership',
+  EVENT_REGISTRATION = 'event_registration',
+  TEAM_UPGRADE = 'team_upgrade',
+  INVOICE_PAYMENT = 'invoice_payment',
+  SHOP = 'shop',
+}
+
 export enum HostType {
   BUSINESS = 'business',
   INDIVIDUAL = 'individual',
@@ -359,6 +371,7 @@ export const EventTypeOptionSchema = z.nativeEnum(EventTypeOption);
 export const EventTypeSchema = z.nativeEnum(EventType);
 export const PaymentMethodSchema = z.nativeEnum(PaymentMethod);
 export const PaymentTypeSchema = z.nativeEnum(PaymentType);
+export const StripePaymentTypeSchema = z.nativeEnum(StripePaymentType);
 export const HostTypeSchema = z.nativeEnum(HostType);
 export const IndoorOutdoorSchema = z.nativeEnum(IndoorOutdoor);
 export const RulebookCategorySchema = z.nativeEnum(RulebookCategory);

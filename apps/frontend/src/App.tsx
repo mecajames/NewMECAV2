@@ -14,7 +14,7 @@ import TermsAndConditionsPage from '@/pages/TermsAndConditionsPage';
 import CompetitionGuidesPage from '@/pages/CompetitionGuidesPage';
 import MECAQuickStartGuidePage from '@/pages/MECAQuickStartGuidePage';
 // Feature pages
-import { LoginPage, ChangePasswordPage } from '@/auth';
+import { LoginPage, ChangePasswordPage, AuthCallbackPage } from '@/auth';
 import { EventsPage, EventDetailPage } from '@/events';
 import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage } from '@/competition-results';
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
@@ -95,6 +95,7 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="/change-password" element={<ChangePasswordPage />} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:eventId" element={<EventDetailPage />} />

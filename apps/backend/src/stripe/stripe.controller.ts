@@ -25,9 +25,10 @@ import { MembershipTypeConfig } from '../membership-type-configs/membership-type
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Payment } from '../payments/payments.entity';
-import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, UserRole, ShopAddress } from '@newmeca/shared';
+import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, UserRole, ShopAddress, StripePaymentType } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { ShopService } from '../shop/shop.service';
+import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
 import Stripe from 'stripe';
 
 interface CreateMembershipPaymentIntentDto {
@@ -293,7 +294,7 @@ export class StripeController {
 
     // Create metadata
     const metadata: Record<string, string> = {
-      paymentType: 'event_registration',
+      paymentType: StripePaymentType.EVENT_REGISTRATION,
       registrationId: registration.id,
       eventId: data.eventId,
       eventTitle: event.title,
@@ -387,7 +388,7 @@ export class StripeController {
 
     // Create metadata
     const metadata: Record<string, string> = {
-      paymentType: 'team_upgrade',
+      paymentType: StripePaymentType.TEAM_UPGRADE,
       membershipId: data.membershipId,
       userId: data.userId,
       email: user.email,
@@ -451,7 +452,7 @@ export class StripeController {
 
     // Create metadata
     const metadata: Record<string, string> = {
-      paymentType: 'invoice_payment',
+      paymentType: StripePaymentType.INVOICE_PAYMENT,
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       userId: user.id,
@@ -506,7 +507,7 @@ export class StripeController {
 
     // Create metadata
     const metadata: Record<string, string> = {
-      paymentType: 'shop',
+      paymentType: StripePaymentType.SHOP,
       orderId: order.id,
       orderNumber: order.orderNumber,
       email: data.email.toLowerCase(),
@@ -544,7 +545,7 @@ export class StripeController {
   async handleWebhook(
     @Req() req: RawBodyRequest<Request>,
     @Headers('stripe-signature') signature: string,
-  ): Promise<{ received: boolean }> {
+  ): Promise<{ received: boolean; message?: string }> {
     if (!signature) {
       throw new BadRequestException('Missing stripe-signature header');
     }
@@ -557,17 +558,59 @@ export class StripeController {
     // Verify and construct the event
     const event = this.stripeService.constructWebhookEvent(rawBody, signature);
 
-    // Handle specific event types
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        await this.handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
-        break;
-      case 'payment_intent.payment_failed':
-        await this.handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
-        break;
-      default:
-        console.log(`Unhandled Stripe event type: ${event.type}`);
+    // Idempotency check: Skip if already processed
+    const em = this.em.fork();
+    const existingEvent = await em.findOne(ProcessedWebhookEvent, { stripeEventId: event.id });
+    if (existingEvent) {
+      console.log(`Webhook event ${event.id} already processed, skipping`);
+      return { received: true, message: 'Already processed' };
     }
+
+    // Create record to track this event (before processing to prevent race conditions)
+    const webhookEvent = new ProcessedWebhookEvent();
+    webhookEvent.stripeEventId = event.id;
+    webhookEvent.eventType = event.type;
+
+    // Extract payment intent info if available
+    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    if (paymentIntent?.id) {
+      webhookEvent.paymentIntentId = paymentIntent.id;
+      webhookEvent.paymentType = paymentIntent.metadata?.paymentType;
+      webhookEvent.metadata = paymentIntent.metadata;
+    }
+
+    try {
+      // Handle specific event types
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          await this.handlePaymentIntentSucceeded(paymentIntent);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'payment_intent.payment_failed':
+          await this.handlePaymentIntentFailed(paymentIntent);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'charge.refunded':
+          await this.handleChargeRefunded(event.data.object as Stripe.Charge);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'charge.dispute.created':
+          await this.handleDisputeCreated(event.data.object as Stripe.Dispute);
+          webhookEvent.processingResult = 'success';
+          break;
+        default:
+          console.log(`Unhandled Stripe event type: ${event.type}`);
+          webhookEvent.processingResult = 'unhandled';
+      }
+    } catch (error) {
+      webhookEvent.processingResult = 'error';
+      webhookEvent.errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      // Still persist the event to avoid reprocessing, but log the error
+      console.error(`Error processing webhook ${event.id}:`, error);
+    }
+
+    // Persist the processed event record
+    await em.persistAndFlush(webhookEvent);
 
     return { received: true };
   }
@@ -576,19 +619,27 @@ export class StripeController {
     console.log('Payment succeeded:', paymentIntent.id);
 
     const metadata = paymentIntent.metadata;
-    const paymentType = metadata.paymentType;
+    const paymentType = metadata.paymentType as StripePaymentType | undefined;
 
     // Route to appropriate handler based on payment type
-    if (paymentType === 'event_registration') {
-      await this.handleEventRegistrationPayment(paymentIntent);
-    } else if (paymentType === 'team_upgrade') {
-      await this.handleTeamUpgradePayment(paymentIntent);
-    } else if (paymentType === 'invoice_payment') {
-      await this.handleInvoicePayment(paymentIntent);
-    } else if (paymentType === 'shop') {
-      await this.handleShopPayment(paymentIntent);
-    } else {
-      await this.handleMembershipPayment(paymentIntent);
+    switch (paymentType) {
+      case StripePaymentType.EVENT_REGISTRATION:
+        await this.handleEventRegistrationPayment(paymentIntent);
+        break;
+      case StripePaymentType.TEAM_UPGRADE:
+        await this.handleTeamUpgradePayment(paymentIntent);
+        break;
+      case StripePaymentType.INVOICE_PAYMENT:
+        await this.handleInvoicePayment(paymentIntent);
+        break;
+      case StripePaymentType.SHOP:
+        await this.handleShopPayment(paymentIntent);
+        break;
+      case StripePaymentType.MEMBERSHIP:
+      default:
+        // Default to membership payment (for backwards compatibility)
+        await this.handleMembershipPayment(paymentIntent);
+        break;
     }
   }
 
@@ -1107,6 +1158,123 @@ export class StripeController {
     // In production, you might want to send an email notification
   }
 
+  /**
+   * Handle charge.refunded webhook event
+   * Updates payment status and membership/registration status as needed
+   */
+  private async handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+    console.log('Charge refunded:', charge.id, 'Payment Intent:', charge.payment_intent);
+
+    if (!charge.payment_intent) {
+      console.error('Charge refund missing payment_intent:', charge.id);
+      return;
+    }
+
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent.id;
+
+    const em = this.em.fork();
+
+    // Find the payment record by stripe payment intent ID
+    const payment = await em.findOne(Payment, {
+      stripePaymentIntentId: paymentIntentId,
+    });
+
+    if (!payment) {
+      console.log(`No payment record found for refunded charge, payment intent: ${paymentIntentId}`);
+      return;
+    }
+
+    // Update payment status
+    const { PaymentStatus } = await import('@newmeca/shared');
+    payment.paymentStatus = PaymentStatus.REFUNDED;
+    payment.refundedAt = new Date();
+    payment.refundReason = charge.refunds?.data[0]?.reason || 'Refunded via Stripe';
+
+    // If this payment is associated with a membership, update membership status
+    if (payment.membership) {
+      const membership = await em.findOne('Membership', { id: payment.membership.id });
+      if (membership) {
+        (membership as any).paymentStatus = PaymentStatus.REFUNDED;
+        console.log(`Membership ${payment.membership.id} marked as refunded`);
+      }
+    }
+
+    await em.flush();
+    console.log(`Payment ${payment.id} marked as refunded`);
+
+    // TODO: Send refund confirmation email to user
+    // TODO: Create QuickBooks credit memo if QB is connected
+  }
+
+  /**
+   * Handle charge.dispute.created webhook event
+   * Alerts admin and freezes related membership if applicable
+   */
+  private async handleDisputeCreated(dispute: Stripe.Dispute): Promise<void> {
+    console.log('Dispute created:', dispute.id, 'Charge:', dispute.charge);
+
+    const chargeId = typeof dispute.charge === 'string'
+      ? dispute.charge
+      : dispute.charge?.id;
+
+    if (!chargeId) {
+      console.error('Dispute missing charge ID:', dispute.id);
+      return;
+    }
+
+    // Get the payment intent from the charge
+    const stripe = new (await import('stripe')).default(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2025-02-24.acacia',
+    });
+
+    const charge = await stripe.charges.retrieve(chargeId);
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+
+    if (!paymentIntentId) {
+      console.error('Dispute charge missing payment_intent:', chargeId);
+      return;
+    }
+
+    const em = this.em.fork();
+
+    // Find the payment record
+    const payment = await em.findOne(Payment, {
+      stripePaymentIntentId: paymentIntentId,
+    });
+
+    if (payment) {
+      // Store dispute info in payment metadata
+      payment.paymentMetadata = {
+        ...payment.paymentMetadata,
+        dispute: {
+          id: dispute.id,
+          amount: dispute.amount,
+          reason: dispute.reason,
+          status: dispute.status,
+          created: new Date(dispute.created * 1000).toISOString(),
+        },
+      };
+      await em.flush();
+      console.log(`Payment ${payment.id} flagged with dispute ${dispute.id}`);
+    }
+
+    // Log critical alert for admin attention
+    console.error(`[CRITICAL] Payment dispute created:`, {
+      disputeId: dispute.id,
+      amount: dispute.amount / 100,
+      reason: dispute.reason,
+      paymentIntentId,
+      evidence_due_by: new Date(dispute.evidence_details?.due_by || 0 * 1000).toISOString(),
+    });
+
+    // TODO: Send email notification to admin
+    // TODO: Consider freezing associated membership until dispute is resolved
+  }
+
   private getMembershipTypeFromCategory(category: string): MembershipType {
     switch (category) {
       case 'competitor':
@@ -1123,6 +1291,7 @@ export class StripeController {
   /**
    * Create an Order and Invoice from a successful payment
    * This is done asynchronously to not block the webhook response
+   * Uses a transaction to ensure order + invoice are created atomically
    */
   private async createOrderAndInvoice(
     paymentIntent: Stripe.PaymentIntent,
@@ -1133,7 +1302,7 @@ export class StripeController {
     try {
       const em = this.em.fork();
 
-      // Look up the payment record
+      // Look up the payment record (before transaction)
       const payment = await em.findOne(Payment, {
         stripePaymentIntentId: paymentIntent.id
       });
@@ -1168,7 +1337,6 @@ export class StripeController {
         // Main event registration item
         const classCount = parseInt(metadata.classCount || '1', 10);
         const perClassFee = parseFloat(metadata.perClassFee || '0');
-        const registrationTotal = classCount * perClassFee;
 
         items.push({
           description: `Event Registration: ${metadata.eventTitle || 'Event'} (${classCount} class${classCount > 1 ? 'es' : ''})`,
@@ -1209,23 +1377,28 @@ export class StripeController {
         country: metadata.billingCountry || 'US',
       };
 
-      // Create the order
-      const order = await this.ordersService.createFromPayment({
-        paymentId: payment?.id,
-        userId: metadata.userId,
-        orderType,
-        items,
-        billingAddress: billingAddress.name ? billingAddress : undefined,
-        notes: `Stripe Payment: ${paymentIntent.id}`,
+      // Use transaction for order + invoice creation (atomic operation)
+      const { order, invoice } = await em.transactional(async () => {
+        // Create the order
+        const createdOrder = await this.ordersService.createFromPayment({
+          paymentId: payment?.id,
+          userId: metadata.userId,
+          orderType,
+          items,
+          billingAddress: billingAddress.name ? billingAddress : undefined,
+          notes: `Stripe Payment: ${paymentIntent.id}`,
+        });
+
+        console.log(`Order ${createdOrder.orderNumber} created for payment ${paymentIntent.id}`);
+
+        // Create invoice from order
+        const createdInvoice = await this.invoicesService.createFromOrder(createdOrder.id);
+        console.log(`Invoice ${createdInvoice.invoiceNumber} created for order ${createdOrder.orderNumber}`);
+
+        return { order: createdOrder, invoice: createdInvoice };
       });
 
-      console.log(`Order ${order.orderNumber} created for payment ${paymentIntent.id}`);
-
-      // Create invoice from order
-      const invoice = await this.invoicesService.createFromOrder(order.id);
-      console.log(`Invoice ${invoice.invoiceNumber} created for order ${order.orderNumber}`);
-
-      // Send invoice email (async, non-blocking)
+      // Send invoice email (async, non-blocking, outside transaction)
       if (invoice) {
         this.invoicesService.sendInvoice(invoice.id).catch((error) => {
           console.error('Failed to send invoice email:', error);
@@ -1242,16 +1415,22 @@ export class StripeController {
    * Create an Order and Invoice directly from a registration ID
    * This is simpler than the payment-based approach and used for test mode
    * and for syncing existing registrations
+   * Uses a transaction to ensure order + invoice are created atomically
    */
   private async createOrderAndInvoiceFromRegistration(registrationId: string): Promise<void> {
     try {
-      // Create order from registration
-      const order = await this.ordersService.createFromEventRegistration(registrationId);
-      console.log(`Order ${order.orderNumber} created for registration ${registrationId}`);
+      const em = this.em.fork();
 
-      // Create invoice from order
-      const invoice = await this.invoicesService.createFromOrder(order.id);
-      console.log(`Invoice ${invoice.invoiceNumber} created for order ${order.orderNumber}`);
+      // Use transaction for order + invoice creation (atomic operation)
+      await em.transactional(async () => {
+        // Create order from registration
+        const order = await this.ordersService.createFromEventRegistration(registrationId);
+        console.log(`Order ${order.orderNumber} created for registration ${registrationId}`);
+
+        // Create invoice from order
+        const invoice = await this.invoicesService.createFromOrder(order.id);
+        console.log(`Invoice ${invoice.invoiceNumber} created for order ${order.orderNumber}`);
+      });
     } catch (error) {
       console.error('Failed to create order/invoice from registration:', error);
       throw error;

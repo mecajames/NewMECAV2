@@ -274,17 +274,18 @@ export class MembershipsService {
 
   /**
    * Create a membership for an existing user with all details
+   * Uses a database transaction to ensure membership + MECA ID assignment are atomic
    */
   async createMembership(data: CreateMembershipDto): Promise<Membership> {
     const em = this.em.fork();
 
-    // Check if purchase is allowed
+    // Check if purchase is allowed (before transaction)
     const canPurchase = await this.canPurchaseMembership(data.userId, data.membershipTypeConfigId);
     if (!canPurchase.allowed) {
       throw new BadRequestException(canPurchase.reason);
     }
 
-    // Get membership config
+    // Get membership config (before transaction)
     const config = await em.findOne(MembershipTypeConfig, { id: data.membershipTypeConfigId });
     if (!config) {
       throw new NotFoundException('Membership type not found');
@@ -297,59 +298,63 @@ export class MembershipsService {
       }
     }
 
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setFullYear(endDate.getFullYear() + 1); // 1 year membership
+    // Use transaction for membership creation + MECA ID assignment
+    const membership = await em.transactional(async (txEm) => {
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setFullYear(endDate.getFullYear() + 1); // 1 year membership
 
-    const membership = new Membership();
-    membership.user = em.getReference(Profile, data.userId);
-    membership.membershipTypeConfig = config;
-    membership.startDate = startDate;
-    membership.endDate = endDate;
-    membership.amountPaid = data.amountPaid;
-    membership.paymentStatus = PaymentStatus.PAID;
-    membership.stripePaymentIntentId = data.stripePaymentIntentId;
-    membership.transactionId = data.transactionId;
+      const newMembership = new Membership();
+      newMembership.user = txEm.getReference(Profile, data.userId);
+      newMembership.membershipTypeConfig = config;
+      newMembership.startDate = startDate;
+      newMembership.endDate = endDate;
+      newMembership.amountPaid = data.amountPaid;
+      newMembership.paymentStatus = PaymentStatus.PAID;
+      newMembership.stripePaymentIntentId = data.stripePaymentIntentId;
+      newMembership.transactionId = data.transactionId;
 
-    // Competitor info
-    membership.competitorName = data.competitorName;
-    membership.vehicleLicensePlate = data.vehicleLicensePlate;
-    membership.vehicleColor = data.vehicleColor;
-    membership.vehicleMake = data.vehicleMake;
-    membership.vehicleModel = data.vehicleModel;
+      // Competitor info
+      newMembership.competitorName = data.competitorName;
+      newMembership.vehicleLicensePlate = data.vehicleLicensePlate;
+      newMembership.vehicleColor = data.vehicleColor;
+      newMembership.vehicleMake = data.vehicleMake;
+      newMembership.vehicleModel = data.vehicleModel;
 
-    // Team add-on (for competitors) or included team (for retailer/manufacturer)
-    // Also check if membership type config includes team automatically
-    membership.hasTeamAddon = config.includesTeam || data.hasTeamAddon || false;
-    membership.teamName = data.teamName;
-    membership.teamDescription = data.teamDescription;
-    if (data.teamName) {
-      membership.teamNameLastEdited = new Date(); // Start 30-day edit window
-    }
+      // Team add-on (for competitors) or included team (for retailer/manufacturer)
+      // Also check if membership type config includes team automatically
+      newMembership.hasTeamAddon = config.includesTeam || data.hasTeamAddon || false;
+      newMembership.teamName = data.teamName;
+      newMembership.teamDescription = data.teamDescription;
+      if (data.teamName) {
+        newMembership.teamNameLastEdited = new Date(); // Start 30-day edit window
+      }
 
-    // Business info
-    membership.businessName = data.businessName;
-    membership.businessWebsite = data.businessWebsite;
+      // Business info
+      newMembership.businessName = data.businessName;
+      newMembership.businessWebsite = data.businessWebsite;
 
-    // Billing info
-    membership.billingFirstName = data.billingFirstName;
-    membership.billingLastName = data.billingLastName;
-    membership.billingPhone = data.billingPhone;
-    membership.billingAddress = data.billingAddress;
-    membership.billingCity = data.billingCity;
-    membership.billingState = data.billingState;
-    membership.billingPostalCode = data.billingPostalCode;
-    membership.billingCountry = data.billingCountry || 'USA';
+      // Billing info
+      newMembership.billingFirstName = data.billingFirstName;
+      newMembership.billingLastName = data.billingLastName;
+      newMembership.billingPhone = data.billingPhone;
+      newMembership.billingAddress = data.billingAddress;
+      newMembership.billingCity = data.billingCity;
+      newMembership.billingState = data.billingState;
+      newMembership.billingPostalCode = data.billingPostalCode;
+      newMembership.billingCountry = data.billingCountry || 'USA';
 
-    await em.persistAndFlush(membership);
+      txEm.persist(newMembership);
 
-    // Assign MECA ID - check for renewal
-    const previousMembership = canPurchase.existingMembershipId
-      ? await em.findOne(Membership, { id: canPurchase.existingMembershipId })
-      : await this.mecaIdService.findPreviousMembership(data.userId, config.category);
+      // Assign MECA ID within the same transaction
+      const previousMembership = canPurchase.existingMembershipId
+        ? await txEm.findOne(Membership, { id: canPurchase.existingMembershipId })
+        : await this.mecaIdService.findPreviousMembership(data.userId, config.category);
 
-    await this.mecaIdService.assignMecaIdToMembership(membership, previousMembership || undefined, em);
-    await em.flush();
+      await this.mecaIdService.assignMecaIdToMembership(newMembership, previousMembership || undefined, txEm);
+
+      return newMembership;
+    });
 
     this.logger.log(`Created membership ${membership.id} with MECA ID ${membership.mecaId} for user ${data.userId}`);
 
