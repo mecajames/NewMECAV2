@@ -21,9 +21,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
-      message = typeof exceptionResponse === 'string'
-        ? exceptionResponse
-        : (exceptionResponse as any).message || message;
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else {
+        message = (exceptionResponse as any).message || message;
+        // Include validation errors if present
+        if ((exceptionResponse as any).errors) {
+          errorDetails = { errors: (exceptionResponse as any).errors };
+        }
+      }
     } else if (exception instanceof Error) {
       message = exception.message;
       errorDetails = {
@@ -35,21 +41,29 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
-    console.error('=== EXCEPTION CAUGHT ===');
-    console.error('Path:', request.url);
-    console.error('Method:', request.method);
-    console.error('Status:', status);
-    console.error('Message:', message);
-    console.error('Details:', JSON.stringify(errorDetails, null, 2));
-    console.error('Full exception:', exception);
-    console.error('========================');
+    // Skip logging for expected 404s (socket.io, favicon, etc.)
+    const ignoredPaths = ['/socket.io', '/favicon.ico'];
+    const shouldLog = !ignoredPaths.some((path) => request.url?.startsWith(path));
+
+    if (shouldLog) {
+      console.error('=== EXCEPTION CAUGHT ===');
+      console.error('Path:', request.url);
+      console.error('Method:', request.method);
+      console.error('Status:', status);
+      console.error('Message:', message);
+      console.error('Details:', JSON.stringify(errorDetails, null, 2));
+      console.error('Full exception:', exception);
+      console.error('========================');
+    }
 
     response.status(status).json({
       statusCode: status,
       message,
       path: request.url,
       timestamp: new Date().toISOString(),
-      ...(process.env.NODE_ENV === 'development' && { errorDetails }),
+      // Always include validation errors, other details only in development
+      ...(errorDetails.errors && { errors: errorDetails.errors }),
+      ...(process.env.NODE_ENV === 'development' && !errorDetails.errors && Object.keys(errorDetails).length > 0 && { errorDetails }),
     });
   }
 }

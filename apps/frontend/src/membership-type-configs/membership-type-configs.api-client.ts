@@ -21,6 +21,8 @@ export interface MembershipTypeConfig {
   category: MembershipCategory;
   tier?: ManufacturerTier; // Only for manufacturer memberships
   price: number;
+  teamAddonPrice?: number; // Price to add team functionality
+  includesTeam?: boolean; // Whether this membership type includes team automatically (e.g., "Competitor w/Team")
   currency?: string;
   benefits?: string[];
   requiredFields?: string[];
@@ -28,6 +30,7 @@ export interface MembershipTypeConfig {
   isActive: boolean;
   isFeatured: boolean;
   showOnPublicSite: boolean; // False for manufacturer memberships
+  isUpgradeOnly?: boolean; // True for team add-on membership type
   displayOrder: number;
   stripePriceId?: string;
   stripeProductId?: string;
@@ -43,6 +46,8 @@ export interface CreateMembershipTypeConfigDto {
   category: MembershipCategory;
   tier?: ManufacturerTier;
   price: number;
+  teamAddonPrice?: number;
+  includesTeam?: boolean;
   currency?: string;
   benefits?: string[];
   requiredFields?: string[];
@@ -50,6 +55,7 @@ export interface CreateMembershipTypeConfigDto {
   isActive?: boolean;
   isFeatured?: boolean;
   showOnPublicSite?: boolean;
+  isUpgradeOnly?: boolean;
   displayOrder?: number;
   stripePriceId?: string;
   stripeProductId?: string;
@@ -62,6 +68,8 @@ export interface UpdateMembershipTypeConfigDto {
   description?: string;
   tier?: ManufacturerTier;
   price?: number;
+  teamAddonPrice?: number;
+  includesTeam?: boolean;
   currency?: string;
   benefits?: string[];
   requiredFields?: string[];
@@ -69,6 +77,7 @@ export interface UpdateMembershipTypeConfigDto {
   isActive?: boolean;
   isFeatured?: boolean;
   showOnPublicSite?: boolean;
+  isUpgradeOnly?: boolean;
   displayOrder?: number;
   stripePriceId?: string;
   stripeProductId?: string;

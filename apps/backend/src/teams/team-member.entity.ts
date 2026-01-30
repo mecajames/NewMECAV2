@@ -1,5 +1,6 @@
-import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { Membership } from '../memberships/memberships.entity';
 
 // Team member roles:
 // - owner: Full control, manages billing, can delete team (only one per team)
@@ -26,6 +27,10 @@ export class TeamMember {
 
   @Property({ type: 'uuid', fieldName: 'user_id' })
   userId!: string;
+
+  // The membership this team member is registered with (for MECA ID tracking)
+  @ManyToOne(() => Membership, { nullable: true, fieldName: 'membership_id' })
+  membership?: Membership;
 
   @Property({ type: 'text', default: 'member' })
   role: TeamMemberRole = 'member';

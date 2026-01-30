@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Guide: Managing Family & Team Memberships - MECA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.8;
+            color: #1e293b;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.6rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.2rem;
+            margin: 25px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        .intro-box {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #ea580c;
+        }
+
+        .intro-box p {
+            margin-bottom: 15px;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature-card h4 {
+            color: #ea580c;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .feature-card .icon {
+            width: 40px;
+            height: 40px;
+            background: #fef3c7;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+
+        .step-guide {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 3px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .connector {
+            position: absolute;
+            left: 17px;
+            top: 36px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        .tip-box {
+            background: #dcfce7;
+            border: 1px solid #22c55e;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .tip-box::before {
+            content: "💡 Tip: ";
+            font-weight: bold;
+            color: #166534;
+        }
+
+        .note-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .note-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+        }
+
+        .warning-box {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .warning-box::before {
+            content: "⚠️ Important: ";
+            font-weight: bold;
+            color: #92400e;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .comparison-table th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .comparison-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .checkmark {
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        .xmark {
+            color: #ef4444;
+            font-weight: bold;
+        }
+
+        .screenshot-placeholder {
+            background: #e2e8f0;
+            border: 2px dashed #94a3b8;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            color: #64748b;
+            margin: 15px 0;
+        }
+
+        .faq {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .faq-item {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 15px 0;
+        }
+
+        .faq-item:last-child {
+            border-bottom: none;
+        }
+
+        .faq-question {
+            font-weight: bold;
+            color: #0f172a;
+            margin-bottom: 10px;
+        }
+
+        .faq-question::before {
+            content: "Q: ";
+            color: #ea580c;
+        }
+
+        .faq-answer {
+            color: #475569;
+            padding-left: 20px;
+        }
+
+        .faq-answer::before {
+            content: "A: ";
+            font-weight: bold;
+            color: #22c55e;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        .highlight {
+            background: #fef3c7;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Family & Team Memberships</h1>
+    <p class="subtitle">Your Guide to Managing Multiple MECA Memberships</p>
+
+    <div class="intro-box">
+        <p><strong>Do you have family members or team members who want to compete?</strong></p>
+        <p>With MECA's Family & Team Membership feature, you can manage multiple memberships from a single account. Each person gets their own unique MECA ID and can compete independently, while you handle all the billing in one place!</p>
+        <p><strong>Perfect for:</strong></p>
+        <ul style="margin-left: 25px; margin-top: 10px;">
+            <li>Parents managing memberships for their children</li>
+            <li>Spouses who both compete</li>
+            <li>Team sponsors covering memberships for competitors</li>
+            <li>Businesses paying for employee memberships</li>
+        </ul>
+    </div>
+
+    <div class="toc">
+        <h3>In This Guide</h3>
+        <ul>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="#add-member">Adding a Family or Team Member</a></li>
+            <li><a href="#login-options">Login Options Explained</a></li>
+            <li><a href="#switching">Switching Between MECA IDs</a></li>
+            <li><a href="#billing">Understanding Your Billing</a></li>
+            <li><a href="#independence">When a Member Wants Their Own Account</a></li>
+            <li><a href="#faq">Frequently Asked Questions</a></li>
+        </ul>
+    </div>
+
+    <!-- HOW IT WORKS -->
+    <h2 id="how-it-works">How It Works</h2>
+
+    <div class="feature-card">
+        <h4><span class="icon">🏠</span> Master Account</h4>
+        <p>When you add your first family/team member, your account becomes a "Master Account". As the master, you:</p>
+        <ul style="margin-left: 25px; margin-top: 10px;">
+            <li>Handle billing for all linked memberships</li>
+            <li>Add new family/team members (up to 10)</li>
+            <li>Switch between MECA IDs to see different members' info</li>
+            <li>Register family members for events (if they don't have their own login)</li>
+        </ul>
+    </div>
+
+    <div class="feature-card">
+        <h4><span class="icon">👥</span> Linked Members</h4>
+        <p>Each person you add becomes a "linked member" with:</p>
+        <ul style="margin-left: 25px; margin-top: 10px;">
+            <li><strong>Their own unique MECA ID</strong> - for competition tracking</li>
+            <li><strong>Their own competition history</strong> - results tied to their ID</li>
+            <li><strong>Their own profile</strong> - name, vehicle info, etc.</li>
+            <li><strong>Optional: Their own login</strong> - so they can access the system too</li>
+        </ul>
+    </div>
+
+    <div class="tip-box">
+        Each linked member keeps their MECA ID forever - even if they later get their own independent account!
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ADD MEMBER -->
+    <h2 id="add-member">Adding a Family or Team Member</h2>
+
+    <div class="step-guide">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <div class="step-title">Go to Your Dashboard</div>
+                <div class="step-details">
+                    Log in to your MECA account and click on <span class="highlight">My MECA</span> in the navigation.
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <div class="step-title">Find Your Membership</div>
+                <div class="step-details">
+                    Scroll down to the <span class="highlight">My Memberships</span> section. You'll see your current membership listed.
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <div class="step-title">Click "Add Family/Team Member"</div>
+                <div class="step-details">
+                    Look for the <span class="highlight">Add Family/Team Member</span> button next to your membership. Click it to start the wizard.
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <div class="step-title">Enter Their Information</div>
+                <div class="step-details">
+                    Fill in the new member's details:
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li><strong>Competitor Name</strong> - How they'll appear in results</li>
+                        <li><strong>Vehicle Info</strong> - Make, model, color, license plate</li>
+                        <li><strong>Team Name</strong> (optional) - If they're part of a team</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">5</div>
+            <div class="step-content">
+                <div class="step-title">Choose Login Option</div>
+                <div class="step-details">
+                    Decide if they need their own login (see next section for details):
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li><strong>No login</strong> - You manage everything for them</li>
+                        <li><strong>Give them a login</strong> - They can access the system independently</li>
+                    </ul>
+                    If giving them a login, you'll need to provide their email address.
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">6</div>
+            <div class="step-content">
+                <div class="step-title">Select Membership Type</div>
+                <div class="step-details">
+                    Choose which type of membership they need (usually the same as yours).
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">7</div>
+            <div class="step-content">
+                <div class="step-title">Review & Pay</div>
+                <div class="step-details">
+                    Review all the information and complete the payment. Once paid, they'll receive their unique MECA ID!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- LOGIN OPTIONS -->
+    <h2 id="login-options">Login Options Explained</h2>
+
+    <p style="margin-bottom: 20px;">When adding a family/team member, you choose whether they get their own login to the system.</p>
+
+    <table class="comparison-table">
+        <thead>
+            <tr>
+                <th>Feature</th>
+                <th>No Login<br>(You Manage)</th>
+                <th>With Login<br>(Semi-Independent)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Their own MECA ID</td>
+                <td class="checkmark">✓</td>
+                <td class="checkmark">✓</td>
+            </tr>
+            <tr>
+                <td>Competition results tracked</td>
+                <td class="checkmark">✓</td>
+                <td class="checkmark">✓</td>
+            </tr>
+            <tr>
+                <td>Can log in to website</td>
+                <td class="xmark">✗</td>
+                <td class="checkmark">✓</td>
+            </tr>
+            <tr>
+                <td>Can edit their profile</td>
+                <td class="xmark">✗ (you do it)</td>
+                <td class="checkmark">✓</td>
+            </tr>
+            <tr>
+                <td>Can register for events</td>
+                <td class="xmark">✗ (you do it)</td>
+                <td class="checkmark">✓</td>
+            </tr>
+            <tr>
+                <td>Can view their results</td>
+                <td class="xmark">✗ (you view for them)</td>
+                <td class="checkmark">✓</td>
+            </tr>
+            <tr>
+                <td>Can access billing/invoices</td>
+                <td class="xmark">✗</td>
+                <td class="xmark">✗</td>
+            </tr>
+            <tr>
+                <td>Can add memberships</td>
+                <td class="xmark">✗</td>
+                <td class="xmark">✗</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="note-box">
+        <h4>Which Should You Choose?</h4>
+        <ul style="margin-left: 20px; margin-top: 10px;">
+            <li><strong>No Login:</strong> Best for young children or members who don't need system access</li>
+            <li><strong>With Login:</strong> Best for older children, spouses, or anyone who wants to check their own results or register for events themselves</li>
+        </ul>
+    </div>
+
+    <div class="warning-box">
+        Members with their own login can see their competition results and register for events, but they cannot see invoices, payment information, or add new memberships. All billing stays with you.
+    </div>
+
+    <!-- SWITCHING -->
+    <h2 id="switching">Switching Between MECA IDs</h2>
+
+    <div class="step-guide">
+        <p style="margin-bottom: 20px;">Once you have family/team members added, you'll see a new dropdown in your dashboard header:</p>
+
+        <div class="screenshot-placeholder">
+            [ MECA ID Switcher Dropdown ]<br>
+            Shows: Your Name (MECA ID: 12345) ▼<br>
+            <small>Click to see all MECA IDs you manage</small>
+        </div>
+
+        <h3 style="border-left: none; padding-left: 0;">Using the MECA ID Switcher</h3>
+
+        <ol style="margin-left: 25px; margin-top: 15px;">
+            <li><strong>Click the dropdown</strong> - Shows all MECA IDs you control</li>
+            <li><strong>Select a MECA ID</strong> - Dashboard updates to show that person's info</li>
+            <li><strong>View their stats</strong> - See competition results, points, etc.</li>
+            <li><strong>Take actions</strong> - Register for events, edit profile (if no login)</li>
+        </ol>
+    </div>
+
+    <div class="tip-box">
+        Your own MECA ID will be marked as "Primary" in the dropdown. Family/team members will show as "Secondary".
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- BILLING -->
+    <h2 id="billing">Understanding Your Billing</h2>
+
+    <div class="feature-card">
+        <h4><span class="icon">📧</span> Separate Invoices</h4>
+        <p>Each family/team member has their own membership dates. When it's time to renew, you'll receive separate invoices for each person. This lets you choose whether to renew each membership individually.</p>
+    </div>
+
+    <div class="feature-card">
+        <h4><span class="icon">💳</span> Single Payment Account</h4>
+        <p>All invoices come to your email and are paid through your account. You don't need to manage multiple payment methods or accounts.</p>
+    </div>
+
+    <div class="feature-card">
+        <h4><span class="icon">📋</span> Clear Line Items</h4>
+        <p>Each invoice clearly shows who the membership is for, including their name and MECA ID, so you always know what you're paying for.</p>
+    </div>
+
+    <div class="note-box">
+        <h4>Example Invoice</h4>
+        <div style="font-family: monospace; background: #f8fafc; padding: 15px; margin-top: 10px; border-radius: 6px;">
+            Invoice #INV-2025-0123<br><br>
+            Competitor Membership - Johnny Smith (MECA ID: 12346)<br>
+            Annual membership renewal<br>
+            <strong>Total: $55.00</strong>
+        </div>
+    </div>
+
+    <!-- INDEPENDENCE -->
+    <h2 id="independence">When a Member Wants Their Own Account</h2>
+
+    <p style="margin-bottom: 20px;">Sometimes a family or team member may want to have their own fully independent account - for example, when a child turns 18 or a sponsored competitor moves on.</p>
+
+    <div class="step-guide">
+        <h3 style="border-left: none; padding-left: 0; margin-top: 0;">What Happens When They Become Independent:</h3>
+
+        <ul style="margin-left: 25px; margin-top: 15px;">
+            <li><span class="checkmark">✓</span> They keep their same MECA ID</li>
+            <li><span class="checkmark">✓</span> They keep all their competition history</li>
+            <li><span class="checkmark">✓</span> Billing transfers to their own account</li>
+            <li><span class="checkmark">✓</span> They get full account access (billing, adding memberships, etc.)</li>
+        </ul>
+
+        <div class="warning-box" style="margin-top: 20px;">
+            Once a member becomes independent, you will no longer be responsible for their billing. They'll need to pay for their own renewals going forward.
+        </div>
+    </div>
+
+    <p>To make a member independent, please contact MECA support or an administrator.</p>
+
+    <!-- FAQ -->
+    <h2 id="faq">Frequently Asked Questions</h2>
+
+    <div class="faq">
+        <div class="faq-item">
+            <div class="faq-question">How many family/team members can I add?</div>
+            <div class="faq-answer">You can add up to 10 family or team members to your account.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Can I add members with different membership types?</div>
+            <div class="faq-answer">Yes! Each family/team member can have a different membership type. For example, you could have a Competitor membership while adding a family member with a different tier.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">What if I forget to renew a family member's membership?</div>
+            <div class="faq-answer">Each membership has its own renewal date. You'll receive reminder emails before each one expires. If you don't renew, that specific membership will expire but your others will remain active.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Can a family member register themselves for events?</div>
+            <div class="faq-answer">Only if you gave them their own login. If they don't have a login, you'll need to register them - but don't worry, it's easy! Just use the MECA ID switcher to select their ID, then register for the event normally.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Can family members see each other's results?</div>
+            <div class="faq-answer">As the master account holder, you can see everyone's results by switching MECA IDs. Family members with their own login can only see their own results.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">What if I want to give a member a login later?</div>
+            <div class="faq-answer">Contact MECA support - they can convert a managed member to one with their own login.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">Can a linked member compete without me being there?</div>
+            <div class="faq-answer">Absolutely! They have their own MECA ID and can compete at any event independently. If they have their own login, they can also register themselves. If not, you just need to register them in advance.</div>
+        </div>
+    </div>
+
+    <div class="note-box">
+        <h4>Need Help?</h4>
+        <p>If you have questions or need assistance with family/team memberships, please contact MECA support through the Help section in your dashboard or email us directly.</p>
+    </div>
+
+    <footer>
+        <p>MECA Competition System - Family & Team Memberships User Guide</p>
+        <p style="font-size: 0.9rem; margin-top: 5px;">Generated: December 2025</p>
+    </footer>
+</body>
+</html>

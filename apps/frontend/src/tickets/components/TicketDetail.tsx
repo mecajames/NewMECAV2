@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  Ticket,
   Clock,
   User,
   Calendar,
@@ -16,8 +15,6 @@ import {
   XCircle,
   RotateCcw,
   UserPlus,
-  Edit,
-  Trash2,
   Lock,
   Eye,
   Search,
@@ -337,13 +334,7 @@ export function TicketDetail({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={handleBack}
-          className="p-2 text-gray-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+      <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
             <span className="text-sm font-mono text-orange-400">{ticket.ticket_number}</span>
@@ -357,6 +348,13 @@ export function TicketDetail({
           </div>
           <h1 className="text-2xl font-bold text-white">{ticket.title}</h1>
         </div>
+        <button
+          onClick={handleBack}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          {isStaff ? 'Back to Tickets' : 'Back to Support'}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

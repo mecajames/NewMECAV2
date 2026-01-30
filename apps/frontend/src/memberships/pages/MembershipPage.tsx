@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Check, Star, Users, Trophy, Calendar, DollarSign, Globe, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { membershipTypeConfigsApi, MembershipTypeConfig, MembershipCategory } from '@/membership-type-configs';
+import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 
 export default function MembershipPage() {
   const navigate = useNavigate();
   const [memberships, setMemberships] = useState<MembershipTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const seoProps = useStaticPageSEO('membership');
 
   useEffect(() => {
     const fetchMemberships = async () => {
@@ -93,10 +95,12 @@ export default function MembershipPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold text-white mb-4">Membership Benefits</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
+        <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h1 className="text-5xl font-bold text-white mb-4">Membership Benefits</h1>
           <p className="text-xl text-white/90 max-w-3xl mx-auto">
             Join the MECA community and unlock exclusive benefits for competitive car audio enthusiasts
           </p>
@@ -146,7 +150,7 @@ export default function MembershipPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {memberships.map((membership, index) => (
+              {memberships.map((membership, _index) => (
                 <div
                   key={membership.id}
                   className={`bg-slate-800 rounded-2xl shadow-2xl p-8 flex flex-col ${
@@ -259,9 +263,10 @@ export default function MembershipPage() {
                 Competitor memberships are for individuals competing in events. Team memberships are for clubs and groups. Retailer memberships are for businesses in the car audio industry.
               </p>
             </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

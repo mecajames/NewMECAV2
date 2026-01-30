@@ -80,14 +80,17 @@ export default function MECAQuickStartGuidePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back link */}
-        <Link
-          to="/competition-guides"
-          className="inline-flex items-center text-gray-400 hover:text-white mb-8 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Competition Guides
-        </Link>
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-xl font-semibold text-gray-400">Competition Guide</h2>
+          <Link
+            to="/competition-guides"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Competition Guides
+          </Link>
+        </div>
 
         {/* Header */}
         <div className="text-center mb-12">

@@ -1,19 +1,26 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle,
   Eye, MessageSquare, Settings, Users, FileText, Image, BarChart3, UserPlus, Crown, LogOut, Trash2, Plus, X, Loader2,
-  TrendingUp, TrendingDown, Minus
+  TrendingUp, TrendingDown, Minus, Star, Bell, Check
 } from 'lucide-react';
+import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth';
 import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
 import axios from 'axios';
-import { teamsApi, Team, TeamType, TeamMemberRole, TeamMember, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult } from '@/teams';
-import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket } from 'lucide-react';
+import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
+import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter } from 'lucide-react';
+import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
+import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
+import type { Judge } from '@newmeca/shared';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
+import { EventRatingsPanel } from '@/ratings';
+import { seasonsApi, Season } from '@/seasons/seasons.api-client';
+import { AchievementsGallery } from '@/achievements';
 
 interface EventHostingRequest {
   id: string;
@@ -46,15 +53,57 @@ export default function MyMecaDashboardPage() {
     bestPlacement: null as number | null,
   });
   const [loading, setLoading] = useState(true);
+  const [expandedRatingEventId, setExpandedRatingEventId] = useState<string | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [teamLoading, setTeamLoading] = useState(true);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
-  const [showAllTeamsModal, setShowAllTeamsModal] = useState(false);
-  const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamError, setTeamError] = useState('');
   const [canCreateTeam, setCanCreateTeam] = useState(false);
-  const [canCreateReason, setCanCreateReason] = useState('');
+  const [_canCreateReason, setCanCreateReason] = useState('');
   const [upgradeEligibility, setUpgradeEligibility] = useState<UpgradeEligibilityResponse | null>(null);
+
+  // Multi-team support
+  const [allTeams, setAllTeams] = useState<MyTeamsResponse>({ ownedTeams: [], memberTeams: [] });
+  const [ownsTeam, setOwnsTeam] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
+  // Judge and Event Director state
+  const [judgeProfile, setJudgeProfile] = useState<Judge | null>(null);
+  const [edProfile, setEdProfile] = useState<EventDirector | null>(null);
+  const [judgeAssignments, setJudgeAssignments] = useState<EventJudgeAssignment[]>([]);
+  const [edAssignments, setEdAssignments] = useState<EventDirectorAssignment[]>([]);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [deletingNotificationId, setDeletingNotificationId] = useState<string | null>(null);
+  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+
+  // Event Registrations filter state
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [registrationFilters, setRegistrationFilters] = useState({
+    search: '',
+    seasonId: '',
+    country: '',
+    state: '',
+  });
+
+  // Analytics filter state
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    seasonId: '',
+    state: '',
+  });
+
+  // Results filter state
+  const [resultsFilters, setResultsFilters] = useState({
+    seasonId: '',
+    state: '',
+  });
+
+  // Profile image selector state
+  const [showProfileImageSelector, setShowProfileImageSelector] = useState(false);
+  const [updatingProfileImage, setUpdatingProfileImage] = useState(false);
+  const profileImageInputRef = useRef<HTMLInputElement>(null);
 
   // Team image upload state
   const teamLogoInputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +112,6 @@ export default function MyMecaDashboardPage() {
   const [uploadingTeamGallery, setUploadingTeamGallery] = useState(false);
   const [teamLogoUrl, setTeamLogoUrl] = useState<string | null>(null);
   const [teamGalleryImages, setTeamGalleryImages] = useState<string[]>([]);
-  const [showTeamGalleryModal, setShowTeamGalleryModal] = useState(false);
 
   // Edit Team modal state
   const [showEditTeamModal, setShowEditTeamModal] = useState(false);
@@ -101,11 +149,7 @@ export default function MyMecaDashboardPage() {
   // User's own pending invites/requests state (when not on a team)
   const [myPendingInvites, setMyPendingInvites] = useState<any[]>([]);
   const [myPendingJoinRequests, setMyPendingJoinRequests] = useState<any[]>([]);
-  const [processingInviteResponse, setProcessingInviteResponse] = useState<string | null>(null);
-  const [joiningTeamId, setJoiningTeamId] = useState<string | null>(null);
-  const [joinRequestMessage, setJoinRequestMessage] = useState('');
-  const [showJoinRequestModal, setShowJoinRequestModal] = useState(false);
-  const [selectedTeamForJoin, setSelectedTeamForJoin] = useState<Team | null>(null);
+  const [cancellingRequest, setCancellingRequest] = useState<string | null>(null);
 
   // Enhanced team form state
   const [newTeam, setNewTeam] = useState<CreateTeamDto>({
@@ -125,8 +169,113 @@ export default function MyMecaDashboardPage() {
     if (profile && !authLoading) {
       fetchUserData();
       fetchTeamData();
+      fetchJudgeEDData();
+      fetchNotifications();
     }
   }, [profile, authLoading]);
+
+  // Fetch seasons for filtering
+  useEffect(() => {
+    const fetchSeasons = async () => {
+      try {
+        const seasonsData = await seasonsApi.getAll();
+        setSeasons(seasonsData);
+
+        // Default filters to current season
+        const currentSeason = seasonsData.find(s => s.is_current);
+        if (currentSeason) {
+          setResultsFilters(prev => ({ ...prev, seasonId: currentSeason.id }));
+          setAnalyticsFilters(prev => ({ ...prev, seasonId: currentSeason.id }));
+        }
+      } catch (error) {
+        console.error('Error fetching seasons:', error);
+      }
+    };
+    fetchSeasons();
+  }, []);
+
+  // Fetch judge and event director data
+  const fetchJudgeEDData = async () => {
+    try {
+      const [judge, ed] = await Promise.all([
+        getMyJudgeProfile(),
+        getMyEventDirectorProfile(),
+      ]);
+      // DEBUG: Log the returned values
+      console.log('DEBUG - Profile permissions:', {
+        can_apply_judge: (profile as any)?.can_apply_judge,
+        can_apply_event_director: (profile as any)?.can_apply_event_director,
+      });
+      console.log('DEBUG - Judge profile:', judge);
+      console.log('DEBUG - ED profile:', ed);
+      setJudgeProfile(judge);
+      setEdProfile(ed);
+
+      // If user is a judge or ED, fetch their assignments
+      if (judge) {
+        const assignments = await getMyJudgeAssignments({ upcoming: true });
+        setJudgeAssignments(assignments);
+      }
+      if (ed) {
+        const assignments = await getMyEDAssignments({ upcoming: true });
+        setEdAssignments(assignments);
+      }
+    } catch (error) {
+      console.error('Error fetching judge/ED data:', error);
+    }
+  };
+
+  // Fetch user notifications
+  const fetchNotifications = async () => {
+    if (!profile?.id) return;
+    try {
+      setNotificationsLoading(true);
+      const data = await notificationsApi.getUserNotifications(profile.id, 50);
+      setNotifications(data);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const handleMarkNotificationRead = async (notificationId: string) => {
+    if (!profile?.id) return;
+    try {
+      setMarkingReadId(notificationId);
+      await notificationsApi.markAsRead(notificationId, profile.id);
+      setNotifications(prev => prev.map(n =>
+        n.id === notificationId ? { ...n, read: true } : n
+      ));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    } finally {
+      setMarkingReadId(null);
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    if (!profile?.id) return;
+    try {
+      await notificationsApi.markAllAsRead(profile.id);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    if (!profile?.id) return;
+    try {
+      setDeletingNotificationId(notificationId);
+      await notificationsApi.deleteNotification(notificationId, profile.id);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    } finally {
+      setDeletingNotificationId(null);
+    }
+  };
 
   // Initialize team gallery images when team data loads
   useEffect(() => {
@@ -158,12 +307,14 @@ export default function MyMecaDashboardPage() {
   const fetchTeamData = async () => {
     try {
       setTeamLoading(true);
-      const [userTeam, eligibility, upgradeElig, pendingInvites, pendingRequests] = await Promise.all([
+      const [userTeam, eligibility, upgradeElig, pendingInvites, pendingRequests, myTeams, ownsTeamResult] = await Promise.all([
         teamsApi.getTeamByUserId(profile!.id),
         teamsApi.canCreateTeam(),
         teamsApi.canUpgradeToTeam(),
         teamsApi.getMyPendingInvites(),
         teamsApi.getMyPendingRequests(),
+        teamsApi.getMyTeams(),
+        teamsApi.ownsTeam(),
       ]);
       setTeam(userTeam);
       setCanCreateTeam(eligibility.canCreate);
@@ -171,19 +322,18 @@ export default function MyMecaDashboardPage() {
       setUpgradeEligibility(upgradeElig);
       setMyPendingInvites(pendingInvites);
       setMyPendingJoinRequests(pendingRequests);
+      setAllTeams(myTeams);
+      setOwnsTeam(ownsTeamResult.ownsTeam);
+      // Set selectedTeamId to owned team first, or first member team
+      if (!selectedTeamId) {
+        const firstOwnedTeam = myTeams.ownedTeams[0];
+        const firstMemberTeam = myTeams.memberTeams[0];
+        setSelectedTeamId(firstOwnedTeam?.id || firstMemberTeam?.id || userTeam?.id || null);
+      }
     } catch (error) {
       console.error('Error fetching team:', error);
     } finally {
       setTeamLoading(false);
-    }
-  };
-
-  const fetchAllTeams = async () => {
-    try {
-      const teams = await teamsApi.getAllTeams();
-      setAllTeams(teams);
-    } catch (error) {
-      console.error('Error fetching all teams:', error);
     }
   };
 
@@ -371,14 +521,22 @@ export default function MyMecaDashboardPage() {
 
   // Lookup member by MECA ID
   const handleLookupMember = async () => {
-    if (!inviteMecaId.trim()) return;
+    const trimmedId = inviteMecaId.trim();
+    if (!trimmedId) return;
+
+    // Validate that MECA ID is numeric
+    if (!/^\d+$/.test(trimmedId)) {
+      setTeamError('MECA ID must be a number (e.g., 202401)');
+      setLookupResult(null);
+      return;
+    }
 
     setLookingUp(true);
     setLookupResult(null);
     setTeamError('');
 
     try {
-      const result = await teamsApi.lookupMemberByMecaId(inviteMecaId.trim());
+      const result = await teamsApi.lookupMemberByMecaId(trimmedId);
       setLookupResult(result);
     } catch (error: any) {
       setTeamError(error.response?.data?.message || 'Failed to lookup member');
@@ -467,72 +625,13 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  // ============================================
-  // USER'S OWN INVITE/REQUEST HANDLERS (when not on a team)
-  // ============================================
-
-  // Accept an invite I received
-  const handleAcceptInvite = async (teamId: string) => {
-    setProcessingInviteResponse(teamId);
-    setTeamError('');
-
-    try {
-      await teamsApi.acceptInvite(teamId);
-      fetchTeamData();
-    } catch (error: any) {
-      setTeamError(error.response?.data?.message || 'Failed to accept invite');
-    } finally {
-      setProcessingInviteResponse(null);
-    }
-  };
-
-  // Decline an invite I received
-  const handleDeclineInvite = async (teamId: string) => {
-    if (!confirm('Are you sure you want to decline this invite?')) {
-      return;
-    }
-
-    setProcessingInviteResponse(teamId);
-    setTeamError('');
-
-    try {
-      await teamsApi.declineInvite(teamId);
-      fetchTeamData();
-    } catch (error: any) {
-      setTeamError(error.response?.data?.message || 'Failed to decline invite');
-    } finally {
-      setProcessingInviteResponse(null);
-    }
-  };
-
-  // Request to join a team
-  const handleRequestToJoin = async () => {
-    if (!selectedTeamForJoin) return;
-
-    setJoiningTeamId(selectedTeamForJoin.id);
-    setTeamError('');
-
-    try {
-      await teamsApi.requestToJoin(selectedTeamForJoin.id, joinRequestMessage || undefined);
-      setShowJoinRequestModal(false);
-      setSelectedTeamForJoin(null);
-      setJoinRequestMessage('');
-      fetchTeamData();
-    } catch (error: any) {
-      setTeamError(error.response?.data?.message || 'Failed to request to join');
-    } finally {
-      setJoiningTeamId(null);
-    }
-  };
-
   // Cancel my own join request
   const handleCancelMyJoinRequest = async (teamId: string) => {
-    if (!confirm('Are you sure you want to cancel your join request?')) {
+    if (!confirm('Are you sure you want to cancel this join request?')) {
       return;
     }
 
-    setProcessingInviteResponse(teamId);
-    setTeamError('');
+    setCancellingRequest(teamId);
 
     try {
       await teamsApi.cancelJoinRequest(teamId);
@@ -540,7 +639,7 @@ export default function MyMecaDashboardPage() {
     } catch (error: any) {
       setTeamError(error.response?.data?.message || 'Failed to cancel request');
     } finally {
-      setProcessingInviteResponse(null);
+      setCancellingRequest(null);
     }
   };
 
@@ -724,6 +823,78 @@ export default function MyMecaDashboardPage() {
     }
   };
 
+  // Handle selecting an existing profile image as the main profile picture
+  const handleSelectProfileImage = async (imageUrl: string) => {
+    if (!profile) return;
+    setUpdatingProfileImage(true);
+    try {
+      await axios.put(`/api/profiles/${profile.id}`, {
+        profile_picture_url: imageUrl,
+      });
+      // Refresh the auth context to get updated profile
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Error updating profile image:', err);
+      alert('Failed to update profile image');
+    } finally {
+      setUpdatingProfileImage(false);
+      setShowProfileImageSelector(false);
+    }
+  };
+
+  // Handle uploading a new profile image
+  const handleUploadProfileImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !profile) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+
+    setUpdatingProfileImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `profile-pictures/${profile.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(fileName);
+
+      // Update profile with new image URL and add to profile_images array
+      const newProfileImages = [...(profile.profile_images || []), publicUrl];
+      await axios.put(`/api/profiles/${profile.id}`, {
+        profile_picture_url: publicUrl,
+        profile_images: newProfileImages,
+      });
+
+      // Refresh the auth context to get updated profile
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Error uploading profile image:', err);
+      alert('Failed to upload profile image');
+    } finally {
+      setUpdatingProfileImage(false);
+      setShowProfileImageSelector(false);
+      if (profileImageInputRef.current) {
+        profileImageInputRef.current.value = '';
+      }
+    }
+  };
+
   // Helper to change tabs and update URL for browser history
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -869,7 +1040,7 @@ export default function MyMecaDashboardPage() {
     { id: 'profile', label: 'Profile', icon: Settings },
     { id: 'gallery', label: 'Gallery', icon: Image },
     { id: 'team', label: 'Team', icon: Users },
-    { id: 'events', label: 'My Events', icon: Calendar },
+    { id: 'events', label: 'Event Registrations', icon: Calendar },
     { id: 'results', label: 'Results', icon: Trophy },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   ];
@@ -1036,6 +1207,124 @@ export default function MyMecaDashboardPage() {
             </div>
           </div>
         </button>
+
+        {/* Judge Card - Only show if user has judge permission enabled */}
+        {/* Show "My Judging" only if permission ON AND record exists AND is_active */}
+        {/* Show "Become a Judge" only if permission ON AND no record exists */}
+        {(profile as any)?.can_apply_judge && (
+          judgeProfile && judgeProfile.is_active ? (
+            <button
+              onClick={() => navigate('/judges/assignments')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                  <Gavel className="h-6 w-6 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">My Judging</h3>
+                  <p className="text-gray-400 text-sm">
+                    {judgeAssignments.length > 0
+                      ? `${judgeAssignments.length} upcoming assignment${judgeAssignments.length > 1 ? 's' : ''}`
+                      : 'View assignments'}
+                  </p>
+                </div>
+              </div>
+            </button>
+          ) : !judgeProfile ? (
+            <button
+              onClick={() => navigate('/judges/apply')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                  <Gavel className="h-6 w-6 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Become a Judge</h3>
+                  <p className="text-gray-400 text-sm">Apply to judge MECA events</p>
+                </div>
+              </div>
+            </button>
+          ) : null /* Judge record exists but inactive - show nothing */
+        )}
+
+        {/* Event Director Card - Only show if user has ED permission enabled */}
+        {/* Show "My Event Directing" only if permission ON AND record exists AND is_active */}
+        {/* Show "Become an Event Director" only if permission ON AND no record exists */}
+        {(profile as any)?.can_apply_event_director && (
+          edProfile && edProfile.is_active ? (
+            <button
+              onClick={() => navigate('/event-directors/assignments')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                  <ClipboardList className="h-6 w-6 text-purple-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">My Event Directing</h3>
+                  <p className="text-gray-400 text-sm">
+                    {edAssignments.length > 0
+                      ? `${edAssignments.length} upcoming event${edAssignments.length > 1 ? 's' : ''}`
+                      : 'View assignments'}
+                  </p>
+                </div>
+              </div>
+            </button>
+          ) : !edProfile ? (
+            <button
+              onClick={() => navigate('/event-directors/apply')}
+              className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                  <ClipboardList className="h-6 w-6 text-purple-500" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Become an Event Director</h3>
+                  <p className="text-gray-400 text-sm">Apply to direct MECA events</p>
+                </div>
+              </div>
+            </button>
+          ) : null /* ED record exists but inactive - show nothing */
+        )}
+
+        {/* ED Hosting Requests Card - Only show for active Event Directors */}
+        {(profile as any)?.can_apply_event_director && edProfile && edProfile.is_active && (
+          <button
+            onClick={() => navigate('/event-directors/hosting-requests')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors">
+                <Mail className="h-6 w-6 text-cyan-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Hosting Requests</h3>
+                <p className="text-gray-400 text-sm">Review assigned event requests</p>
+              </div>
+            </div>
+          </button>
+        )}
+
+        {/* ED Submit New Event Card - Only show for active Event Directors */}
+        {(profile as any)?.can_apply_event_director && edProfile && edProfile.is_active && (
+          <button
+            onClick={() => navigate('/event-directors/submit-event')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                <Calendar className="h-6 w-6 text-green-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">Submit New Event</h3>
+                <p className="text-gray-400 text-sm">Submit an event for approval</p>
+              </div>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Event Hosting Requests */}
@@ -1189,6 +1478,120 @@ export default function MyMecaDashboardPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Achievements Section */}
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg mt-8">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <Award className="h-5 w-5 text-orange-500" />
+          My Achievements
+        </h2>
+        <AchievementsGallery
+          profileId={profile?.id}
+          maxItems={6}
+          showEmpty={true}
+        />
+      </div>
+
+      {/* Notifications Section */}
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg mt-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Bell className="h-5 w-5 text-orange-500" />
+            My Notifications
+            {notifications.filter(n => !n.read).length > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded-full">
+                {notifications.filter(n => !n.read).length}
+              </span>
+            )}
+          </h2>
+          {notifications.some(n => !n.read) && (
+            <button
+              onClick={handleMarkAllNotificationsRead}
+              className="text-orange-500 hover:text-orange-400 text-sm font-medium"
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
+
+        {notificationsLoading ? (
+          <div className="text-center py-8">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
+        ) : notifications.length > 0 ? (
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className={`rounded-lg p-4 transition-colors ${
+                  notification.read ? 'bg-slate-700/50' : 'bg-slate-700 border-l-4 border-orange-500'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className={`font-medium text-sm ${notification.read ? 'text-gray-300' : 'text-white'}`}>
+                        {notification.title}
+                      </h4>
+                      {!notification.read && (
+                        <span className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></span>
+                      )}
+                    </div>
+                    <p className={`text-sm ${notification.read ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {notification.message}
+                    </p>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                      {notification.fromUser && (
+                        <span>
+                          From: {notification.fromUser.first_name} {notification.fromUser.last_name}
+                        </span>
+                      )}
+                      <span>
+                        {new Date(notification.createdAt).toLocaleDateString()} at{' '}
+                        {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {!notification.read && (
+                      <button
+                        onClick={() => handleMarkNotificationRead(notification.id)}
+                        disabled={markingReadId === notification.id}
+                        className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-green-500/10 rounded transition-colors disabled:opacity-50"
+                        title="Mark as read"
+                      >
+                        {markingReadId === notification.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteNotification(notification.id)}
+                      disabled={deletingNotificationId === notification.id}
+                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50"
+                      title="Delete notification"
+                    >
+                      {deletingNotificationId === notification.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Bell className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-400 text-sm">No notifications yet</p>
+            <p className="text-gray-500 text-xs mt-1">You'll see important updates here</p>
+          </div>
+        )}
       </div>
     </>
   );
@@ -1355,13 +1758,17 @@ export default function MyMecaDashboardPage() {
       const isCoOwner = myRole === 'co_owner';
       const isModerator = myRole === 'moderator';
       const canManageTeam = isOwner || isCoOwner; // Can edit team settings
-      const canManageMembers = isOwner || isCoOwner || isModerator; // Can add/remove members
       const canManageRoles = isOwner || isCoOwner; // Can change roles
+      const canManageJoinRequests = isOwner || isCoOwner || isModerator; // Can approve/reject join requests
 
       // Get owner info (prefer owner field, fallback to captain)
       const ownerInfo = team.owner || team.captain;
 
       console.log('Team Debug:', { teamId: team.id, myUserId: profile?.id, myMembership, myRole, isOwner, canManageTeam });
+
+      // Calculate total teams the user is on
+      const totalTeamsCount = allTeams.ownedTeams.length + allTeams.memberTeams.length;
+      const allTeamsList = [...allTeams.ownedTeams, ...allTeams.memberTeams];
 
       return (
         <div className="space-y-6">
@@ -1380,6 +1787,47 @@ export default function MyMecaDashboardPage() {
             accept="image/*"
             onChange={handleTeamGalleryUpload}
           />
+
+          {/* Team Switcher - only show if user is on multiple teams */}
+          {totalTeamsCount > 1 && (
+            <div className="bg-slate-800 rounded-xl p-4 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Users className="h-5 w-5 text-orange-500" />
+                  <span className="text-gray-400 text-sm">Viewing team:</span>
+                  <select
+                    value={selectedTeamId || team.id}
+                    onChange={(e) => {
+                      setSelectedTeamId(e.target.value);
+                      const selectedTeam = allTeamsList.find(t => t.id === e.target.value);
+                      if (selectedTeam) {
+                        setTeam(selectedTeam as Team);
+                      }
+                    }}
+                    className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  >
+                    {allTeams.ownedTeams.length > 0 && (
+                      <optgroup label="My Teams (Owner)">
+                        {allTeams.ownedTeams.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {allTeams.memberTeams.length > 0 && (
+                      <optgroup label="Teams I'm On">
+                        {allTeams.memberTeams.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+                <span className="text-gray-500 text-sm">
+                  {totalTeamsCount} team{totalTeamsCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Team Header */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
@@ -1500,7 +1948,7 @@ export default function MyMecaDashboardPage() {
               </div>
               <div className="space-y-3">
                 {team.members?.map((member) => {
-                  const memberRole = (member.role === 'captain' ? 'owner' : member.role) as TeamMemberRole;
+                  const memberRole = ((member.role as string) === 'captain' ? 'owner' : member.role) as TeamMemberRole;
                   const roleInfo = getRoleInfo(memberRole);
                   const RoleIcon = roleInfo.icon;
                   const isMe = member.userId === profile?.id;
@@ -1592,8 +2040,8 @@ export default function MyMecaDashboardPage() {
               </div>
             </div>
 
-            {/* Pending Join Requests - Only visible to owner/co-owner */}
-            {canManageTeam && team.pendingRequests && team.pendingRequests.length > 0 && (
+            {/* Pending Join Requests - Visible to owner/co-owner/moderator */}
+            {canManageJoinRequests && team.pendingRequests && team.pendingRequests.length > 0 && (
               <div className="mt-6 pt-6 border-t border-slate-700">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Clock className="h-5 w-5 text-yellow-500" />
@@ -2194,6 +2642,47 @@ export default function MyMecaDashboardPage() {
               </div>
             </div>
           )}
+
+          {/* Browse & Join Other Teams - always visible */}
+          <div className="bg-slate-800 rounded-xl p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Search className="h-5 w-5 text-gray-400" />
+                <span className="text-gray-300">Looking to join another team?</span>
+              </div>
+              <button
+                onClick={() => navigate('/teams')}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                <UserPlus className="h-4 w-4" />
+                Browse & Join Other Teams
+              </button>
+            </div>
+          </div>
+
+          {/* Create Your Team CTA - show when user has team membership but doesn't own a team */}
+          {canCreateTeam && !ownsTeam && (
+            <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                    <Crown className="h-5 w-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">Ready to lead your own team?</p>
+                    <p className="text-gray-400 text-sm">You have a team membership - create your own team!</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCreateTeamModal(true)}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Your Team
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -2214,10 +2703,7 @@ export default function MyMecaDashboardPage() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => {
-                fetchAllTeams();
-                setShowAllTeamsModal(true);
-              }}
+              onClick={() => navigate('/teams')}
               className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               <UserPlus className="h-5 w-5" />
@@ -2262,6 +2748,111 @@ export default function MyMecaDashboardPage() {
             </p>
           )}
         </div>
+
+        {/* User's Pending Join Requests */}
+        {myPendingJoinRequests.length > 0 && (
+          <div className="mt-8 pt-8 border-t border-slate-700">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Clock className="h-5 w-5 text-yellow-500" />
+              Your Pending Join Requests ({myPendingJoinRequests.length})
+            </h3>
+            <div className="space-y-3">
+              {myPendingJoinRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center justify-between p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center overflow-hidden">
+                      {request.team?.logoUrl ? (
+                        <img
+                          src={request.team.logoUrl}
+                          alt={request.team?.name || 'Team'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Users className="h-6 w-6 text-orange-500" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">
+                        Team {request.team?.name || 'Unknown'}
+                      </p>
+                      <p className="text-yellow-400 text-sm flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Pending approval
+                      </p>
+                      {request.requestedAt && (
+                        <p className="text-gray-400 text-xs">
+                          Requested {new Date(request.requestedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleCancelMyJoinRequest(request.teamId)}
+                    disabled={cancellingRequest === request.teamId}
+                    className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {cancellingRequest === request.teamId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                    Cancel Request
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* User's Pending Invites */}
+        {myPendingInvites.length > 0 && (
+          <div className="mt-8 pt-8 border-t border-slate-700">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Mail className="h-5 w-5 text-cyan-500" />
+              Invitations to Join ({myPendingInvites.length})
+            </h3>
+            <div className="space-y-3">
+              {myPendingInvites.map((invite) => (
+                <div
+                  key={invite.id}
+                  className="flex items-center justify-between p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center overflow-hidden">
+                      {invite.team?.logoUrl ? (
+                        <img
+                          src={invite.team.logoUrl}
+                          alt={invite.team?.name || 'Team'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Users className="h-6 w-6 text-cyan-500" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">
+                        Team {invite.team?.name || 'Unknown'}
+                      </p>
+                      <p className="text-cyan-400 text-sm">
+                        You've been invited to join!
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/teams/${invite.teamId}`)}
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View Team
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Enhanced Create Team Modal */}
         {showCreateTeamModal && (
@@ -2494,185 +3085,456 @@ export default function MyMecaDashboardPage() {
           </div>
         )}
 
-        {/* Browse Teams Modal */}
-        {showAllTeamsModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Browse Teams</h3>
-                <button
-                  onClick={() => setShowAllTeamsModal(false)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  <XCircle className="h-6 w-6" />
-                </button>
-              </div>
+      </div>
+    );
+  };
 
-              {allTeams.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                  <p className="text-gray-400">No teams available to join</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {allTeams.map((t) => (
-                    <div
-                      key={t.id}
-                      className="bg-slate-700 rounded-lg p-4 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
-                          <Users className="h-6 w-6 text-orange-500" />
-                        </div>
-                        <div>
-                          <h4 className="text-white font-semibold">{t.name}</h4>
-                          <p className="text-gray-400 text-sm">
-                            {t.members?.length || 1} member{(t.members?.length || 1) !== 1 ? 's' : ''} • Captain: {t.captain?.first_name} {t.captain?.last_name}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-gray-500 text-sm">Contact team captain to join</p>
+  const renderEvents = () => {
+    // Get unique countries and states from registrations for filter dropdowns
+    const uniqueCountries = [...new Set(
+      registrations
+        .map(reg => reg.event?.venue_country)
+        .filter(Boolean)
+    )].sort();
+
+    const uniqueStates = [...new Set(
+      registrations
+        .filter(reg => !registrationFilters.country || reg.event?.venue_country === registrationFilters.country)
+        .map(reg => reg.event?.venue_state)
+        .filter(Boolean)
+    )].sort();
+
+    // Filter registrations based on current filters
+    const filteredRegistrations = registrations.filter(reg => {
+      const event = reg.event;
+      if (!event) return false;
+
+      // Search filter - search in event title, venue name, city
+      if (registrationFilters.search) {
+        const searchLower = registrationFilters.search.toLowerCase();
+        const matchesSearch =
+          event.title?.toLowerCase().includes(searchLower) ||
+          event.venue_name?.toLowerCase().includes(searchLower) ||
+          event.venue_city?.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
+
+      // Season filter
+      if (registrationFilters.seasonId && event.season_id !== registrationFilters.seasonId) {
+        return false;
+      }
+
+      // Country filter
+      if (registrationFilters.country && event.venue_country !== registrationFilters.country) {
+        return false;
+      }
+
+      // State filter
+      if (registrationFilters.state && event.venue_state !== registrationFilters.state) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const clearFilters = () => {
+      setRegistrationFilters({
+        search: '',
+        seasonId: '',
+        country: '',
+        state: '',
+      });
+    };
+
+    const hasActiveFilters = registrationFilters.search || registrationFilters.seasonId ||
+                             registrationFilters.country || registrationFilters.state;
+
+    return (
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Calendar className="h-6 w-6 text-orange-500" />
+            Event Registrations
+          </h2>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
+            >
+              <X className="h-4 w-4" />
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search events..."
+              value={registrationFilters.search}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, search: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Season Filter */}
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={registrationFilters.seasonId}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, seasonId: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map(season => (
+                <option key={season.id} value={season.id}>
+                  {season.name} {season.is_current && '(Current)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Country Filter */}
+          <div className="relative">
+            <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={registrationFilters.country}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, country: e.target.value, state: '' }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+            >
+              <option value="">All Countries</option>
+              {uniqueCountries.map(country => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* State Filter */}
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={registrationFilters.state}
+              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, state: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
+              disabled={!registrationFilters.country && uniqueStates.length === 0}
+            >
+              <option value="">All States</option>
+              {uniqueStates.map(state => (
+                <option key={state} value={state}>{state}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Results count */}
+        {registrations.length > 0 && (
+          <div className="text-sm text-gray-400 mb-4">
+            Showing {filteredRegistrations.length} of {registrations.length} registration{registrations.length !== 1 ? 's' : ''}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
+        ) : filteredRegistrations.length > 0 ? (
+          <div className="space-y-4">
+            {filteredRegistrations.map((reg) => (
+              <div
+                key={reg.id}
+                className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
+                onClick={() => reg.event && navigate(`/events/${reg.event.id}`)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-white mb-1">
+                      {reg.event?.title}
+                    </h4>
+                    <div className="space-y-1 text-sm text-gray-400">
+                      <p className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {reg.event?.venue_name}
+                        {reg.event?.venue_city && `, ${reg.event.venue_city}`}
+                        {reg.event?.venue_state && `, ${reg.event.venue_state}`}
+                        {reg.event?.venue_country && reg.event.venue_country !== 'USA' && `, ${reg.event.venue_country}`}
+                      </p>
+                      <p className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {reg.event && new Date(reg.event.event_date).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </p>
+                      {reg.event?.season_id && (
+                        <p className="text-xs text-gray-500">
+                          Season: {seasons.find(s => s.id === reg.event?.season_id)?.name || 'Unknown'}
+                        </p>
+                      )}
                     </div>
-                  ))}
+                  </div>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                      reg.status === 'confirmed'
+                        ? 'bg-green-500/10 text-green-400'
+                        : reg.status === 'pending'
+                        ? 'bg-yellow-500/10 text-yellow-400'
+                        : 'bg-red-500/10 text-red-400'
+                    }`}
+                  >
+                    {reg.status}
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+            ))}
+          </div>
+        ) : registrations.length > 0 ? (
+          <div className="text-center py-12">
+            <Search className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 mb-4">No registrations match your filters</p>
+            <button
+              onClick={clearFilters}
+              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 mb-4">No event registrations yet</p>
+            <button
+              onClick={() => navigate('/events')}
+              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Browse Events
+            </button>
           </div>
         )}
       </div>
     );
   };
 
-  const renderEvents = () => (
-    <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-        <Calendar className="h-6 w-6 text-orange-500" />
-        My Event History
-      </h2>
+  const renderResults = () => {
+    // Get unique states from results for filter dropdown
+    const availableResultsStates = [...new Set(
+      results
+        .map(r => r.event?.venue_state)
+        .filter((s): s is string => !!s)
+    )].sort();
 
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-        </div>
-      ) : registrations.length > 0 ? (
-        <div className="space-y-4">
-          {registrations.map((reg) => (
-            <div
-              key={reg.id}
-              className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
-              onClick={() => reg.event && navigate(`/events/${reg.event.id}`)}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="font-semibold text-white mb-1">
-                    {reg.event?.title}
-                  </h4>
-                  <div className="space-y-1 text-sm text-gray-400">
-                    <p>{reg.event?.venue}</p>
-                    <p>{reg.event && new Date(reg.event.event_date).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}</p>
-                  </div>
-                </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    reg.status === 'confirmed'
-                      ? 'bg-green-500/10 text-green-400'
-                      : reg.status === 'pending'
-                      ? 'bg-yellow-500/10 text-yellow-400'
-                      : 'bg-red-500/10 text-red-400'
-                  }`}
-                >
-                  {reg.status}
-                </span>
-              </div>
+    // Apply filters to results
+    const filteredResultsData = results.filter(r => {
+      // Season filter
+      if (resultsFilters.seasonId && r.season_id !== resultsFilters.seasonId) {
+        return false;
+      }
+      // State filter
+      if (resultsFilters.state && r.event?.venue_state !== resultsFilters.state) {
+        return false;
+      }
+      return true;
+    });
+
+    // Note: eventIds can be computed from filteredResultsData if needed for duplicate rating panel detection
+
+    return (
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+          <Trophy className="h-6 w-6 text-orange-500" />
+          My Competition Results
+        </h2>
+
+        {/* Results Filters */}
+        <div className="bg-slate-700/50 rounded-lg p-4 mb-6">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-gray-400" />
+              <span className="text-gray-300 font-medium">Filters:</span>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400 mb-4">No event registrations yet</p>
-          <button
-            onClick={() => navigate('/events')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
-          >
-            Browse Events
-          </button>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderResults = () => (
-    <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-        <Trophy className="h-6 w-6 text-orange-500" />
-        My Competition Results
-      </h2>
-
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-        </div>
-      ) : results.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Event</th>
-                <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Class</th>
-                <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Score</th>
-                <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Place</th>
-                <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">Points</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((result) => (
-                <tr key={result.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                  <td className="py-3 px-4">
-                    <div>
-                      <p className="text-white font-medium">{result.event?.title}</p>
-                      <p className="text-gray-400 text-sm">{result.event && new Date(result.event.event_date).toLocaleDateString()}</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-gray-300">{result.competition_class}</td>
-                  <td className="py-3 px-4 text-gray-300">{result.score}</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                      result.placement === 1 ? 'bg-yellow-500/20 text-yellow-400' :
-                      result.placement === 2 ? 'bg-gray-400/20 text-gray-300' :
-                      result.placement === 3 ? 'bg-orange-500/20 text-orange-400' :
-                      'bg-slate-600 text-gray-300'
-                    }`}>
-                      {result.placement}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <span className="text-orange-500 font-semibold">{result.points_earned}</span>
-                  </td>
-                </tr>
+            <select
+              value={resultsFilters.seasonId}
+              onChange={(e) => setResultsFilters({ ...resultsFilters, seasonId: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.name}
+                </option>
               ))}
-            </tbody>
-          </table>
+            </select>
+            <select
+              value={resultsFilters.state}
+              onChange={(e) => setResultsFilters({ ...resultsFilters, state: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All States</option>
+              {availableResultsStates.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+            {(resultsFilters.seasonId || resultsFilters.state) && (
+              <button
+                onClick={() => setResultsFilters({ seasonId: '', state: '' })}
+                className="text-orange-400 hover:text-orange-300 text-sm flex items-center gap-1"
+              >
+                <X className="h-4 w-4" />
+                Clear Filters
+              </button>
+            )}
+            <span className="text-gray-500 text-sm ml-auto">
+              {filteredResultsData.length} of {results.length} results
+            </span>
+          </div>
         </div>
-      ) : (
-        <div className="text-center py-12">
-          <Trophy className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400">No competition results yet</p>
-        </div>
-      )}
-    </div>
-  );
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+          </div>
+        ) : filteredResultsData.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Event</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Class</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Score</th>
+                  <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Place</th>
+                  <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">Points</th>
+                  <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Rate Staff</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredResultsData.map((result) => (
+                  <React.Fragment key={result.id}>
+                    <tr className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="text-white font-medium">{result.event?.title}</p>
+                          <p className="text-gray-400 text-sm">{result.event && new Date(result.event.event_date).toLocaleDateString()}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-gray-300">{result.competition_class}</td>
+                      <td className="py-3 px-4 text-gray-300">{result.score}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                          result.placement === 1 ? 'bg-yellow-500/20 text-yellow-400' :
+                          result.placement === 2 ? 'bg-gray-400/20 text-gray-300' :
+                          result.placement === 3 ? 'bg-orange-500/20 text-orange-400' :
+                          'bg-slate-600 text-gray-300'
+                        }`}>
+                          {result.placement}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="text-orange-500 font-semibold">{result.points_earned}</span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {result.event?.id && (
+                          <button
+                            onClick={() => setExpandedRatingEventId(
+                              expandedRatingEventId === result.event?.id ? null : result.event?.id || null
+                            )}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                              expandedRatingEventId === result.event?.id
+                                ? 'bg-yellow-500/20 text-yellow-400'
+                                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                            }`}
+                          >
+                            <Star className="h-4 w-4" />
+                            Rate
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {/* Expanded Rating Panel */}
+                    {expandedRatingEventId === result.event?.id && result.event && (
+                      <tr>
+                        <td colSpan={6} className="p-0">
+                          <div className="bg-slate-700/50 p-4 border-b border-slate-600">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-white font-semibold flex items-center gap-2">
+                                <Star className="h-5 w-5 text-yellow-500" />
+                                Rate Staff for {result.event.title}
+                              </h4>
+                              <button
+                                onClick={() => setExpandedRatingEventId(null)}
+                                className="text-gray-400 hover:text-white"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            </div>
+                            <EventRatingsPanel
+                              eventId={result.event.id}
+                              eventName={result.event.title}
+                              onRatingSubmitted={() => {
+                                // Optionally refresh or show success message
+                              }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : results.length > 0 ? (
+          <div className="text-center py-12">
+            <Filter className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No results match the selected filters</p>
+            <button
+              onClick={() => setResultsFilters({ seasonId: '', state: '' })}
+              className="mt-4 text-orange-400 hover:text-orange-300"
+            >
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Trophy className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No competition results yet</p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderAnalytics = () => {
+    // Get unique states from results for filter dropdown
+    const availableStates = [...new Set(
+      results
+        .map(r => r.event?.venue_state)
+        .filter((s): s is string => !!s)
+    )].sort();
+
+    // Apply filters to results
+    const filteredResults = results.filter(r => {
+      // Season filter
+      if (analyticsFilters.seasonId && r.season_id !== analyticsFilters.seasonId) {
+        return false;
+      }
+      // State filter
+      if (analyticsFilters.state && r.event?.venue_state !== analyticsFilters.state) {
+        return false;
+      }
+      return true;
+    });
+
     // Helper to detect format from result - checks multiple fields
     const getResultFormat = (r: CompetitionResult): string => {
-      // Check direct format field first
-      if (r.format) return r.format;
+      // Check direct format field first (may exist on some results)
+      if ((r as any).format) return (r as any).format;
 
       // Check class.format (from joined CompetitionClass)
       if (r.class?.format) return r.class.format;
@@ -2691,8 +3553,8 @@ export default function MyMecaDashboardPage() {
       return 'SPL';
     };
 
-    // Calculate format/category stats from actual results data
-    const formatStats = results.reduce((acc, r) => {
+    // Calculate format/category stats from filtered results data
+    const formatStats = filteredResults.reduce((acc, r) => {
       const format = getResultFormat(r);
       if (!acc[format]) {
         acc[format] = { count: 0, points: 0, totalPoints: 0, scores: [] as number[], pointsHistory: [] as number[], bestScore: 0, wins: 0 };
@@ -2708,10 +3570,10 @@ export default function MyMecaDashboardPage() {
     }, {} as Record<string, { count: number; points: number; totalPoints: number; scores: number[]; pointsHistory: number[]; bestScore: number; wins: number }>);
 
     const placementBreakdown = {
-      first: results.filter(r => r.placement === 1).length,
-      second: results.filter(r => r.placement === 2).length,
-      third: results.filter(r => r.placement === 3).length,
-      other: results.filter(r => r.placement > 3).length,
+      first: filteredResults.filter(r => r.placement === 1).length,
+      second: filteredResults.filter(r => r.placement === 2).length,
+      third: filteredResults.filter(r => r.placement === 3).length,
+      other: filteredResults.filter(r => r.placement > 3).length,
     };
 
     // Chart colors
@@ -2729,7 +3591,7 @@ export default function MyMecaDashboardPage() {
 
     // Get results by format for charts (only formats with actual data)
     const getFormatChartData = (formatName: string) => {
-      const formatResults = results
+      const formatResults = filteredResults
         .filter(r => getResultFormat(r) === formatName)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         .slice(-12);
@@ -2785,14 +3647,62 @@ export default function MyMecaDashboardPage() {
 
     return (
       <div className="space-y-6">
-        {/* Original Summary Stats */}
+        {/* Analytics Filters */}
+        <div className="bg-slate-800 rounded-xl p-4 shadow-lg">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-gray-400" />
+              <span className="text-gray-300 font-medium">Filters:</span>
+            </div>
+            <select
+              value={analyticsFilters.seasonId}
+              onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, seasonId: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={analyticsFilters.state}
+              onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, state: e.target.value })}
+              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">All States</option>
+              {availableStates.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+            {(analyticsFilters.seasonId || analyticsFilters.state) && (
+              <button
+                onClick={() => setAnalyticsFilters({ seasonId: '', state: '' })}
+                className="text-orange-400 hover:text-orange-300 text-sm flex items-center gap-1"
+              >
+                <X className="h-4 w-4" />
+                Clear Filters
+              </button>
+            )}
+            <span className="text-gray-500 text-sm ml-auto">
+              {filteredResults.length} of {results.length} results
+            </span>
+          </div>
+        </div>
+
+        {/* Summary Stats (filtered) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
-            <p className="text-3xl font-bold text-white mb-1">{stats.totalEvents}</p>
-            <p className="text-gray-400 text-sm">Events Competed</p>
+            <p className="text-3xl font-bold text-white mb-1">{filteredResults.length}</p>
+            <p className="text-gray-400 text-sm">Results</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
-            <p className="text-3xl font-bold text-orange-500 mb-1">{stats.totalPoints}</p>
+            <p className="text-3xl font-bold text-orange-500 mb-1">
+              {filteredResults.reduce((sum, r) => sum + (r.points_earned || 0), 0)}
+            </p>
             <p className="text-gray-400 text-sm">Total Points</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
@@ -2801,7 +3711,9 @@ export default function MyMecaDashboardPage() {
           </div>
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center">
             <p className="text-3xl font-bold text-green-400 mb-1">
-              {stats.bestPlacement ? `#${stats.bestPlacement}` : 'N/A'}
+              {filteredResults.length > 0
+                ? `#${Math.min(...filteredResults.map(r => r.placement).filter(p => p > 0))}`
+                : 'N/A'}
             </p>
             <p className="text-gray-400 text-sm">Best Placement</p>
           </div>
@@ -2931,7 +3843,7 @@ export default function MyMecaDashboardPage() {
                           paddingAngle={2}
                           dataKey="value"
                         >
-                          {placementChartData.map((entry, index) => (
+                          {placementChartData.map((_entry, index) => (
                             <Cell key={`cell-${index}`} fill={PLACEMENT_COLORS[index % PLACEMENT_COLORS.length]} />
                           ))}
                         </Pie>
@@ -3053,12 +3965,12 @@ export default function MyMecaDashboardPage() {
         )}
 
         {/* NEW: Points Progress Line Chart - Only show if there are enough results */}
-        {results.length > 2 && (
+        {filteredResults.length > 2 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Points Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
                   .map((r, index) => ({
@@ -3066,13 +3978,12 @@ export default function MyMecaDashboardPage() {
                     points: r.points_earned || 0,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
                     labelStyle={{ color: '#fff' }}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="points"
@@ -3093,7 +4004,7 @@ export default function MyMecaDashboardPage() {
             <h2 className="text-2xl font-bold text-white mb-6">SPL Score Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .filter(r => getResultFormat(r) === 'SPL')
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
@@ -3103,7 +4014,7 @@ export default function MyMecaDashboardPage() {
                     event: r.event?.title || `Competition ${index + 1}`,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} domain={['auto', 'auto']} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
@@ -3111,7 +4022,6 @@ export default function MyMecaDashboardPage() {
                     formatter={(value: number) => [`${value.toFixed(1)} dB`, 'Score']}
                     labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="score"
@@ -3127,12 +4037,12 @@ export default function MyMecaDashboardPage() {
         )}
 
         {/* Wattage Progress Line Chart */}
-        {results.length > 0 && (
+        {filteredResults.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Wattage Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
                   .map((r, index) => ({
@@ -3141,7 +4051,7 @@ export default function MyMecaDashboardPage() {
                     event: r.event?.title || `Competition ${index + 1}`,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
@@ -3149,7 +4059,6 @@ export default function MyMecaDashboardPage() {
                     formatter={(value: number) => [`${value.toLocaleString()} W`, 'Wattage']}
                     labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="wattage"
@@ -3165,12 +4074,12 @@ export default function MyMecaDashboardPage() {
         )}
 
         {/* Frequency Progress Line Chart */}
-        {results.length > 0 && (
+        {filteredResults.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Frequency Progress</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={results
+                <LineChart data={filteredResults
                   .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                   .slice(-20)
                   .map((r, index) => ({
@@ -3179,7 +4088,7 @@ export default function MyMecaDashboardPage() {
                     event: r.event?.title || `Competition ${index + 1}`,
                   }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} label={{ value: 'Competition #', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
@@ -3187,7 +4096,6 @@ export default function MyMecaDashboardPage() {
                     formatter={(value: number) => [`${value} Hz`, 'Frequency']}
                     labelFormatter={(label, payload) => payload?.[0]?.payload?.event || `Competition ${label}`}
                   />
-                  <Legend />
                   <Line
                     type="monotone"
                     dataKey="frequency"
@@ -3208,6 +4116,19 @@ export default function MyMecaDashboardPage() {
             <p className="text-gray-400">Analytics will appear once you have competition results</p>
           </div>
         )}
+
+        {results.length > 0 && filteredResults.length === 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg text-center py-12">
+            <Filter className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No results match the selected filters</p>
+            <button
+              onClick={() => setAnalyticsFilters({ seasonId: '', state: '' })}
+              className="mt-4 text-orange-400 hover:text-orange-300"
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -3215,20 +4136,38 @@ export default function MyMecaDashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Hidden file input for profile image upload */}
+        <input
+          type="file"
+          ref={profileImageInputRef}
+          className="hidden"
+          accept="image/*"
+          onChange={handleUploadProfileImage}
+        />
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            {(profile.profile_picture_url || (profile.profile_images && profile.profile_images.length > 0)) ? (
-              <img
-                src={profile.profile_picture_url || profile.profile_images?.[0]}
-                alt="Profile"
-                className="w-16 h-16 rounded-full object-cover border-2 border-orange-500"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center">
-                <User className="h-8 w-8 text-orange-500" />
+            <div
+              onClick={() => setShowProfileImageSelector(true)}
+              className="relative group cursor-pointer"
+              title="Click to change profile picture"
+            >
+              {(profile.profile_picture_url || (profile.profile_images && profile.profile_images.length > 0)) ? (
+                <img
+                  src={profile.profile_picture_url || profile.profile_images?.[0]}
+                  alt="Profile"
+                  className="w-16 h-16 rounded-full object-cover border-2 border-orange-500 group-hover:opacity-80 transition-opacity"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center group-hover:bg-orange-500/30 transition-colors">
+                  <User className="h-8 w-8 text-orange-500" />
+                </div>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="h-6 w-6 text-white" />
               </div>
-            )}
+            </div>
             <div>
               <h1 className="text-4xl font-bold text-white">My MECA</h1>
               <p className="text-gray-400">Welcome back, {`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}</p>
@@ -3352,6 +4291,77 @@ export default function MyMecaDashboardPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Image Selector Modal */}
+        {showProfileImageSelector && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-white">Choose Profile Picture</h3>
+                <button
+                  onClick={() => setShowProfileImageSelector(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {updatingProfileImage && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
+                  <span className="text-white ml-3">Updating profile picture...</span>
+                </div>
+              )}
+
+              {!updatingProfileImage && (
+                <>
+                  {/* Upload new image */}
+                  <div className="mb-6">
+                    <button
+                      onClick={() => profileImageInputRef.current?.click()}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      <Upload className="h-5 w-5" />
+                      Upload New Photo
+                    </button>
+                  </div>
+
+                  {/* Existing images */}
+                  {profile?.profile_images && profile.profile_images.length > 0 && (
+                    <div>
+                      <p className="text-gray-400 text-sm mb-3">Or select from your gallery:</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        {profile.profile_images.map((imageUrl, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleSelectProfileImage(imageUrl)}
+                            className={`aspect-square rounded-lg overflow-hidden bg-slate-700 hover:ring-2 hover:ring-orange-500 transition-all ${
+                              profile.profile_picture_url === imageUrl ? 'ring-2 ring-orange-500' : ''
+                            }`}
+                          >
+                            <img
+                              src={imageUrl}
+                              alt={`Profile option ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(!profile?.profile_images || profile.profile_images.length === 0) && (
+                    <div className="text-center py-4">
+                      <Image className="h-12 w-12 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">No images in your gallery yet.</p>
+                      <p className="text-gray-500 text-xs mt-1">Upload a photo to get started!</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

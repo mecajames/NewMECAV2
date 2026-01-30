@@ -1,16 +1,19 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { EventStatus } from '@newmeca/shared';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { EventStatus, RegistrationStatus, MultiDayResultsMode } from '@newmeca/shared';
 import { randomUUID } from 'crypto';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class EventsService {
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAll(page: number = 1, limit: number = 10): Promise<Event[]> {
@@ -19,7 +22,7 @@ export class EventsService {
     return em.find(Event, {}, {
       limit,
       offset,
-      orderBy: { eventDate: 'ASC' }
+      orderBy: { eventDate: 'DESC' }
     });
   }
 
@@ -54,7 +57,7 @@ export class EventsService {
     return em.find(Event, { season: seasonId }, {
       limit,
       offset,
-      orderBy: { eventDate: 'ASC' }
+      orderBy: { eventDate: 'DESC' }
     });
   }
 
@@ -190,14 +193,24 @@ export class EventsService {
    * @param data Base event data
    * @param numberOfDays Number of days (1, 2, or 3)
    * @param dayDates Array of ISO date strings for each day
+   * @param dayMultipliers Optional array of per-day points multipliers (1-4)
+   * @param multiDayResultsMode Optional mode for how to calculate results across days
    * @returns Array of created events
    */
-  async createMultiDay(data: Partial<Event>, numberOfDays: number, dayDates: string[]): Promise<Event[]> {
+  async createMultiDay(
+    data: Partial<Event>,
+    numberOfDays: number,
+    dayDates: string[],
+    dayMultipliers?: number[],
+    multiDayResultsMode?: MultiDayResultsMode
+  ): Promise<Event[]> {
     const em = this.em.fork();
 
     try {
       console.log('📝 CREATE MULTI-DAY EVENT - Received data:', JSON.stringify(data, null, 2));
       console.log('📝 CREATE MULTI-DAY EVENT - Days:', numberOfDays, 'Dates:', dayDates);
+      console.log('📝 CREATE MULTI-DAY EVENT - Day Multipliers:', dayMultipliers);
+      console.log('📝 CREATE MULTI-DAY EVENT - Results Mode:', multiDayResultsMode);
 
       // Generate a shared group ID for all days of this event
       const multiDayGroupId = randomUUID();
@@ -245,8 +258,14 @@ export class EventsService {
         if (data.longitude !== undefined) transformedData.longitude = data.longitude;
         if (data.status !== undefined) transformedData.status = data.status;
         if (data.formats !== undefined) transformedData.formats = data.formats;
-        if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
         if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
+
+        // Set points multiplier - use per-day multiplier if provided, otherwise use base multiplier
+        if (dayMultipliers && dayMultipliers[dayNum - 1] !== undefined) {
+          transformedData.pointsMultiplier = dayMultipliers[dayNum - 1];
+        } else if ((data as any).points_multiplier !== undefined) {
+          transformedData.pointsMultiplier = (data as any).points_multiplier;
+        }
 
         // Set the date for this specific day
         transformedData.eventDate = dayDate;
@@ -254,6 +273,11 @@ export class EventsService {
         // Set multi-day fields
         transformedData.multiDayGroupId = multiDayGroupId;
         transformedData.dayNumber = dayNum;
+
+        // Set multi-day results mode (same for all days in the group)
+        if (multiDayResultsMode) {
+          transformedData.multiDayResultsMode = multiDayResultsMode;
+        }
 
         // Append day number to description
         const baseDescription = data.description || '';
@@ -356,6 +380,8 @@ export class EventsService {
     if (data.formats !== undefined) transformedData.formats = data.formats;
     if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
     if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
+    if ((data as any).flyer_image_position !== undefined) transformedData.flyerImagePosition = (data as any).flyer_image_position;
+    if ((data as any).multi_day_results_mode !== undefined) transformedData.multiDayResultsMode = (data as any).multi_day_results_mode;
 
     console.log('🔍 UPDATE EVENT - Transformed eventDate:', transformedData.eventDate);
 
@@ -395,5 +421,93 @@ export class EventsService {
     const em = this.em.fork();
     const totalEvents = await em.count(Event, {});
     return { totalEvents };
+  }
+
+  /**
+   * Send rating request emails to all participants of a completed event
+   * @param eventId The ID of the event
+   * @returns Summary of emails sent
+   */
+  async sendRatingRequestEmails(eventId: string): Promise<{ sent: number; failed: number; errors: string[] }> {
+    const em = this.em.fork();
+
+    // Find the event and verify it's completed
+    const event = await em.findOne(Event, { id: eventId });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    if (event.status !== EventStatus.COMPLETED) {
+      throw new BadRequestException(`Event is not completed. Current status: ${event.status}`);
+    }
+
+    // Find all registrations for this event with confirmed status or checked in
+    // EventRegistration has registrationStatus field and uses 'user' for the profile relationship
+    const registrations = await em.find(
+      EventRegistration,
+      {
+        event: eventId,
+        $or: [
+          { registrationStatus: RegistrationStatus.CONFIRMED },
+          { checkedIn: true },
+        ],
+      },
+      { populate: ['user'] }
+    );
+
+    if (registrations.length === 0) {
+      return { sent: 0, failed: 0, errors: ['No eligible participants found for this event'] };
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://meca.com';
+    const ratingUrl = `${frontendUrl}/events/${eventId}#ratings`;
+
+    let sent = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    // Track emails sent to avoid duplicates
+    const sentEmails = new Set<string>();
+
+    // Send email to each participant
+    for (const registration of registrations) {
+      // Use email from registration or from user profile
+      const email = registration.email || registration.user?.email;
+      const firstName = registration.firstName || registration.user?.first_name;
+
+      if (!email) {
+        errors.push(`Registration ${registration.id} has no email`);
+        failed++;
+        continue;
+      }
+
+      // Skip duplicate emails
+      if (sentEmails.has(email.toLowerCase())) {
+        continue;
+      }
+      sentEmails.add(email.toLowerCase());
+
+      try {
+        const result = await this.emailService.sendEventRatingRequestEmail({
+          to: email,
+          firstName: firstName || undefined,
+          eventName: event.title,
+          eventDate: event.eventDate,
+          ratingUrl,
+        });
+
+        if (result.success) {
+          sent++;
+        } else {
+          failed++;
+          errors.push(`Failed to send to ${email}: ${result.error}`);
+        }
+      } catch (error) {
+        failed++;
+        errors.push(`Error sending to ${email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    return { sent, failed, errors };
   }
 }

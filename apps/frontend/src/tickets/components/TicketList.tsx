@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Ticket,
@@ -22,7 +22,6 @@ import {
   TicketStatus,
   TicketPriority,
   TicketCategory,
-  TicketDepartment,
   TicketListQuery,
 } from '../tickets.api-client';
 

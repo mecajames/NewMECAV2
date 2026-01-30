@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   Ticket,
   Tag,
@@ -36,10 +36,9 @@ const priorityOptions: { value: TicketPriority; label: string; className: string
 
 export function GuestTicketCreatePage() {
   const { token } = useParams<{ token: string }>();
-  const navigate = useNavigate();
 
   const [verifying, setVerifying] = useState(true);
-  const [verified, setVerified] = useState(false);
+  const [_verified, setVerified] = useState(false);
   const [email, setEmail] = useState('');
   const [verifyError, setVerifyError] = useState<string | null>(null);
 

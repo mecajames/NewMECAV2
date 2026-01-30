@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -25,10 +28,48 @@ import { StripeModule } from './stripe/stripe.module';
 import { QuickBooksModule } from './quickbooks/quickbooks.module';
 import { TeamsModule } from './teams/teams.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { AuthModule } from './auth/auth.module';
+import { EmailModule } from './email/email.module';
+import { BusinessListingsModule } from './business-listings/business-listings.module';
+import { OrdersModule } from './orders/orders.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { BillingModule } from './billing/billing.module';
+import { JudgesModule } from './judges/judges.module';
+import { EventDirectorsModule } from './event-directors/event-directors.module';
+import { RatingsModule } from './ratings/ratings.module';
+import { ContactModule } from './contact/contact.module';
+import { WorldFinalsModule } from './world-finals/world-finals.module';
+import { AchievementsModule } from './achievements/achievements.module';
+import { ShopModule } from './shop/shop.module';
+import { TrainingRecordsModule } from './training-records/training-records.module';
+import { ScheduledTasksModule } from './scheduled-tasks/scheduled-tasks.module';
+import { BannersModule } from './banners/banners.module';
+import { PointsConfigurationModule } from './points-configuration/points-configuration.module';
+import { StatesModule } from './states/states.module';
+import { ResultTeamsModule } from './result-teams/result-teams.module';
+import { MemberGalleryModule } from './member-gallery/member-gallery.module';
+import { StandingsModule } from './standings/standings.module';
 
 @Module({
   imports: [
+    // Scheduled tasks (cron jobs for membership expiration, event reminders, etc.)
+    ScheduleModule.forRoot(),
+    // Rate limiting: generous in development, stricter in production
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000, // 1 minute window
+        limit: process.env.NODE_ENV === 'development' ? 1000 : 1000,
+      },
+      {
+        name: 'strict',
+        ttl: 60000, // 1 minute window
+        limit: process.env.NODE_ENV === 'development' ? 100 : 60,
+      },
+    ]),
     DatabaseModule,
+    AuthModule,
+    EmailModule,
     ProfilesModule,
     EventsModule,
     MembershipsModule,
@@ -52,8 +93,34 @@ import { TicketsModule } from './tickets/tickets.module';
     QuickBooksModule,
     TeamsModule,
     TicketsModule,
+    BusinessListingsModule,
+    OrdersModule,
+    InvoicesModule,
+    BillingModule,
+    JudgesModule,
+    EventDirectorsModule,
+    RatingsModule,
+    ContactModule,
+    WorldFinalsModule,
+    AchievementsModule,
+    ShopModule,
+    TrainingRecordsModule,
+    ScheduledTasksModule,
+    BannersModule,
+    PointsConfigurationModule,
+    StatesModule,
+    ResultTeamsModule,
+    MemberGalleryModule,
+    StandingsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Apply rate limiting globally to all endpoints
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

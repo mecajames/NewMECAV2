@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, Filter, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Check, X } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle } from 'lucide-react';
 import { eventsApi, Event } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { competitionResultsApi } from '@/competition-results';
@@ -9,13 +8,6 @@ import { seasonsApi, Season } from '@/seasons';
 import { useAuth } from '@/auth';
 import { SeasonSelector } from '@/seasons';
 import { AuditLogModal } from '@/admin';
-
-interface DuplicateItem {
-  index: number;
-  importData: any;
-  existingData: any;
-  matchType: 'meca_id' | 'name';
-}
 
 interface ResultEntry {
   id?: string;
@@ -54,14 +46,42 @@ interface PreviewResult {
   frequency?: number;
 }
 
+interface ParsedResultItem {
+  index: number;
+  data: {
+    memberID?: string;
+    name: string;
+    class: string;
+    score: number;
+    format: string;
+    wattage?: number;
+    frequency?: number;
+  };
+  nameMatch?: {
+    matchedMecaId: string;
+    matchedName: string;
+    matchedCompetitorId: string | null;
+    confidence: 'exact' | 'partial';
+  };
+  missingFields: string[];
+  isValid: boolean;
+  validationErrors: string[];
+}
+
+interface UserDecision {
+  confirmNameMatch: boolean | null; // true = use matched MECA ID, false = use 999999, null = not decided
+  wattage?: number;
+  frequency?: number;
+  skip: boolean;
+}
+
 type EntryMethod = 'manual' | 'excel' | 'termlab';
 
 export default function ResultsEntryNew() {
   const { profile } = useAuth();
-  const location = useLocation();
 
   // Season and Event Selection
-  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [_seasons, setSeasons] = useState<Season[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState('');
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
@@ -90,14 +110,22 @@ export default function ResultsEntryNew() {
     placement: '',
     points_earned: '',
     vehicle_info: '',
+    wattage: '',
+    frequency: '',
     notes: '',
   });
 
   // File Import
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewResults, setPreviewResults] = useState<PreviewResult[]>([]);
+  const [_previewResults, setPreviewResults] = useState<PreviewResult[]>([]);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Enhanced Import Flow
+  const [parsedResults, setParsedResults] = useState<ParsedResultItem[]>([]);
+  const [userDecisions, setUserDecisions] = useState<Record<number, UserDecision>>({});
+  const [showImportReviewModal, setShowImportReviewModal] = useState(false);
+  const [importFileExtension, setImportFileExtension] = useState<string>('xlsx');
 
   // Edit Modal
   const [editingResult, setEditingResult] = useState<ResultEntry | null>(null);
@@ -124,6 +152,9 @@ export default function ResultsEntryNew() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Membership status tracking for current entry
+  const [currentEntryMembershipStatus, setCurrentEntryMembershipStatus] = useState<string>('');
 
   const availableFormats = ['SPL', 'SQL', 'Show and Shine', 'Ride the Light'];
 
@@ -353,30 +384,98 @@ export default function ResultsEntryNew() {
     }
 
     setSelectedFile(file);
+    setUploading(true);
 
-    // Parse file and show preview
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Use the new parseAndValidate endpoint
+      const result = await competitionResultsApi.parseAndValidate(selectedEventId, file);
 
-      // For now, we'll show the preview modal
-      // In a real implementation, you'd call an API endpoint to parse the file
-      setShowPreviewModal(true);
+      // Initialize user decisions with defaults
+      const initialDecisions: Record<number, UserDecision> = {};
+      for (const item of result.results) {
+        initialDecisions[item.index] = {
+          confirmNameMatch: item.nameMatch ? null : null, // null means not decided yet
+          wattage: item.data.wattage,
+          frequency: item.data.frequency,
+          skip: !item.isValid, // Auto-skip invalid entries (missing name/class/score)
+        };
+      }
+
+      setParsedResults(result.results);
+      setUserDecisions(initialDecisions);
+      setImportFileExtension(result.fileExtension);
+      setShowImportReviewModal(true);
     } catch (error: any) {
       alert('Error parsing file: ' + error.message);
     }
+
+    setUploading(false);
   };
 
   const handleConfirmImport = async () => {
-    if (!selectedFile || !selectedEventId || !profile?.id) return;
+    if (!selectedEventId || !profile?.id) return;
 
     setUploading(true);
 
     try {
-      const result = await competitionResultsApi.importResults(
+      // Build the final results array applying user decisions
+      const finalResults: any[] = [];
+      const resolutions: Record<number, 'skip' | 'replace'> = {};
+
+      for (const item of parsedResults) {
+        const decision = userDecisions[item.index];
+
+        // Skip if user marked as skip
+        if (decision?.skip) {
+          resolutions[item.index] = 'skip';
+          continue;
+        }
+
+        // Check if name match needs confirmation but wasn't decided
+        if (item.nameMatch && decision?.confirmNameMatch === null) {
+          // Skip entries where user didn't confirm name match
+          resolutions[item.index] = 'skip';
+          continue;
+        }
+
+        // Check if missing fields weren't filled
+        if (item.missingFields.length > 0) {
+          const hasMissingWattage = item.missingFields.includes('wattage') && !decision?.wattage;
+          const hasMissingFrequency = item.missingFields.includes('frequency') && !decision?.frequency;
+          if (hasMissingWattage || hasMissingFrequency) {
+            resolutions[item.index] = 'skip';
+            continue;
+          }
+        }
+
+        // Build the result data
+        const resultData = {
+          ...item.data,
+          // Apply name match decision
+          memberID: item.nameMatch && decision?.confirmNameMatch === true
+            ? item.nameMatch.matchedMecaId
+            : item.data.memberID || '999999',
+          // Apply user-provided wattage/frequency
+          wattage: decision?.wattage || item.data.wattage,
+          frequency: decision?.frequency || item.data.frequency,
+        };
+
+        finalResults.push(resultData);
+      }
+
+      if (finalResults.length === 0) {
+        alert('No results to import. All entries were skipped or missing required data.');
+        setUploading(false);
+        return;
+      }
+
+      // Import using the resolution endpoint
+      const result = await competitionResultsApi.importWithResolution(
         selectedEventId,
-        selectedFile,
-        profile.id
+        finalResults,
+        resolutions,
+        profile.id,
+        importFileExtension
       );
 
       let message = result.message;
@@ -389,7 +488,10 @@ export default function ResultsEntryNew() {
       // Clear and refresh
       setSelectedFile(null);
       setPreviewResults([]);
+      setParsedResults([]);
+      setUserDecisions({});
       setShowPreviewModal(false);
+      setShowImportReviewModal(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -417,35 +519,109 @@ export default function ResultsEntryNew() {
       placement: '',
       points_earned: '',
       vehicle_info: '',
+      wattage: '',
+      frequency: '',
       notes: '',
     });
+    setCurrentEntryMembershipStatus('');
   };
 
   const updateField = (field: keyof ResultEntry, value: string) => {
-    const updated = { ...currentEntry, [field]: value };
+    // ALWAYS update the field with the value the user typed
+    const updated: ResultEntry = { ...currentEntry, [field]: value };
 
-    if (field === 'meca_id' && value) {
-      const competitor = competitors.find((c) => c.meca_id === value);
-      if (competitor) {
-        updated.competitor_id = competitor.id;
-        updated.competitor_name = `${competitor.first_name || ''} ${competitor.last_name || ''}`.trim();
-        updated.meca_id = competitor.meca_id || '';
+    // Handle MECA ID field changes
+    if (field === 'meca_id') {
+      if (!value) {
+        // MECA ID was cleared - reset related fields
+        updated.competitor_id = '';
+        updated.competitor_name = '';
+        setCurrentEntryMembershipStatus('');
+      } else if (value.length >= 4 && competitors.length > 0) {
+        // Only do lookup when we have at least 4 characters
+        const normalizedValue = value.trim().toLowerCase();
+        const competitor = competitors.find((c) => {
+          // Convert meca_id to string in case it's a number
+          const profileMecaId = String(c.meca_id || '').trim().toLowerCase();
+          return profileMecaId === normalizedValue;
+        });
+
+        if (competitor) {
+          const membershipStatus = competitor.membership_status || '';
+          setCurrentEntryMembershipStatus(membershipStatus);
+          updated.competitor_id = competitor.id;
+          updated.competitor_name = `${competitor.first_name || ''} ${competitor.last_name || ''}`.trim();
+          // If membership is not active, they don't earn points
+          if (membershipStatus !== 'active') {
+            updated.points_earned = '0';
+          }
+        } else {
+          // MECA ID not found in system
+          setCurrentEntryMembershipStatus('');
+        }
+      } else {
+        // Still typing (less than 4 chars) - just clear status
+        setCurrentEntryMembershipStatus('');
       }
     }
 
+    // Handle competitor_id changes (from dropdown selection)
     if (field === 'competitor_id' && value) {
       const competitor = competitors.find((c) => c.id === value);
       if (competitor) {
         updated.competitor_name = `${competitor.first_name || ''} ${competitor.last_name || ''}`.trim();
-        updated.meca_id = competitor.meca_id || '';
+        updated.meca_id = String(competitor.meca_id || '');
+        const membershipStatus = competitor.membership_status || '';
+        setCurrentEntryMembershipStatus(membershipStatus);
+        if (membershipStatus !== 'active') {
+          updated.points_earned = '0';
+        }
       }
     }
 
-    if (field === 'competitor_name' && value && !updated.competitor_id) {
-      updated.meca_id = '999999';
-      updated.points_earned = '0';
+    // Handle competitor_name field changes
+    if (field === 'competitor_name') {
+      if (!value || value.trim() === '') {
+        // Name was cleared - reset related fields
+        updated.meca_id = '';
+        updated.competitor_id = '';
+        updated.points_earned = '';
+        setCurrentEntryMembershipStatus('');
+      } else if (competitors.length > 0) {
+        // Search for EXACT full name match only
+        const nameLower = value.toLowerCase().trim();
+        const matchingCompetitor = competitors.find((c) => {
+          const fullName = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().trim();
+          return fullName === nameLower;
+        });
+
+        if (matchingCompetitor) {
+          // Found exact match - check membership status
+          const membershipStatus = matchingCompetitor.membership_status || '';
+          setCurrentEntryMembershipStatus(membershipStatus);
+
+          if (membershipStatus === 'active') {
+            // Active member - populate their MECA ID
+            updated.competitor_id = matchingCompetitor.id;
+            updated.meca_id = String(matchingCompetitor.meca_id || '');
+          } else {
+            // Expired membership - keep their actual MECA ID for admin view
+            // but mark as expired (no points)
+            updated.competitor_id = matchingCompetitor.id;
+            updated.meca_id = String(matchingCompetitor.meca_id || '') || '999999';
+            updated.points_earned = '0';
+          }
+        } else {
+          // No exact match found - this is a non-member, use 999999
+          updated.competitor_id = '';
+          updated.meca_id = '999999';
+          updated.points_earned = '0';
+          setCurrentEntryMembershipStatus('');
+        }
+      }
     }
 
+    // Handle class_id changes
     if (field === 'class_id' && value) {
       const selectedClass = competitionClasses.find((c) => c.id === value);
       if (selectedClass) {
@@ -454,11 +630,21 @@ export default function ResultsEntryNew() {
       }
     }
 
-    if (field === 'points_earned' && updated.meca_id === '999999') {
+    // Ensure non-members (999999) don't earn points
+    if (updated.meca_id === '999999') {
       updated.points_earned = '0';
     }
 
     setCurrentEntry(updated);
+  };
+
+  // Check if wattage/frequency is required for this class
+  const isWattageFrequencyRequired = (format: string, className: string): boolean => {
+    if (format !== 'SPL') return false;
+    // Only Dueling Demos classes are exempt from wattage/frequency requirement
+    const exemptClasses = ['dueling demos'];
+    const classLower = className.toLowerCase();
+    return !exemptClasses.some(exempt => classLower.includes(exempt));
   };
 
   const handleSaveManualEntry = async () => {
@@ -470,6 +656,14 @@ export default function ResultsEntryNew() {
     if (!currentEntry.competitor_name || !currentEntry.competition_class || !currentEntry.score) {
       alert('Please fill in all required fields: Competitor, Class, and Score');
       return;
+    }
+
+    // Check wattage/frequency requirement for SPL classes (except Dueling Demos)
+    if (isWattageFrequencyRequired(currentEntry.format, currentEntry.competition_class)) {
+      if (!currentEntry.wattage || !currentEntry.frequency) {
+        alert('Wattage and Frequency are required for SPL classes (except Dueling Demos)');
+        return;
+      }
     }
 
     setSaving(true);
@@ -488,6 +682,8 @@ export default function ResultsEntryNew() {
         placement: parseInt(currentEntry.placement) || 0,
         points_earned: finalPointsEarned,
         vehicle_info: currentEntry.vehicle_info || null,
+        wattage: currentEntry.wattage ? parseInt(currentEntry.wattage.toString()) : null,
+        frequency: currentEntry.frequency ? parseInt(currentEntry.frequency.toString()) : null,
         notes: currentEntry.notes || null,
         created_by: profile!.id,
       };
@@ -538,6 +734,8 @@ export default function ResultsEntryNew() {
         placement: parseInt(editingResult.placement),
         points_earned: finalPointsEarned,
         vehicle_info: editingResult.vehicle_info || null,
+        wattage: editingResult.wattage ? parseInt(editingResult.wattage.toString()) : null,
+        frequency: editingResult.frequency ? parseInt(editingResult.frequency.toString()) : null,
         notes: editingResult.notes || null,
         created_by: profile!.id,
         updated_by: profile!.id,
@@ -783,7 +981,19 @@ export default function ResultsEntryNew() {
             onClick={() => setShowEntrySection(!showEntrySection)}
             className="w-full flex items-center justify-between text-white font-semibold hover:bg-slate-600 p-2 rounded-lg transition-colors"
           >
-            <span className="text-lg">Enter Results for This Event</span>
+            <span className="text-lg flex items-center gap-2">
+              Enter Results for This Event
+              <span
+                className="cursor-help"
+                title="View Results Entry Guide"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open('/docs/ED-Results-Entry-Guide.html', '_blank', 'width=900,height=800');
+                }}
+              >
+                <HelpCircle className="h-5 w-5 text-blue-400 hover:text-blue-300" />
+              </span>
+            </span>
             {showEntrySection ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
           </button>
 
@@ -828,7 +1038,7 @@ export default function ResultsEntryNew() {
               {/* Manual Entry */}
               {entryMethod === 'manual' && (
                 <div className="bg-slate-800 rounded-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-3">
                     <div>
                       <label className="block text-xs text-gray-400 mb-1">MECA ID</label>
                       <input
@@ -840,13 +1050,27 @@ export default function ResultsEntryNew() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Name *</label>
+                      <label className="block text-xs text-gray-400 mb-1">
+                        Name *
+                        {currentEntryMembershipStatus === 'expired' && (
+                          <span className="ml-1 text-red-400">(Expired)</span>
+                        )}
+                        {currentEntryMembershipStatus === 'active' && (
+                          <span className="ml-1 text-green-400">(Active)</span>
+                        )}
+                      </label>
                       <input
                         type="text"
                         value={currentEntry.competitor_name}
                         onChange={(e) => updateField('competitor_name', e.target.value)}
                         placeholder="Competitor"
-                        className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                        className={`w-full px-2 py-1.5 bg-slate-700 border rounded text-sm ${
+                          currentEntryMembershipStatus === 'expired'
+                            ? 'border-red-500 text-red-400'
+                            : currentEntryMembershipStatus === 'active'
+                            ? 'border-green-500 text-white'
+                            : 'border-slate-600 text-white'
+                        }`}
                       />
                     </div>
                     <div>
@@ -872,9 +1096,10 @@ export default function ResultsEntryNew() {
                       >
                         <option value="">Select</option>
                         {competitionClasses
+                          .filter(c => selectedEvent?.season_id ? c.season_id === selectedEvent.season_id : true)
                           .filter(c => currentEntry.format ? c.format === currentEntry.format : true)
                           .map((c) => (
-                            <option key={c.id} value={c.id}>{c.abbreviation}</option>
+                            <option key={c.id} value={c.id}>{c.abbreviation} - {c.name}</option>
                           ))}
                       </select>
                     </div>
@@ -890,12 +1115,26 @@ export default function ResultsEntryNew() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1">Power Wattage</label>
+                      <label className="block text-xs text-gray-400 mb-1">
+                        Wattage (W){isWattageFrequencyRequired(currentEntry.format, currentEntry.competition_class) && <span className="text-orange-400"> *</span>}
+                      </label>
                       <input
-                        type="text"
-                        value={currentEntry.vehicle_info}
-                        onChange={(e) => updateField('vehicle_info', e.target.value)}
-                        placeholder="e.g., Power: 6000W"
+                        type="number"
+                        value={currentEntry.wattage}
+                        onChange={(e) => updateField('wattage', e.target.value)}
+                        placeholder="6000"
+                        className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">
+                        Freq (Hz){isWattageFrequencyRequired(currentEntry.format, currentEntry.competition_class) && <span className="text-orange-400"> *</span>}
+                      </label>
+                      <input
+                        type="number"
+                        value={currentEntry.frequency}
+                        onChange={(e) => updateField('frequency', e.target.value)}
+                        placeholder="45"
                         className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
                       />
                     </div>
@@ -1171,28 +1410,24 @@ export default function ResultsEntryNew() {
                       {renderSortIcon('score')}
                     </div>
                   </th>
-                  {selectedFormat === 'SPL' && (
-                    <>
-                      <th
-                        className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
-                        onClick={() => handleSort('wattage')}
-                      >
-                        <div className="flex items-center">
-                          Wattage
-                          {renderSortIcon('wattage')}
-                        </div>
-                      </th>
-                      <th
-                        className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
-                        onClick={() => handleSort('frequency')}
-                      >
-                        <div className="flex items-center">
-                          Frequency
-                          {renderSortIcon('frequency')}
-                        </div>
-                      </th>
-                    </>
-                  )}
+                  <th
+                    className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
+                    onClick={() => handleSort('wattage')}
+                  >
+                    <div className="flex items-center">
+                      Wattage
+                      {renderSortIcon('wattage')}
+                    </div>
+                  </th>
+                  <th
+                    className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
+                    onClick={() => handleSort('frequency')}
+                  >
+                    <div className="flex items-center">
+                      Freq
+                      {renderSortIcon('frequency')}
+                    </div>
+                  </th>
                   <th
                     className="px-3 py-2 text-left text-xs uppercase cursor-pointer hover:bg-slate-800 transition-colors"
                     onClick={() => handleSort('placement')}
@@ -1234,12 +1469,8 @@ export default function ResultsEntryNew() {
                     <td className="px-3 py-2 text-white">{result.format || '-'}</td>
                     <td className="px-3 py-2 text-white">{result.competition_class || '-'}</td>
                     <td className="px-3 py-2 text-white">{result.score || '-'}</td>
-                    {selectedFormat === 'SPL' && (
-                      <>
-                        <td className="px-3 py-2 text-white">{result.wattage || '-'}</td>
-                        <td className="px-3 py-2 text-white">{result.frequency || '-'}</td>
-                      </>
-                    )}
+                    <td className="px-3 py-2 text-white">{result.wattage || '-'}</td>
+                    <td className="px-3 py-2 text-white">{result.frequency || '-'}</td>
                     <td className="px-3 py-2 text-white font-semibold">{result.placement || '-'}</td>
                     <td className="px-3 py-2 text-orange-400 font-semibold">{result.points_earned || '0'}</td>
                     <td className="px-3 py-2 text-gray-400 text-xs">
@@ -1294,7 +1525,7 @@ export default function ResultsEntryNew() {
                       <span>
                         Entered by: <span className="text-white font-medium">
                           {(() => {
-                            const creator = competitors.find(c => c.id === editingResult.created_by || c.auth_user_id === editingResult.created_by);
+                            const creator = competitors.find(c => c.id === editingResult.created_by || (c as any).auth_user_id === editingResult.created_by);
                             return creator?.email || creator?.first_name || profile?.email || 'Unknown';
                           })()}
                         </span>
@@ -1310,7 +1541,7 @@ export default function ResultsEntryNew() {
                           <span>
                             by: <span className="text-white font-medium">
                               {(() => {
-                                const updater = competitors.find(c => c.id === editingResult.updated_by || c.auth_user_id === editingResult.updated_by);
+                                const updater = competitors.find(c => c.id === editingResult.updated_by || (c as any).auth_user_id === editingResult.updated_by);
                                 return updater?.email || updater?.first_name || 'Unknown';
                               })()}
                             </span>
@@ -1391,9 +1622,10 @@ export default function ResultsEntryNew() {
                   >
                     <option value="">Select</option>
                     {competitionClasses
+                      .filter(c => selectedEvent?.season_id ? c.season_id === selectedEvent.season_id : true)
                       .filter(c => editingResult.format ? c.format === editingResult.format : true)
                       .map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                        <option key={c.id} value={c.id}>{c.abbreviation} - {c.name}</option>
                       ))}
                   </select>
                 </div>
@@ -1408,12 +1640,22 @@ export default function ResultsEntryNew() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Power Wattage</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Wattage (W)</label>
                   <input
-                    type="text"
-                    value={editingResult.vehicle_info}
-                    onChange={(e) => setEditingResult({...editingResult, vehicle_info: e.target.value})}
-                    placeholder="e.g., Power: 6000W"
+                    type="number"
+                    value={editingResult.wattage}
+                    onChange={(e) => setEditingResult({...editingResult, wattage: e.target.value})}
+                    placeholder="e.g., 6000"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Frequency (Hz)</label>
+                  <input
+                    type="number"
+                    value={editingResult.frequency}
+                    onChange={(e) => setEditingResult({...editingResult, frequency: e.target.value})}
+                    placeholder="e.g., 45"
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
                   />
                 </div>
@@ -1508,6 +1750,248 @@ export default function ResultsEntryNew() {
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Review Modal */}
+      {showImportReviewModal && parsedResults.length > 0 && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-800 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800 z-10">
+              <div>
+                <h2 className="text-xl font-bold text-white">Review Import - {selectedFile?.name}</h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  {parsedResults.length} results found •
+                  <span className="text-yellow-400 ml-1">
+                    {parsedResults.filter(r => r.nameMatch && userDecisions[r.index]?.confirmNameMatch === null).length} need name confirmation
+                  </span> •
+                  <span className="text-orange-400 ml-1">
+                    {parsedResults.filter(r => r.missingFields.length > 0).length} need data completion
+                  </span>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImportReviewModal(false);
+                  setParsedResults([]);
+                  setUserDecisions({});
+                  setSelectedFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4">
+              {/* Results Table */}
+              <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-900 text-white sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Name</th>
+                      <th className="px-3 py-2 text-left">Class</th>
+                      <th className="px-3 py-2 text-left">Score</th>
+                      <th className="px-3 py-2 text-left">Wattage</th>
+                      <th className="px-3 py-2 text-left">Freq</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedResults.map((item) => {
+                      const decision = userDecisions[item.index];
+                      const isSkipped = decision?.skip;
+                      const needsNameConfirm = item.nameMatch && decision?.confirmNameMatch === null;
+                      const needsWattage = item.missingFields.includes('wattage') && !decision?.wattage;
+                      const needsFrequency = item.missingFields.includes('frequency') && !decision?.frequency;
+                      const hasIssues = needsNameConfirm || needsWattage || needsFrequency || !item.isValid;
+
+                      return (
+                        <tr
+                          key={item.index}
+                          className={`border-b border-slate-600 ${
+                            isSkipped ? 'bg-slate-900/50 opacity-50' :
+                            hasIssues ? 'bg-yellow-900/20' : 'bg-slate-800'
+                          }`}
+                        >
+                          <td className="px-3 py-2">
+                            <div className="text-white">{item.data.name}</div>
+                            {item.nameMatch && (
+                              <div className="text-xs mt-1">
+                                <span className="text-yellow-400">Match found: </span>
+                                <span className="text-blue-400">{item.nameMatch.matchedName}</span>
+                                <span className="text-gray-400"> (ID: {item.nameMatch.matchedMecaId})</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-white">{item.data.class}</td>
+                          <td className="px-3 py-2 text-white">{item.data.score}</td>
+                          <td className="px-3 py-2">
+                            {item.missingFields.includes('wattage') ? (
+                              <input
+                                type="number"
+                                value={decision?.wattage || ''}
+                                onChange={(e) => setUserDecisions(prev => ({
+                                  ...prev,
+                                  [item.index]: {
+                                    ...prev[item.index],
+                                    wattage: e.target.value ? parseInt(e.target.value) : undefined
+                                  }
+                                }))}
+                                placeholder="Required"
+                                className={`w-20 px-2 py-1 bg-slate-700 border rounded text-white text-sm ${
+                                  needsWattage ? 'border-orange-500' : 'border-slate-600'
+                                }`}
+                                disabled={isSkipped}
+                              />
+                            ) : (
+                              <span className="text-white">{item.data.wattage || '-'}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {item.missingFields.includes('frequency') ? (
+                              <input
+                                type="number"
+                                value={decision?.frequency || ''}
+                                onChange={(e) => setUserDecisions(prev => ({
+                                  ...prev,
+                                  [item.index]: {
+                                    ...prev[item.index],
+                                    frequency: e.target.value ? parseInt(e.target.value) : undefined
+                                  }
+                                }))}
+                                placeholder="Required"
+                                className={`w-20 px-2 py-1 bg-slate-700 border rounded text-white text-sm ${
+                                  needsFrequency ? 'border-orange-500' : 'border-slate-600'
+                                }`}
+                                disabled={isSkipped}
+                              />
+                            ) : (
+                              <span className="text-white">{item.data.frequency || '-'}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {isSkipped ? (
+                              <span className="text-red-400 text-xs">Skipped</span>
+                            ) : !item.isValid ? (
+                              <span className="text-red-400 text-xs">{item.validationErrors.join(', ')}</span>
+                            ) : needsNameConfirm ? (
+                              <span className="text-yellow-400 text-xs">Confirm name match</span>
+                            ) : needsWattage || needsFrequency ? (
+                              <span className="text-orange-400 text-xs">Complete data</span>
+                            ) : (
+                              <span className="text-green-400 text-xs">Ready</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex gap-1 flex-wrap">
+                              {item.nameMatch && !isSkipped && (
+                                <>
+                                  <button
+                                    onClick={() => setUserDecisions(prev => ({
+                                      ...prev,
+                                      [item.index]: { ...prev[item.index], confirmNameMatch: true }
+                                    }))}
+                                    className={`px-2 py-1 rounded text-xs transition-colors ${
+                                      decision?.confirmNameMatch === true
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-slate-600 hover:bg-green-600 text-gray-300 hover:text-white'
+                                    }`}
+                                    title="Use matched MECA ID"
+                                  >
+                                    ✓ Use
+                                  </button>
+                                  <button
+                                    onClick={() => setUserDecisions(prev => ({
+                                      ...prev,
+                                      [item.index]: { ...prev[item.index], confirmNameMatch: false }
+                                    }))}
+                                    className={`px-2 py-1 rounded text-xs transition-colors ${
+                                      decision?.confirmNameMatch === false
+                                        ? 'bg-gray-600 text-white'
+                                        : 'bg-slate-600 hover:bg-gray-600 text-gray-300 hover:text-white'
+                                    }`}
+                                    title="Use as non-member (999999)"
+                                  >
+                                    ✗ Ignore
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                onClick={() => setUserDecisions(prev => ({
+                                  ...prev,
+                                  [item.index]: { ...prev[item.index], skip: !prev[item.index]?.skip }
+                                }))}
+                                className={`px-2 py-1 rounded text-xs transition-colors ${
+                                  isSkipped
+                                    ? 'bg-orange-600 text-white'
+                                    : 'bg-slate-600 hover:bg-red-600 text-gray-300 hover:text-white'
+                                }`}
+                              >
+                                {isSkipped ? 'Unskip' : 'Skip'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary and Actions */}
+              <div className="mt-4 p-3 bg-slate-900 rounded-lg">
+                <div className="flex justify-between items-center text-sm">
+                  <div className="text-gray-300">
+                    <span className="text-green-400 font-semibold">
+                      {parsedResults.filter(r => {
+                        const d = userDecisions[r.index];
+                        if (d?.skip) return false;
+                        if (!r.isValid) return false;
+                        if (r.nameMatch && d?.confirmNameMatch === null) return false;
+                        if (r.missingFields.includes('wattage') && !d?.wattage) return false;
+                        if (r.missingFields.includes('frequency') && !d?.frequency) return false;
+                        return true;
+                      }).length}
+                    </span>
+                    <span className="text-gray-400"> of {parsedResults.length} will be imported</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setShowImportReviewModal(false);
+                        setParsedResults([]);
+                        setUserDecisions({});
+                        setSelectedFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmImport}
+                      disabled={uploading || parsedResults.filter(r => {
+                        const d = userDecisions[r.index];
+                        if (d?.skip) return false;
+                        if (!r.isValid) return false;
+                        if (r.nameMatch && d?.confirmNameMatch === null) return false;
+                        if (r.missingFields.includes('wattage') && !d?.wattage) return false;
+                        if (r.missingFields.includes('frequency') && !d?.frequency) return false;
+                        return true;
+                      }).length === 0}
+                      className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Upload className="h-4 w-4" />
+                      {uploading ? 'Importing...' : 'Import Results'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

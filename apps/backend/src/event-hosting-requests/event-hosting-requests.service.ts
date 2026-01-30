@@ -5,6 +5,7 @@ import { EventHostingRequestMessage } from './event-hosting-request-message.enti
 import { EventHostingRequestStatus, EDAssignmentStatus, FinalApprovalStatus, EventStatus, EventTypeOption, SenderRole, RecipientType, UserRole } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
+import { EventDirector } from '../event-directors/event-director.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventsService } from '../events/events.service';
 
@@ -454,19 +455,29 @@ export class EventHostingRequestsService {
 
   /**
    * Event Director accepts the assignment
+   * Note: eventDirectorId is the ID from the event_directors table,
+   * but assigned_event_director_id in hosting requests stores the user's profile ID
    */
   async edAcceptAssignment(
     requestId: string,
     eventDirectorId: string,
   ): Promise<EventHostingRequest> {
     const em = this.em.fork();
+
+    // Look up the EventDirector to get the user_id (profile ID)
+    const eventDirector = await em.findOne(EventDirector, { id: eventDirectorId }, { populate: ['user'] });
+    if (!eventDirector) {
+      throw new BadRequestException('Event Director not found');
+    }
+    const profileId = eventDirector.user.id;
+
     const request = await em.findOne(EventHostingRequest, { id: requestId });
     if (!request) {
       throw new NotFoundException(`Event hosting request with ID ${requestId} not found`);
     }
 
-    // Verify this ED is assigned to this request
-    if (request.assignedEventDirectorId !== eventDirectorId) {
+    // Verify this ED is assigned to this request (compare with profile ID)
+    if (request.assignedEventDirectorId !== profileId) {
       throw new BadRequestException('You are not assigned to this request');
     }
 
@@ -481,7 +492,7 @@ export class EventHostingRequestsService {
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,
-        fromUser: eventDirectorId,
+        fromUser: profileId,
         title: 'Event Director Accepted Request',
         message: `Event Director has accepted to manage: ${request.eventName}`,
         type: 'info',
@@ -494,6 +505,8 @@ export class EventHostingRequestsService {
 
   /**
    * Event Director rejects the assignment (back to admin)
+   * Note: eventDirectorId is the ID from the event_directors table,
+   * but assigned_event_director_id in hosting requests stores the user's profile ID
    */
   async edRejectAssignment(
     requestId: string,
@@ -501,13 +514,21 @@ export class EventHostingRequestsService {
     reason: string,
   ): Promise<EventHostingRequest> {
     const em = this.em.fork();
+
+    // Look up the EventDirector to get the user_id (profile ID)
+    const eventDirector = await em.findOne(EventDirector, { id: eventDirectorId }, { populate: ['user'] });
+    if (!eventDirector) {
+      throw new BadRequestException('Event Director not found');
+    }
+    const profileId = eventDirector.user.id;
+
     const request = await em.findOne(EventHostingRequest, { id: requestId });
     if (!request) {
       throw new NotFoundException(`Event hosting request with ID ${requestId} not found`);
     }
 
-    // Verify this ED is assigned to this request
-    if (request.assignedEventDirectorId !== eventDirectorId) {
+    // Verify this ED is assigned to this request (compare with profile ID)
+    if (request.assignedEventDirectorId !== profileId) {
       throw new BadRequestException('You are not assigned to this request');
     }
 
@@ -523,7 +544,7 @@ export class EventHostingRequestsService {
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,
-        fromUser: eventDirectorId,
+        fromUser: profileId,
         title: 'Event Director Declined Request',
         message: `Event Director has declined to manage: ${request.eventName}. Reason: ${reason}`,
         type: 'alert',
@@ -785,13 +806,25 @@ export class EventHostingRequestsService {
 
   /**
    * Find requests assigned to an Event Director
+   * Note: eventDirectorId is the ID from the event_directors table,
+   * but assigned_event_director_id in hosting requests stores the user's profile ID
    */
   async findByEventDirector(
     eventDirectorId: string,
     status?: EventHostingRequestStatus,
   ): Promise<EventHostingRequest[]> {
     const em = this.em.fork();
-    const where: any = { assignedEventDirector: eventDirectorId };
+
+    // Look up the EventDirector to get the user_id (profile ID)
+    const eventDirector = await em.findOne(EventDirector, { id: eventDirectorId }, { populate: ['user'] });
+    if (!eventDirector) {
+      // If no EventDirector found, return empty array
+      return [];
+    }
+
+    // Use the user_id (profile ID) to query hosting requests
+    const profileId = eventDirector.user.id;
+    const where: any = { assignedEventDirector: profileId };
     if (status) {
       where.status = status;
     }
@@ -804,6 +837,8 @@ export class EventHostingRequestsService {
 
   /**
    * Get stats for Event Director dashboard
+   * Note: eventDirectorId is the ID from the event_directors table,
+   * but assigned_event_director_id in hosting requests stores the user's profile ID
    */
   async getEventDirectorStats(eventDirectorId: string): Promise<{
     assigned: number;
@@ -811,14 +846,22 @@ export class EventHostingRequestsService {
     accepted: number;
   }> {
     const em = this.em.fork();
+
+    // Look up the EventDirector to get the user_id (profile ID)
+    const eventDirector = await em.findOne(EventDirector, { id: eventDirectorId }, { populate: ['user'] });
+    if (!eventDirector) {
+      return { assigned: 0, pendingReview: 0, accepted: 0 };
+    }
+
+    const profileId = eventDirector.user.id;
     const [assigned, pendingReview, accepted] = await Promise.all([
-      em.count(EventHostingRequest, { assignedEventDirector: eventDirectorId }),
+      em.count(EventHostingRequest, { assignedEventDirector: profileId }),
       em.count(EventHostingRequest, {
-        assignedEventDirector: eventDirectorId,
+        assignedEventDirector: profileId,
         edStatus: EDAssignmentStatus.PENDING_REVIEW,
       }),
       em.count(EventHostingRequest, {
-        assignedEventDirector: eventDirectorId,
+        assignedEventDirector: profileId,
         edStatus: EDAssignmentStatus.ACCEPTED,
       }),
     ]);

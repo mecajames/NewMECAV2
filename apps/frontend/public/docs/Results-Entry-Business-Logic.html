@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results Entry Business Logic - MECA Documentation</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      color: #f97316;
+      font-size: 2rem;
+    }
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 40px;
+    }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #f97316;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .section {
+      background: #334155;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    h2 {
+      color: #f97316;
+      font-size: 1.4rem;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #475569;
+    }
+    h3 {
+      color: #22c55e;
+      font-size: 1.1rem;
+      margin: 16px 0 12px 0;
+    }
+    p {
+      margin-bottom: 12px;
+    }
+    ul, ol {
+      margin-left: 24px;
+      margin-bottom: 12px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .highlight {
+      background: #475569;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #f97316;
+    }
+    .status-box {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin: 4px;
+    }
+    .status-active {
+      background: #22c55e;
+      color: #052e16;
+    }
+    .status-expired {
+      background: #ef4444;
+      color: #fff;
+    }
+    .status-none {
+      background: #6b7280;
+      color: #fff;
+    }
+    .code-block {
+      background: #1e293b;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .flow-diagram {
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .flow-number {
+      background: #f97316;
+      color: #fff;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .arrow {
+      text-align: center;
+      color: #f97316;
+      font-size: 1.5rem;
+      margin: 8px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #475569;
+    }
+    th {
+      background: #475569;
+      color: #f97316;
+    }
+    tr:nth-child(even) {
+      background: #3d4f63;
+    }
+    .warning {
+      background: #7c2d12;
+      border-left-color: #ef4444;
+    }
+    .info {
+      background: #1e3a5f;
+      border-left-color: #3b82f6;
+    }
+    .success {
+      background: #14532d;
+      border-left-color: #22c55e;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Documentation Index</a>
+
+    <h1>Results Entry Business Logic</h1>
+    <p class="subtitle">Competition Results Entry - MECA ID Lookup and Membership Validation</p>
+
+    <div class="section">
+      <h2>Overview</h2>
+      <p>
+        The Competition Results Entry system allows administrators and event directors to record
+        competition results for MECA events. The system includes automatic member lookup,
+        membership status validation, and points eligibility determination.
+      </p>
+
+      <div class="highlight">
+        <strong>Key Principle:</strong> Only competitors with <span class="status-box status-active">Active</span>
+        memberships can earn competition points. Competitors with
+        <span class="status-box status-expired">Expired</span> memberships or
+        <span class="status-box status-none">Non-Members</span> can compete but will not receive points.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Entry Methods</h2>
+      <p>Results can be entered through three methods:</p>
+      <ol>
+        <li><strong>Manual Entry</strong> - Individual results entered one at a time</li>
+        <li><strong>Excel Import</strong> - Bulk import from Excel spreadsheet template</li>
+        <li><strong>TermLab Import</strong> - Import from TermLab (.tlab) export files</li>
+      </ol>
+    </div>
+
+    <div class="section">
+      <h2>MECA ID Lookup Logic</h2>
+      <p>When a MECA ID is entered in the results form:</p>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div>User types MECA ID in the input field (accepts unlimited characters)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div>Once 4+ characters are entered, system searches all member profiles for exact MECA ID match</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div>If found, system retrieves member's name and membership status</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">4</span>
+          <div>Name field is auto-populated with visual indicator of membership status</div>
+        </div>
+      </div>
+
+      <h3>Membership Status Outcomes (MECA ID Lookup)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Membership Status</th>
+            <th>Name Field Appearance</th>
+            <th>Points Eligibility</th>
+            <th>MECA ID Used</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-box status-active">Active</span></td>
+            <td>White text, green border, "(Active)" label</td>
+            <td>Eligible for points</td>
+            <td>Member's actual MECA ID</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-expired">Expired</span></td>
+            <td>Red text, red border, "(Expired)" label</td>
+            <td>NOT eligible - 0 points</td>
+            <td>Member's actual MECA ID</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-none">Not Found</span></td>
+            <td>Normal white text (name not auto-populated)</td>
+            <td>NOT eligible - 0 points</td>
+            <td>Entered ID kept as-is</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Name Lookup Logic</h2>
+      <p>When a name is entered (instead of MECA ID):</p>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <span class="flow-number">1</span>
+          <div>User enters competitor name (e.g., "John Smith")</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">2</span>
+          <div>System searches for profiles with <strong>EXACT full name match</strong> (first + last name must match exactly, case-insensitive)</div>
+        </div>
+        <div class="arrow">&darr;</div>
+        <div class="flow-step">
+          <span class="flow-number">3</span>
+          <div>If exact match found → check membership status and populate MECA ID</div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-number">3b</span>
+          <div>If NO exact match found → MECA ID set to <strong>999999</strong> (non-member)</div>
+        </div>
+      </div>
+
+      <h3>Name Lookup Outcomes</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Search Result</th>
+            <th>Admin/ED View MECA ID</th>
+            <th>Public Results View</th>
+            <th>Points Eligibility</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Found with <span class="status-box status-active">Active</span> membership</td>
+            <td>Member's actual MECA ID (e.g., "202401")</td>
+            <td>Member's actual MECA ID</td>
+            <td>Eligible for points</td>
+          </tr>
+          <tr>
+            <td>Found with <span class="status-box status-expired">Expired</span> membership</td>
+            <td>Member's actual MECA ID <strong style="color: #ef4444;">(name in RED)</strong></td>
+            <td><strong>999999</strong> (displayed as non-member)</td>
+            <td>NOT eligible - 0 points</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-none">Not found in system</span></td>
+            <td><strong>999999</strong> (non-member code)</td>
+            <td><strong>999999</strong></td>
+            <td>NOT eligible - 0 points</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="highlight warning">
+        <strong>Important - Expired Member Handling:</strong>
+        <ul style="margin-top: 8px;">
+          <li><strong>Admin/ED Results Entry:</strong> Expired members keep their actual MECA ID stored in the system, but their name is highlighted in RED to indicate expired status.</li>
+          <li><strong>Public Results Display:</strong> Expired member MECA IDs are replaced with 999999 to appear as non-members to the public.</li>
+          <li><strong>Points:</strong> Expired members receive 0 points regardless of placement, same as non-members.</li>
+        </ul>
+      </div>
+
+      <div class="highlight success">
+        <strong>Name Matching Rules:</strong>
+        <ul style="margin-top: 8px;">
+          <li>Match is <strong>case-insensitive</strong> ("john smith" = "John Smith")</li>
+          <li>Match requires <strong>EXACT full name</strong> (first + last)</li>
+          <li>"James" alone will NOT match "James Ryan"</li>
+          <li>"Ryan" alone will NOT match "James Ryan"</li>
+          <li>"James Ryans" will NOT match "James Ryan" (extra character)</li>
+          <li>If no exact match → MECA ID automatically set to 999999</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Field Clearing Behavior</h2>
+      <p>When fields are cleared or modified:</p>
+
+      <h3>Clearing MECA ID Field</h3>
+      <ul>
+        <li>Completely clearing the MECA ID field resets the Name and Competitor ID fields</li>
+        <li>Membership status indicator is cleared</li>
+      </ul>
+
+      <h3>Clearing Name Field</h3>
+      <ul>
+        <li>Completely clearing the Name field resets the MECA ID, Competitor ID, and Points fields</li>
+        <li>Membership status indicator is cleared</li>
+      </ul>
+
+      <h3>Modifying Name (No Match)</h3>
+      <ul>
+        <li>If the name is modified and no longer matches any member exactly, MECA ID is set to <strong>999999</strong></li>
+        <li>Points are set to 0</li>
+        <li>Example: "James Ryan" (valid) → "James Ryans" (no match) → MECA ID becomes 999999</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Visual Indicators</h2>
+      <p>The Name input field provides visual feedback about membership status:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Label Text</th>
+            <th>Border Color</th>
+            <th>Text Color</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-box status-active">Active</span></td>
+            <td>"Name * (Active)"</td>
+            <td>Green (#22c55e)</td>
+            <td>White</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-expired">Expired</span></td>
+            <td>"Name * (Expired)"</td>
+            <td>Red (#ef4444)</td>
+            <td>Red (#f87171)</td>
+          </tr>
+          <tr>
+            <td><span class="status-box status-none">Unknown/None</span></td>
+            <td>"Name *"</td>
+            <td>Default gray</td>
+            <td>White</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Non-Member Code: 999999</h2>
+      <p>The MECA ID <code>999999</code> is a special code that indicates:</p>
+      <ul>
+        <li>The competitor is not a MECA member</li>
+        <li>The competitor has an expired membership (in public view)</li>
+        <li>The competitor could not be found in the member database</li>
+        <li>The entered name does not exactly match any member</li>
+      </ul>
+
+      <div class="highlight info">
+        <strong>Points Rule:</strong> Any result with MECA ID <code>999999</code> will automatically
+        have points set to 0, regardless of placement. This is enforced both during entry and
+        during the points recalculation process.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Points Calculation</h2>
+      <p>Points are awarded based on placement within each class, but only to eligible members:</p>
+
+      <h3>Standard Events (1X Points)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Placement</th>
+            <th>Points (Active Member)</th>
+            <th>Points (Expired/Non-Member)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1st Place</td><td>5 points</td><td>0 points</td></tr>
+          <tr><td>2nd Place</td><td>4 points</td><td>0 points</td></tr>
+          <tr><td>3rd Place</td><td>3 points</td><td>0 points</td></tr>
+          <tr><td>4th Place</td><td>2 points</td><td>0 points</td></tr>
+          <tr><td>5th Place</td><td>1 point</td><td>0 points</td></tr>
+          <tr><td>6th+ Place</td><td>0 points</td><td>0 points</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Multiplier Events (2X, 3X, 4X)</h3>
+      <p>Special events may have point multipliers. For example, a 3X event awards:</p>
+      <ul>
+        <li>1st Place: 15 points (5 x 3)</li>
+        <li>2nd Place: 12 points (4 x 3)</li>
+        <li>3rd Place: 9 points (3 x 3)</li>
+        <li>4th Place: 6 points (2 x 3)</li>
+        <li>5th Place: 3 points (1 x 3)</li>
+      </ul>
+
+      <p>Championship events (4X) use a special structure: 20, 19, 18, 17, 16 for top 5 placements.</p>
+    </div>
+
+    <div class="section">
+      <h2>Available In</h2>
+      <p>The results entry functionality is available in two locations:</p>
+      <ul>
+        <li><strong>Admin Dashboard</strong> - Competition Results Entry page (<code>/dashboard/admin</code> &rarr; Results)</li>
+        <li><strong>Event Director Dashboard</strong> - Event Management page &rarr; Enter Results tab</li>
+      </ul>
+      <p>Both locations use the same business logic for MECA ID lookup and membership validation.</p>
+    </div>
+
+    <div class="section">
+      <h2>Technical Implementation</h2>
+
+      <h3>Frontend Components</h3>
+      <ul>
+        <li><code>ResultsEntryNew.tsx</code> - Admin results entry component (<code>updateField</code> function)</li>
+        <li><code>EDEventManagementPage.tsx</code> - Event Director results entry (<code>handleMecaIdChange</code>, <code>handleNameChange</code> functions)</li>
+      </ul>
+
+      <h3>Key Functions - MECA ID Lookup</h3>
+      <div class="code-block">
+// When user types in MECA ID field:
+1. ALWAYS update meca_id to whatever user typed (no restrictions)
+2. If length >= 4 characters AND competitors loaded:
+   - Search for exact match: String(c.meca_id).toLowerCase() === input.toLowerCase()
+   - If found: populate name, set membership status indicator
+   - If not found: leave name empty, clear status
+3. If length < 4: just clear status indicator
+4. If field cleared: reset name, competitor_id, and status
+      </div>
+
+      <h3>Key Functions - Name Lookup</h3>
+      <div class="code-block">
+// When user types in Name field:
+1. ALWAYS update name to whatever user typed
+2. If name cleared: reset meca_id, competitor_id, points, status
+3. If competitors loaded:
+   - Search for EXACT full name match (case-insensitive)
+   - Match: `${first_name} ${last_name}`.toLowerCase() === input.toLowerCase()
+
+   If EXACT match found:
+     - Active member: populate their actual MECA ID
+     - Expired member: populate actual MECA ID, set points to 0
+
+   If NO match found:
+     - Set MECA ID to "999999"
+     - Set points to 0
+      </div>
+
+      <h3>Data Type Note</h3>
+      <div class="highlight info">
+        <strong>Technical Note:</strong> MECA IDs are stored as numbers in the database but are converted to strings
+        for comparison using <code>String(meca_id)</code>. This ensures proper matching regardless of how the
+        ID was stored or entered.
+      </div>
+
+      <h3>Backend Validation</h3>
+      <p>The backend also validates membership status during:</p>
+      <ul>
+        <li>Result creation (<code>competition-results.service.ts</code>)</li>
+        <li>Points recalculation (<code>recalculatePoints</code> endpoint)</li>
+        <li>Excel/TermLab file import</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Troubleshooting</h2>
+
+      <h3>MECA ID Not Finding Member</h3>
+      <ul>
+        <li>Ensure the MECA ID is at least 4 characters long (lookup starts at 4 chars)</li>
+        <li>Ensure the MECA ID is entered correctly (check for typos)</li>
+        <li>Verify the member exists in the system</li>
+        <li>Wait for profiles to load (may take a moment on first page load)</li>
+        <li>MECA ID comparison is case-insensitive</li>
+      </ul>
+
+      <h3>Name Search Not Working</h3>
+      <ul>
+        <li>Name search is <strong>case-insensitive</strong></li>
+        <li>Search requires <strong>EXACT full name match</strong> (first + last name)</li>
+        <li>First name only or last name only will NOT match</li>
+        <li>Partial matches are NOT supported (e.g., "James Rya" won't match "James Ryan")</li>
+        <li>Extra characters break the match (e.g., "James Ryans" won't match "James Ryan")</li>
+        <li>If no exact match is found, the MECA ID will be set to 999999</li>
+      </ul>
+
+      <h3>MECA ID Shows 999999 Unexpectedly</h3>
+      <ul>
+        <li>This happens when the entered name doesn't exactly match any member</li>
+        <li>Check spelling carefully - even one extra or missing character causes 999999</li>
+        <li>Try entering the MECA ID directly instead of the name</li>
+      </ul>
+
+      <h3>Fields Not Clearing Properly</h3>
+      <ul>
+        <li>Fully clear the field (delete all characters) to reset related fields</li>
+        <li>Partial text will trigger lookups and may set 999999 if no match</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Quick Reference Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Enter valid MECA ID (active member)</td>
+            <td>Name populated, green indicator, points eligible</td>
+          </tr>
+          <tr>
+            <td>Enter valid MECA ID (expired member)</td>
+            <td>Name populated in RED, red indicator, 0 points</td>
+          </tr>
+          <tr>
+            <td>Enter invalid/unknown MECA ID</td>
+            <td>Name not populated, no indicator</td>
+          </tr>
+          <tr>
+            <td>Enter exact name (active member)</td>
+            <td>MECA ID populated, green indicator, points eligible</td>
+          </tr>
+          <tr>
+            <td>Enter exact name (expired member)</td>
+            <td>Actual MECA ID populated, RED indicator, 0 points</td>
+          </tr>
+          <tr>
+            <td>Enter name with no exact match</td>
+            <td>MECA ID set to 999999, 0 points</td>
+          </tr>
+          <tr>
+            <td>Clear MECA ID field</td>
+            <td>Name and competitor ID cleared</td>
+          </tr>
+          <tr>
+            <td>Clear Name field</td>
+            <td>MECA ID, competitor ID, and points cleared</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="text-align: center; margin-top: 40px; color: #64748b;">
+      Last updated: January 20, 2026
+    </p>
+  </div>
+</body>
+</html>

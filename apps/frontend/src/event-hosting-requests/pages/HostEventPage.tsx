@@ -5,7 +5,8 @@ import { ReCaptchaV2Widget } from '@/shared';
 import type { ReCaptchaV2Ref } from '@/shared';
 import { recaptchaApi } from '@/recaptcha';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
-import { competitionFormatsApi, CompetitionFormat } from '@/competition-formats';
+import { CompetitionFormat } from '@/competition-formats';
+import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 
 const ADDITIONAL_SERVICES_OPTIONS = [
   'Staffing',
@@ -54,6 +55,7 @@ const INDOOR_OUTDOOR_OPTIONS = [
 ];
 
 export default function HostEventPage() {
+  const seoProps = useStaticPageSEO('hostEvent');
   const [competitionFormats, setCompetitionFormats] = useState<CompetitionFormat[]>([]);
   const [formData, setFormData] = useState({
     // Host Information
@@ -359,10 +361,12 @@ export default function HostEventPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold text-white mb-4">Host a MECA Event</h1>
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
+        <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h1 className="text-5xl font-bold text-white mb-4">Host a MECA Event</h1>
           <p className="text-xl text-white/90 max-w-3xl mx-auto">
             Partner with MECA to bring exciting car audio competitions to your location
           </p>
@@ -1335,9 +1339,10 @@ export default function HostEventPage() {
               </a>{' '}
               apply.
             </p>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

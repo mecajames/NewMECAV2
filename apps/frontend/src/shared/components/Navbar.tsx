@@ -1,15 +1,18 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, ClipboardList, Shield, ShoppingBag } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '@/notifications';
+import { CartIcon } from '@/shop/components/CartIcon';
 
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
+  const [membersMenuOpen, setMembersMenuOpen] = useState(false);
+  const [resultsMenuOpen, setResultsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
@@ -64,6 +67,9 @@ export default function Navbar() {
     if (path.startsWith('/leaderboard')) return 'leaderboard';
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/members')) return 'members';
+    if (path.startsWith('/teams')) return 'teams';
+    if (path === '/shop' || path.startsWith('/shop/products')) return 'shop';
+    if (path.startsWith('/shop/')) return 'cart'; // cart/checkout/orders - no nav highlight
     if (path.startsWith('/dashboard')) return 'dashboard';
     if (path.startsWith('/membership')) return 'membership';
     if (path.startsWith('/login')) return 'login';
@@ -73,13 +79,11 @@ export default function Navbar() {
 
   const currentPage = getCurrentPage();
 
+  // Results and Members dropdowns are handled separately
   const navItems = [
     { id: 'home', label: 'Home', icon: null, path: '/' },
     { id: 'events', label: 'Events', icon: Calendar, path: '/events' },
-    { id: 'results', label: 'Results', icon: Trophy, path: '/results' },
-    { id: 'standings', label: 'Standings', icon: Award, path: '/standings' },
-    { id: 'leaderboard', label: 'Top 10', icon: Trophy, path: '/leaderboard' },
-    { id: 'members', label: 'Members', icon: Users, path: '/members' },
+    { id: 'shop', label: 'MECA Shop', icon: ShoppingBag, path: '/shop' },
   ];
 
   const groupedRulebooks = activeRulebooks.reduce((acc, rulebook) => {
@@ -95,7 +99,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div
-            className="flex items-center cursor-pointer"
+            className="flex items-center cursor-pointer flex-shrink-0"
             onClick={() => navigate('/')}
           >
             <img
@@ -121,6 +125,107 @@ export default function Navbar() {
               </button>
             ))}
 
+            {/* Results Dropdown */}
+            <div className="relative"
+              onMouseEnter={() => setResultsMenuOpen(true)}
+              onMouseLeave={() => setResultsMenuOpen(false)}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === 'results' || currentPage === 'standings' || currentPage === 'leaderboard'
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Trophy className="h-4 w-4" />
+                Results
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {resultsMenuOpen && (
+                <div className="absolute top-full left-0 mt-0 pt-2 w-56">
+                  <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                    <button
+                      onClick={() => {
+                        navigate('/results');
+                        setResultsMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Trophy className="h-4 w-4" />
+                      Competition Results
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/standings');
+                        setResultsMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Award className="h-4 w-4" />
+                      Standings
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/leaderboard');
+                        setResultsMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Trophy className="h-4 w-4" />
+                      Top 10
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Members Dropdown */}
+            <div className="relative"
+              onMouseEnter={() => setMembersMenuOpen(true)}
+              onMouseLeave={() => setMembersMenuOpen(false)}
+            >
+              <button
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === 'members' || currentPage === 'teams'
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                Members
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {membersMenuOpen && (
+                <div className="absolute top-full left-0 mt-0 pt-2 w-56">
+                  <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                    <button
+                      onClick={() => {
+                        navigate('/members');
+                        setMembersMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Users className="h-4 w-4" />
+                      Members Directory
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/teams');
+                        setMembersMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Shield className="h-4 w-4" />
+                      Teams Directory
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Rulebooks Dropdown */}
             <div className="relative"
               onMouseEnter={() => setRulebooksMenuOpen(true)}
               onMouseLeave={() => setRulebooksMenuOpen(false)}
@@ -191,6 +296,9 @@ export default function Navbar() {
 
             {user ? (
               <div className="flex items-center gap-3">
+                {/* Cart Icon */}
+                <CartIcon />
+
                 <button
                   onClick={() => navigate('/dashboard')}
                   className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
@@ -258,7 +366,9 @@ export default function Navbar() {
                               onClick={() => {
                                 handleMarkNotificationRead(notification.id);
                                 if (notification.link) {
-                                  navigate(`/${notification.link}`);
+                                  // If link is "dashboard", navigate to mymeca dashboard overview tab instead of letting it redirect
+                                  const targetPath = notification.link === 'dashboard' ? '/dashboard/mymeca?tab=overview' : `/${notification.link}`;
+                                  navigate(targetPath);
                                   setNotificationsOpen(false);
                                 }
                               }}
@@ -324,6 +434,18 @@ export default function Navbar() {
                             My MECA
                           </div>
                         </button>
+                        <button
+                          onClick={() => {
+                            navigate('/my-registrations');
+                            setUserMenuOpen(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <ClipboardList className="h-4 w-4" />
+                            My Registrations
+                          </div>
+                        </button>
                         {profile?.role === 'admin' && (
                           <button
                             onClick={() => {
@@ -368,6 +490,8 @@ export default function Navbar() {
               </div>
             ) : (
               <div className="flex items-center gap-4">
+                {/* Cart Icon for non-logged in users */}
+                <CartIcon />
                 <button
                   onClick={() => navigate('/login')}
                   className="px-4 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition-colors"
@@ -416,6 +540,82 @@ export default function Navbar() {
               </button>
             ))}
 
+            {/* Results Section */}
+            <button
+              onClick={() => {
+                navigate('/results');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'results'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Trophy className="h-5 w-5" />
+              Competition Results
+            </button>
+            <button
+              onClick={() => {
+                navigate('/standings');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'standings'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Award className="h-5 w-5" />
+              Standings
+            </button>
+            <button
+              onClick={() => {
+                navigate('/leaderboard');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'leaderboard'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Trophy className="h-5 w-5" />
+              Top 10
+            </button>
+
+            {/* Members Directory */}
+            <button
+              onClick={() => {
+                navigate('/members');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'members'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Users className="h-5 w-5" />
+              Members Directory
+            </button>
+
+            {/* Teams Directory */}
+            <button
+              onClick={() => {
+                navigate('/teams');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'teams'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Shield className="h-5 w-5" />
+              Teams Directory
+            </button>
+
             {user ? (
               <>
                 <button
@@ -431,6 +631,16 @@ export default function Navbar() {
                 >
                   <User className="h-5 w-5" />
                   My MECA
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/my-registrations');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+                >
+                  <ClipboardList className="h-5 w-5" />
+                  My Registrations
                 </button>
                 {profile?.role === 'admin' && (
                   <button

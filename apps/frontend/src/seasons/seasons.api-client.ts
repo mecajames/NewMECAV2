@@ -8,6 +8,7 @@ export interface Season {
   endDate: string;
   isCurrent: boolean;
   isNext: boolean;
+  qualificationPointsThreshold?: number | null;
   createdAt: string;
   updatedAt: string;
   // Frontend expects snake_case for compatibility
@@ -15,6 +16,7 @@ export interface Season {
   end_date?: string;
   is_current?: boolean;
   is_next?: boolean;
+  qualification_points_threshold?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -84,6 +86,7 @@ export const seasonsApi = {
     end_date: string;
     is_current?: boolean;
     is_next?: boolean;
+    qualification_points_threshold?: number | null;
   }): Promise<Season> => {
     const response = await fetch(`${API_BASE_URL}/api/seasons`, {
       method: 'POST',
@@ -97,6 +100,7 @@ export const seasonsApi = {
         end_date: data.end_date,
         is_current: data.is_current || false,
         is_next: data.is_next || false,
+        qualification_points_threshold: data.qualification_points_threshold,
       }),
     });
     if (!response.ok) {
@@ -118,6 +122,7 @@ export const seasonsApi = {
       end_date?: string;
       is_current?: boolean;
       is_next?: boolean;
+      qualification_points_threshold?: number | null;
     }
   ): Promise<Season> => {
     const response = await fetch(`${API_BASE_URL}/api/seasons/${id}`, {
@@ -131,6 +136,7 @@ export const seasonsApi = {
         end_date: data.end_date,
         is_current: data.is_current,
         is_next: data.is_next,
+        qualification_points_threshold: data.qualification_points_threshold,
       }),
     });
     if (!response.ok) {

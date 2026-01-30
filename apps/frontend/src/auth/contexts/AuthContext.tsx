@@ -1,19 +1,24 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { User, Session, Provider } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/lib/supabase';
 import { setAxiosUserId } from '@/lib/axios';
+import { profilesApi } from '@/profiles';
 
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   session: Session | null;
   loading: boolean;
+  forcePasswordChange: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any; data: any }>;
+  signInWithOAuth: (provider: Provider) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<{ error: any }>;
   resetPassword: (email: string) => Promise<{ error: any }>;
+  clearForcePasswordChange: () => Promise<void>;
+  ensureProfileExists: (user: User) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [forcePasswordChange, setForcePasswordChange] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -39,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Add computed full_name field for backward compatibility
     if (data) {
       data.full_name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+      // Check if user needs to change password
+      setForcePasswordChange(data.force_password_change === true);
     }
 
     return data;
@@ -129,6 +137,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null, data };
   };
 
+  const signInWithOAuth = async (provider: Provider) => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    return { error };
+  };
+
+  const ensureProfileExists = async (authUser: User) => {
+    // Check if profile already exists
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    if (existingProfile) {
+      // Profile exists, just refresh it
+      const profileData = await fetchProfile(authUser.id);
+      setProfile(profileData);
+      return;
+    }
+
+    // Create profile for new OAuth user
+    const { data: mecaIdData } = await supabase.rpc('generate_meca_id');
+    const mecaId = mecaIdData || 700800;
+
+    // Extract name from OAuth metadata
+    const fullName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || '';
+    const nameParts = fullName.split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: authUser.id,
+        email: authUser.email,
+        first_name: firstName,
+        last_name: lastName,
+        meca_id: mecaId,
+        role: 'user',
+        membership_status: 'none',
+      });
+
+    if (profileError) {
+      console.error('Error creating profile for OAuth user:', profileError);
+      return;
+    }
+
+    // Fetch the newly created profile
+    const profileData = await fetchProfile(authUser.id);
+    setProfile(profileData);
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -168,6 +234,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  const clearForcePasswordChange = async () => {
+    if (user) {
+      try {
+        await profilesApi.clearForcePasswordChange(user.id);
+        setForcePasswordChange(false);
+        // Refresh profile to get updated data
+        await refreshProfile();
+      } catch (error) {
+        console.error('Error clearing force password change:', error);
+      }
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -175,12 +254,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         session,
         loading,
+        forcePasswordChange,
         signIn,
         signUp,
+        signInWithOAuth,
         signOut,
         refreshProfile,
         updatePassword,
         resetPassword,
+        clearForcePasswordChange,
+        ensureProfileExists,
       }}
     >
       {children}

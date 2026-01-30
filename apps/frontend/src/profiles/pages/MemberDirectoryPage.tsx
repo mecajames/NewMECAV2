@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Search, Car, Music, User, Trophy, Award } from 'lucide-react';
+import { Users, Search, Car, Music, User, Award } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
+import { SEOHead, useMemberDirectorySEO } from '@/shared/seo';
+import { Pagination } from '@/shared/components';
 
 export default function MemberDirectoryPage() {
   const navigate = useNavigate();
@@ -9,6 +11,11 @@ export default function MemberDirectoryPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const seoProps = useMemberDirectorySEO();
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [membersPerPage, setMembersPerPage] = useState(50);
 
   useEffect(() => {
     fetchPublicProfiles();
@@ -27,25 +34,51 @@ export default function MemberDirectoryPage() {
     }
   };
 
-  const filteredProfiles = profiles.filter(profile => {
-    const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.toLowerCase();
-    const mecaId = profile.meca_id?.toLowerCase() || '';
-    const vehicle = profile.vehicle_info?.toLowerCase() || '';
-    const search = searchTerm.toLowerCase();
+  const filteredProfiles = useMemo(() => {
+    // Only show active members
+    let result = profiles.filter(profile => profile.membership_status === 'active');
 
-    return fullName.includes(search) || mecaId.includes(search) || vehicle.includes(search);
-  });
+    // Filter by search term
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      result = result.filter(profile => {
+        const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.toLowerCase();
+        const mecaId = String(profile.meca_id || '').toLowerCase();
+        const vehicle = (profile.vehicle_info || '').toLowerCase();
+        return fullName.includes(search) || mecaId.includes(search) || vehicle.includes(search);
+      });
+    }
+
+    return result;
+  }, [profiles, searchTerm]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Paginated profiles
+  const totalPages = Math.ceil(filteredProfiles.length / membersPerPage);
+  const paginatedProfiles = useMemo(() => {
+    const startIndex = (currentPage - 1) * membersPerPage;
+    return filteredProfiles.slice(startIndex, startIndex + membersPerPage);
+  }, [filteredProfiles, currentPage, membersPerPage]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-      </div>
+      <>
+        <SEOHead {...seoProps} />
+        <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <>
+      <SEOHead {...seoProps} />
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -78,25 +111,31 @@ export default function MemberDirectoryPage() {
         {/* Stats */}
         <div className="mb-8">
           <p className="text-gray-400">
-            Showing {filteredProfiles.length} of {profiles.length} public profiles
+            Showing {filteredProfiles.length} active members
           </p>
         </div>
 
         {/* Profile Grid */}
-        {filteredProfiles.length > 0 ? (
+        {paginatedProfiles.length > 0 ? (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProfiles.map((profile) => (
+            {paginatedProfiles.map((profile) => (
               <div
                 key={profile.id}
                 className="bg-slate-800 rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow"
               >
                 {/* Profile Header with Image */}
                 <div className="relative h-48 bg-gradient-to-br from-slate-700 to-slate-800">
-                  {profile.profile_picture_url ? (
+                  {(profile.profile_picture_url || profile.profile_images?.[0]) ? (
                     <img
-                      src={profile.profile_picture_url}
+                      src={profile.profile_picture_url || profile.profile_images?.[0]}
                       alt={`${profile.first_name}'s profile`}
                       className="w-full h-full object-cover"
+                      style={{
+                        objectPosition: profile.cover_image_position
+                          ? `${profile.cover_image_position.x}% ${profile.cover_image_position.y}%`
+                          : '50% 50%'
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -189,6 +228,19 @@ export default function MemberDirectoryPage() {
               </div>
             ))}
           </div>
+
+          {/* Pagination */}
+          <div className="mt-6 rounded-xl overflow-hidden">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              itemsPerPage={membersPerPage}
+              totalItems={filteredProfiles.length}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setMembersPerPage}
+            />
+          </div>
+          </>
         ) : (
           <div className="text-center py-16">
             <Users className="h-16 w-16 text-gray-600 mx-auto mb-4" />
@@ -201,6 +253,7 @@ export default function MemberDirectoryPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp } from 'lucide-react';
-import { eventsApi, Event } from '@/events';
-import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
-import { useAuth } from '@/auth';
+import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn, ArrowLeft, Star } from 'lucide-react';
+import { eventsApi, Event, EventAssignmentManager } from '@/events';
+import { eventRegistrationsApi } from '@/event-registrations';
+import { useAuth, usePermissions } from '@/auth';
+import { EventRatingsPanel } from '@/ratings';
+import { ratingsApi } from '@/api-client/ratings.api-client';
+import { getStorageUrl } from '@/lib/storage';
+import { SEOHead, useEventDetailSEO } from '@/shared/seo';
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -24,6 +28,44 @@ export default function EventDetailPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const { user, profile } = useAuth();
+  const { hasPermission: _hasPermission } = usePermissions();
+
+  // Position editing state
+  const [isEditingPosition, setIsEditingPosition] = useState(false);
+  const [position, setPosition] = useState({ x: 50, y: 50 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [savingPosition, setSavingPosition] = useState(false);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
+  // Flyer lightbox state
+  const [showFlyerLightbox, setShowFlyerLightbox] = useState(false);
+
+  // Check if user is admin
+  const isAdmin = profile?.role === 'admin';
+
+  // Track if user participated in this event (for ratings)
+  const [userParticipated, setUserParticipated] = useState(false);
+
+  // SEO - must be called unconditionally at the top level
+  const seoData = useEventDetailSEO(
+    event
+      ? {
+          id: event.id,
+          title: event.title,
+          description: event.description || undefined,
+          date: event.event_date,
+          location: {
+            name: event.venue_name,
+            address: event.venue_address || undefined,
+            city: event.venue_city || undefined,
+            state: event.venue_state || undefined,
+            country: event.venue_country || undefined,
+          },
+          image: event.flyer_url ? getStorageUrl(event.flyer_url) : undefined,
+          price: event.registration_fee || undefined,
+        }
+      : null
+  );
 
   useEffect(() => {
     if (!eventId) {
@@ -32,6 +74,20 @@ export default function EventDetailPage() {
     }
     fetchEvent();
   }, [eventId]);
+
+  // Check if user competed at this event (has results under their MECA ID)
+  useEffect(() => {
+    const checkCompetition = async () => {
+      if (!user || !eventId) return;
+      try {
+        const competed = await ratingsApi.hasUserCompetedAtEvent(eventId);
+        setUserParticipated(competed);
+      } catch (err) {
+        console.error('Error checking competition participation:', err);
+      }
+    };
+    checkCompetition();
+  }, [user, eventId]);
 
   useEffect(() => {
     if (profile && showRegistrationModal) {
@@ -45,6 +101,13 @@ export default function EventDetailPage() {
       });
     }
   }, [profile, showRegistrationModal]);
+
+  useEffect(() => {
+    // Initialize position from event data
+    if (event?.flyer_image_position) {
+      setPosition(event.flyer_image_position);
+    }
+  }, [event]);
 
   const fetchEvent = async () => {
     if (!eventId) return;
@@ -67,6 +130,72 @@ export default function EventDetailPage() {
       console.error('Error fetching event:', error);
     }
     setLoading(false);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isEditingPosition) return;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !imageContainerRef.current) return;
+
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+
+    setPosition({ x, y });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isEditingPosition) return;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || !imageContainerRef.current) return;
+
+    const touch = e.touches[0];
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
+
+    setPosition({ x, y });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  const savePosition = async () => {
+    if (!event) return;
+
+    try {
+      setSavingPosition(true);
+      await eventsApi.updateFlyerImagePosition(event.id, position);
+      setEvent({ ...event, flyer_image_position: position });
+      setIsEditingPosition(false);
+    } catch (err) {
+      console.error('Error saving position:', err);
+    } finally {
+      setSavingPosition(false);
+    }
+  };
+
+  const cancelEditing = () => {
+    // Reset to saved position
+    if (event?.flyer_image_position) {
+      setPosition(event.flyer_image_position);
+    } else {
+      setPosition({ x: 50, y: 50 });
+    }
+    setIsEditingPosition(false);
   };
 
   const getFormatColor = (format: string) => {
@@ -151,27 +280,88 @@ export default function EventDetailPage() {
     );
   }
 
-  const mapUrl = event.latitude && event.longitude
-    ? `https://www.google.com/maps/embed/v1/place?key=YOUR_GOOGLE_MAPS_API_KEY&q=${event.latitude},${event.longitude}`
-    : `https://www.google.com/maps/embed/v1/place?key=YOUR_GOOGLE_MAPS_API_KEY&q=${encodeURIComponent(event.venue_address)}`;
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <>
+      {seoData && <SEOHead {...seoData} />}
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <button
-          onClick={() => navigate('/events')}
-          className="mb-6 text-gray-400 hover:text-white transition-colors"
-        >
-          ← Back to Events
-        </button>
+        {/* Header with Back button */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-400">Event Details</h2>
+          <button
+            onClick={() => navigate('/events')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Events
+          </button>
+        </div>
 
         {event.flyer_url && (
-          <div className="mb-8 rounded-xl overflow-hidden shadow-2xl">
+          <div
+            ref={imageContainerRef}
+            className={`mb-8 rounded-xl overflow-hidden shadow-2xl relative ${isEditingPosition ? 'cursor-move' : ''}`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
             <img
-              src={event.flyer_url}
+              src={getStorageUrl(event.flyer_url)}
               alt={event.title}
-              className="w-full max-h-96 object-cover"
+              className="w-full max-h-96 object-cover select-none"
+              style={{ objectPosition: `${position.x}% ${position.y}%` }}
+              draggable={false}
+              onError={(e) => {
+                // Hide the entire flyer container when image fails to load
+                const container = e.currentTarget.closest('.mb-8');
+                if (container) (container as HTMLElement).style.display = 'none';
+              }}
             />
+
+            {/* Position editing overlay */}
+            {isEditingPosition && (
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
+                <div className="bg-black/70 text-white px-4 py-2 rounded-lg text-sm">
+                  Drag to reposition image
+                </div>
+              </div>
+            )}
+
+            {/* Edit position button - only show for admins */}
+            {isAdmin && !isEditingPosition && (
+              <button
+                onClick={() => setIsEditingPosition(true)}
+                className="absolute bottom-3 right-3 bg-black/70 hover:bg-black/90 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+              >
+                <Move className="h-4 w-4" />
+                Adjust Position
+              </button>
+            )}
+
+            {/* Save/Cancel buttons when editing */}
+            {isEditingPosition && (
+              <div className="absolute bottom-3 right-3 flex gap-2">
+                <button
+                  onClick={cancelEditing}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+                <button
+                  onClick={savePosition}
+                  disabled={savingPosition}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" />
+                  {savingPosition ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -293,30 +483,91 @@ export default function EventDetailPage() {
               )}
             </div>
 
-            {event.event_director && (
-              <div className="bg-slate-700 rounded-lg p-6">
-                <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-                  <User className="h-5 w-5 text-orange-500" />
-                  Event Director
-                </h3>
-                <p className="text-white font-medium mb-2">{`${event.event_director.first_name || ''} ${event.event_director.last_name || ''}`.trim()}</p>
-                <p className="text-gray-400 text-sm mb-1">{event.event_director.email}</p>
-                {event.event_director.phone && (
-                  <p className="text-gray-400 text-sm">{event.event_director.phone}</p>
-                )}
-              </div>
-            )}
+            <div className="space-y-4">
+              {/* Flyer Thumbnail */}
+              {event.flyer_url && (
+                <div
+                  className="relative cursor-pointer group"
+                  onClick={() => setShowFlyerLightbox(true)}
+                >
+                  <div className="bg-slate-700 rounded-lg p-2 hover:bg-slate-600 transition-colors">
+                    <p className="text-gray-400 text-sm mb-2 flex items-center gap-2">
+                      <Image className="h-4 w-4" />
+                      Event Flyer
+                    </p>
+                    <div className="relative overflow-hidden rounded-lg">
+                      <img
+                        src={getStorageUrl(event.flyer_url)}
+                        alt={`${event.title} flyer`}
+                        className="w-full h-32 object-cover transition-transform group-hover:scale-105"
+                        style={{
+                          objectPosition: event.flyer_image_position
+                            ? `${event.flyer_image_position.x}% ${event.flyer_image_position.y}%`
+                            : '50% 50%'
+                        }}
+                        onError={(e) => {
+                          // Hide the flyer thumbnail section when image fails
+                          const container = e.currentTarget.closest('.relative.cursor-pointer');
+                          if (container) (container as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="bg-white/20 backdrop-blur-sm rounded-full p-2">
+                          <ZoomIn className="h-6 w-6 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-gray-400 text-xs mt-2 text-center">Click to view full flyer</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Event Director */}
+              {event.event_director && (
+                <div className="bg-slate-700 rounded-lg p-6">
+                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                    <User className="h-5 w-5 text-orange-500" />
+                    Event Director
+                  </h3>
+                  <p className="text-white font-medium mb-2">{`${event.event_director.first_name || ''} ${event.event_director.last_name || ''}`.trim()}</p>
+                  <p className="text-gray-400 text-sm mb-1">{event.event_director.email}</p>
+                  {event.event_director.phone && (
+                    <p className="text-gray-400 text-sm">{event.event_director.phone}</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Action Buttons */}
-          {event.status === 'upcoming' && (
-            <button
-              onClick={() => setShowRegistrationModal(true)}
-              className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
-            >
-              Pre-Register for This Event
-            </button>
+          {/* Admin: Event Staff Assignments */}
+          {isAdmin && eventId && (
+            <div className="mb-8">
+              <EventAssignmentManager eventId={eventId} eventTitle={event.title} />
+            </div>
           )}
+
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            {event.status === 'upcoming' && (
+              <button
+                onClick={() => navigate(`/events/${eventId}/register`)}
+                className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
+              >
+                Pre-Register for This Event
+              </button>
+            )}
+
+            {/* Check-In Button for Event Directors/Admins Only */}
+            {(profile?.role === 'admin' || profile?.role === 'event_director') && (event.status === 'upcoming' || event.status === 'ongoing') && (
+              <button
+                onClick={() => navigate(`/events/${eventId}/check-in`)}
+                className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <QrCode className="h-6 w-6" />
+                QR Check-In
+              </button>
+            )}
+          </div>
 
           {event.status === 'completed' && (
             <button
@@ -328,6 +579,23 @@ export default function EventDetailPage() {
             </button>
           )}
         </div>
+
+        {/* Ratings Section - Show for completed events where user has competition results */}
+        {event.status === 'completed' && userParticipated && (
+          <div className="mt-8 bg-slate-700 rounded-xl p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Star className="h-6 w-6 text-yellow-500" />
+              Rate Event Staff
+            </h3>
+            <p className="text-gray-400 text-sm mb-4">
+              Help us improve by rating the judges and event directors from this event.
+            </p>
+            <EventRatingsPanel
+              eventId={event.id}
+              eventName={event.title}
+            />
+          </div>
+        )}
 
         <div className="bg-slate-800 rounded-xl shadow-2xl p-8">
           <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
@@ -492,6 +760,33 @@ export default function EventDetailPage() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Flyer Lightbox Modal */}
+      {showFlyerLightbox && event?.flyer_url && (
+        <div
+          className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowFlyerLightbox(false)}
+        >
+          <button
+            onClick={() => setShowFlyerLightbox(false)}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors z-10"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          <div
+            className="relative max-w-4xl max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={getStorageUrl(event.flyer_url)}
+              alt={`${event.title} flyer`}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onError={() => setShowFlyerLightbox(false)}
+            />
+          </div>
+        </div>
+      )}
+      </div>
+    </>
   );
 }

@@ -24,6 +24,9 @@ export class Season {
   @Property({ type: 'boolean', fieldName: 'is_next', serializedName: 'is_next' })
   isNext: boolean = false;
 
+  @Property({ type: 'integer', nullable: true, fieldName: 'qualification_points_threshold', serializedName: 'qualification_points_threshold' })
+  qualificationPointsThreshold?: number;
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
 

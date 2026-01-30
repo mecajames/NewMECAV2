@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Upload, Trash2, Edit2, FileText, Archive, Eye, EyeOff, FolderOpen, X, ExternalLink, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getStorageUrl } from '@/lib/storage';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { seasonsApi, Season } from '@/seasons';
 import { useAuth } from '@/auth';
@@ -84,7 +85,6 @@ export default function RulebookManagement() {
   };
 
   const uploadPDF = async (file: File): Promise<string | null> => {
-    const fileExt = 'pdf';
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = `rulebooks/${fileName}`;
 
@@ -486,7 +486,7 @@ export default function RulebookManagement() {
                   <td className="py-3 px-4">
                     <div className="flex gap-2">
                       <button
-                        onClick={() => window.open(rulebook.pdfUrl, '_blank')}
+                        onClick={() => window.open(getStorageUrl(rulebook.pdfUrl), '_blank')}
                         className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                         title="View PDF"
                       >

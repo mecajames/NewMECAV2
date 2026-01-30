@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EntryMethodSchema, AuditActionSchema } from "./enums.schema";
+import { EntryMethodSchema, AuditActionSchema } from "./enums.schema.js";
 
 // Create Session DTO
 export const CreateAuditSessionSchema = z.object({

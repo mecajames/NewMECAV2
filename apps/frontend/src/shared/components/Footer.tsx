@@ -1,53 +1,21 @@
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Youtube, Twitter } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { siteSettingsApi } from '@/site-settings';
-
-interface SocialMediaSettings {
-  facebook_url: string;
-  facebook_active: boolean;
-  instagram_url: string;
-  instagram_active: boolean;
-  youtube_url: string;
-  youtube_active: boolean;
-  x_url: string;
-  x_active: boolean;
-}
+import { useSiteSettings } from '@/shared/contexts';
 
 export default function Footer() {
-  const [socialSettings, setSocialSettings] = useState<SocialMediaSettings>({
-    facebook_url: '',
-    facebook_active: false,
-    instagram_url: '',
-    instagram_active: false,
-    youtube_url: '',
-    youtube_active: false,
-    x_url: '',
-    x_active: false,
-  });
+  const { getSetting } = useSiteSettings();
 
-  useEffect(() => {
-    const fetchSocialSettings = async () => {
-      try {
-        const settings = await siteSettingsApi.getAll();
-        const socialConfig: SocialMediaSettings = {
-          facebook_url: settings.find((s: any) => s.setting_key === 'social_facebook_url')?.setting_value || '',
-          facebook_active: settings.find((s: any) => s.setting_key === 'social_facebook_active')?.setting_value === 'true',
-          instagram_url: settings.find((s: any) => s.setting_key === 'social_instagram_url')?.setting_value || '',
-          instagram_active: settings.find((s: any) => s.setting_key === 'social_instagram_active')?.setting_value === 'true',
-          youtube_url: settings.find((s: any) => s.setting_key === 'social_youtube_url')?.setting_value || '',
-          youtube_active: settings.find((s: any) => s.setting_key === 'social_youtube_active')?.setting_value === 'true',
-          x_url: settings.find((s: any) => s.setting_key === 'social_x_url')?.setting_value || '',
-          x_active: settings.find((s: any) => s.setting_key === 'social_x_active')?.setting_value === 'true',
-        };
-        setSocialSettings(socialConfig);
-      } catch (error) {
-        console.error('Error fetching social settings:', error);
-      }
-    };
-
-    fetchSocialSettings();
-  }, []);
+  // Get social settings from cached context
+  const socialSettings = {
+    facebook_url: getSetting('social_facebook_url') || '',
+    facebook_active: getSetting('social_facebook_active') === 'true',
+    instagram_url: getSetting('social_instagram_url') || '',
+    instagram_active: getSetting('social_instagram_active') === 'true',
+    youtube_url: getSetting('social_youtube_url') || '',
+    youtube_active: getSetting('social_youtube_active') === 'true',
+    x_url: getSetting('social_x_url') || '',
+    x_active: getSetting('social_x_active') === 'true',
+  };
 
   const currentYear = new Date().getFullYear();
 

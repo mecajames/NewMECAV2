@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MECA Documentation</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      color: #f97316;
+      font-size: 2.5rem;
+    }
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 40px;
+    }
+    .doc-list {
+      list-style: none;
+    }
+    .doc-list li {
+      margin-bottom: 12px;
+    }
+    .doc-list a {
+      display: block;
+      padding: 16px 20px;
+      background: #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      border-left: 4px solid transparent;
+    }
+    .doc-list a:hover {
+      background: #475569;
+      border-left-color: #f97316;
+      transform: translateX(4px);
+    }
+    .doc-list a .type {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 10px;
+      text-transform: uppercase;
+    }
+    .type-html {
+      background: #22c55e;
+      color: #052e16;
+    }
+    .type-md {
+      background: #3b82f6;
+      color: #1e3a8a;
+    }
+    .section {
+      margin-bottom: 30px;
+    }
+    .section h2 {
+      color: #f97316;
+      font-size: 1.2rem;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #475569;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MECA Documentation</h1>
+    <p class="subtitle">NewMECA V2 System Documentation</p>
+
+    <div class="section">
+      <h2>Admin Guides</h2>
+      <ul class="doc-list">
+        <li>
+          <a href="Admin-Judge-EventDirector-Guide.html">
+            <span class="type type-html">HTML</span>
+            Admin Guide: Judge & Event Director Management
+          </a>
+        </li>
+        <li>
+          <a href="Admin-Secondary-Memberships-Guide.html">
+            <span class="type type-html">HTML</span>
+            Admin Secondary Memberships Guide
+          </a>
+        </li>
+        <li>
+          <a href="Admin-User-Membership-Workflows.html">
+            <span class="type type-html">HTML</span>
+            Admin User Membership Workflows
+          </a>
+        </li>
+        <li>
+          <a href="Points-Configuration-Guide.html">
+            <span class="type type-html">HTML</span>
+            Points Configuration Guide
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>System Documentation</h2>
+      <ul class="doc-list">
+        <li>
+          <a href="MECA-ID-System.html">
+            <span class="type type-html">HTML</span>
+            MECA ID System - Business Logic & Reference
+          </a>
+        </li>
+        <li>
+          <a href="Master-Secondary-System-Flow.html">
+            <span class="type type-html">HTML</span>
+            Master Secondary System Flow
+          </a>
+        </li>
+        <li>
+          <a href="MECA-Judge-EventDirector-System.html">
+            <span class="type type-html">HTML</span>
+            MECA Judge & Event Director System
+          </a>
+        </li>
+        <li>
+          <a href="MECA-Judge-EventDirector-System-Prompt.md">
+            <span class="type type-md">MD</span>
+            MECA Judge & Event Director System Prompt (Dev Spec)
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>User Guides</h2>
+      <ul class="doc-list">
+        <li>
+          <a href="User-Guide-Family-Team-Memberships.html">
+            <span class="type type-html">HTML</span>
+            User Guide: Family & Team Memberships
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>QA & Testing</h2>
+      <ul class="doc-list">
+        <li>
+          <a href="QA-Testing-Secondary-Memberships.html">
+            <span class="type type-html">HTML</span>
+            QA Testing: Secondary Memberships
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Technical Reference</h2>
+      <ul class="doc-list">
+        <li>
+          <a href="Results-Entry-Business-Logic.html">
+            <span class="type type-html">HTML</span>
+            Results Entry Business Logic (MECA ID & Membership)
+          </a>
+        </li>
+        <li>
+          <a href="BUSINESS_LOGIC_OVERVIEW.html">
+            <span class="type type-html">HTML</span>
+            Business Logic (Overview)
+          </a>
+        </li>
+        <li>
+          <a href="BUSINESS_LOGIC_DETAILED.md">
+            <span class="type type-md">MD</span>
+            Business Logic (Detailed - Dev Spec)
+          </a>
+        </li>
+        <li>
+          <a href="README.html">
+            <span class="type type-html">HTML</span>
+            Developer Documentation Index
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

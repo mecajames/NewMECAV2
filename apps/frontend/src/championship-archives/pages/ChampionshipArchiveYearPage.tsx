@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Trophy, Medal, Search, Filter, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'lucide-react';
+import { Trophy, Medal, Search, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { championshipArchivesApi, ChampionshipArchive, ChampionshipAward } from '@/championship-archives';
 import { useAuth } from '@/auth';
 
@@ -80,7 +81,7 @@ export default function ChampionshipArchiveYearPage() {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState('all');
-  const [classFilter, setClassFilter] = useState('all');
+  const [_classFilter, _setClassFilter] = useState('all');
   const [stateFilter, setStateFilter] = useState('all');
 
   // Admin editing
@@ -325,13 +326,15 @@ export default function ChampionshipArchiveYearPage() {
         <div className="absolute inset-0 bg-black/20" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Back Button */}
-          <Link
-            to="/championship-archives"
-            className="inline-flex items-center gap-2 text-white hover:text-orange-200 transition-colors mb-6 group"
-          >
-            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-            <span className="font-medium">Back to Archives</span>
-          </Link>
+          <div className="flex justify-end mb-4">
+            <Link
+              to="/championship-archives"
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Archives
+            </Link>
+          </div>
 
           <div className="text-center">
             <div className="inline-block bg-white/20 px-6 py-2 rounded-full mb-4">
@@ -419,7 +422,7 @@ export default function ChampionshipArchiveYearPage() {
           <div className="bg-slate-800 rounded-xl p-8 mb-6">
             <div className="prose prose-invert prose-orange max-w-none">
               <div
-                dangerouslySetInnerHTML={{ __html: archive.additional_content.html }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(archive.additional_content.html) }}
                 className="championship-archive-content"
               />
             </div>

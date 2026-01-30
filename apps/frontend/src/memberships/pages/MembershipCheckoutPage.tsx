@@ -1,16 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
-import {
-  Elements,
-  PaymentElement,
-  useStripe,
-  useElements,
-} from '@stripe/react-stripe-js';
 import {
   ArrowLeft,
   Check,
-  CreditCard,
   User,
   Mail,
   Phone,
@@ -20,76 +12,31 @@ import {
   Lock,
   AlertCircle,
   CheckCircle,
+  Eye,
+  EyeOff,
   UserPlus,
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import {
   membershipTypeConfigsApi,
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
-import {
-  membershipsApi,
-  Membership,
-} from '@/memberships';
+// import { membershipsApi } from '../memberships.api-client';
+import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
+import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
+import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
 
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
+// Check if Stripe is configured (without loading it)
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+const isStripeConfigured = !!stripePublishableKey &&
+  !stripePublishableKey.includes('YOUR_STRIPE') &&
+  stripePublishableKey.startsWith('pk_');
 
-// US States for dropdown
-const US_STATES = [
-  { value: '', label: 'Select State' },
-  { value: 'AL', label: 'Alabama' },
-  { value: 'AK', label: 'Alaska' },
-  { value: 'AZ', label: 'Arizona' },
-  { value: 'AR', label: 'Arkansas' },
-  { value: 'CA', label: 'California' },
-  { value: 'CO', label: 'Colorado' },
-  { value: 'CT', label: 'Connecticut' },
-  { value: 'DE', label: 'Delaware' },
-  { value: 'FL', label: 'Florida' },
-  { value: 'GA', label: 'Georgia' },
-  { value: 'HI', label: 'Hawaii' },
-  { value: 'ID', label: 'Idaho' },
-  { value: 'IL', label: 'Illinois' },
-  { value: 'IN', label: 'Indiana' },
-  { value: 'IA', label: 'Iowa' },
-  { value: 'KS', label: 'Kansas' },
-  { value: 'KY', label: 'Kentucky' },
-  { value: 'LA', label: 'Louisiana' },
-  { value: 'ME', label: 'Maine' },
-  { value: 'MD', label: 'Maryland' },
-  { value: 'MA', label: 'Massachusetts' },
-  { value: 'MI', label: 'Michigan' },
-  { value: 'MN', label: 'Minnesota' },
-  { value: 'MS', label: 'Mississippi' },
-  { value: 'MO', label: 'Missouri' },
-  { value: 'MT', label: 'Montana' },
-  { value: 'NE', label: 'Nebraska' },
-  { value: 'NV', label: 'Nevada' },
-  { value: 'NH', label: 'New Hampshire' },
-  { value: 'NJ', label: 'New Jersey' },
-  { value: 'NM', label: 'New Mexico' },
-  { value: 'NY', label: 'New York' },
-  { value: 'NC', label: 'North Carolina' },
-  { value: 'ND', label: 'North Dakota' },
-  { value: 'OH', label: 'Ohio' },
-  { value: 'OK', label: 'Oklahoma' },
-  { value: 'OR', label: 'Oregon' },
-  { value: 'PA', label: 'Pennsylvania' },
-  { value: 'RI', label: 'Rhode Island' },
-  { value: 'SC', label: 'South Carolina' },
-  { value: 'SD', label: 'South Dakota' },
-  { value: 'TN', label: 'Tennessee' },
-  { value: 'TX', label: 'Texas' },
-  { value: 'UT', label: 'Utah' },
-  { value: 'VT', label: 'Vermont' },
-  { value: 'VA', label: 'Virginia' },
-  { value: 'WA', label: 'Washington' },
-  { value: 'WV', label: 'West Virginia' },
-  { value: 'WI', label: 'Wisconsin' },
-  { value: 'WY', label: 'Wyoming' },
-];
+// Lazy load Stripe payment form only when configured
+const LazyMembershipStripePaymentForm = isStripeConfigured
+  ? lazy(() => import('@/memberships/components/MembershipStripePaymentForm'))
+  : null;
 
 interface FormData {
   // Contact Info
@@ -104,10 +51,18 @@ interface FormData {
   state: string;
   postalCode: string;
   country: string;
-  // Team Info (for team memberships)
+  // Competitor Info (for competitor memberships)
+  competitorName: string;
+  vehicleLicensePlate: string;
+  vehicleColor: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  // Team Add-on (for competitor memberships)
+  hasTeamAddon: boolean;
+  // Team Info (for team memberships or competitor with team add-on)
   teamName: string;
   teamDescription: string;
-  // Business Info (for retailer memberships)
+  // Business Info (for retailer/manufacturer memberships)
   businessName: string;
   businessWebsite: string;
 }
@@ -126,113 +81,6 @@ type CheckoutStep = 'info' | 'payment' | 'confirmation';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-// Stripe Payment Form Component
-function StripePaymentForm({
-  membership,
-  formData,
-  onSuccess,
-  onBack,
-}: {
-  membership: MembershipTypeConfig;
-  formData: FormData;
-  onSuccess: (paymentIntentId: string) => void;
-  onBack: () => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [submitting, setSubmitting] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setSubmitting(true);
-    setPaymentError(null);
-
-    try {
-      const { error, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: window.location.href,
-          receipt_email: formData.email,
-        },
-        redirect: 'if_required',
-      });
-
-      if (error) {
-        setPaymentError(error.message || 'Payment failed. Please try again.');
-      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        onSuccess(paymentIntent.id);
-      } else {
-        setPaymentError('Payment was not completed. Please try again.');
-      }
-    } catch (err) {
-      console.error('Payment error:', err);
-      setPaymentError('An unexpected error occurred. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      {paymentError && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
-          <p className="text-red-500 text-sm">{paymentError}</p>
-        </div>
-      )}
-
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-          <CreditCard className="h-5 w-5 mr-2 text-orange-500" />
-          Card Information
-        </h3>
-        <div className="bg-slate-700 rounded-lg p-4">
-          <PaymentElement
-            options={{
-              layout: 'tabs',
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center text-sm text-gray-400 mb-6">
-        <Lock className="h-4 w-4 mr-2" />
-        Your payment information is secure and encrypted
-      </div>
-
-      <div className="flex gap-4">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={submitting}
-          className="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-        >
-          Back
-        </button>
-        <button
-          type="submit"
-          disabled={!stripe || !elements || submitting}
-          className="flex-1 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {submitting ? (
-            <span className="flex items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Processing Payment...
-            </span>
-          ) : (
-            `Pay $${membership.price.toFixed(2)}`
-          )}
-        </button>
-      </div>
-    </form>
-  );
-}
-
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
   const navigate = useNavigate();
@@ -250,13 +98,15 @@ export default function MembershipCheckoutPage() {
   // Order data saved after successful payment
   const [orderData, setOrderData] = useState<OrderData | null>(null);
 
-  // Account creation state (shown after payment for guests)
+  // Account creation state (for guest checkout)
   const [showAccountCreation, setShowAccountCreation] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
   const [accountPassword, setAccountPassword] = useState('');
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
-  const [accountCreated, setAccountCreated] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -268,7 +118,15 @@ export default function MembershipCheckoutPage() {
     city: '',
     state: '',
     postalCode: '',
-    country: 'USA',
+    country: 'US',
+    // Competitor info
+    competitorName: '',
+    vehicleLicensePlate: '',
+    vehicleColor: '',
+    vehicleMake: '',
+    vehicleModel: '',
+    // Team add-on
+    hasTeamAddon: false,
     teamName: '',
     teamDescription: '',
     businessName: '',
@@ -290,6 +148,7 @@ export default function MembershipCheckoutPage() {
 
         // Pre-fill form from user profile if logged in
         if (profile) {
+          const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
           setFormData((prev) => ({
             ...prev,
             email: profile.email || '',
@@ -301,6 +160,8 @@ export default function MembershipCheckoutPage() {
             state: profile.state || '',
             postalCode: profile.postal_code || '',
             country: profile.country || 'USA',
+            // Default competitor name to user's full name
+            competitorName: fullName,
           }));
         }
       } catch (err) {
@@ -365,6 +226,12 @@ export default function MembershipCheckoutPage() {
 
   const handleContinueToPayment = async () => {
     if (!validateInfoStep() || !membership) return;
+
+    // If Stripe is not configured, go directly to payment step (test mode)
+    if (!isStripeConfigured) {
+      setStep('payment');
+      return;
+    }
 
     setCreatingPaymentIntent(true);
     setError(null);
@@ -441,9 +308,10 @@ export default function MembershipCheckoutPage() {
   const handleCreateAccount = async () => {
     if (!orderData) return;
 
-    // Validate passwords
-    if (accountPassword.length < 6) {
-      setAccountError('Password must be at least 6 characters');
+    // Validate password strength
+    const strength = calculatePasswordStrength(accountPassword);
+    if (strength.score < MIN_PASSWORD_STRENGTH) {
+      setAccountError(`Password is not strong enough. Current strength: ${strength.score}. Minimum required: ${MIN_PASSWORD_STRENGTH}`);
       return;
     }
     if (accountPassword !== accountConfirmPassword) {
@@ -456,7 +324,7 @@ export default function MembershipCheckoutPage() {
 
     try {
       // Create the account
-      const { error, data: signUpData } = await signUp(
+      const { error } = await signUp(
         orderData.email,
         accountPassword,
         orderData.firstName,
@@ -468,18 +336,17 @@ export default function MembershipCheckoutPage() {
         return;
       }
 
-      // Link the membership to the new user
-      if (signUpData?.user?.id) {
-        try {
-          await membershipsApi.linkMembershipsToUser({
-            email: orderData.email,
-            userId: signUpData.user.id,
-          });
-        } catch (linkError) {
-          console.error('Failed to link membership:', linkError);
-          // Don't fail the account creation if linking fails
-        }
-      }
+      // TODO: Link the membership to the new user once backend endpoint exists
+      // if (signUpData?.user?.id) {
+      //   try {
+      //     await membershipsApi.linkMembershipsToUser({
+      //       email: orderData.email,
+      //       userId: signUpData.user.id,
+      //     });
+      //   } catch (linkError) {
+      //     console.error('Failed to link membership:', linkError);
+      //   }
+      // }
 
       setAccountCreated(true);
       setShowAccountCreation(false);
@@ -503,6 +370,8 @@ export default function MembershipCheckoutPage() {
         return 'Team';
       case MembershipCategory.RETAIL:
         return 'Retailer';
+      case MembershipCategory.MANUFACTURER:
+        return 'Manufacturer';
       default:
         return category;
     }
@@ -525,9 +394,9 @@ export default function MembershipCheckoutPage() {
           <p className="text-gray-400 mb-6">{error}</p>
           <Link
             to="/membership"
-            className="inline-flex items-center text-orange-500 hover:text-orange-400"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Memberships
           </Link>
         </div>
@@ -620,27 +489,63 @@ export default function MembershipCheckoutPage() {
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Create Password
                     </label>
-                    <input
-                      type="password"
-                      value={accountPassword}
-                      onChange={(e) => setAccountPassword(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="••••••••"
-                      minLength={6}
-                    />
-                    <p className="mt-1 text-xs text-gray-400">Must be at least 6 characters</p>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={accountPassword}
+                        onChange={(e) => setAccountPassword(e.target.value)}
+                        className="w-full px-4 py-3 pr-12 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="Enter a strong password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                    {accountPassword && (
+                      <div className="mt-2">
+                        <PasswordStrengthIndicator
+                          password={accountPassword}
+                          showFeedback={true}
+                          showScore={true}
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          Minimum strength required: {MIN_PASSWORD_STRENGTH}
+                        </p>
+                      </div>
+                    )}
+                    {!accountPassword && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        Use a mix of letters, numbers, and symbols for a strong password
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Confirm Password
                     </label>
-                    <input
-                      type="password"
-                      value={accountConfirmPassword}
-                      onChange={(e) => setAccountConfirmPassword(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="••••••••"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={accountConfirmPassword}
+                        onChange={(e) => setAccountConfirmPassword(e.target.value)}
+                        className="w-full px-4 py-3 pr-12 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="Confirm your password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                    {accountConfirmPassword && accountPassword !== accountConfirmPassword && (
+                      <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
+                    )}
                   </div>
                   <div className="flex gap-3">
                     <button
@@ -736,14 +641,17 @@ export default function MembershipCheckoutPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-6xl mx-auto px-4">
-        {/* Back button */}
-        <Link
-          to="/membership"
-          className="inline-flex items-center text-gray-400 hover:text-white mb-8 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Memberships
-        </Link>
+        {/* Header with Back button on right */}
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold text-white">Membership Checkout</h1>
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Go Back
+          </button>
+        </div>
 
         {/* Progress indicator */}
         <div className="flex items-center justify-center mb-12">
@@ -900,8 +808,30 @@ export default function MembershipCheckoutPage() {
                           required
                         />
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="col-span-2">
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Country *
+                        </label>
+                        <select
+                          name="country"
+                          value={formData.country}
+                          onChange={(e) => {
+                            handleInputChange(e);
+                            // Clear state when country changes
+                            setFormData(prev => ({ ...prev, country: e.target.value, state: '' }));
+                          }}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          required
+                        >
+                          {countries.map((country) => (
+                            <option key={country.code} value={country.code}>
+                              {country.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
                             City *
                           </label>
@@ -917,25 +847,38 @@ export default function MembershipCheckoutPage() {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            State *
+                            {getStateLabel(formData.country)} *
                           </label>
-                          <select
-                            name="state"
-                            value={formData.state}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            required
-                          >
-                            {US_STATES.map((state) => (
-                              <option key={state.value} value={state.value}>
-                                {state.value || 'Select'}
-                              </option>
-                            ))}
-                          </select>
+                          {getStatesForCountry(formData.country).length > 0 ? (
+                            <select
+                              name="state"
+                              value={formData.state}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              required
+                            >
+                              <option value="">Select</option>
+                              {getStatesForCountry(formData.country).map((state) => (
+                                <option key={state.code} value={state.code}>
+                                  {state.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              name="state"
+                              value={formData.state}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              placeholder={getStateLabel(formData.country)}
+                              required
+                            />
+                          )}
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            ZIP Code *
+                            {getPostalCodeLabel(formData.country)} *
                           </label>
                           <input
                             type="text"
@@ -943,7 +886,7 @@ export default function MembershipCheckoutPage() {
                             value={formData.postalCode}
                             onChange={handleInputChange}
                             className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="12345"
+                            placeholder={formData.country === 'US' ? '12345' : 'Postal code'}
                             required
                           />
                         </div>
@@ -1046,31 +989,75 @@ export default function MembershipCheckoutPage() {
                 </form>
               )}
 
-              {step === 'payment' && clientSecret && (
-                <Elements
-                  stripe={stripePromise}
-                  options={{
-                    clientSecret,
-                    appearance: {
-                      theme: 'night',
-                      variables: {
-                        colorPrimary: '#f97316',
-                        colorBackground: '#334155',
-                        colorText: '#ffffff',
-                        colorDanger: '#ef4444',
-                        fontFamily: 'system-ui, sans-serif',
-                        borderRadius: '8px',
-                      },
-                    },
-                  }}
-                >
-                  <StripePaymentForm
+              {step === 'payment' && clientSecret && isStripeConfigured && LazyMembershipStripePaymentForm && (
+                <Suspense fallback={
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
+                  </div>
+                }>
+                  <LazyMembershipStripePaymentForm
+                    clientSecret={clientSecret}
                     membership={membership}
                     formData={formData}
                     onSuccess={handlePaymentSuccess}
                     onBack={() => setStep('info')}
                   />
-                </Elements>
+                </Suspense>
+              )}
+
+              {step === 'payment' && !isStripeConfigured && (
+                <div className="space-y-6">
+                  <div className="p-4 bg-amber-500/10 border border-amber-500 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-amber-500 font-medium">Test Mode</p>
+                        <p className="text-amber-400 text-sm mt-1">
+                          Stripe is not configured. You can skip payment to test the checkout flow.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-700 rounded-xl p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4">Order Summary</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Email</span>
+                        <span className="text-white">{formData.email || profile?.email}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Name</span>
+                        <span className="text-white">{formData.firstName} {formData.lastName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Membership</span>
+                        <span className="text-white">{membership.name}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-slate-600 pt-2 mt-2">
+                        <span className="text-gray-400">Total</span>
+                        <span className="text-orange-500 font-semibold">${membership.price.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setStep('info')}
+                      className="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePaymentSuccess('test-payment-' + Date.now())}
+                      className="flex-1 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      Skip Payment (Test Mode)
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
