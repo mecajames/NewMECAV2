@@ -176,25 +176,55 @@ export default function TeamUpgradeModal({
     }
   };
 
-  // Sanitize team name - remove any variant of "team" from the name
-  const sanitizeTeamName = (name: string): string => {
-    const teamPattern = /[tT][eE3][aA4@][mM]/gi;
-    return name
-      .replace(teamPattern, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
+  /**
+   * Check if team name contains any variation of "team"
+   * Includes: team, Team, TEAM, t3@m, T3AM, maet (backwards), spaced variations
+   */
   const containsTeamWord = (name: string): boolean => {
-    const teamPattern = /[tT][eE3][aA4@][mM]/i;
-    return teamPattern.test(name);
+    if (!name) return false;
+
+    const normalized = name.toLowerCase().trim();
+
+    // Direct match for "team"
+    if (normalized.includes('team')) return true;
+
+    // Backwards "team" -> "maet"
+    if (normalized.includes('maet')) return true;
+
+    // Leet speak variations: t3@m, t3am, te@m, t34m, etc.
+    const leetNormalized = normalized
+      .replace(/3/g, 'e')
+      .replace(/@/g, 'a')
+      .replace(/4/g, 'a')
+      .replace(/0/g, 'o')
+      .replace(/1/g, 'i')
+      .replace(/\$/g, 's')
+      .replace(/7/g, 't');
+
+    if (leetNormalized.includes('team') || leetNormalized.includes('maet')) return true;
+
+    // Check for spaced out variations: t e a m, t-e-a-m, t.e.a.m
+    const noSpaces = normalized.replace(/[\s\-._]/g, '');
+    const noSpacesLeet = noSpaces
+      .replace(/3/g, 'e')
+      .replace(/@/g, 'a')
+      .replace(/4/g, 'a');
+
+    if (noSpacesLeet.includes('team') || noSpacesLeet.includes('maet')) return true;
+
+    return false;
   };
 
   const handleProceedToPayment = async () => {
-    const sanitizedName = sanitizeTeamName(teamName);
+    const trimmedName = teamName.trim();
 
-    if (!sanitizedName) {
-      setError('Please enter a valid team name (without the word "Team")');
+    if (!trimmedName) {
+      setError('Please enter a team name');
+      return;
+    }
+
+    if (containsTeamWord(trimmedName)) {
+      setError('Team name cannot contain the word "team" or variations (T3@M, TEAM, backwards, etc.). Please choose a different name.');
       return;
     }
 
@@ -204,7 +234,7 @@ export default function TeamUpgradeModal({
 
       const result = await membershipsApi.createTeamUpgradePaymentIntent({
         membershipId,
-        teamName: sanitizedName,
+        teamName: trimmedName,
         teamDescription: teamDescription.trim() || undefined,
       });
 
@@ -339,19 +369,19 @@ export default function TeamUpgradeModal({
                     type="text"
                     value={teamName}
                     onChange={(e) => setTeamName(e.target.value)}
-                    placeholder="Enter your team name (without 'Team')"
+                    placeholder="e.g., Thunder Audio, Bass Hunters, Sound Warriors"
                     className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                      containsTeamWord(teamName) ? 'border-yellow-500' : 'border-slate-600'
+                      containsTeamWord(teamName) ? 'border-red-500' : 'border-slate-600'
                     }`}
                   />
                   {containsTeamWord(teamName) && (
-                    <p className="text-yellow-500 text-xs mt-1 flex items-center">
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
                       <AlertCircle className="h-3 w-3 mr-1" />
-                      The word "Team" will be removed automatically
+                      Team name cannot contain "team" or variations (T3@M, TEAM, backwards, etc.)
                     </p>
                   )}
                   <p className="text-gray-500 text-xs mt-1">
-                    Your team will appear as "Team {sanitizeTeamName(teamName) || '[Name]'}"
+                    Note: The word "team" is not allowed in team names. Choose a unique name for your team.
                   </p>
                 </div>
 
@@ -447,7 +477,7 @@ export default function TeamUpgradeModal({
               >
                 <PaymentForm
                   upgradeDetails={upgradeDetails}
-                  teamName={sanitizeTeamName(teamName)}
+                  teamName={teamName.trim()}
                   teamDescription={teamDescription}
                   onSuccess={handlePaymentSuccess}
                   onBack={() => setStep('details')}

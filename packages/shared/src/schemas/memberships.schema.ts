@@ -112,7 +112,17 @@ export const AdminCreateMembershipSchema = z.object({
 
   // Business fields (for Retailer/Manufacturer)
   businessName: z.string().optional(),
+  businessPhone: z.string().optional(),
   businessWebsite: z.string().url().optional().or(z.literal('')),
+  // Business address (structured, ISO standard)
+  businessStreet: z.string().optional(),
+  businessCity: z.string().optional(),
+  businessState: z.string().optional(), // ISO 3166-2
+  businessPostalCode: z.string().optional(),
+  businessCountry: z.string().optional().default('US'), // ISO 3166-1 alpha-2
+  // Business directory listing
+  businessDescription: z.string().optional(),
+  businessLogoUrl: z.string().url().optional().or(z.literal('')),
   manufacturerTier: ManufacturerTierSchema.optional(), // Only for Manufacturer memberships
 
   // Billing information

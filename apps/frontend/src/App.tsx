@@ -16,9 +16,9 @@ import MECAQuickStartGuidePage from '@/pages/MECAQuickStartGuidePage';
 // Feature pages
 import { LoginPage, ChangePasswordPage, AuthCallbackPage } from '@/auth';
 import { EventsPage, EventDetailPage } from '@/events';
-import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage } from '@/competition-results';
+import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage, TeamStandingsPage, TeamLeaderboardPage } from '@/competition-results';
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
-import { DashboardPage, MyMecaDashboardPage, AdminDashboardPage } from '@/dashboard';
+import { DashboardPage, MyMecaDashboardPage, AdminDashboardPage, BusinessListingDashboardPage, MembershipDashboardPage } from '@/dashboard';
 import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage } from '@/profiles';
 import { TeamDirectoryPage, TeamPublicProfilePage } from '@/teams';
 import { RetailerDirectoryPage, RetailerProfilePage, ManufacturerDirectoryPage, ManufacturerProfilePage, ManufacturerPartnerInfoPage } from '@/business-listings';
@@ -105,6 +105,8 @@ function App() {
               <Route path="/results/member/:mecaId" element={<MemberResultsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/standings" element={<StandingsPage />} />
+              <Route path="/team-standings" element={<TeamStandingsPage />} />
+              <Route path="/team-leaderboard" element={<TeamLeaderboardPage />} />
               <Route path="/rulebooks" element={<RulebooksPage />} />
               <Route path="/rulebooks/:rulebookId" element={<RulebookDetailPage />} />
               <Route path="/rulebooks/archive" element={<RulebookArchivePage />} />
@@ -157,6 +159,8 @@ function App() {
               {/* User Routes */}
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/dashboard/mymeca" element={<MyMecaDashboardPage />} />
+              <Route path="/dashboard/business-listing" element={<BusinessListingDashboardPage />} />
+              <Route path="/dashboard/membership" element={<MembershipDashboardPage />} />
               <Route path="/dashboard/admin" element={<AdminDashboardPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/public-profile" element={<PublicProfilePage />} />

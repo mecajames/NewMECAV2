@@ -29,6 +29,8 @@ export const PAGE_TITLES = {
   results: 'Competition Results | MECA Car Audio',
   leaderboard: 'Leaderboard Rankings | MECA Car Audio',
   standings: 'Season Standings | MECA Car Audio',
+  teamStandings: 'Team Standings | MECA Car Audio',
+  teamLeaderboard: 'Top 10 Teams | MECA Car Audio',
   // Directories
   members: 'Member Directory | MECA Car Audio',
   memberProfile: (name: string) => `${name} | MECA Member`,
@@ -67,6 +69,8 @@ export const PAGE_DESCRIPTIONS = {
   results: 'View competition results from MECA sanctioned car audio events. See scores, placements, and detailed breakdowns.',
   leaderboard: 'Check the current MECA leaderboard rankings. See who leads in SPL, SQL, and overall points standings.',
   standings: 'View current season standings for MECA competitors. Track points, rankings, and championship positions.',
+  teamStandings: 'View team standings for MECA car audio competitions. See which teams are leading in total points this season.',
+  teamLeaderboard: 'View the top 10 teams in MECA car audio competitions. See which teams are leading in total points this season.',
   // Directories
   members: 'Browse the MECA member directory. Find competitors, enthusiasts, and community members.',
   teams: 'Discover MECA competition teams. Browse team profiles and see their achievements.',

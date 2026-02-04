@@ -5,3 +5,4 @@ export { default as MembershipTypeManagement } from './components/MembershipType
 export { default as TeamUpgradeModal } from './components/TeamUpgradeModal';
 export { AddSecondaryModal } from './components/AddSecondaryModal';
 export { EditSecondaryModal } from './components/EditSecondaryModal';
+export { default as MemberCancelMembershipModal } from './components/MemberCancelMembershipModal';

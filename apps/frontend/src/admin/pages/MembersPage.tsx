@@ -35,6 +35,8 @@ interface MembershipInfo {
   paymentStatus: string;
   endDate?: string;
   accountType?: string;
+  // Auto-renewal status: 'on' (active Stripe subscription), 'legacy' (had PMPro recurring), 'off' (one-time payment)
+  autoRenewStatus: 'on' | 'legacy' | 'off';
   // Secondary memberships attached to this master
   secondaries: SecondaryMembershipInfo[];
 }
@@ -56,6 +58,7 @@ export default function MembersPage() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [membershipTypeFilter, setMembershipTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [autoRenewFilter, setAutoRenewFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'meca_id' | 'created_at'>('name');
   const [showUserWizard, setShowUserWizard] = useState(false);
 
@@ -106,7 +109,7 @@ export default function MembersPage() {
 
   useEffect(() => {
     filterAndSortMembers();
-  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, sortBy, mecaIdMin, mecaIdMax]);
+  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, sortBy, mecaIdMin, mecaIdMax]);
 
   const fetchMembers = async () => {
     try {
@@ -149,6 +152,8 @@ export default function MembersPage() {
           vehicle_color,
           vehicle_make,
           vehicle_model,
+          stripe_subscription_id,
+          had_legacy_subscription,
           membership_type_configs (
             category,
             is_upgrade_only,
@@ -230,6 +235,17 @@ export default function MembersPage() {
             usersWithTeamAddon.has(m.user_id) ||
             (isUpgradeOnly && config.name?.toLowerCase().includes('team') && config.category === 'competitor');
 
+          // Determine auto-renewal status:
+          // - 'on' = Has active Stripe subscription
+          // - 'legacy' = Had recurring billing in PMPro (needs to re-setup)
+          // - 'off' = No recurring billing
+          let autoRenewStatus: 'on' | 'legacy' | 'off' = 'off';
+          if (m.stripe_subscription_id) {
+            autoRenewStatus = 'on';
+          } else if (m.had_legacy_subscription) {
+            autoRenewStatus = 'legacy';
+          }
+
           membershipMap.set(m.user_id, {
             id: m.id,
             mecaId: m.meca_id,
@@ -238,6 +254,7 @@ export default function MembersPage() {
             paymentStatus: m.payment_status,
             endDate: m.end_date || undefined,
             accountType: m.account_type,
+            autoRenewStatus,
             secondaries: [], // Will be populated below for masters
             priority,
             isUpgradeOnly,
@@ -394,22 +411,25 @@ export default function MembersPage() {
     try {
       // Store admin session info before impersonating (use sessionStorage for security - clears on tab close)
       const { data: { session: adminSession } } = await supabase.auth.getSession();
-      if (adminSession) {
-        sessionStorage.setItem('adminSession', JSON.stringify({
-          access_token: adminSession.access_token,
-          refresh_token: adminSession.refresh_token,
-          user: adminSession.user,
-        }));
-        sessionStorage.setItem('isImpersonating', 'true');
-        sessionStorage.setItem('impersonatedUserId', member.id);
-        sessionStorage.setItem('impersonatedUserName', `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email);
+      if (!adminSession) {
+        throw new Error('No active session. Please log in again.');
       }
+
+      sessionStorage.setItem('adminSession', JSON.stringify({
+        access_token: adminSession.access_token,
+        refresh_token: adminSession.refresh_token,
+        user: adminSession.user,
+      }));
+      sessionStorage.setItem('isImpersonating', 'true');
+      sessionStorage.setItem('impersonatedUserId', member.id);
+      sessionStorage.setItem('impersonatedUserName', `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email);
 
       // Get impersonation link from backend
       const response = await fetch(`${API_BASE_URL}/api/profiles/admin/impersonate/${member.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminSession.access_token}`,
         },
         body: JSON.stringify({
           redirectTo: `${window.location.origin}/dashboard`,
@@ -417,7 +437,9 @@ export default function MembersPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate impersonation link');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Impersonation API error:', response.status, errorData);
+        throw new Error(errorData.message || errorData.error || `Server error: ${response.status}`);
       }
 
       const data = await response.json();
@@ -430,12 +452,13 @@ export default function MembersPage() {
       }
     } catch (error) {
       console.error('Error impersonating user:', error);
-      alert('Failed to impersonate user. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to impersonate user: ${errorMessage}`);
       // Clean up stored session if impersonation failed
-      localStorage.removeItem('adminSession');
-      localStorage.removeItem('isImpersonating');
-      localStorage.removeItem('impersonatedUserId');
-      localStorage.removeItem('impersonatedUserName');
+      sessionStorage.removeItem('adminSession');
+      sessionStorage.removeItem('isImpersonating');
+      sessionStorage.removeItem('impersonatedUserId');
+      sessionStorage.removeItem('impersonatedUserName');
     } finally {
       setImpersonateLoading(null);
     }
@@ -515,6 +538,14 @@ export default function MembersPage() {
       filtered = filtered.filter((member) => getDerivedMembershipStatus(member.membershipInfo) === statusFilter);
     }
 
+    // Apply auto-renew filter
+    if (autoRenewFilter !== 'all') {
+      filtered = filtered.filter((member) => {
+        if (!member.membershipInfo) return autoRenewFilter === 'none';
+        return member.membershipInfo.autoRenewStatus === autoRenewFilter;
+      });
+    }
+
     // Apply MECA ID range filter
     if (mecaIdMin || mecaIdMax) {
       const minId = mecaIdMin ? parseInt(mecaIdMin, 10) : 0;
@@ -546,7 +577,7 @@ export default function MembersPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, sortBy, mecaIdMin, mecaIdMax]);
+  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, sortBy, mecaIdMin, mecaIdMax]);
 
   // Paginated members
   const totalPages = Math.ceil(filteredMembers.length / membersPerPage);
@@ -782,6 +813,22 @@ export default function MembersPage() {
                 <option value="pending">Pending</option>
                 <option value="expired">Expired</option>
                 <option value="none">None</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Auto-Renew
+              </label>
+              <select
+                value={autoRenewFilter}
+                onChange={(e) => setAutoRenewFilter(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              >
+                <option value="all">All</option>
+                <option value="on">On (Active Subscription)</option>
+                <option value="legacy">Legacy (Needs Re-setup)</option>
+                <option value="off">Off (One-time Payment)</option>
               </select>
             </div>
           </div>
@@ -1022,6 +1069,9 @@ export default function MembersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Status
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Auto-Renew
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Joined
                   </th>
@@ -1033,7 +1083,7 @@ export default function MembersPage() {
               <tbody className="bg-slate-800 divide-y divide-slate-700">
                 {paginatedMembers.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan={10} className="px-6 py-12 text-center text-gray-400">
                       No members found matching your criteria.
                     </td>
                   </tr>
@@ -1167,6 +1217,34 @@ export default function MembersPage() {
                             >
                               {getDerivedMembershipStatus(member.membershipInfo)}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            {member.membershipInfo ? (
+                              <span
+                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                  member.membershipInfo.autoRenewStatus === 'on'
+                                    ? 'bg-green-100 text-green-800'
+                                    : member.membershipInfo.autoRenewStatus === 'legacy'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}
+                                title={
+                                  member.membershipInfo.autoRenewStatus === 'on'
+                                    ? 'Active Stripe subscription'
+                                    : member.membershipInfo.autoRenewStatus === 'legacy'
+                                    ? 'Had recurring billing in PMPro - needs to re-setup'
+                                    : 'One-time payment'
+                                }
+                              >
+                                {member.membershipInfo.autoRenewStatus === 'on'
+                                  ? 'On'
+                                  : member.membershipInfo.autoRenewStatus === 'legacy'
+                                  ? 'Legacy'
+                                  : 'Off'}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-500">-</span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                             {new Date(member.created_at).toLocaleDateString()}

@@ -15,8 +15,10 @@ import {
   Eye,
   EyeOff,
   UserPlus,
+  Newspaper,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { newsletterApi } from '@/newsletter';
 import {
   membershipTypeConfigsApi,
   MembershipTypeConfig,
@@ -37,6 +39,45 @@ const isStripeConfigured = !!stripePublishableKey &&
 const LazyMembershipStripePaymentForm = isStripeConfigured
   ? lazy(() => import('@/memberships/components/MembershipStripePaymentForm'))
   : null;
+
+/**
+ * Check if team name contains any variation of "team"
+ * Includes: team, Team, TEAM, t3@m, T3AM, maet (backwards), spaced variations
+ */
+function containsTeamWord(name: string): boolean {
+  if (!name) return false;
+
+  const normalized = name.toLowerCase().trim();
+
+  // Direct match for "team"
+  if (normalized.includes('team')) return true;
+
+  // Backwards "team" -> "maet"
+  if (normalized.includes('maet')) return true;
+
+  // Leet speak variations: t3@m, t3am, te@m, t34m, etc.
+  const leetNormalized = normalized
+    .replace(/3/g, 'e')
+    .replace(/@/g, 'a')
+    .replace(/4/g, 'a')
+    .replace(/0/g, 'o')
+    .replace(/1/g, 'i')
+    .replace(/\$/g, 's')
+    .replace(/7/g, 't');
+
+  if (leetNormalized.includes('team') || leetNormalized.includes('maet')) return true;
+
+  // Check for spaced out variations: t e a m, t-e-a-m, t.e.a.m
+  const noSpaces = normalized.replace(/[\s\-._]/g, '');
+  const noSpacesLeet = noSpaces
+    .replace(/3/g, 'e')
+    .replace(/@/g, 'a')
+    .replace(/4/g, 'a');
+
+  if (noSpacesLeet.includes('team') || noSpacesLeet.includes('maet')) return true;
+
+  return false;
+}
 
 interface FormData {
   // Contact Info
@@ -65,6 +106,10 @@ interface FormData {
   // Business Info (for retailer/manufacturer memberships)
   businessName: string;
   businessWebsite: string;
+  // Auto-renewal option
+  enableAutoRenewal: boolean;
+  // Newsletter signup
+  subscribeNewsletter: boolean;
 }
 
 interface OrderData {
@@ -131,6 +176,10 @@ export default function MembershipCheckoutPage() {
     teamDescription: '',
     businessName: '',
     businessWebsite: '',
+    // Auto-renewal (subscription)
+    enableAutoRenewal: false,
+    // Newsletter signup
+    subscribeNewsletter: true, // Default to checked
   });
 
   useEffect(() => {
@@ -214,6 +263,12 @@ export default function MembershipCheckoutPage() {
       return false;
     }
 
+    // Team name cannot contain "team" or variations
+    if (formData.teamName && containsTeamWord(formData.teamName)) {
+      setError('Team name cannot contain the word "team" or variations (T3@M, TEAM, backwards, etc.). Please choose a different name.');
+      return false;
+    }
+
     // Retailer-specific validation
     if (membership?.category === MembershipCategory.RETAIL && !formData.businessName) {
       setError('Business name is required');
@@ -239,7 +294,39 @@ export default function MembershipCheckoutPage() {
     try {
       const email = user ? (profile?.email || formData.email) : formData.email;
 
-      // Create Payment Intent via backend
+      // If auto-renewal is enabled, redirect to Stripe Checkout for subscription
+      if (formData.enableAutoRenewal) {
+        const successUrl = `${window.location.origin}/membership/checkout/${membership.id}/success?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl = window.location.href;
+
+        const response = await fetch(`${API_URL}/api/stripe/create-subscription-checkout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            membershipTypeConfigId: membership.id,
+            email,
+            userId: user?.id,
+            successUrl,
+            cancelUrl,
+            billingFirstName: formData.firstName,
+            billingLastName: formData.lastName,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to initialize subscription checkout');
+        }
+
+        const { checkoutUrl } = await response.json();
+        // Redirect to Stripe Checkout
+        window.location.href = checkoutUrl;
+        return;
+      }
+
+      // Create Payment Intent via backend (one-time payment)
       const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
         method: 'POST',
         headers: {
@@ -295,6 +382,20 @@ export default function MembershipCheckoutPage() {
       firstName: formData.firstName,
       lastName: formData.lastName,
     });
+
+    // Subscribe to newsletter if checkbox was checked
+    if (formData.subscribeNewsletter && email) {
+      try {
+        await newsletterApi.signup({
+          email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+        });
+      } catch (err) {
+        // Don't block checkout if newsletter signup fails
+        console.error('Newsletter signup failed:', err);
+      }
+    }
 
     // Proceed to confirmation
     setStep('confirmation');
@@ -911,10 +1012,21 @@ export default function MembershipCheckoutPage() {
                             name="teamName"
                             value={formData.teamName}
                             onChange={handleInputChange}
-                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="Your Team Name"
+                            className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                              containsTeamWord(formData.teamName) ? 'border-red-500' : 'border-slate-600'
+                            }`}
+                            placeholder="e.g., Thunder Audio, Bass Hunters, Sound Warriors"
                             required
                           />
+                          {containsTeamWord(formData.teamName) && (
+                            <p className="text-red-500 text-xs mt-1 flex items-center">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Team name cannot contain "team" or variations (T3@M, TEAM, backwards, etc.)
+                            </p>
+                          )}
+                          <p className="text-gray-500 text-xs mt-1">
+                            Note: The word "team" is not allowed in team names. Choose a unique name for your team.
+                          </p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -971,6 +1083,53 @@ export default function MembershipCheckoutPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Auto-Renewal Option */}
+                  <div className="mb-4 p-4 bg-slate-700/50 rounded-xl border border-slate-600">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.enableAutoRenewal}
+                        onChange={(e) => setFormData(prev => ({ ...prev, enableAutoRenewal: e.target.checked }))}
+                        className="mt-1 w-5 h-5 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-white font-medium">Enable Auto-Renewal</span>
+                        <p className="text-gray-400 text-sm mt-1">
+                          Automatically renew your membership each year. You can cancel anytime from your dashboard.
+                        </p>
+                        {formData.enableAutoRenewal && (
+                          <div className="mt-2 p-2 bg-green-500/10 border border-green-500/30 rounded-lg">
+                            <p className="text-green-400 text-xs flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              You'll be charged ${membership.price.toFixed(2)}/year. Cancel anytime.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Newsletter Signup Option */}
+                  <div className="mb-8 p-4 bg-slate-700/50 rounded-xl border border-slate-600">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.subscribeNewsletter}
+                        onChange={(e) => setFormData(prev => ({ ...prev, subscribeNewsletter: e.target.checked }))}
+                        className="mt-1 w-5 h-5 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Newspaper className="h-4 w-4 text-orange-500" />
+                          <span className="text-white font-medium">Subscribe to MECA Head Newsletter</span>
+                        </div>
+                        <p className="text-gray-400 text-sm mt-1">
+                          Get event updates, competition news, tips, and exclusive content delivered to your inbox.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
 
                   <button
                     type="submit"

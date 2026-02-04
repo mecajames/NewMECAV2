@@ -17,6 +17,10 @@ import { EntityManager } from '@mikro-orm/core';
 import { StripeService } from './stripe.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { MasterSecondaryService } from '../memberships/master-secondary.service';
+import { MecaIdService } from '../memberships/meca-id.service';
+import { MembershipSyncService } from '../memberships/membership-sync.service';
+import { Membership } from '../memberships/memberships.entity';
+import { PaymentStatus } from '@newmeca/shared';
 import { QuickBooksService } from '../quickbooks/quickbooks.service';
 import { EventRegistrationsService, CreateRegistrationDto } from '../event-registrations/event-registrations.service';
 import { OrdersService } from '../orders/orders.service';
@@ -116,6 +120,8 @@ export class StripeController {
     private readonly invoicesService: InvoicesService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly shopService: ShopService,
+    private readonly mecaIdService: MecaIdService,
+    private readonly membershipSyncService: MembershipSyncService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -540,6 +546,89 @@ export class StripeController {
     };
   }
 
+  /**
+   * Create a Stripe Checkout Session for subscription-based membership purchase.
+   * This redirects the user to Stripe Checkout for recurring billing setup.
+   */
+  @Post('create-subscription-checkout')
+  @HttpCode(HttpStatus.OK)
+  async createSubscriptionCheckout(
+    @Body() data: {
+      membershipTypeConfigId: string;
+      email: string;
+      userId?: string;
+      successUrl: string;
+      cancelUrl: string;
+      billingFirstName?: string;
+      billingLastName?: string;
+    },
+  ): Promise<{ checkoutUrl: string; sessionId: string }> {
+    // Validate required fields
+    if (!data.membershipTypeConfigId) {
+      throw new BadRequestException('Membership type is required');
+    }
+    if (!data.email) {
+      throw new BadRequestException('Email is required');
+    }
+    if (!data.successUrl || !data.cancelUrl) {
+      throw new BadRequestException('Success and cancel URLs are required');
+    }
+
+    const em = this.em.fork();
+
+    // Get membership type config
+    const membershipConfig = await em.findOne(MembershipTypeConfig, { id: data.membershipTypeConfigId });
+    if (!membershipConfig) {
+      throw new BadRequestException('Membership type not found');
+    }
+
+    if (!membershipConfig.stripeProductId) {
+      throw new BadRequestException('This membership type is not configured for recurring billing. Please contact support.');
+    }
+
+    // Get or create a recurring price for this product
+    const priceInCents = Math.round(membershipConfig.price * 100);
+    const price = await this.stripeService.getOrCreateRecurringPrice({
+      productId: membershipConfig.stripeProductId,
+      unitAmount: priceInCents,
+      interval: 'year', // Memberships are annual
+      currency: membershipConfig.currency || 'usd',
+    });
+
+    // Find or create Stripe customer
+    const customerName = [data.billingFirstName, data.billingLastName].filter(Boolean).join(' ') || undefined;
+    const customer = await this.stripeService.findOrCreateCustomer(data.email, customerName);
+
+    // Build metadata
+    const metadata: Record<string, string> = {
+      paymentType: 'MEMBERSHIP_SUBSCRIPTION',
+      membershipTypeConfigId: membershipConfig.id,
+      membershipTypeName: membershipConfig.name,
+      email: data.email,
+    };
+    if (data.userId) metadata.userId = data.userId;
+    if (data.billingFirstName) metadata.billingFirstName = data.billingFirstName;
+    if (data.billingLastName) metadata.billingLastName = data.billingLastName;
+
+    // Create checkout session
+    const session = await this.stripeService.createSubscriptionCheckoutSession({
+      customerId: customer.id,
+      priceId: price.id,
+      successUrl: data.successUrl,
+      cancelUrl: data.cancelUrl,
+      metadata,
+    });
+
+    if (!session.url) {
+      throw new BadRequestException('Failed to create checkout session');
+    }
+
+    return {
+      checkoutUrl: session.url,
+      sessionId: session.id,
+    };
+  }
+
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
@@ -596,6 +685,20 @@ export class StripeController {
           break;
         case 'charge.dispute.created':
           await this.handleDisputeCreated(event.data.object as Stripe.Dispute);
+          webhookEvent.processingResult = 'success';
+          break;
+        // Subscription events
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated':
+          await this.handleSubscriptionCreatedOrUpdated(event.data.object as Stripe.Subscription);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'customer.subscription.deleted':
+          await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'checkout.session.completed':
+          await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
           webhookEvent.processingResult = 'success';
           break;
         default:
@@ -1273,6 +1376,161 @@ export class StripeController {
 
     // TODO: Send email notification to admin
     // TODO: Consider freezing associated membership until dispute is resolved
+  }
+
+  /**
+   * Handle subscription created or updated events.
+   * Links the subscription to the membership if not already linked.
+   */
+  private async handleSubscriptionCreatedOrUpdated(subscription: Stripe.Subscription): Promise<void> {
+    console.log('Subscription created/updated:', subscription.id, 'Status:', subscription.status);
+
+    const metadata = subscription.metadata;
+    const membershipId = metadata?.membershipId;
+
+    if (!membershipId) {
+      console.log('Subscription has no membershipId in metadata, skipping');
+      return;
+    }
+
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId });
+
+    if (membership) {
+      // Update the membership with subscription ID if not already set
+      if (!membership.stripeSubscriptionId) {
+        membership.stripeSubscriptionId = subscription.id;
+        await em.flush();
+        console.log(`Membership ${membershipId} linked to subscription ${subscription.id}`);
+      }
+    } else {
+      console.error(`Membership ${membershipId} not found for subscription ${subscription.id}`);
+    }
+  }
+
+  /**
+   * Handle subscription deleted event.
+   * Clears the subscription ID from the membership.
+   */
+  private async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
+    console.log('Subscription deleted:', subscription.id);
+
+    const em = this.em.fork();
+
+    // Find membership with this subscription ID
+    const membership = await em.findOne(Membership, { stripeSubscriptionId: subscription.id });
+
+    if (membership) {
+      membership.stripeSubscriptionId = undefined;
+      await em.flush();
+      console.log(`Cleared subscription from membership ${membership.id}`);
+    }
+  }
+
+  /**
+   * Handle checkout.session.completed event for subscription checkouts.
+   * Creates the membership when a subscription checkout completes.
+   */
+  private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
+    console.log('Checkout session completed:', session.id, 'Mode:', session.mode);
+
+    // Only handle subscription checkouts
+    if (session.mode !== 'subscription') {
+      console.log('Non-subscription checkout, skipping');
+      return;
+    }
+
+    const metadata = session.metadata;
+    if (!metadata || metadata.paymentType !== 'MEMBERSHIP_SUBSCRIPTION') {
+      console.log('Not a membership subscription checkout, skipping');
+      return;
+    }
+
+    const membershipTypeConfigId = metadata.membershipTypeConfigId;
+    const email = metadata.email;
+    const userId = metadata.userId;
+    const subscriptionId = session.subscription as string;
+
+    if (!membershipTypeConfigId || !email) {
+      console.error('Missing required metadata for subscription checkout:', session.id);
+      return;
+    }
+
+    const em = this.em.fork();
+
+    // Get membership type config
+    const membershipConfig = await em.findOne(MembershipTypeConfig, { id: membershipTypeConfigId });
+    if (!membershipConfig) {
+      console.error('Membership type config not found:', membershipTypeConfigId);
+      return;
+    }
+
+    // Find or create user
+    let profile = userId ? await em.findOne(Profile, { id: userId }) : null;
+    if (!profile) {
+      profile = await em.findOne(Profile, { email: email.toLowerCase() });
+    }
+
+    if (!profile) {
+      console.error('No user found for subscription checkout. Email:', email);
+      // TODO: Create a pending membership or send invitation email
+      return;
+    }
+
+    try {
+      // Create the membership via the memberships service
+      const membership = new Membership();
+      membership.user = profile;
+      membership.membershipTypeConfig = membershipConfig;
+      membership.amountPaid = membershipConfig.price;
+      membership.paymentStatus = PaymentStatus.PAID;
+      membership.stripeSubscriptionId = subscriptionId;
+      membership.startDate = new Date();
+
+      // Set end date to 1 year from now
+      const endDate = new Date();
+      endDate.setFullYear(endDate.getFullYear() + 1);
+      membership.endDate = endDate;
+
+      // Set competitor name from metadata if available
+      const billingFirstName = metadata.billingFirstName || profile.first_name || '';
+      const billingLastName = metadata.billingLastName || profile.last_name || '';
+      membership.competitorName = [billingFirstName, billingLastName].filter(Boolean).join(' ');
+
+      // Assign MECA ID
+      const mecaId = await this.mecaIdService.assignMecaIdToMembership(membership);
+      membership.mecaId = mecaId;
+
+      await em.persistAndFlush(membership);
+
+      // Update profile membership status
+      await this.membershipSyncService.setProfileActive(profile.id);
+
+      console.log(`Created subscription membership ${membership.id} with MECA ID ${mecaId} for user ${profile.id}`);
+
+      // Create order and invoice
+      // Get Stripe subscription for amount details
+      const stripe = new (await import('stripe')).default(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: '2025-02-24.acacia',
+      });
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const invoice = stripeSubscription.latest_invoice as Stripe.Invoice | null;
+      const paymentIntentId = typeof invoice?.payment_intent === 'string' ? invoice.payment_intent : invoice?.payment_intent?.id;
+
+      if (paymentIntentId) {
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        // Build metadata for order/invoice creation
+        const orderMetadata: Stripe.Metadata = {
+          ...metadata,
+          membershipId: membership.id,
+          mecaId: String(mecaId),
+        };
+        await this.createOrderAndInvoice(paymentIntent, orderMetadata, membershipConfig.price, 'membership');
+      }
+
+    } catch (error) {
+      console.error('Error creating membership from subscription checkout:', error);
+    }
   }
 
   private getMembershipTypeFromCategory(category: string): MembershipType {

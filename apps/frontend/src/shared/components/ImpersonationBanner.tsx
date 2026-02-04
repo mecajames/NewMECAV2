@@ -28,17 +28,18 @@ export default function ImpersonationBanner() {
 
       const adminSession = JSON.parse(adminSessionStr);
 
-      // Sign out of current session first
+      // Sign out of current impersonated session first
       await supabase.auth.signOut();
 
-      // Restore admin session
-      const { error } = await supabase.auth.setSession({
-        access_token: adminSession.access_token,
+      // Try to restore admin session using refresh token
+      // The access token may have expired, so we use refreshSession which handles this
+      const { data, error } = await supabase.auth.refreshSession({
         refresh_token: adminSession.refresh_token,
       });
 
-      if (error) {
-        throw error;
+      if (error || !data.session) {
+        // If refresh fails, the session is too old - user needs to re-login
+        throw new Error('Admin session expired. Please log in again.');
       }
 
       // Clear impersonation state
@@ -51,7 +52,8 @@ export default function ImpersonationBanner() {
       window.location.href = '/admin/members';
     } catch (error) {
       console.error('Error restoring admin session:', error);
-      alert('Failed to restore admin session. Please log in again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to restore admin session: ${errorMessage}`);
 
       // Clear everything and redirect to login
       sessionStorage.removeItem('adminSession');

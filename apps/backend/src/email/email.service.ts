@@ -147,6 +147,16 @@ export interface SendSecondaryMemberWelcomeEmailDto {
   benefits?: string[];
 }
 
+export interface SendMembershipCancelledRefundedEmailDto {
+  to: string;
+  firstName?: string;
+  mecaId: number;
+  membershipType: string;
+  cancellationDate: Date;
+  refundAmount?: number;
+  reason: string;
+}
+
 // ==========================================================================
 // Ticket Email DTOs
 // ==========================================================================
@@ -770,6 +780,29 @@ export class EmailService {
 
     const html = this.getSecondaryMemberWelcomeEmailTemplate(dto, expiryDateStr);
     const text = this.getSecondaryMemberWelcomeEmailText(dto, expiryDateStr);
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Send notification when a membership is cancelled and refunded
+   */
+  async sendMembershipCancelledRefundedEmail(dto: SendMembershipCancelledRefundedEmailDto): Promise<{ success: boolean; error?: string }> {
+    const subject = 'Your MECA Membership Has Been Cancelled';
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+    const cancellationDateStr = dto.cancellationDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const html = this.getMembershipCancelledRefundedEmailTemplate(greeting, dto, cancellationDateStr);
+    const text = this.getMembershipCancelledRefundedEmailText(greeting, dto, cancellationDateStr);
 
     return this.sendEmail({
       to: dto.to,
@@ -2460,6 +2493,123 @@ NOTE: As a secondary member, your membership is managed by ${dto.masterMemberNam
 Find upcoming events: https://meca.com/events
 
 Questions? Contact us at support@mecacaraudio.com
+
+© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+    `.trim();
+  }
+
+  private getMembershipCancelledRefundedEmailTemplate(
+    greeting: string,
+    dto: SendMembershipCancelledRefundedEmailDto,
+    cancellationDateStr: string
+  ): string {
+    const refundSection = dto.refundAmount
+      ? `
+      <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <h3 style="margin: 0 0 10px 0; color: #065f46;">Refund Processed</h3>
+        <p style="margin: 0; color: #047857; font-size: 20px; font-weight: bold;">
+          $${dto.refundAmount.toFixed(2)}
+        </p>
+        <p style="margin: 10px 0 0 0; color: #047857; font-size: 14px;">
+          The refund will appear on your original payment method within 5-10 business days.
+        </p>
+      </div>`
+      : '';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Membership Cancelled - MECA</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Membership Cancelled</h1>
+    <p style="color: #94a3b8; margin: 10px 0 0 0;">Your MECA membership has been cancelled</p>
+  </div>
+
+  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+    <p style="font-size: 16px;">${greeting},</p>
+
+    <p>We're writing to confirm that your MECA membership has been cancelled as requested.</p>
+
+    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <h3 style="margin: 0 0 15px 0; color: #1e293b;">Cancellation Details</h3>
+      <p style="margin: 5px 0;"><strong>MECA ID:</strong> #${dto.mecaId}</p>
+      <p style="margin: 5px 0;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
+      <p style="margin: 5px 0;"><strong>Cancelled On:</strong> ${cancellationDateStr}</p>
+      ${dto.reason ? `<p style="margin: 5px 0;"><strong>Reason:</strong> ${dto.reason}</p>` : ''}
+    </div>
+
+    ${refundSection}
+
+    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+      <p style="margin: 0; color: #92400e;">
+        <strong>Important:</strong> Your membership is now inactive. You will no longer be able to:
+      </p>
+      <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400e;">
+        <li>Register for MECA events</li>
+        <li>Access member-only benefits</li>
+        <li>Maintain your competition standings</li>
+      </ul>
+    </div>
+
+    <p>If you change your mind, you can rejoin MECA at any time by visiting our website.</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="https://meca.com/memberships" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Rejoin MECA</a>
+    </div>
+
+    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
+      If you have any questions, contact us at support@mecacaraudio.com
+    </p>
+  </div>
+
+  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
+    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
+  </div>
+</body>
+</html>
+    `.trim();
+  }
+
+  private getMembershipCancelledRefundedEmailText(
+    greeting: string,
+    dto: SendMembershipCancelledRefundedEmailDto,
+    cancellationDateStr: string
+  ): string {
+    const refundSection = dto.refundAmount
+      ? `
+REFUND PROCESSED
+----------------
+Amount: $${dto.refundAmount.toFixed(2)}
+The refund will appear on your original payment method within 5-10 business days.
+`
+      : '';
+
+    return `
+${greeting},
+
+We're writing to confirm that your MECA membership has been cancelled as requested.
+
+CANCELLATION DETAILS
+--------------------
+MECA ID: #${dto.mecaId}
+Membership Type: ${dto.membershipType}
+Cancelled On: ${cancellationDateStr}
+${dto.reason ? `Reason: ${dto.reason}` : ''}
+
+${refundSection}
+IMPORTANT: Your membership is now inactive. You will no longer be able to:
+- Register for MECA events
+- Access member-only benefits
+- Maintain your competition standings
+
+If you change your mind, you can rejoin MECA at any time by visiting: https://meca.com/memberships
+
+If you have any questions, contact us at support@mecacaraudio.com
 
 © ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
     `.trim();

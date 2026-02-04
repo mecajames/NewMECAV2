@@ -23,6 +23,64 @@ import { OrderItem } from '../orders/order-items.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { EmailService } from '../email/email.service';
+import { StripeService } from '../stripe/stripe.service';
+
+/**
+ * Validates that a team name does not contain variations of the word "team".
+ * Checks for: team, Team, TEAM, t3@m, T3AM, backwards (maet, maeT), and similar variations.
+ * @param teamName The team name to validate
+ * @returns true if valid (does NOT contain "team" variations), false otherwise
+ */
+export function isValidTeamName(teamName: string): boolean {
+  if (!teamName) return true;
+
+  const normalized = teamName.toLowerCase().trim();
+
+  // Direct matches for "team" (case insensitive already)
+  if (normalized.includes('team')) {
+    return false;
+  }
+
+  // Check for backwards "team" -> "maet"
+  if (normalized.includes('maet')) {
+    return false;
+  }
+
+  // Leet speak variations: t3@m, t3am, te@m, t34m, etc.
+  // Replace common leet substitutions and check again
+  const leetNormalized = normalized
+    .replace(/3/g, 'e')
+    .replace(/@/g, 'a')
+    .replace(/4/g, 'a')
+    .replace(/0/g, 'o')
+    .replace(/1/g, 'i')
+    .replace(/\$/g, 's')
+    .replace(/7/g, 't');
+
+  if (leetNormalized.includes('team') || leetNormalized.includes('maet')) {
+    return false;
+  }
+
+  // Check for spaced out variations: t e a m, t-e-a-m, t.e.a.m
+  const noSpaces = normalized.replace(/[\s\-._]/g, '');
+  const noSpacesLeet = noSpaces
+    .replace(/3/g, 'e')
+    .replace(/@/g, 'a')
+    .replace(/4/g, 'a');
+
+  if (noSpacesLeet.includes('team') || noSpacesLeet.includes('maet')) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Returns an error message for invalid team names
+ */
+export function getTeamNameValidationError(): string {
+  return 'Team name cannot contain the word "team" or variations of it (including T3@M, TEAM, backwards, etc.). Please choose a different name.';
+}
 
 // Legacy interface - kept for backwards compatibility
 export interface AdminAssignMembershipDto {
@@ -58,7 +116,17 @@ export interface CreateMembershipDto {
   teamDescription?: string;
   // Business info
   businessName?: string;
+  businessPhone?: string;
   businessWebsite?: string;
+  // Business address (structured, ISO standard)
+  businessStreet?: string;
+  businessCity?: string;
+  businessState?: string; // ISO 3166-2
+  businessPostalCode?: string;
+  businessCountry?: string; // ISO 3166-1 alpha-2
+  // Business directory listing
+  businessDescription?: string;
+  businessLogoUrl?: string;
   // Billing info
   billingFirstName?: string;
   billingLastName?: string;
@@ -83,6 +151,8 @@ export class MembershipsService {
     @Inject(forwardRef(() => TeamsService))
     private readonly teamsService: TeamsService,
     private readonly emailService: EmailService,
+    @Inject(forwardRef(() => StripeService))
+    private readonly stripeService: StripeService,
   ) {}
 
   async findById(id: string): Promise<Membership> {
@@ -324,6 +394,12 @@ export class MembershipsService {
       // Team add-on (for competitors) or included team (for retailer/manufacturer)
       // Also check if membership type config includes team automatically
       newMembership.hasTeamAddon = config.includesTeam || data.hasTeamAddon || false;
+
+      // Validate team name does not contain "team" variations
+      if (data.teamName && !isValidTeamName(data.teamName)) {
+        throw new BadRequestException(getTeamNameValidationError());
+      }
+
       newMembership.teamName = data.teamName;
       newMembership.teamDescription = data.teamDescription;
       if (data.teamName) {
@@ -332,7 +408,17 @@ export class MembershipsService {
 
       // Business info
       newMembership.businessName = data.businessName;
+      newMembership.businessPhone = data.businessPhone;
       newMembership.businessWebsite = data.businessWebsite;
+      // Business address (structured)
+      newMembership.businessStreet = data.businessStreet;
+      newMembership.businessCity = data.businessCity;
+      newMembership.businessState = data.businessState;
+      newMembership.businessPostalCode = data.businessPostalCode;
+      newMembership.businessCountry = data.businessCountry || 'US';
+      // Business directory listing
+      newMembership.businessDescription = data.businessDescription;
+      newMembership.businessLogoUrl = data.businessLogoUrl;
 
       // Billing info
       newMembership.billingFirstName = data.billingFirstName;
@@ -434,8 +520,20 @@ export class MembershipsService {
       newMembership.teamName = previousMembership.teamName;
       newMembership.teamDescription = previousMembership.teamDescription;
       newMembership.hasTeamAddon = previousMembership.hasTeamAddon;
+      // Business info
       newMembership.businessName = previousMembership.businessName;
+      newMembership.businessPhone = previousMembership.businessPhone;
       newMembership.businessWebsite = previousMembership.businessWebsite;
+      // Business address (structured)
+      newMembership.businessStreet = previousMembership.businessStreet;
+      newMembership.businessCity = previousMembership.businessCity;
+      newMembership.businessState = previousMembership.businessState;
+      newMembership.businessPostalCode = previousMembership.businessPostalCode;
+      newMembership.businessCountry = previousMembership.businessCountry;
+      // Business directory listing
+      newMembership.businessDescription = previousMembership.businessDescription;
+      newMembership.businessLogoUrl = previousMembership.businessLogoUrl;
+      newMembership.businessListingStatus = previousMembership.businessListingStatus;
       // Reset team name edit window - user can edit once after renewal
       // teamNameLastEdited is intentionally NOT copied so user gets a fresh edit opportunity
     }
@@ -467,6 +565,11 @@ export class MembershipsService {
       throw new BadRequestException(
         'You have already edited your team name for this membership period. Team names can only be changed once after purchase or renewal. Contact an admin if you need to make changes.'
       );
+    }
+
+    // Validate team name does not contain "team" variations
+    if (!isValidTeamName(teamName)) {
+      throw new BadRequestException(getTeamNameValidationError());
     }
 
     membership.teamName = teamName;
@@ -705,6 +808,12 @@ export class MembershipsService {
     // Team add-on (for competitor) or included team (for retailer/manufacturer)
     // Also check if membership type config includes team automatically
     membership.hasTeamAddon = membershipConfig.includesTeam || data.hasTeamAddon || false;
+
+    // Validate team name does not contain "team" variations
+    if (data.teamName && !isValidTeamName(data.teamName)) {
+      throw new BadRequestException(getTeamNameValidationError());
+    }
+
     membership.teamName = data.teamName;
     membership.teamDescription = data.teamDescription;
     if (data.teamName) {
@@ -713,7 +822,17 @@ export class MembershipsService {
 
     // Business info
     membership.businessName = data.businessName;
+    membership.businessPhone = data.businessPhone;
     membership.businessWebsite = data.businessWebsite;
+    // Business address (structured)
+    membership.businessStreet = data.businessStreet;
+    membership.businessCity = data.businessCity;
+    membership.businessState = data.businessState;
+    membership.businessPostalCode = data.businessPostalCode;
+    membership.businessCountry = data.businessCountry || 'US';
+    // Business directory listing
+    membership.businessDescription = data.businessDescription;
+    membership.businessLogoUrl = data.businessLogoUrl;
 
     // Billing info
     membership.billingFirstName = data.billingFirstName;
@@ -1147,6 +1266,11 @@ export class MembershipsService {
       throw new BadRequestException('Membership already has team functionality');
     }
 
+    // Validate team name does not contain "team" variations
+    if (!isValidTeamName(teamName)) {
+      throw new BadRequestException(getTeamNameValidationError());
+    }
+
     // Apply the upgrade
     membership.hasTeamAddon = true;
     membership.teamName = teamName;
@@ -1320,5 +1444,561 @@ export class MembershipsService {
       membership: newMembership,
       message: `Membership created with MECA ID ${forcedMecaId} (90-day rule bypassed)`,
     };
+  }
+
+  // =============================================================================
+  // Admin Cancellation Methods
+  // =============================================================================
+
+  /**
+   * Cancel a membership immediately (admin action).
+   * Sets payment status to CANCELLED and deactivates the membership.
+   *
+   * @param membershipId The membership to cancel
+   * @param reason The reason for cancellation
+   * @param adminId The ID of the admin performing the cancellation
+   */
+  async cancelMembershipImmediately(
+    membershipId: string,
+    reason: string,
+    adminId: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    if (membership.cancelledAt) {
+      throw new BadRequestException('This membership has already been cancelled');
+    }
+
+    if (membership.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException('Can only cancel paid memberships');
+    }
+
+    // Cancel immediately
+    membership.cancelledAt = new Date();
+    membership.cancellationReason = reason;
+    membership.cancelledBy = adminId;
+    membership.cancelAtPeriodEnd = false;
+    membership.paymentStatus = PaymentStatus.CANCELLED;
+
+    await em.flush();
+
+    // Sync profile membership status
+    if (membership.user) {
+      await this.membershipSyncService.syncProfileMembershipStatus(membership.user.id);
+    }
+
+    this.logger.log(`Membership ${membershipId} cancelled immediately by admin ${adminId}. Reason: ${reason}`);
+
+    return {
+      success: true,
+      membership,
+      message: 'Membership cancelled and deactivated immediately',
+    };
+  }
+
+  /**
+   * Schedule a membership to be cancelled at the end of its current period.
+   * The membership remains active until the end date, then will be deactivated.
+   *
+   * @param membershipId The membership to cancel
+   * @param reason The reason for cancellation
+   * @param adminId The ID of the admin performing the cancellation
+   */
+  async cancelMembershipAtRenewal(
+    membershipId: string,
+    reason: string,
+    adminId: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    if (membership.cancelledAt) {
+      throw new BadRequestException('This membership has already been cancelled');
+    }
+
+    if (membership.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException('Can only cancel paid memberships');
+    }
+
+    // Schedule cancellation at period end
+    membership.cancelledAt = new Date();
+    membership.cancellationReason = reason;
+    membership.cancelledBy = adminId;
+    membership.cancelAtPeriodEnd = true;
+    // Keep payment status as PAID - membership is still active until end date
+
+    await em.flush();
+
+    const endDateStr = membership.endDate
+      ? membership.endDate.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : 'the end of the current period';
+
+    this.logger.log(`Membership ${membershipId} scheduled for cancellation at period end by admin ${adminId}. Reason: ${reason}`);
+
+    return {
+      success: true,
+      membership,
+      message: `Membership scheduled for cancellation. Will be deactivated on ${endDateStr}`,
+    };
+  }
+
+  /**
+   * Refund a membership: cancels immediately, processes Stripe refund, and sends notification email.
+   *
+   * @param membershipId The membership to refund
+   * @param reason The reason for the refund
+   * @param adminId The ID of the admin performing the refund
+   */
+  async refundMembership(
+    membershipId: string,
+    reason: string,
+    adminId: string,
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    stripeRefund: { id: string; amount: number; status: string } | null;
+    message: string;
+  }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    if (membership.cancelledAt) {
+      throw new BadRequestException('This membership has already been cancelled');
+    }
+
+    if (membership.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException('Can only refund paid memberships');
+    }
+
+    let stripeRefund: { id: string; amount: number; status: string } | null = null;
+
+    // Process Stripe refund if there's a payment intent
+    if (membership.stripePaymentIntentId) {
+      try {
+        const refund = await this.stripeService.createRefund(
+          membership.stripePaymentIntentId,
+          reason,
+        );
+        stripeRefund = {
+          id: refund.id,
+          amount: refund.amount,
+          status: refund.status || 'pending',
+        };
+        this.logger.log(`Stripe refund ${refund.id} created for membership ${membershipId}`);
+      } catch (stripeError) {
+        this.logger.error(`Failed to create Stripe refund for membership ${membershipId}:`, stripeError);
+        throw new BadRequestException(
+          `Failed to process Stripe refund: ${stripeError instanceof Error ? stripeError.message : 'Unknown error'}`
+        );
+      }
+    }
+
+    // Cancel the membership immediately
+    membership.cancelledAt = new Date();
+    membership.cancellationReason = `REFUND: ${reason}`;
+    membership.cancelledBy = adminId;
+    membership.cancelAtPeriodEnd = false;
+    membership.paymentStatus = PaymentStatus.REFUNDED;
+
+    await em.flush();
+
+    // Sync profile membership status
+    if (membership.user) {
+      await this.membershipSyncService.syncProfileMembershipStatus(membership.user.id);
+    }
+
+    // Send refund notification email
+    if (membership.user?.email) {
+      try {
+        await this.emailService.sendMembershipCancelledRefundedEmail({
+          to: membership.user.email,
+          firstName: membership.user.first_name || undefined,
+          mecaId: membership.mecaId!,
+          membershipType: membership.membershipTypeConfig?.name || 'Membership',
+          cancellationDate: new Date(),
+          refundAmount: stripeRefund ? stripeRefund.amount / 100 : Number(membership.amountPaid),
+          reason,
+        });
+        this.logger.log(`Refund notification email sent to ${membership.user.email}`);
+      } catch (emailError) {
+        this.logger.error(`Failed to send refund notification email:`, emailError);
+        // Don't fail the refund if email fails
+      }
+    }
+
+    this.logger.log(`Membership ${membershipId} refunded by admin ${adminId}. Reason: ${reason}`);
+
+    return {
+      success: true,
+      membership,
+      stripeRefund,
+      message: stripeRefund
+        ? `Membership cancelled and refunded $${(stripeRefund.amount / 100).toFixed(2)}`
+        : 'Membership cancelled. No Stripe payment to refund.',
+    };
+  }
+
+  /**
+   * Get cancellation details for a membership (for admin display)
+   */
+  async getCancellationInfo(membershipId: string): Promise<{
+    isCancelled: boolean;
+    cancelAtPeriodEnd: boolean;
+    cancelledAt?: Date;
+    cancellationReason?: string;
+    cancelledBy?: string;
+    effectiveEndDate?: Date;
+  }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    return {
+      isCancelled: !!membership.cancelledAt,
+      cancelAtPeriodEnd: membership.cancelAtPeriodEnd,
+      cancelledAt: membership.cancelledAt,
+      cancellationReason: membership.cancellationReason,
+      cancelledBy: membership.cancelledBy,
+      effectiveEndDate: membership.cancelAtPeriodEnd ? membership.endDate : membership.cancelledAt,
+    };
+  }
+
+  // =============================================================================
+  // AUTO-RENEWAL / SUBSCRIPTION MANAGEMENT METHODS
+  // =============================================================================
+
+  /**
+   * Get the subscription/auto-renewal status for a membership
+   */
+  async getSubscriptionStatus(membershipId: string): Promise<{
+    autoRenewStatus: 'on' | 'legacy' | 'off';
+    stripeSubscriptionId?: string;
+    hadLegacySubscription: boolean;
+    stripeSubscriptionStatus?: string;
+    currentPeriodEnd?: Date;
+    cancelAtPeriodEnd?: boolean;
+  }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    let stripeSubscriptionStatus: string | undefined;
+    let currentPeriodEnd: Date | undefined;
+    let cancelAtPeriodEnd: boolean | undefined;
+
+    // If there's a Stripe subscription, get its current status
+    if (membership.stripeSubscriptionId) {
+      try {
+        const subscription = await this.stripeService.getSubscription(membership.stripeSubscriptionId);
+        stripeSubscriptionStatus = subscription.status;
+        currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+        cancelAtPeriodEnd = subscription.cancel_at_period_end;
+      } catch (error) {
+        this.logger.warn(`Failed to get Stripe subscription ${membership.stripeSubscriptionId}:`, error);
+        // Subscription may have been deleted from Stripe
+        stripeSubscriptionStatus = 'unknown';
+      }
+    }
+
+    return {
+      autoRenewStatus: membership.getAutoRenewalStatus(),
+      stripeSubscriptionId: membership.stripeSubscriptionId,
+      hadLegacySubscription: membership.hadLegacySubscription,
+      stripeSubscriptionStatus,
+      currentPeriodEnd,
+      cancelAtPeriodEnd,
+    };
+  }
+
+  /**
+   * Cancel auto-renewal for a membership
+   * If the membership has a Stripe subscription, it will be cancelled in Stripe
+   */
+  async cancelAutoRenewal(
+    membershipId: string,
+    reason: string,
+    cancelledBy: string,
+    cancelImmediately: boolean = false,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    membership: Membership;
+  }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    // If there's no Stripe subscription, just update the membership status
+    if (!membership.stripeSubscriptionId) {
+      // Check if this was a legacy subscription
+      if (membership.hadLegacySubscription) {
+        // Legacy subscriptions don't exist in Stripe anymore, so just mark as not having legacy
+        membership.hadLegacySubscription = false;
+        await em.flush();
+
+        return {
+          success: true,
+          message: 'Legacy auto-renewal preference has been cleared. This membership will not auto-renew.',
+          membership,
+        };
+      }
+
+      return {
+        success: true,
+        message: 'This membership does not have auto-renewal enabled.',
+        membership,
+      };
+    }
+
+    // Cancel the Stripe subscription
+    try {
+      const cancelledSubscription = await this.stripeService.cancelSubscription(
+        membership.stripeSubscriptionId,
+        cancelImmediately,
+      );
+
+      if (cancelImmediately) {
+        // Immediate cancellation - remove the subscription ID
+        membership.stripeSubscriptionId = undefined;
+      }
+
+      await em.flush();
+
+      const message = cancelImmediately
+        ? 'Auto-renewal has been cancelled immediately. The subscription has been terminated.'
+        : `Auto-renewal has been disabled. The membership will remain active until ${new Date(cancelledSubscription.current_period_end * 1000).toLocaleDateString()}.`;
+
+      this.logger.log(`Auto-renewal cancelled for membership ${membershipId} by ${cancelledBy}. Reason: ${reason}`);
+
+      return {
+        success: true,
+        message,
+        membership,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to cancel Stripe subscription for membership ${membershipId}:`, error);
+      throw new BadRequestException('Failed to cancel subscription in Stripe');
+    }
+  }
+
+  /**
+   * Enable auto-renewal for a membership
+   * This creates a Stripe subscription for the membership
+   * Returns a checkout URL if payment method setup is required
+   */
+  async enableAutoRenewal(
+    membershipId: string,
+    enabledBy: string,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    checkoutUrl?: string;
+    membership: Membership;
+  }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    // Check if already has an active subscription
+    if (membership.stripeSubscriptionId) {
+      try {
+        const subscription = await this.stripeService.getSubscription(membership.stripeSubscriptionId);
+        if (subscription.status === 'active' || subscription.status === 'trialing') {
+          // If cancelled at period end, reactivate it
+          if (subscription.cancel_at_period_end) {
+            await this.stripeService.reactivateSubscription(membership.stripeSubscriptionId);
+            return {
+              success: true,
+              message: 'Auto-renewal has been re-enabled.',
+              membership,
+            };
+          }
+          return {
+            success: true,
+            message: 'Auto-renewal is already enabled for this membership.',
+            membership,
+          };
+        }
+      } catch {
+        // Subscription doesn't exist in Stripe anymore, clear it
+        membership.stripeSubscriptionId = undefined;
+      }
+    }
+
+    // Get the membership type config to determine the price
+    const config = membership.membershipTypeConfig;
+    if (!config) {
+      throw new BadRequestException('Membership type configuration not found');
+    }
+
+    // Check if the membership type has a Stripe price configured
+    if (!config.stripePriceId && !config.stripeProductId) {
+      throw new BadRequestException(
+        'This membership type does not support auto-renewal. Please contact support to configure subscription billing.',
+      );
+    }
+
+    // Get the user's email for customer lookup/creation
+    const user = membership.user;
+    if (!user.email) {
+      throw new BadRequestException('User email is required to set up auto-renewal');
+    }
+
+    // Create or get the Stripe customer
+    const customer = await this.stripeService.findOrCreateCustomer(
+      user.email,
+      `${user.first_name || ''} ${user.last_name || ''}`.trim() || undefined,
+    );
+
+    // Determine the price ID - use configured price or create one dynamically
+    let priceId = config.stripePriceId;
+
+    if (!priceId && config.stripeProductId) {
+      // Create or get a recurring price for this product
+      const price = await this.stripeService.getOrCreateRecurringPrice({
+        productId: config.stripeProductId,
+        unitAmount: Math.round(config.price * 100), // Convert to cents
+        interval: 'year', // Annual memberships
+      });
+      priceId = price.id;
+    }
+
+    if (!priceId) {
+      throw new BadRequestException('Unable to determine subscription price');
+    }
+
+    // Create a checkout session for the subscription
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const checkoutSession = await this.stripeService.createSubscriptionCheckoutSession({
+      customerId: customer.id,
+      priceId,
+      successUrl: `${frontendUrl}/dashboard?subscription=success&membership=${membershipId}`,
+      cancelUrl: `${frontendUrl}/dashboard?subscription=cancelled`,
+      metadata: {
+        membershipId,
+        userId: user.id,
+        enabledBy,
+      },
+    });
+
+    this.logger.log(`Created subscription checkout session for membership ${membershipId} by ${enabledBy}`);
+
+    return {
+      success: true,
+      message: 'Please complete the checkout to enable auto-renewal.',
+      checkoutUrl: checkoutSession.url!,
+      membership,
+    };
+  }
+
+  /**
+   * Create a Stripe billing portal session for a user
+   * Allows them to manage their subscriptions, payment methods, etc.
+   */
+  async createBillingPortalSession(
+    userId: string,
+    returnUrl: string,
+  ): Promise<{ url: string }> {
+    const em = this.em.fork();
+    const user = await em.findOne(Profile, { id: userId });
+
+    if (!user || !user.email) {
+      throw new BadRequestException('User not found or has no email');
+    }
+
+    // Find the Stripe customer for this user
+    const customer = await this.stripeService.findOrCreateCustomer(
+      user.email,
+      `${user.first_name || ''} ${user.last_name || ''}`.trim() || undefined,
+    );
+
+    // Create the billing portal session
+    const session = await this.stripeService.createBillingPortalSession(customer.id, returnUrl);
+
+    return { url: session.url };
+  }
+
+  /**
+   * Handle successful subscription creation (called from webhook)
+   * Links the Stripe subscription to the membership
+   */
+  async handleSubscriptionCreated(
+    stripeSubscriptionId: string,
+    membershipId: string,
+  ): Promise<void> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId });
+
+    if (!membership) {
+      this.logger.warn(`Subscription created for unknown membership ${membershipId}`);
+      return;
+    }
+
+    membership.stripeSubscriptionId = stripeSubscriptionId;
+    membership.hadLegacySubscription = false; // No longer legacy if they have a real subscription
+
+    await em.flush();
+
+    this.logger.log(`Linked Stripe subscription ${stripeSubscriptionId} to membership ${membershipId}`);
+  }
+
+  /**
+   * Handle subscription cancellation (called from webhook)
+   */
+  async handleSubscriptionCancelled(stripeSubscriptionId: string): Promise<void> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { stripeSubscriptionId });
+
+    if (!membership) {
+      this.logger.warn(`Subscription cancelled for unknown subscription ${stripeSubscriptionId}`);
+      return;
+    }
+
+    membership.stripeSubscriptionId = undefined;
+    await em.flush();
+
+    this.logger.log(`Removed Stripe subscription ${stripeSubscriptionId} from membership ${membership.id}`);
   }
 }

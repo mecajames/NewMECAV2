@@ -1276,15 +1276,38 @@ export class TeamsService {
   }> {
     const em = this.em.fork();
 
-    // Verify team exists and is public
-    const team = await em.findOne(Team, { id: teamId });
-    if (!team) {
-      throw new NotFoundException(`Team with ID ${teamId} not found`);
-    }
+    let memberUserIds: string[] = [];
 
-    // Get all active team member user IDs
-    const members = await em.find(TeamMember, { teamId, status: 'active' });
-    const memberUserIds = members.map(m => m.userId);
+    // First try to find a legacy team
+    const team = await em.findOne(Team, { id: teamId });
+    if (team) {
+      // Get all active team member user IDs for legacy team
+      const members = await em.find(TeamMember, { teamId, status: 'active' });
+      memberUserIds = members.map(m => m.userId);
+    } else {
+      // Not a legacy team - check if it's a membership-based team
+      const membershipResult = await em.getConnection().execute(`
+        SELECT m.user_id
+        FROM memberships m
+        JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
+        WHERE m.id = ?
+        AND m.status = 'active'
+        AND (
+          mtc.category = 'retail'
+          OR mtc.category = 'manufacturer'
+          OR mtc.category = 'team'
+          OR mtc.includes_team = true
+          OR mtc.name LIKE '%Team%'
+          OR m.has_team_addon = true
+        )
+      `, [teamId]);
+
+      if (!membershipResult || membershipResult.length === 0) {
+        throw new NotFoundException(`Team with ID ${teamId} not found`);
+      }
+
+      memberUserIds = [membershipResult[0].user_id];
+    }
 
     if (memberUserIds.length === 0) {
       return {
@@ -1427,17 +1450,141 @@ export class TeamsService {
   }
 
   /**
-   * Get all public teams with basic info for the directory
+   * Get all teams from active memberships (retailers, manufacturers, competitor teams)
+   * This is the primary source of teams in the system.
    */
-  async findAllPublicTeams(): Promise<TeamWithMembers[]> {
+  async findAllMembershipTeams(): Promise<Array<{
+    id: string;
+    name: string;
+    teamType: 'retailer' | 'manufacturer' | 'competitor_team';
+    representativeName: string;
+    mecaId: string;
+    userId: string;
+    memberCount: number;
+    logoUrl?: string;
+    location?: string;
+    isPublic: boolean;
+  }>> {
     const em = this.em.fork();
-    const teams = await em.find(Team, { isActive: true, isPublic: true }, {
+
+    // Query active memberships that have team eligibility
+    const result = await em.getConnection().execute(`
+      SELECT
+        m.id as membership_id,
+        m.user_id,
+        m.meca_id,
+        m.team_name,
+        m.business_name,
+        m.competitor_name,
+        m.has_team_addon,
+        m.status,
+        mtc.name as membership_type_name,
+        mtc.category as membership_category,
+        mtc.includes_team,
+        p.first_name,
+        p.last_name,
+        p.full_name,
+        p.meca_id as profile_meca_id,
+        p.profile_picture_url,
+        p.city,
+        p.state
+      FROM memberships m
+      JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
+      LEFT JOIN profiles p ON p.id = m.user_id
+      WHERE m.status = 'active'
+      AND (
+        mtc.category = 'retail'
+        OR mtc.category = 'manufacturer'
+        OR mtc.category = 'team'
+        OR mtc.includes_team = true
+        OR mtc.name LIKE '%Team%'
+        OR m.has_team_addon = true
+      )
+      ORDER BY m.team_name, m.business_name, p.last_name
+    `);
+
+    const teams: Array<{
+      id: string;
+      name: string;
+      teamType: 'retailer' | 'manufacturer' | 'competitor_team';
+      representativeName: string;
+      mecaId: string;
+      userId: string;
+      memberCount: number;
+      logoUrl?: string;
+      location?: string;
+      isPublic: boolean;
+    }> = [];
+
+    for (const m of result) {
+      const mecaId = String(m.meca_id || m.profile_meca_id || '');
+      const firstName = m.first_name || '';
+      const lastName = m.last_name || '';
+      const fullName = m.full_name || `${firstName} ${lastName}`.trim();
+
+      let teamName: string;
+      let teamType: 'retailer' | 'manufacturer' | 'competitor_team';
+      let representativeName: string;
+
+      if (m.membership_category === 'retail') {
+        teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+        teamType = 'retailer';
+        representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+      } else if (m.membership_category === 'manufacturer') {
+        teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+        teamType = 'manufacturer';
+        representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+      } else {
+        teamType = 'competitor_team';
+        representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+
+        if (m.team_name && m.team_name.trim()) {
+          teamName = m.team_name.trim();
+        } else {
+          // Placeholder for teams without a name set
+          const safeName = `${firstName}_${lastName}`.replace(/\s+/g, '_').toLowerCase();
+          teamName = `${safeName}_team_not_populated`;
+        }
+      }
+
+      // Build location string
+      const location = (m.city && m.state) ? `${m.city}, ${m.state}` : undefined;
+
+      teams.push({
+        id: m.membership_id, // Use membership ID as team ID for membership-based teams
+        name: teamName,
+        teamType,
+        representativeName,
+        mecaId,
+        userId: m.user_id,
+        memberCount: 1, // Membership-based teams have 1 member by default
+        logoUrl: m.profile_picture_url || undefined,
+        location,
+        isPublic: true,
+      });
+    }
+
+    return teams;
+  }
+
+  /**
+   * Get all public teams with basic info for the directory
+   * Returns both legacy teams from the teams table AND membership-based teams
+   */
+  async findAllPublicTeams(): Promise<any[]> {
+    const em = this.em.fork();
+
+    // Get legacy teams from teams table
+    const legacyTeams = await em.find(Team, { isActive: true, isPublic: true }, {
       orderBy: { name: 'ASC' },
     });
 
-    // Fetch owners and member counts for each team
-    const teamsWithDetails = await Promise.all(
-      teams.map(async (team) => {
+    // Get membership-based teams
+    const membershipTeams = await this.findAllMembershipTeams();
+
+    // Build legacy teams with details
+    const legacyTeamsWithDetails = await Promise.all(
+      legacyTeams.map(async (team) => {
         const owner = await em.findOne(Profile, { id: team.captainId });
         const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
 
@@ -1446,7 +1593,15 @@ export class TeamsService {
         );
 
         return {
-          ...team,
+          id: team.id,
+          name: team.name,
+          teamType: team.teamType || 'competitive',
+          description: team.description,
+          logoUrl: team.logoUrl,
+          location: team.location,
+          isPublic: team.isPublic,
+          memberCount: members.length,
+          source: 'legacy' as const,
           owner: owner ? {
             id: owner.id,
             first_name: owner.first_name,
@@ -1459,40 +1614,177 @@ export class TeamsService {
       })
     );
 
-    return teamsWithDetails;
+    // Transform membership teams to match the format
+    const membershipTeamsFormatted = membershipTeams.map(team => ({
+      id: team.id,
+      name: team.name,
+      teamType: team.teamType,
+      description: undefined,
+      logoUrl: team.logoUrl,
+      location: team.location,
+      isPublic: team.isPublic,
+      memberCount: team.memberCount,
+      source: 'membership' as const,
+      representativeName: team.representativeName,
+      mecaId: team.mecaId,
+      userId: team.userId,
+      owner: {
+        first_name: team.representativeName.split(' ')[0] || '',
+        last_name: team.representativeName.split(' ').slice(1).join(' ') || '',
+        meca_id: team.mecaId,
+        profile_picture_url: team.logoUrl,
+      },
+      members: [],
+    }));
+
+    // Combine and sort by name
+    const allTeams = [...legacyTeamsWithDetails, ...membershipTeamsFormatted];
+    allTeams.sort((a, b) => a.name.localeCompare(b.name));
+
+    return allTeams;
   }
 
   /**
    * Get public team profile by ID
+   * Supports both legacy teams (from teams table) and membership-based teams (from memberships)
    */
-  async getPublicTeamById(id: string): Promise<TeamWithMembers | null> {
+  async getPublicTeamById(id: string): Promise<any | null> {
     const em = this.em.fork();
+
+    // First try to find a legacy team
     const team = await em.findOne(Team, { id, isActive: true });
 
-    if (!team) {
+    if (team) {
+      // Legacy team found - return with full details
+      const owner = await em.findOne(Profile, { id: team.captainId });
+      const activeMembers = await em.find(TeamMember, { teamId: team.id, status: 'active' });
+      const membersWithUsers = await Promise.all(
+        activeMembers.map(m => this.buildMemberWithUser(em, m))
+      );
+
+      return {
+        ...team,
+        source: 'legacy',
+        owner: owner ? {
+          id: owner.id,
+          first_name: owner.first_name,
+          last_name: owner.last_name,
+          meca_id: owner.meca_id,
+          profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+          email: owner.email,
+        } : undefined,
+        members: membersWithUsers,
+      };
+    }
+
+    // Not a legacy team - check if it's a membership ID for a membership-based team
+    const membershipResult = await em.getConnection().execute(`
+      SELECT
+        m.id as membership_id,
+        m.user_id,
+        m.meca_id,
+        m.team_name,
+        m.business_name,
+        m.competitor_name,
+        m.status,
+        mtc.name as membership_type_name,
+        mtc.category as membership_category,
+        p.id as profile_id,
+        p.first_name,
+        p.last_name,
+        p.full_name,
+        p.meca_id as profile_meca_id,
+        p.profile_picture_url,
+        p.city,
+        p.state,
+        p.bio
+      FROM memberships m
+      JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
+      LEFT JOIN profiles p ON p.id = m.user_id
+      WHERE m.id = ?
+      AND m.status = 'active'
+      AND (
+        mtc.category = 'retail'
+        OR mtc.category = 'manufacturer'
+        OR mtc.category = 'team'
+        OR mtc.includes_team = true
+        OR mtc.name LIKE '%Team%'
+        OR m.has_team_addon = true
+      )
+    `, [id]);
+
+    if (!membershipResult || membershipResult.length === 0) {
       return null;
     }
 
-    // For non-public teams, we still return them but with limited info
-    // The frontend can decide how to handle this
+    const m = membershipResult[0];
+    const firstName = m.first_name || '';
+    const lastName = m.last_name || '';
+    const fullName = m.full_name || `${firstName} ${lastName}`.trim();
 
-    const owner = await em.findOne(Profile, { id: team.captainId });
-    const activeMembers = await em.find(TeamMember, { teamId: team.id, status: 'active' });
-    const membersWithUsers = await Promise.all(
-      activeMembers.map(m => this.buildMemberWithUser(em, m))
-    );
+    let teamName: string;
+    let teamType: string;
+    let representativeName: string;
 
+    if (m.membership_category === 'retail') {
+      teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+      teamType = 'retailer';
+      representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+    } else if (m.membership_category === 'manufacturer') {
+      teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+      teamType = 'manufacturer';
+      representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+    } else {
+      teamType = 'competitor_team';
+      representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+
+      if (m.team_name && m.team_name.trim()) {
+        teamName = m.team_name.trim();
+      } else {
+        const safeName = `${firstName}_${lastName}`.replace(/\s+/g, '_').toLowerCase();
+        teamName = `${safeName}_team_not_populated`;
+      }
+    }
+
+    const location = (m.city && m.state) ? `${m.city}, ${m.state}` : undefined;
+
+    // Return membership-based team
     return {
-      ...team,
-      owner: owner ? {
-        id: owner.id,
-        first_name: owner.first_name,
-        last_name: owner.last_name,
-        meca_id: owner.meca_id,
-        profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
-        email: owner.email,
-      } : undefined,
-      members: membersWithUsers,
+      id: m.membership_id,
+      name: teamName,
+      teamType,
+      description: m.bio || undefined,
+      logoUrl: m.profile_picture_url || undefined,
+      location,
+      isPublic: true,
+      isActive: true,
+      memberCount: 1,
+      source: 'membership',
+      captainId: m.user_id,
+      owner: {
+        id: m.user_id,
+        first_name: firstName,
+        last_name: lastName,
+        meca_id: m.meca_id || m.profile_meca_id,
+        profile_picture_url: m.profile_picture_url,
+      },
+      representativeName,
+      mecaId: m.meca_id || m.profile_meca_id,
+      userId: m.user_id,
+      members: [{
+        id: m.membership_id,
+        teamId: m.membership_id,
+        userId: m.user_id,
+        role: 'owner',
+        status: 'active',
+        user: {
+          id: m.user_id,
+          first_name: firstName,
+          last_name: lastName,
+          meca_id: m.meca_id || m.profile_meca_id,
+          profile_picture_url: m.profile_picture_url,
+        },
+      }],
     };
   }
 

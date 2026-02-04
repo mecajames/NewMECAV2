@@ -163,6 +163,36 @@ export function useStandingsSEO(): SEOProps {
   );
 }
 
+/**
+ * Hook for Team Standings Page SEO
+ */
+export function useTeamStandingsSEO(): SEOProps {
+  return useMemo(
+    () => ({
+      title: PAGE_TITLES.teamStandings,
+      description: PAGE_DESCRIPTIONS.teamStandings,
+      canonical: '/team-standings',
+      type: 'website' as const,
+    }),
+    []
+  );
+}
+
+/**
+ * Hook for Team Leaderboard Page SEO
+ */
+export function useTeamLeaderboardSEO(): SEOProps {
+  return useMemo(
+    () => ({
+      title: PAGE_TITLES.teamLeaderboard,
+      description: PAGE_DESCRIPTIONS.teamLeaderboard,
+      canonical: '/team-leaderboard',
+      type: 'website' as const,
+    }),
+    []
+  );
+}
+
 // ============ DIRECTORIES ============
 
 /**

@@ -244,6 +244,30 @@ export class BusinessListingsController {
   // ADMIN ENDPOINTS
   // ============================================
 
+  @Get('admin/retailers/user/:userId')
+  async adminGetRetailerByUserId(
+    @Headers() headers: any,
+    @Param('userId') userId: string,
+  ): Promise<RetailerListing | null> {
+    const admin = await this.isAdmin(headers);
+    if (!admin) {
+      throw new UnauthorizedException('Admin access required');
+    }
+    return this.businessListingsService.findRetailerByUserId(userId);
+  }
+
+  @Get('admin/manufacturers/user/:userId')
+  async adminGetManufacturerByUserId(
+    @Headers() headers: any,
+    @Param('userId') userId: string,
+  ): Promise<ManufacturerListing | null> {
+    const admin = await this.isAdmin(headers);
+    if (!admin) {
+      throw new UnauthorizedException('Admin access required');
+    }
+    return this.businessListingsService.findManufacturerByUserId(userId);
+  }
+
   @Get('admin/retailers')
   async adminGetAllRetailers(
     @Headers() headers: any,

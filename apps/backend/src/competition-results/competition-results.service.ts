@@ -13,6 +13,7 @@ import { WorldFinalsService } from '../world-finals/world-finals.service';
 import { AchievementsService } from '../achievements/achievements.service';
 import { PointsConfigurationService } from '../points-configuration/points-configuration.service';
 import { PointsConfiguration } from '../points-configuration/points-configuration.entity';
+import { ResultTeamsService } from '../result-teams/result-teams.service';
 
 @Injectable()
 export class CompetitionResultsService {
@@ -31,6 +32,7 @@ export class CompetitionResultsService {
     private readonly em: EntityManager,
     private readonly auditService: AuditService,
     private readonly pointsConfigService: PointsConfigurationService,
+    private readonly resultTeamsService: ResultTeamsService,
     @Optional() private readonly worldFinalsService?: WorldFinalsService,
     @Optional() private readonly achievementsService?: AchievementsService,
   ) {}
@@ -281,6 +283,18 @@ export class CompetitionResultsService {
 
       // Reload the result to get updated points
       await em.refresh(result);
+    }
+
+    // Auto-link this result to the competitor's team(s)
+    try {
+      const competitorId = transformedData.competitor?.id || (data as any).competitor_id;
+      await this.resultTeamsService.autoLinkResultToTeam(
+        result.id,
+        transformedData.mecaId || (data as any).meca_id,
+        competitorId,
+      );
+    } catch (error: any) {
+      this.logger.warn(`Failed to auto-link result ${result.id} to team: ${error.message}`);
     }
 
     // Log to audit if userId is provided

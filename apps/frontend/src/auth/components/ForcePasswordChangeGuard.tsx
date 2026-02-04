@@ -17,19 +17,26 @@ export function ForcePasswordChangeGuard({ children }: ForcePasswordChangeGuardP
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Skip password change requirement when admin is impersonating a user
+  const isImpersonating = sessionStorage.getItem('isImpersonating') === 'true';
+
   useEffect(() => {
     // Don't do anything while loading or if no user
     if (loading || !user) return;
+
+    // Skip if admin is impersonating - they don't need to change the user's password
+    if (isImpersonating) return;
 
     // If user needs to change password and not already on change-password page
     if (forcePasswordChange && location.pathname !== '/change-password') {
       navigate('/change-password?forced=true', { replace: true });
     }
-  }, [user, forcePasswordChange, loading, location.pathname, navigate]);
+  }, [user, forcePasswordChange, loading, location.pathname, navigate, isImpersonating]);
 
   // Allow rendering change-password page even when force is set
   // For all other pages, block rendering if force is set (will redirect)
-  if (!loading && user && forcePasswordChange && location.pathname !== '/change-password') {
+  // But skip this check entirely if admin is impersonating
+  if (!isImpersonating && !loading && user && forcePasswordChange && location.pathname !== '/change-password') {
     // Show loading state briefly while redirecting
     return (
       <div className="min-h-[50vh] flex items-center justify-center">

@@ -34,6 +34,19 @@ export interface TeamStandingsEntry {
   memberCount: number;
   eventsParticipated: number;
   rank?: number;
+  teamType?: 'retailer' | 'manufacturer' | 'competitor_team';
+  representativeName?: string;
+}
+
+// Team member info from memberships
+export interface TeamMemberInfo {
+  mecaId: string;
+  memberId: string;
+  teamName: string;
+  teamType: 'retailer' | 'manufacturer' | 'competitor_team';
+  representativeName: string;
+  firstName: string;
+  lastName: string;
 }
 
 // Format standings summary
@@ -168,6 +181,7 @@ export class StandingsService {
 
   /**
    * Get team standings for a season
+   * Teams come from active memberships: Retailers, Manufacturers, and Team Memberships
    */
   async getTeamStandings(
     seasonId?: string,
@@ -179,59 +193,77 @@ export class StandingsService {
 
     const em = this.em.fork();
 
-    // Only filter by season if explicitly provided (not empty string)
-    const filter: any = {};
-    if (seasonId) {
-      filter.result = { season: seasonId };
+    // Get all team members from memberships
+    const teamMembers = await this.getTeamMembersFromMemberships(em);
+
+    if (teamMembers.length === 0) {
+      this.setCache(cacheKey, []);
+      return [];
     }
 
-    const resultTeams = await em.find(ResultTeam, filter, {
-      populate: ['team', 'result'],
-    });
+    // Build MECA ID to team mapping
+    const mecaIdToTeam = new Map<string, TeamMemberInfo>();
+    for (const member of teamMembers) {
+      if (member.mecaId && member.mecaId !== '999999' && member.mecaId !== '0') {
+        mecaIdToTeam.set(member.mecaId, member);
+      }
+    }
 
-    // Aggregate by team
+    // Get competition results (optionally filtered by season)
+    const resultFilter: any = {};
+    if (seasonId) {
+      resultFilter.season = seasonId;
+    }
+
+    const results = await em.find(CompetitionResult, resultFilter);
+
+    // Aggregate points by team
     const teamAggregates = new Map<string, {
-      teamId: string;
       teamName: string;
+      teamType: 'retailer' | 'manufacturer' | 'competitor_team';
+      representativeName: string;
       totalPoints: number;
       memberMecaIds: Set<string>;
       eventIds: Set<string>;
     }>();
 
-    for (const rt of resultTeams) {
-      const teamId = (rt.team as any)?.id || rt.team;
-      const teamObj = rt.team as Team;
-      if (!teamId) continue;
+    for (const result of results) {
+      const mecaId = result.mecaId;
+      if (!mecaId || mecaId === '999999' || mecaId === '0') continue;
 
-      if (!teamAggregates.has(teamId)) {
-        teamAggregates.set(teamId, {
-          teamId,
-          teamName: teamObj?.name || 'Unknown Team',
+      const teamInfo = mecaIdToTeam.get(mecaId);
+      if (!teamInfo) continue;
+
+      const teamKey = teamInfo.teamName.toLowerCase().trim();
+
+      if (!teamAggregates.has(teamKey)) {
+        teamAggregates.set(teamKey, {
+          teamName: teamInfo.teamName,
+          teamType: teamInfo.teamType,
+          representativeName: teamInfo.representativeName,
           totalPoints: 0,
           memberMecaIds: new Set(),
           eventIds: new Set(),
         });
       }
 
-      const agg = teamAggregates.get(teamId)!;
-      // Points come from the linked CompetitionResult
-      agg.totalPoints += rt.result?.pointsEarned || 0;
-      if (rt.result?.mecaId) {
-        agg.memberMecaIds.add(rt.result.mecaId);
-      }
-      if (rt.result?.event) {
-        const eventId = (rt.result.event as any)?.id || rt.result.event;
-        if (eventId) agg.eventIds.add(eventId);
-      }
+      const agg = teamAggregates.get(teamKey)!;
+      agg.totalPoints += result.pointsEarned || 0;
+      agg.memberMecaIds.add(mecaId);
+
+      const eventId = (result.event as any)?.id || result.event;
+      if (eventId) agg.eventIds.add(String(eventId));
     }
 
-    const entries: TeamStandingsEntry[] = Array.from(teamAggregates.values())
-      .map(agg => ({
-        teamId: agg.teamId,
+    const entries: TeamStandingsEntry[] = Array.from(teamAggregates.entries())
+      .map(([teamKey, agg]) => ({
+        teamId: teamKey,
         teamName: agg.teamName,
         totalPoints: agg.totalPoints,
         memberCount: agg.memberMecaIds.size,
         eventsParticipated: agg.eventIds.size,
+        teamType: agg.teamType,
+        representativeName: agg.representativeName,
       }))
       .sort((a, b) => b.totalPoints - a.totalPoints)
       .slice(0, limit)
@@ -239,6 +271,95 @@ export class StandingsService {
 
     this.setCache(cacheKey, entries);
     return entries;
+  }
+
+  /**
+   * Get all team members from active memberships
+   * Sources: Retailers, Manufacturers, Team Memberships, and has_team_addon competitors
+   */
+  private async getTeamMembersFromMemberships(em: EntityManager): Promise<TeamMemberInfo[]> {
+    const teamMembers: TeamMemberInfo[] = [];
+
+    // Query all active memberships that qualify as teams
+    const memberships = await em.getConnection().execute(`
+      SELECT
+        m.id as membership_id,
+        m.user_id,
+        m.meca_id,
+        m.team_name,
+        m.business_name,
+        m.competitor_name,
+        m.has_team_addon,
+        m.status,
+        mtc.name as membership_type_name,
+        mtc.category as membership_category,
+        p.first_name,
+        p.last_name,
+        p.full_name,
+        p.meca_id as profile_meca_id
+      FROM memberships m
+      JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
+      LEFT JOIN profiles p ON p.id = m.user_id
+      WHERE m.status = 'active'
+      AND (
+        mtc.category = 'retail'
+        OR mtc.category = 'manufacturer'
+        OR mtc.category = 'team'
+        OR mtc.name LIKE '%Team%'
+        OR m.has_team_addon = true
+      )
+    `);
+
+    for (const m of memberships) {
+      const mecaId = String(m.meca_id || m.profile_meca_id || '');
+      if (!mecaId || mecaId === 'null' || mecaId === '999999' || mecaId === '0') {
+        continue;
+      }
+
+      let teamName: string;
+      let teamType: 'retailer' | 'manufacturer' | 'competitor_team';
+      let representativeName: string;
+
+      const firstName = m.first_name || '';
+      const lastName = m.last_name || '';
+      const fullName = m.full_name || `${firstName} ${lastName}`.trim();
+
+      if (m.membership_category === 'retail') {
+        // Retailer: team name is business name, representative is the person
+        teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+        teamType = 'retailer';
+        representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+      } else if (m.membership_category === 'manufacturer') {
+        // Manufacturer: team name is business name, representative is the person
+        teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+        teamType = 'manufacturer';
+        representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+      } else {
+        // Team Membership or has_team_addon: use team_name or generate placeholder
+        teamType = 'competitor_team';
+        representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
+
+        if (m.team_name && m.team_name.trim()) {
+          teamName = m.team_name.trim();
+        } else {
+          // Generate placeholder: first_last_team_not_populated
+          const safeName = `${firstName}_${lastName}`.replace(/\s+/g, '_').toLowerCase();
+          teamName = `${safeName}_team_not_populated`;
+        }
+      }
+
+      teamMembers.push({
+        mecaId,
+        memberId: m.membership_id,
+        teamName,
+        teamType,
+        representativeName,
+        firstName,
+        lastName,
+      });
+    }
+
+    return teamMembers;
   }
 
   /**
