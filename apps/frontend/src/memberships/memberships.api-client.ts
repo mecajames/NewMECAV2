@@ -24,6 +24,9 @@ export interface Membership {
   };
   // MECA ID (per-membership, or from profile if membership doesn't have one)
   mecaId?: number | string;
+  // Subscription / Auto-Renewal fields
+  stripeSubscriptionId?: string;
+  hadLegacySubscription?: boolean;
   // Competitor info
   competitorName?: string;
   vehicleLicensePlate?: string;
@@ -37,7 +40,19 @@ export interface Membership {
   teamNameLastEdited?: string;
   // Business info
   businessName?: string;
+  businessPhone?: string;
   businessWebsite?: string;
+  // Business address (structured, ISO standard)
+  businessStreet?: string;
+  businessCity?: string;
+  businessState?: string; // ISO 3166-2
+  businessPostalCode?: string;
+  businessCountry?: string; // ISO 3166-1 alpha-2
+  // Business directory listing
+  businessDescription?: string;
+  businessLogoUrl?: string;
+  businessListingStatus?: 'pending_approval' | 'approved' | 'rejected';
+  businessListingUpdatedAt?: string;
   // Billing info
   billingFirstName?: string;
   billingLastName?: string;
@@ -76,7 +91,17 @@ export interface CreateMembershipDto {
   teamDescription?: string;
   // Business info
   businessName?: string;
+  businessPhone?: string;
   businessWebsite?: string;
+  // Business address (structured, ISO standard)
+  businessStreet?: string;
+  businessCity?: string;
+  businessState?: string; // ISO 3166-2
+  businessPostalCode?: string;
+  businessCountry?: string; // ISO 3166-1 alpha-2
+  // Business directory listing
+  businessDescription?: string;
+  businessLogoUrl?: string;
   // Billing info
   billingFirstName?: string;
   billingLastName?: string;
@@ -633,6 +658,189 @@ export const membershipsApi = {
       previousMecaId,
       superAdminPassword,
       reason,
+    });
+    return response.data;
+  },
+
+  // ============================================================
+  // ADMIN CANCELLATION OPERATIONS
+  // ============================================================
+
+  /**
+   * Admin: Cancel a membership immediately.
+   * Deactivates the membership immediately and sets status to CANCELLED.
+   */
+  adminCancelImmediately: async (
+    membershipId: string,
+    reason: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/cancel-immediately`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  /**
+   * Admin: Schedule a membership to be cancelled at the end of its current period.
+   * The membership remains active until the end date.
+   */
+  adminCancelAtRenewal: async (
+    membershipId: string,
+    reason: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/cancel-at-renewal`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  /**
+   * Admin: Refund a membership.
+   * Cancels immediately, processes Stripe refund, and sends notification email.
+   */
+  adminRefund: async (
+    membershipId: string,
+    reason: string,
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    stripeRefund: { id: string; amount: number; status: string } | null;
+    message: string;
+  }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/refund`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  /**
+   * Admin: Get cancellation information for a membership
+   */
+  adminGetCancellationInfo: async (
+    membershipId: string,
+  ): Promise<{
+    isCancelled: boolean;
+    cancelAtPeriodEnd: boolean;
+    cancelledAt?: string;
+    cancellationReason?: string;
+    cancelledBy?: string;
+    effectiveEndDate?: string;
+  }> => {
+    const response = await axios.get(`/api/memberships/${membershipId}/admin/cancellation-info`);
+    return response.data;
+  },
+
+  // ============================================================
+  // MEMBER SELF-SERVICE CANCELLATION
+  // ============================================================
+
+  /**
+   * Member: Request cancellation of their own membership.
+   * This schedules cancellation at the end of the current period (NOT immediate).
+   * Members who want immediate cancellation must contact support.
+   */
+  cancelMembership: async (
+    membershipId: string,
+    reason?: string,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    effectiveEndDate: string;
+  }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/cancel`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  // ============================================================
+  // SUBSCRIPTION / AUTO-RENEWAL MANAGEMENT
+  // ============================================================
+
+  /**
+   * Get subscription status for a membership.
+   * Returns current auto-renewal status and Stripe subscription details.
+   */
+  getSubscriptionStatus: async (
+    membershipId: string,
+  ): Promise<{
+    autoRenewalStatus: 'on' | 'legacy' | 'off';
+    stripeSubscriptionId: string | null;
+    hadLegacySubscription: boolean;
+    stripeSubscription: {
+      status: string;
+      currentPeriodEnd: string;
+      cancelAtPeriodEnd: boolean;
+    } | null;
+  }> => {
+    const response = await axios.get(`/api/memberships/${membershipId}/subscription-status`);
+    return response.data;
+  },
+
+  /**
+   * Admin: Cancel auto-renewal for a membership.
+   * Can cancel immediately or at end of current period.
+   */
+  adminCancelAutoRenewal: async (
+    membershipId: string,
+    reason: string,
+    cancelImmediately: boolean = false,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    membership: Membership;
+  }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/cancel-auto-renewal`, {
+      reason,
+      cancelImmediately,
+    });
+    return response.data;
+  },
+
+  /**
+   * Admin: Enable auto-renewal for a membership.
+   * Creates a new Stripe subscription if one doesn't exist.
+   */
+  adminEnableAutoRenewal: async (
+    membershipId: string,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    membership: Membership;
+  }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/enable-auto-renewal`);
+    return response.data;
+  },
+
+  /**
+   * Member: Disable their own auto-renewal.
+   * Cancels at end of current period (NOT immediate).
+   */
+  memberDisableAutoRenewal: async (
+    membershipId: string,
+    reason?: string,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    effectiveCancellationDate: string;
+  }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/disable-auto-renewal`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  /**
+   * Get Stripe Billing Portal URL for subscription management.
+   * Members can use this to update payment methods, view invoices, etc.
+   */
+  getBillingPortalUrl: async (
+    returnUrl: string,
+  ): Promise<{
+    url: string;
+  }> => {
+    const response = await axios.post('/api/memberships/billing-portal', {
+      returnUrl,
     });
     return response.data;
   },

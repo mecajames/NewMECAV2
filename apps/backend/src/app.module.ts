@@ -49,6 +49,7 @@ import { StatesModule } from './states/states.module';
 import { ResultTeamsModule } from './result-teams/result-teams.module';
 import { MemberGalleryModule } from './member-gallery/member-gallery.module';
 import { StandingsModule } from './standings/standings.module';
+import { ConstantContactModule } from './constant-contact/constant-contact.module';
 
 @Module({
   imports: [
@@ -112,6 +113,7 @@ import { StandingsModule } from './standings/standings.module';
     ResultTeamsModule,
     MemberGalleryModule,
     StandingsModule,
+    ConstantContactModule,
   ],
   controllers: [AppController],
   providers: [

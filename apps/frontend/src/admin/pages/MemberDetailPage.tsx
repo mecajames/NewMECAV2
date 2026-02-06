@@ -47,12 +47,24 @@ import { UserPlus } from 'lucide-react';
 import { teamsApi, Team } from '@/teams';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
+import {
+  adminGetRetailerByUserId,
+  adminGetManufacturerByUserId,
+  adminUpdateRetailer,
+  adminUpdateManufacturer,
+  adminApproveRetailer,
+  adminApproveManufacturer,
+  RetailerListing,
+  ManufacturerListing,
+} from '@/business-listings';
+import { useAuth } from '@/auth';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
 
 type TabType =
   | 'overview'
   | 'personal'
+  | 'business'
   | 'media'
   | 'teams'
   | 'memberships'
@@ -111,6 +123,28 @@ export default function MemberDetailPage() {
   const [derivedMembershipStatus, setDerivedMembershipStatus] = useState<string>('none');
   const [derivedMembershipType, setDerivedMembershipType] = useState<string | null>(null);
 
+  // Business info for retailers/manufacturers (stored on membership)
+  const [businessMembershipData, setBusinessMembershipData] = useState<{
+    membershipId: string;
+    // Business contact
+    businessName: string;
+    businessPhone: string;
+    businessWebsite: string;
+    // Business address (structured, ISO standard)
+    businessStreet: string;
+    businessCity: string;
+    businessState: string; // ISO 3166-2
+    businessPostalCode: string;
+    businessCountry: string; // ISO 3166-1 alpha-2
+    // Business directory listing
+    businessDescription: string;
+    businessLogoUrl: string;
+    businessListingStatus: 'pending_approval' | 'approved' | 'rejected';
+    // Metadata
+    category: string;
+    userId: string;
+  } | null>(null);
+
   useEffect(() => {
     if (memberId && !permLoading && !isCreateMode) {
       fetchMember();
@@ -159,10 +193,24 @@ export default function MemberDetailPage() {
       const { data: membershipsData } = await supabase
         .from('memberships')
         .select(`
+          id,
+          user_id,
           payment_status,
           end_date,
           account_type,
           has_team_addon,
+          cancel_at_period_end,
+          business_name,
+          business_phone,
+          business_website,
+          business_street,
+          business_city,
+          business_state,
+          business_postal_code,
+          business_country,
+          business_description,
+          business_logo_url,
+          business_listing_status,
           membership_type_configs (category)
         `)
         .eq('user_id', memberId)
@@ -172,6 +220,7 @@ export default function MemberDetailPage() {
       if (!membershipsData || membershipsData.length === 0) {
         setDerivedMembershipStatus('none');
         setDerivedMembershipType(null);
+        setBusinessMembershipData(null);
         return;
       }
 
@@ -181,6 +230,22 @@ export default function MemberDetailPage() {
       let bestPriority = 999;
       let bestMembershipType: string | null = null;
       let bestHasTeamAddon = false;
+      let bestMembershipId: string | null = null;
+      let bestUserId: string | null = null;
+      // Business contact info
+      let bestBusinessName: string | null = null;
+      let bestBusinessPhone: string | null = null;
+      let bestBusinessWebsite: string | null = null;
+      // Business address (structured)
+      let bestBusinessStreet: string | null = null;
+      let bestBusinessCity: string | null = null;
+      let bestBusinessState: string | null = null;
+      let bestBusinessPostalCode: string | null = null;
+      let bestBusinessCountry: string | null = null;
+      // Business directory listing
+      let bestBusinessDescription: string | null = null;
+      let bestBusinessLogoUrl: string | null = null;
+      let bestBusinessListingStatus: string | null = null;
 
       for (const m of membershipsData) {
         const isSecondary = m.account_type === 'secondary';
@@ -204,6 +269,22 @@ export default function MemberDetailPage() {
         if (priority < bestPriority) {
           bestPriority = priority;
           bestStatus = status;
+          bestMembershipId = m.id;
+          bestUserId = m.user_id;
+          // Business contact info
+          bestBusinessName = m.business_name || '';
+          bestBusinessPhone = m.business_phone || '';
+          bestBusinessWebsite = m.business_website || '';
+          // Business address (structured, ISO standard)
+          bestBusinessStreet = m.business_street || '';
+          bestBusinessCity = m.business_city || '';
+          bestBusinessState = m.business_state || '';
+          bestBusinessPostalCode = m.business_postal_code || '';
+          bestBusinessCountry = m.business_country || 'US';
+          // Business directory listing
+          bestBusinessDescription = m.business_description || '';
+          bestBusinessLogoUrl = m.business_logo_url || '';
+          bestBusinessListingStatus = m.business_listing_status || 'pending_approval';
           // Get membership type from config
           const config = Array.isArray(m.membership_type_configs)
             ? m.membership_type_configs[0]
@@ -224,13 +305,41 @@ export default function MemberDetailPage() {
           team: 'Team',
         };
         setDerivedMembershipType(typeMap[bestMembershipType] || bestMembershipType);
+
+        // Store business info for retailers/manufacturers
+        if (bestMembershipType === 'retail' || bestMembershipType === 'manufacturer') {
+          setBusinessMembershipData({
+            membershipId: bestMembershipId!,
+            // Business contact info
+            businessName: bestBusinessName || '',
+            businessPhone: bestBusinessPhone || '',
+            businessWebsite: bestBusinessWebsite || '',
+            // Business address (structured, ISO standard)
+            businessStreet: bestBusinessStreet || '',
+            businessCity: bestBusinessCity || '',
+            businessState: bestBusinessState || '',
+            businessPostalCode: bestBusinessPostalCode || '',
+            businessCountry: bestBusinessCountry || 'US',
+            // Business directory listing
+            businessDescription: bestBusinessDescription || '',
+            businessLogoUrl: bestBusinessLogoUrl || '',
+            businessListingStatus: (bestBusinessListingStatus as 'pending_approval' | 'approved' | 'rejected') || 'pending_approval',
+            // Metadata
+            category: bestMembershipType,
+            userId: bestUserId!,
+          });
+        } else {
+          setBusinessMembershipData(null);
+        }
       } else {
         setDerivedMembershipType(null);
+        setBusinessMembershipData(null);
       }
     } catch (error) {
       console.error('Error fetching membership status for header:', error);
       setDerivedMembershipStatus('none');
       setDerivedMembershipType(null);
+      setBusinessMembershipData(null);
     }
   };
 
@@ -407,6 +516,8 @@ export default function MemberDetailPage() {
       icon: User,
       tabs: [
         { id: 'personal', label: 'Personal Information' },
+        // Business tab only shows for retailers/manufacturers
+        ...(businessMembershipData ? [{ id: 'business', label: 'Business Directory Listing' }] : []),
         { id: 'media', label: 'Media & Gallery' },
         { id: 'permissions', label: 'Permissions' },
       ]
@@ -995,8 +1106,9 @@ export default function MemberDetailPage() {
         <div className="bg-slate-800 rounded-lg shadow-sm p-6">
           {activeTab === 'overview' && <OverviewTab member={member} derivedMembershipStatus={derivedMembershipStatus} />}
           {activeTab === 'personal' && <PersonalInfoTab member={member} onUpdate={fetchMember} />}
+          {activeTab === 'business' && businessMembershipData && <BusinessInfoTab businessMembershipData={businessMembershipData} onUpdate={fetchMembershipStatusForHeader} />}
           {activeTab === 'media' && <MediaGalleryTab member={member} />}
-          {activeTab === 'teams' && <TeamsTab member={member} />}
+          {activeTab === 'teams' && <TeamsTab member={member} businessMembershipData={businessMembershipData} />}
           {activeTab === 'memberships' && <MembershipsTab member={member} />}
           {activeTab === 'orders' && <OrdersInvoicesTab member={member} />}
           {activeTab === 'events' && <EventRegistrationsTab member={member} />}
@@ -1257,7 +1369,13 @@ export default function MemberDetailPage() {
 }
 
 // Tab Components (Placeholders - will be built in separate files)
-function OverviewTab({ member, derivedMembershipStatus }: { member: Profile; derivedMembershipStatus: string }) {
+function OverviewTab({
+  member,
+  derivedMembershipStatus,
+}: {
+  member: Profile;
+  derivedMembershipStatus: string;
+}) {
   const [stats, setStats] = useState({
     totalOrders: 0,
     eventsAttended: 0,
@@ -1481,6 +1599,735 @@ function OverviewTab({ member, derivedMembershipStatus }: { member: Profile; der
             Team Membership
           </h3>
           <p className="text-gray-300">Member of: <span className="text-white font-semibold">{stats.teamName}</span></p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Business Directory Listing Tab - For Retailers and Manufacturers
+// Uses the business-listings API (retailers/manufacturers tables), NOT membership fields
+function BusinessInfoTab({
+  businessMembershipData,
+  onUpdate,
+}: {
+  businessMembershipData: {
+    membershipId: string;
+    category: string;
+    userId: string;
+  };
+  onUpdate: () => void;
+}) {
+  const { profile } = useAuth();
+  const { hasPermission } = usePermissions();
+  const navigate = useNavigate();
+  const canEdit = hasPermission('edit_user');
+  const canApprove = hasPermission('manage_business_listings') || hasPermission('admin');
+
+  const [loading, setLoading] = useState(true);
+  const [listing, setListing] = useState<RetailerListing | ManufacturerListing | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isRetailer = businessMembershipData.category === 'retail';
+
+  // Form state for editing
+  const [formData, setFormData] = useState({
+    business_name: '',
+    description: '',
+    offer_text: '', // Retailers only
+    business_email: '',
+    business_phone: '',
+    website: '',
+    store_type: 'both', // Retailers only
+    product_categories: [] as string[], // Manufacturers only
+    street_address: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country: 'US',
+    profile_image_url: '',
+    is_sponsor: false,
+    sponsor_order: 0,
+  });
+
+  // Fetch the business listing from the business-listings API
+  useEffect(() => {
+    fetchListing();
+  }, [businessMembershipData.userId, businessMembershipData.category]);
+
+  const fetchListing = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      let data: RetailerListing | ManufacturerListing | null = null;
+
+      // Use admin endpoints to get the user's listing
+      if (!profile?.id) {
+        throw new Error('Admin profile not found');
+      }
+
+      if (isRetailer) {
+        data = await adminGetRetailerByUserId(profile.id, businessMembershipData.userId);
+      } else {
+        data = await adminGetManufacturerByUserId(profile.id, businessMembershipData.userId);
+      }
+
+      setListing(data);
+
+      if (data) {
+        // Normalize country code
+        const normalizeCountry = (country: string | undefined): string => {
+          if (!country) return 'US';
+          const upper = country.toUpperCase();
+          if (upper === 'USA' || upper === 'UNITED STATES') return 'US';
+          if (upper === 'CANADA') return 'CA';
+          return country;
+        };
+
+        setFormData({
+          business_name: data.businessName || '',
+          description: data.description || '',
+          offer_text: 'offerText' in data ? (data as RetailerListing).offerText || '' : '',
+          business_email: data.businessEmail || '',
+          business_phone: data.businessPhone || '',
+          website: data.website || '',
+          store_type: 'storeType' in data ? (data as RetailerListing).storeType || 'both' : 'both',
+          product_categories: 'productCategories' in data ? (data as ManufacturerListing).productCategories || [] : [],
+          street_address: data.streetAddress || '',
+          city: data.city || '',
+          state: data.state || '',
+          postal_code: data.postalCode || '',
+          country: normalizeCountry(data.country),
+          profile_image_url: data.profileImageUrl || '',
+          is_sponsor: data.isSponsor || false,
+          sponsor_order: data.sponsorOrder || 0,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching business listing:', err);
+      setError('Failed to load business listing');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!canEdit || !listing || !profile?.id) return;
+
+    setSaving(true);
+    try {
+      if (isRetailer) {
+        await adminUpdateRetailer(profile.id, listing.id, {
+          business_name: formData.business_name,
+          description: formData.description,
+          offer_text: formData.offer_text,
+          business_email: formData.business_email,
+          business_phone: formData.business_phone,
+          website: formData.website,
+          store_type: formData.store_type,
+          street_address: formData.street_address,
+          city: formData.city,
+          state: formData.state,
+          postal_code: formData.postal_code,
+          country: formData.country,
+          profile_image_url: formData.profile_image_url,
+          is_sponsor: formData.is_sponsor,
+          sponsor_order: formData.sponsor_order,
+          is_approved: true, // Admin edits auto-approve
+        });
+      } else {
+        await adminUpdateManufacturer(profile.id, listing.id, {
+          business_name: formData.business_name,
+          description: formData.description,
+          business_email: formData.business_email,
+          business_phone: formData.business_phone,
+          website: formData.website,
+          product_categories: formData.product_categories,
+          street_address: formData.street_address,
+          city: formData.city,
+          state: formData.state,
+          postal_code: formData.postal_code,
+          country: formData.country,
+          profile_image_url: formData.profile_image_url,
+          is_sponsor: formData.is_sponsor,
+          sponsor_order: formData.sponsor_order,
+          is_approved: true, // Admin edits auto-approve
+        });
+      }
+      setIsEditing(false);
+      await fetchListing();
+      onUpdate();
+    } catch (err) {
+      console.error('Error updating business listing:', err);
+      alert('Failed to update business listing');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (listing) {
+      const normalizeCountry = (country: string | undefined): string => {
+        if (!country) return 'US';
+        const upper = country.toUpperCase();
+        if (upper === 'USA' || upper === 'UNITED STATES') return 'US';
+        if (upper === 'CANADA') return 'CA';
+        return country;
+      };
+
+      setFormData({
+        business_name: listing.businessName || '',
+        description: listing.description || '',
+        offer_text: 'offerText' in listing ? (listing as RetailerListing).offerText || '' : '',
+        business_email: listing.businessEmail || '',
+        business_phone: listing.businessPhone || '',
+        website: listing.website || '',
+        store_type: 'storeType' in listing ? (listing as RetailerListing).storeType || 'both' : 'both',
+        product_categories: 'productCategories' in listing ? (listing as ManufacturerListing).productCategories || [] : [],
+        street_address: listing.streetAddress || '',
+        city: listing.city || '',
+        state: listing.state || '',
+        postal_code: listing.postalCode || '',
+        country: normalizeCountry(listing.country),
+        profile_image_url: listing.profileImageUrl || '',
+        is_sponsor: listing.isSponsor || false,
+        sponsor_order: listing.sponsorOrder || 0,
+      });
+    }
+    setIsEditing(false);
+  };
+
+  const handleApprove = async () => {
+    if (!canApprove || !listing || !profile?.id) return;
+    setSaving(true);
+    try {
+      if (isRetailer) {
+        await adminApproveRetailer(profile.id, listing.id);
+      } else {
+        await adminApproveManufacturer(profile.id, listing.id);
+      }
+      await fetchListing();
+      onUpdate();
+    } catch (err) {
+      console.error('Error approving listing:', err);
+      alert('Failed to approve listing');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleViewInDirectory = () => {
+    if (listing) {
+      navigate(isRetailer ? `/retailers/${listing.id}` : `/manufacturers/${listing.id}`);
+    }
+  };
+
+  const statesForCountry = getStatesForCountry(formData.country);
+  const stateLabel = getStateLabel(formData.country);
+  const postalCodeLabel = getPostalCodeLabel(formData.country);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-solid border-orange-500 border-r-transparent"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+        <p className="text-red-400">{error}</p>
+      </div>
+    );
+  }
+
+  if (!listing) {
+    return (
+      <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-6 text-center">
+        <p className="text-yellow-400 mb-2">No business listing found for this member.</p>
+        <p className="text-gray-400 text-sm">
+          Create a listing on the{' '}
+          <button
+            onClick={() => navigate('/admin/business-listings')}
+            className="text-orange-400 hover:text-orange-300 underline"
+          >
+            Business Listings Admin page
+          </button>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-white">Business Directory Listing</h2>
+          <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs rounded-full">
+            {isRetailer ? 'Retailer' : 'Manufacturer'}
+          </span>
+          {listing.isApproved ? (
+            <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1">
+              <Check className="h-3 w-3" /> Approved
+            </span>
+          ) : (
+            <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded-full flex items-center gap-1">
+              <Clock className="h-3 w-3" /> Pending Approval
+            </span>
+          )}
+          {listing.isSponsor && (
+            <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full">
+              ⭐ Sponsor
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {/* View in Directory Button */}
+          <button
+            onClick={handleViewInDirectory}
+            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            title="View in public directory"
+          >
+            <Eye className="h-4 w-4" />
+            View in Directory
+          </button>
+
+          {/* Admin Approval Button */}
+          {canApprove && !listing.isApproved && !isEditing && (
+            <button
+              onClick={handleApprove}
+              className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 flex items-center gap-2"
+              disabled={saving}
+            >
+              <Check className="h-4 w-4" />
+              Approve
+            </button>
+          )}
+
+          {/* Edit Buttons */}
+          {canEdit && (
+            <>
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={handleCancel}
+                    className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
+                    disabled={saving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                    disabled={saving}
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit Listing
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Business Contact Information */}
+      <div className="bg-slate-700 rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <Globe className="h-5 w-5 text-orange-500" />
+          Business Contact Information
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Business Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Business Name</label>
+            {isEditing ? (
+              <input
+                type="text"
+                value={formData.business_name}
+                onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="Enter business name"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {listing.businessName || <span className="text-gray-500 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Business Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Business Email</label>
+            {isEditing ? (
+              <input
+                type="email"
+                value={formData.business_email}
+                onChange={(e) => setFormData({ ...formData, business_email: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="contact@business.com"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {listing.businessEmail || <span className="text-gray-500 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Business Phone */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Business Phone</label>
+            {isEditing ? (
+              <input
+                type="tel"
+                value={formData.business_phone}
+                onChange={(e) => setFormData({ ...formData, business_phone: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="(555) 123-4567"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {listing.businessPhone ? (
+                  <a href={`tel:${listing.businessPhone}`} className="text-orange-400 hover:text-orange-300 flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    {listing.businessPhone}
+                  </a>
+                ) : (
+                  <span className="text-gray-500 italic">Not set</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Business Website */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Website</label>
+            {isEditing ? (
+              <input
+                type="url"
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="https://example.com"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg">
+                {listing.website ? (
+                  <a
+                    href={listing.website.startsWith('http') ? listing.website : `https://${listing.website}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-orange-400 hover:text-orange-300 flex items-center gap-2"
+                  >
+                    <Globe className="h-4 w-4" />
+                    {listing.website}
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <span className="text-gray-500 italic">Not set</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Business Address */}
+      <div className="bg-slate-700 rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <MapPin className="h-5 w-5 text-orange-500" />
+          Business Address
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Street Address */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-400 mb-2">Street Address</label>
+            {isEditing ? (
+              <input
+                type="text"
+                value={formData.street_address}
+                onChange={(e) => setFormData({ ...formData, street_address: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="123 Main Street"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {listing.streetAddress || <span className="text-gray-500 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+
+          {/* City */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">City</label>
+            {isEditing ? (
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="City"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {listing.city || <span className="text-gray-500 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Country */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Country</label>
+            {isEditing ? (
+              <select
+                value={formData.country}
+                onChange={(e) => setFormData({ ...formData, country: e.target.value, state: '' })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {countries.find(c => c.code === listing.country || c.code === formData.country)?.name || listing.country || <span className="text-gray-500 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+
+          {/* State/Province */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">{stateLabel}</label>
+            {isEditing ? (
+              statesForCountry.length > 0 ? (
+                <select
+                  value={formData.state}
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Select {stateLabel}</option>
+                  {statesForCountry.map((s) => (
+                    <option key={s.code} value={s.code}>{s.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={formData.state}
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  placeholder={stateLabel}
+                />
+              )
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {statesForCountry.find(s => s.code === listing.state)?.name || listing.state || <span className="text-gray-500 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Postal Code */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">{postalCodeLabel}</label>
+            {isEditing ? (
+              <input
+                type="text"
+                value={formData.postal_code}
+                onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder={postalCodeLabel}
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                {listing.postalCode || <span className="text-gray-500 italic">Not set</span>}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Directory Listing Details */}
+      <div className="bg-slate-700 rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-orange-500" />
+          Directory Listing Details
+        </h3>
+        <div className="space-y-4">
+          {/* Profile/Logo Image */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Profile/Logo Image URL</label>
+            {isEditing ? (
+              <input
+                type="url"
+                value={formData.profile_image_url}
+                onChange={(e) => setFormData({ ...formData, profile_image_url: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="https://example.com/logo.png"
+              />
+            ) : (
+              <div className="flex items-center gap-4">
+                {listing.profileImageUrl ? (
+                  <>
+                    <img
+                      src={listing.profileImageUrl}
+                      alt="Business Logo"
+                      className="h-16 w-16 object-cover rounded-lg bg-slate-600"
+                    />
+                    <span className="text-gray-400 text-sm truncate max-w-md">{listing.profileImageUrl}</span>
+                  </>
+                ) : (
+                  <div className="px-4 py-2 bg-slate-600 rounded-lg text-gray-500 italic">No logo set</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Business Description</label>
+            {isEditing ? (
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={4}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500 resize-none"
+                placeholder="Describe your business..."
+              />
+            ) : (
+              <div className="px-4 py-3 bg-slate-600 rounded-lg text-white min-h-[100px]">
+                {listing.description || <span className="text-gray-500 italic">No description provided</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Special Offer (Retailers Only) */}
+          {isRetailer && (
+            <div className="bg-gradient-to-r from-red-900/30 to-orange-900/30 border border-red-500/30 rounded-lg p-4">
+              <label className="block text-red-400 text-sm font-medium mb-2">
+                🏷️ Special Offer for MECA Members
+              </label>
+              {isEditing ? (
+                <textarea
+                  value={formData.offer_text}
+                  onChange={(e) => setFormData({ ...formData, offer_text: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-2 bg-slate-800 text-white rounded-lg border border-red-500/50 focus:ring-2 focus:ring-red-500 resize-none"
+                  placeholder="e.g., 10% off all purchases with code MECA10..."
+                />
+              ) : (
+                <div className="px-4 py-2 bg-slate-800 rounded-lg text-white">
+                  {(listing as RetailerListing).offerText || <span className="text-gray-500 italic">No special offer</span>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Store Type (Retailers Only) */}
+          {isRetailer && (
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Store Type</label>
+              {isEditing ? (
+                <select
+                  value={formData.store_type}
+                  onChange={(e) => setFormData({ ...formData, store_type: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="brick_and_mortar">Physical Store Only</option>
+                  <option value="online">Online Only</option>
+                  <option value="both">Physical & Online</option>
+                </select>
+              ) : (
+                <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                  {(listing as RetailerListing).storeType === 'brick_and_mortar' ? 'Physical Store Only' :
+                   (listing as RetailerListing).storeType === 'online' ? 'Online Only' : 'Physical & Online'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Product Categories (Manufacturers Only) */}
+          {!isRetailer && (
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Product Categories</label>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={formData.product_categories.join(', ')}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    product_categories: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+                  })}
+                  className="w-full px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  placeholder="Amplifiers, Subwoofers, Speakers (comma separated)"
+                />
+              ) : (
+                <div className="px-4 py-2 bg-slate-600 rounded-lg text-white">
+                  {(listing as ManufacturerListing).productCategories?.join(', ') || <span className="text-gray-500 italic">No categories</span>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Admin Options */}
+      {canEdit && (
+        <div className="bg-slate-700 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Admin Options</h3>
+          <div className="space-y-4">
+            {/* Sponsor Status */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="is_sponsor"
+                checked={formData.is_sponsor}
+                onChange={(e) => setFormData({ ...formData, is_sponsor: e.target.checked })}
+                disabled={!isEditing}
+                className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-orange-500 focus:ring-orange-500"
+              />
+              <label htmlFor="is_sponsor" className="text-gray-300">
+                Featured Sponsor (shown on homepage carousel)
+              </label>
+            </div>
+
+            {/* Sponsor Order */}
+            {formData.is_sponsor && (
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Sponsor Display Order</label>
+                <input
+                  type="number"
+                  value={formData.sponsor_order}
+                  onChange={(e) => setFormData({ ...formData, sponsor_order: parseInt(e.target.value) || 0 })}
+                  disabled={!isEditing}
+                  min="0"
+                  className="w-32 px-4 py-2 bg-slate-600 border border-slate-500 text-white rounded-lg focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                />
+                <p className="text-gray-500 text-xs mt-1">Lower numbers appear first</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pending Approval Note */}
+      {!listing.isApproved && (
+        <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <p className="text-yellow-400 text-sm flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            This listing is pending admin approval and is not visible in the public directory.
+          </p>
         </div>
       )}
     </div>
@@ -2495,7 +3342,14 @@ function ImageCard({
   );
 }
 
-function TeamsTab({ member }: { member: Profile }) {
+function TeamsTab({ member, businessMembershipData }: {
+  member: Profile;
+  businessMembershipData: {
+    membershipId: string;
+    businessName: string;
+    category: string;
+  } | null;
+}) {
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2538,13 +3392,29 @@ function TeamsTab({ member }: { member: Profile }) {
 
   useEffect(() => {
     fetchTeam();
-  }, [member.id]);
+  }, [member.id, businessMembershipData?.membershipId]);
 
   const fetchTeam = async () => {
     try {
       setLoading(true);
       setError(null);
-      const teamData = await teamsApi.getTeamByUserId(member.id);
+
+      let teamData: Team | null = null;
+
+      // For retailers/manufacturers, the team ID is the membership ID
+      if (businessMembershipData?.membershipId) {
+        try {
+          teamData = await teamsApi.getPublicTeamById(businessMembershipData.membershipId);
+        } catch {
+          // Business team might not exist yet, continue to check regular teams
+        }
+      }
+
+      // If no business team found, check for regular teams (competitor teams, etc.)
+      if (!teamData) {
+        teamData = await teamsApi.getTeamByUserId(member.id);
+      }
+
       setTeam(teamData);
       if (teamData) {
         setEditForm({
@@ -3430,10 +4300,24 @@ function TeamsTab({ member }: { member: Profile }) {
   );
 }
 
+// Super Admin users who can override MECA IDs
+// Only James Ryan and Mick Mahkool can use this feature
+const SUPER_ADMIN_EMAILS = [
+  'james@mecacaraudio.com',
+  'mick@mecausa.com',
+];
+
+function isSuperAdmin(profile: Profile | null): boolean {
+  if (!profile?.email) return false;
+  return SUPER_ADMIN_EMAILS.includes(profile.email.toLowerCase());
+}
+
 function MembershipsTab({ member }: { member: Profile }) {
   const navigate = useNavigate();
+  const { profile: currentUserProfile } = useAuth();
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('edit_user');
+  const canOverrideMecaId = canEdit && isSuperAdmin(currentUserProfile);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [_membershipTypes, setMembershipTypes] = useState<MembershipTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3492,6 +4376,15 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideLoading, setOverrideLoading] = useState(false);
   const [overrideError, setOverrideError] = useState<string | null>(null);
+
+  // Auto-Renewal Management state
+  const [showAutoRenewalModal, setShowAutoRenewalModal] = useState(false);
+  const [autoRenewalMembership, setAutoRenewalMembership] = useState<Membership | null>(null);
+  const [autoRenewalAction, setAutoRenewalAction] = useState<'cancel' | 'enable'>('cancel');
+  const [autoRenewalReason, setAutoRenewalReason] = useState('');
+  const [autoRenewalCancelImmediately, setAutoRenewalCancelImmediately] = useState(false);
+  const [autoRenewalLoading, setAutoRenewalLoading] = useState(false);
+  const [autoRenewalError, setAutoRenewalError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMemberships();
@@ -3690,6 +4583,60 @@ function MembershipsTab({ member }: { member: Profile }) {
     }
   };
 
+  // Auto-Renewal Management handlers
+  const handleOpenAutoRenewalModal = (membership: Membership, action: 'cancel' | 'enable') => {
+    setAutoRenewalMembership(membership);
+    setAutoRenewalAction(action);
+    setAutoRenewalReason('');
+    setAutoRenewalCancelImmediately(false);
+    setAutoRenewalError(null);
+    setShowAutoRenewalModal(true);
+  };
+
+  const handleAutoRenewalSubmit = async () => {
+    if (!autoRenewalMembership) return;
+
+    if (autoRenewalAction === 'cancel' && !autoRenewalReason.trim()) {
+      setAutoRenewalError('Please provide a reason for cancellation');
+      return;
+    }
+
+    setAutoRenewalLoading(true);
+    setAutoRenewalError(null);
+    try {
+      if (autoRenewalAction === 'cancel') {
+        await membershipsApi.adminCancelAutoRenewal(
+          autoRenewalMembership.id,
+          autoRenewalReason.trim(),
+          autoRenewalCancelImmediately
+        );
+        alert('Auto-renewal has been cancelled successfully.');
+      } else {
+        await membershipsApi.adminEnableAutoRenewal(autoRenewalMembership.id);
+        alert('Auto-renewal has been enabled successfully.');
+      }
+      setShowAutoRenewalModal(false);
+      setAutoRenewalMembership(null);
+      fetchMemberships();
+    } catch (error: any) {
+      console.error('Error managing auto-renewal:', error);
+      setAutoRenewalError(error.response?.data?.message || `Failed to ${autoRenewalAction} auto-renewal`);
+    } finally {
+      setAutoRenewalLoading(false);
+    }
+  };
+
+  // Helper to get auto-renewal status display
+  const getAutoRenewalStatus = (membership: Membership): { label: string; color: string } => {
+    if (membership.stripeSubscriptionId) {
+      return { label: 'On', color: 'text-green-400' };
+    }
+    if (membership.hadLegacySubscription) {
+      return { label: 'Legacy', color: 'text-yellow-400' };
+    }
+    return { label: 'Off', color: 'text-gray-400' };
+  };
+
   // Helper to get relationship label
   const getRelationshipLabel = (relationship?: string): string => {
     if (!relationship) return '';
@@ -3837,7 +4784,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                         <span className="text-orange-400 font-mono font-semibold text-lg">
                           #{membership.mecaId}
                         </span>
-                        {canEdit && (
+                        {canOverrideMecaId && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -3937,6 +4884,28 @@ function MembershipsTab({ member }: { member: Profile }) {
                       <span className={`${isExpired(membership.endDate || '') ? 'text-red-400' : 'text-gray-200'}`}>
                         {membership.endDate ? formatDate(membership.endDate) : 'N/A'}
                       </span>
+                    </div>
+                    {/* Auto-Renewal Status */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">Auto-Renewal: </span>
+                      <span className={getAutoRenewalStatus(membership).color}>
+                        {getAutoRenewalStatus(membership).label}
+                      </span>
+                      {/* Admin can only CANCEL auto-renewal, not enable it */}
+                      {canEdit && membership.stripeSubscriptionId && membership.paymentStatus === 'paid' && !isExpired(membership.endDate || '') && (
+                        <button
+                          onClick={() => handleOpenAutoRenewalModal(membership, 'cancel')}
+                          className="ml-2 text-xs px-2 py-0.5 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded"
+                          title="Cancel auto-renewal"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {membership.hadLegacySubscription && !membership.stripeSubscriptionId && (
+                        <span className="ml-1 text-xs text-yellow-400" title="This member had recurring billing in the old PMPro system">
+                          (needs re-setup)
+                        </span>
+                      )}
                     </div>
                     {membership.transactionId && (
                       <div className="col-span-2">
@@ -4215,155 +5184,201 @@ function MembershipsTab({ member }: { member: Profile }) {
                 </div>
               </div>
 
-              {/* Competitor Info Section */}
-              <div className="border-t border-slate-600 pt-4">
-                <h3 className="text-lg font-medium text-white mb-3">Competitor Info</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Competitor Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.competitorName}
-                      onChange={(e) => setEditFormData({ ...editFormData, competitorName: e.target.value })}
-                      placeholder="Competitor name"
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Vehicle Info Section */}
-              <div className="border-t border-slate-600 pt-4">
-                <h3 className="text-lg font-medium text-white mb-3">Vehicle Info</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Make
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.vehicleMake}
-                      onChange={(e) => setEditFormData({ ...editFormData, vehicleMake: e.target.value })}
-                      placeholder="e.g., Toyota"
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Model
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.vehicleModel}
-                      onChange={(e) => setEditFormData({ ...editFormData, vehicleModel: e.target.value })}
-                      placeholder="e.g., Camry"
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Color
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.vehicleColor}
-                      onChange={(e) => setEditFormData({ ...editFormData, vehicleColor: e.target.value })}
-                      placeholder="e.g., Black"
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      License Plate
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.vehicleLicensePlate}
-                      onChange={(e) => setEditFormData({ ...editFormData, vehicleLicensePlate: e.target.value })}
-                      placeholder="License plate"
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Team Info Section */}
-              <div className="border-t border-slate-600 pt-4">
-                <h3 className="text-lg font-medium text-white mb-3">Team Info</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="hasTeamAddon"
-                      checked={editFormData.hasTeamAddon}
-                      onChange={(e) => setEditFormData({ ...editFormData, hasTeamAddon: e.target.checked })}
-                      className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
-                    />
-                    <label htmlFor="hasTeamAddon" className="text-gray-300">
-                      Has Team Add-on
-                    </label>
-                  </div>
+              {/* Business Info Section - FIRST for Retailer/Manufacturer */}
+              {(editingMembership?.membershipTypeConfig?.category === 'retail' ||
+                editingMembership?.membershipTypeConfig?.category === 'manufacturer') && (
+                <div className="border-t border-slate-600 pt-4">
+                  <h3 className="text-lg font-medium text-white mb-3">Business Info</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Team Name
+                        Business Name
                       </label>
                       <input
                         type="text"
-                        value={editFormData.teamName}
-                        onChange={(e) => setEditFormData({ ...editFormData, teamName: e.target.value })}
-                        placeholder="Team name"
+                        value={editFormData.businessName}
+                        onChange={(e) => setEditFormData({ ...editFormData, businessName: e.target.value })}
+                        placeholder="Business name"
                         className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Team Description
+                        Business Website
                       </label>
                       <input
-                        type="text"
-                        value={editFormData.teamDescription}
-                        onChange={(e) => setEditFormData({ ...editFormData, teamDescription: e.target.value })}
-                        placeholder="Team description"
+                        type="url"
+                        value={editFormData.businessWebsite}
+                        onChange={(e) => setEditFormData({ ...editFormData, businessWebsite: e.target.value })}
+                        placeholder="https://..."
                         className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Business Info Section */}
-              <div className="border-t border-slate-600 pt-4">
-                <h3 className="text-lg font-medium text-white mb-3">Business Info</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Business Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.businessName}
-                      onChange={(e) => setEditFormData({ ...editFormData, businessName: e.target.value })}
-                      placeholder="Business name"
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Business Website
-                    </label>
-                    <input
-                      type="url"
-                      value={editFormData.businessWebsite}
-                      onChange={(e) => setEditFormData({ ...editFormData, businessWebsite: e.target.value })}
-                      placeholder="https://..."
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
-                    />
+              {/* Competitor Info Section - Only for competitor memberships */}
+              {editingMembership?.membershipTypeConfig?.category !== 'retail' &&
+                editingMembership?.membershipTypeConfig?.category !== 'manufacturer' && (
+                <div className="border-t border-slate-600 pt-4">
+                  <h3 className="text-lg font-medium text-white mb-3">Competitor Info</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Competitor Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.competitorName}
+                        onChange={(e) => setEditFormData({ ...editFormData, competitorName: e.target.value })}
+                        placeholder="Competitor name"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Vehicle Info Section - Only for competitor memberships */}
+              {editingMembership?.membershipTypeConfig?.category !== 'retail' &&
+                editingMembership?.membershipTypeConfig?.category !== 'manufacturer' && (
+                <div className="border-t border-slate-600 pt-4">
+                  <h3 className="text-lg font-medium text-white mb-3">Vehicle Info</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Make
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.vehicleMake}
+                        onChange={(e) => setEditFormData({ ...editFormData, vehicleMake: e.target.value })}
+                        placeholder="e.g., Toyota"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Model
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.vehicleModel}
+                        onChange={(e) => setEditFormData({ ...editFormData, vehicleModel: e.target.value })}
+                        placeholder="e.g., Camry"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Color
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.vehicleColor}
+                        onChange={(e) => setEditFormData({ ...editFormData, vehicleColor: e.target.value })}
+                        placeholder="e.g., Black"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        License Plate
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.vehicleLicensePlate}
+                        onChange={(e) => setEditFormData({ ...editFormData, vehicleLicensePlate: e.target.value })}
+                        placeholder="License plate"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Team Info Section - Only for competitor memberships */}
+              {editingMembership?.membershipTypeConfig?.category !== 'retail' &&
+                editingMembership?.membershipTypeConfig?.category !== 'manufacturer' && (
+                <div className="border-t border-slate-600 pt-4">
+                  <h3 className="text-lg font-medium text-white mb-3">Team Info</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="hasTeamAddon"
+                        checked={editFormData.hasTeamAddon}
+                        onChange={(e) => setEditFormData({ ...editFormData, hasTeamAddon: e.target.checked })}
+                        className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                      />
+                      <label htmlFor="hasTeamAddon" className="text-gray-300">
+                        Has Team Add-on
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Team Name
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.teamName}
+                          onChange={(e) => setEditFormData({ ...editFormData, teamName: e.target.value })}
+                          placeholder="Team name"
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Team Description
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.teamDescription}
+                          onChange={(e) => setEditFormData({ ...editFormData, teamDescription: e.target.value })}
+                          placeholder="Team description"
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Business Info Section - At bottom for competitor memberships */}
+              {editingMembership?.membershipTypeConfig?.category !== 'retail' &&
+                editingMembership?.membershipTypeConfig?.category !== 'manufacturer' && (
+                <div className="border-t border-slate-600 pt-4">
+                  <h3 className="text-lg font-medium text-white mb-3">Business Info</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Business Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.businessName}
+                        onChange={(e) => setEditFormData({ ...editFormData, businessName: e.target.value })}
+                        placeholder="Business name"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Business Website
+                      </label>
+                      <input
+                        type="url"
+                        value={editFormData.businessWebsite}
+                        onChange={(e) => setEditFormData({ ...editFormData, businessWebsite: e.target.value })}
+                        placeholder="https://..."
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 justify-end pt-4 border-t border-slate-600">
                 <button
@@ -4512,6 +5527,106 @@ function MembershipsTab({ member }: { member: Profile }) {
           </div>
         </div>
       )}
+
+      {/* Auto-Renewal Cancellation Modal (Admin can only cancel, not enable) */}
+      {showAutoRenewalModal && autoRenewalMembership && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-600">
+            <h3 className="text-lg font-bold text-white mb-4">Cancel Auto-Renewal</h3>
+
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-700/50 rounded-lg">
+                <p className="text-sm text-gray-400">Membership Type:</p>
+                <p className="text-white font-medium">{autoRenewalMembership.membershipTypeConfig?.name || 'Unknown'}</p>
+                {autoRenewalMembership.mecaId && (
+                  <>
+                    <p className="text-sm text-gray-400 mt-2">MECA ID:</p>
+                    <p className="text-orange-400 font-mono">#{autoRenewalMembership.mecaId}</p>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Cancellation Type</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-white cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancelType"
+                      checked={!autoRenewalCancelImmediately}
+                      onChange={() => setAutoRenewalCancelImmediately(false)}
+                      className="text-orange-500"
+                    />
+                    <span>Cancel at end of current period</span>
+                  </label>
+                  <p className="text-xs text-gray-500 ml-6">
+                    Member keeps access until: {autoRenewalMembership.endDate ? formatDate(autoRenewalMembership.endDate) : 'N/A'}
+                  </p>
+                  <label className="flex items-center gap-2 text-white cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cancelType"
+                      checked={autoRenewalCancelImmediately}
+                      onChange={() => setAutoRenewalCancelImmediately(true)}
+                      className="text-orange-500"
+                    />
+                    <span>Cancel immediately</span>
+                  </label>
+                  <p className="text-xs text-gray-500 ml-6">
+                    Subscription stops now, no more charges
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Reason for Cancellation <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={autoRenewalReason}
+                  onChange={(e) => setAutoRenewalReason(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white focus:border-orange-500 focus:outline-none resize-none"
+                  rows={3}
+                  placeholder="Explain why auto-renewal is being cancelled..."
+                />
+              </div>
+
+              {autoRenewalError && (
+                <div className="p-3 bg-red-900/30 border border-red-600 rounded text-red-300 text-sm">
+                  {autoRenewalError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowAutoRenewalModal(false);
+                    setAutoRenewalMembership(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded"
+                  disabled={autoRenewalLoading}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handleAutoRenewalSubmit}
+                  className="flex-1 px-4 py-2 text-white rounded flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500"
+                  disabled={autoRenewalLoading}
+                >
+                  {autoRenewalLoading ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={16} />
+                      Processing...
+                    </>
+                  ) : (
+                    'Cancel Auto-Renewal'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4628,6 +5743,7 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
@@ -4649,6 +5765,15 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         {formatDate(order.createdAt)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                        <a
+                          href={`/admin/billing/orders/${order.id}`}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-medium rounded-lg transition-colors"
+                        >
+                          <Eye className="h-3 w-3" />
+                          View Details
+                        </a>
                       </td>
                     </tr>
                   ))}

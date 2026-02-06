@@ -514,11 +514,18 @@ export class ProfilesService {
     redirectTo: string,
   ): Promise<{ success: boolean; link?: string; error?: string }> {
     // Verify the target user exists in profiles
-    const profile = await this.findById(targetUserId);
-    if (!profile) {
+    try {
+      const profile = await this.findById(targetUserId);
+      if (!profile) {
+        return {
+          success: false,
+          error: 'User profile not found in database',
+        };
+      }
+    } catch {
       return {
         success: false,
-        error: 'User not found',
+        error: 'User profile not found in database',
       };
     }
 

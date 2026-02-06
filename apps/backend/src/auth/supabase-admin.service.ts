@@ -290,9 +290,10 @@ export class SupabaseAdminService {
       const { data: userData, error: userError } = await this.supabaseAdmin.auth.admin.getUserById(targetUserId);
 
       if (userError || !userData.user) {
+        this.logger.error(`User not found in Supabase Auth: ${targetUserId}, error: ${userError?.message}`);
         return {
           success: false,
-          error: userError?.message || 'User not found',
+          error: userError?.message || 'User not found in authentication system. This user may not have a login account.',
         };
       }
 

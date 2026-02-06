@@ -11,6 +11,8 @@ export {
   useResultsSEO,
   useLeaderboardSEO,
   useStandingsSEO,
+  useTeamStandingsSEO,
+  useTeamLeaderboardSEO,
   useMemberDirectorySEO,
   useMemberProfileSEO,
   useTeamDirectorySEO,

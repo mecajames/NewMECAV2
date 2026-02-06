@@ -1,0 +1,110 @@
+name: Deploy to Lightsail
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'deploy/**'
+      - 'rush.json'
+      - 'common/config/rush/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: v2-container-service-1
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install lightsailctl
+        run: |
+          curl -s "https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl" -o /usr/local/bin/lightsailctl
+          chmod +x /usr/local/bin/lightsailctl
+
+      - name: Build backend Docker image
+        run: |
+          docker build \
+            -f deploy/backend.Dockerfile \
+            -t newmeca-backend:latest \
+            .
+
+      - name: Build nginx/frontend Docker image
+        run: |
+          docker build \
+            -f deploy/nginx.Dockerfile \
+            --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            --build-arg VITE_API_URL="" \
+            --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
+            --build-arg VITE_STRIPE_PUBLISHABLE_KEY="${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}" \
+            -t newmeca-nginx:latest \
+            .
+
+      - name: Push backend image to Lightsail
+        id: push-backend
+        run: |
+          output=$(aws lightsail push-container-image \
+            --region ${{ env.AWS_REGION }} \
+            --service-name ${{ env.SERVICE_NAME }} \
+            --label backend \
+            --image newmeca-backend:latest 2>&1)
+          echo "$output"
+          backend_image=$(echo "$output" | grep "Refer to this image as" | sed 's/.*Refer to this image as "\(.*\)".*/\1/')
+          echo "image=$backend_image" >> "$GITHUB_OUTPUT"
+
+      - name: Push nginx image to Lightsail
+        id: push-nginx
+        run: |
+          output=$(aws lightsail push-container-image \
+            --region ${{ env.AWS_REGION }} \
+            --service-name ${{ env.SERVICE_NAME }} \
+            --label nginx \
+            --image newmeca-nginx:latest 2>&1)
+          echo "$output"
+          nginx_image=$(echo "$output" | grep "Refer to this image as" | sed 's/.*Refer to this image as "\(.*\)".*/\1/')
+          echo "image=$nginx_image" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment config and deploy
+        run: |
+          echo "Backend image: ${{ steps.push-backend.outputs.image }}"
+          echo "Nginx image: ${{ steps.push-nginx.outputs.image }}"
+
+          # Update deployment.json with new image references
+          jq \
+            --arg backend "${{ steps.push-backend.outputs.image }}" \
+            --arg nginx "${{ steps.push-nginx.outputs.image }}" \
+            '.containers.backend.image = $backend | .containers.nginx.image = $nginx' \
+            deploy/deployment.json > /tmp/deployment.json
+
+          echo "Deployment config:"
+          cat /tmp/deployment.json
+
+          # Create the deployment
+          aws lightsail create-container-service-deployment \
+            --region ${{ env.AWS_REGION }} \
+            --cli-input-json file:///tmp/deployment.json
+
+      - name: Verify deployment started
+        run: |
+          echo "Deployment initiated. Checking status..."
+          aws lightsail get-container-services \
+            --service-name ${{ env.SERVICE_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'containerServices[0].{state:state,url:url}' \
+            --output table

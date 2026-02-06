@@ -10,6 +10,10 @@ const TEAM_TYPE_LABELS: Record<string, string> = {
   casual: 'Casual',
   shop: 'Shop',
   club: 'Club',
+  // Membership-based team types
+  retailer: 'Retailer',
+  manufacturer: 'Manufacturer',
+  competitor_team: 'Competitor Team',
 };
 
 const TEAM_TYPE_COLORS: Record<string, string> = {
@@ -17,6 +21,10 @@ const TEAM_TYPE_COLORS: Record<string, string> = {
   casual: 'bg-blue-500/10 text-blue-400',
   shop: 'bg-green-500/10 text-green-400',
   club: 'bg-purple-500/10 text-purple-400',
+  // Membership-based team types
+  retailer: 'bg-green-500/10 text-green-400',
+  manufacturer: 'bg-blue-500/10 text-blue-400',
+  competitor_team: 'bg-orange-500/10 text-orange-400',
 };
 
 export default function TeamDirectoryPage() {
@@ -75,17 +83,27 @@ export default function TeamDirectoryPage() {
   };
 
   const filteredTeams = teams.filter(team => {
+    const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
-      team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      team.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      team.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      team.owner?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      team.owner?.last_name?.toLowerCase().includes(searchTerm.toLowerCase());
+      team.name.toLowerCase().includes(searchLower) ||
+      team.description?.toLowerCase().includes(searchLower) ||
+      team.location?.toLowerCase().includes(searchLower) ||
+      team.owner?.first_name?.toLowerCase().includes(searchLower) ||
+      team.owner?.last_name?.toLowerCase().includes(searchLower) ||
+      team.representativeName?.toLowerCase().includes(searchLower);
 
-    const matchesType = teamTypeFilter === 'all' || team.teamType === teamTypeFilter;
+    // For team type filter, also match retailer->shop and manufacturer->club mappings
+    let matchesType = teamTypeFilter === 'all' || team.teamType === teamTypeFilter;
+    if (!matchesType && teamTypeFilter === 'shop' && team.teamType === 'retailer') matchesType = true;
+    if (!matchesType && teamTypeFilter === 'club' && team.teamType === 'manufacturer') matchesType = true;
 
     return matchesSearch && matchesType;
   });
+
+  // Helper to get member count from either memberCount or members array
+  const getMemberCount = (team: Team): number => {
+    return team.memberCount ?? team.members?.length ?? 1;
+  };
 
   // Check if user is already a member of a team
   const isUserOnTeam = (teamId: string): boolean => {
@@ -191,6 +209,9 @@ export default function TeamDirectoryPage() {
             className="px-4 py-3 bg-slate-800 text-white rounded-lg border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
           >
             <option value="all">All Types</option>
+            <option value="retailer">Retailers</option>
+            <option value="manufacturer">Manufacturers</option>
+            <option value="competitor_team">Competitor Teams</option>
             <option value="competitive">Competitive</option>
             <option value="casual">Casual</option>
             <option value="shop">Shop</option>
@@ -245,7 +266,7 @@ export default function TeamDirectoryPage() {
                     {/* Member Count Badge */}
                     <div className="absolute top-3 left-3 bg-slate-900/80 text-white text-xs px-3 py-1 rounded-full flex items-center gap-1">
                       <Users className="h-3 w-3" />
-                      {team.members?.length || 0} members
+                      {getMemberCount(team)} {getMemberCount(team) === 1 ? 'member' : 'members'}
                     </div>
                   </div>
 
@@ -400,7 +421,7 @@ export default function TeamDirectoryPage() {
                         </p>
                       )}
                       <p className="text-gray-400 text-sm">
-                        {selectedTeam.members?.length || 0} members
+                        {getMemberCount(selectedTeam as Team)} {getMemberCount(selectedTeam as Team) === 1 ? 'member' : 'members'}
                       </p>
                     </div>
                   </div>

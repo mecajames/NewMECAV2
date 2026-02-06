@@ -1,4 +1,4 @@
-import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight, Store, Factory, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
+import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight, Store, Factory, CheckCircle, ArrowRight, Sparkles, Newspaper } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
@@ -6,6 +6,7 @@ import { useSiteSettings } from '@/shared/contexts';
 import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business-listings';
 import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useHomeSEO } from '@/shared/seo';
+import { NewsletterModal } from '@/newsletter';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function HomePage() {
     retailers: RetailerListing[];
     manufacturers: ManufacturerListing[];
   }>({ retailers: [], manufacturers: [] });
+  const [newsletterModalOpen, setNewsletterModalOpen] = useState(false);
 
   // Derive hero settings from cached context
   const heroSettings = useMemo(() => {
@@ -396,6 +398,40 @@ export default function HomePage() {
           )}
         </div>
 
+        {/* Newsletter Signup Banner */}
+        <div className="mb-16">
+          <button
+            onClick={() => setNewsletterModalOpen(true)}
+            className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-800 via-slate-800 to-slate-800 border border-slate-700 hover:border-orange-500/50 transition-all duration-300"
+          >
+            {/* Subtle animated gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-600/0 via-orange-600/5 to-orange-600/0 group-hover:from-orange-600/5 group-hover:via-orange-600/10 group-hover:to-orange-600/5 transition-all duration-500" />
+
+            {/* Animated shine effect */}
+            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+
+            <div className="relative flex items-center justify-center gap-4 py-5 px-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                  <Newspaper className="h-5 w-5 text-orange-500" />
+                </div>
+                <div className="text-left">
+                  <span className="block text-lg font-semibold text-white group-hover:text-orange-400 transition-colors">
+                    Sign Up for the MECA Head Newsletter
+                  </span>
+                  <span className="block text-sm text-gray-400">
+                    Get event updates, competition news, and exclusive content
+                  </span>
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-orange-600/20 group-hover:bg-orange-600 text-orange-400 group-hover:text-white font-medium rounded-lg transition-all duration-300">
+                Subscribe
+                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          </button>
+        </div>
+
         {/* MECA Information Section */}
         <div className="mb-16 bg-slate-800 rounded-2xl p-8 md:p-12">
           <div className="max-w-5xl mx-auto">
@@ -766,6 +802,12 @@ export default function HomePage() {
         </div>
       </div>
       </div>
+
+      {/* Newsletter Modal */}
+      <NewsletterModal
+        isOpen={newsletterModalOpen}
+        onClose={() => setNewsletterModalOpen(false)}
+      />
     </>
   );
 }
