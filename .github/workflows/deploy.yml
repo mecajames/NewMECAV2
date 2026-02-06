@@ -80,20 +80,40 @@ jobs:
           nginx_image=$(echo "$output" | grep "Refer to this image as" | sed 's/.*Refer to this image as "\(.*\)".*/\1/')
           echo "image=$nginx_image" >> "$GITHUB_OUTPUT"
 
-      - name: Update deployment config and deploy
+      - name: Build deployment config from template and deploy
         run: |
           echo "Backend image: ${{ steps.push-backend.outputs.image }}"
           echo "Nginx image: ${{ steps.push-nginx.outputs.image }}"
 
-          # Update deployment.json with new image references
+          # Build deployment.json from template + GitHub Secrets
           jq \
             --arg backend "${{ steps.push-backend.outputs.image }}" \
             --arg nginx "${{ steps.push-nginx.outputs.image }}" \
-            '.containers.backend.image = $backend | .containers.nginx.image = $nginx' \
-            deploy/deployment.json > /tmp/deployment.json
+            --arg database_url "${{ secrets.DATABASE_URL }}" \
+            --arg supabase_url "${{ secrets.SUPABASE_URL }}" \
+            --arg supabase_anon_key "${{ secrets.SUPABASE_ANON_KEY }}" \
+            --arg supabase_service_role_key "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            --arg stripe_secret_key "${{ secrets.STRIPE_SECRET_KEY }}" \
+            --arg stripe_webhook_secret "${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
+            --arg cors_origin "${{ secrets.CORS_ORIGIN }}" \
+            --arg recaptcha_secret_key "${{ secrets.RECAPTCHA_SECRET_KEY }}" \
+            --arg sendgrid_api_key "${{ secrets.SENDGRID_API_KEY }}" \
+            '
+            .containers.backend.image = $backend |
+            .containers.nginx.image = $nginx |
+            .containers.backend.environment.DATABASE_URL = $database_url |
+            .containers.backend.environment.SUPABASE_URL = $supabase_url |
+            .containers.backend.environment.SUPABASE_ANON_KEY = $supabase_anon_key |
+            .containers.backend.environment.SUPABASE_SERVICE_ROLE_KEY = $supabase_service_role_key |
+            .containers.backend.environment.STRIPE_SECRET_KEY = $stripe_secret_key |
+            .containers.backend.environment.STRIPE_WEBHOOK_SECRET = $stripe_webhook_secret |
+            .containers.backend.environment.CORS_ORIGIN = $cors_origin |
+            .containers.backend.environment.RECAPTCHA_SECRET_KEY = $recaptcha_secret_key |
+            .containers.backend.environment.SENDGRID_API_KEY = $sendgrid_api_key
+            ' deploy/deployment.template.json > /tmp/deployment.json
 
-          echo "Deployment config:"
-          cat /tmp/deployment.json
+          echo "Deployment config (secrets masked):"
+          jq '.containers.backend.environment | keys' /tmp/deployment.json
 
           # Create the deployment
           aws lightsail create-container-service-deployment \

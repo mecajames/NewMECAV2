@@ -40,6 +40,14 @@ dist-ssr
 apps/backend/.env
 apps/frontend/.env
 
+# Deploy secrets (never commit real values)
+deploy/.env.staging
+deploy/.env.backend
+deploy/deployment.json
+
+# User data dumps
+auth_users_dump.csv
+
 # Docker
 docker/analysis-output/*
 !docker/analysis-output/.gitkeep

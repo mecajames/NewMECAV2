@@ -8,7 +8,8 @@
 #   - Docker Desktop running
 #   - AWS CLI v2 configured (aws configure)
 #   - lightsailctl plugin installed
-#   - deploy/.env.staging file with secrets (copy from .env.staging.example)
+#   - deploy/.env.staging file with frontend secrets (copy from .env.staging.example)
+#   - deploy/.env.backend file with backend secrets (copy from .env.backend.example)
 # ============================================
 
 param(
@@ -33,6 +34,27 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ------------------------------------------
+# Helper: Parse .env file into hashtable
+# ------------------------------------------
+function Read-EnvFile {
+    param([string]$Path)
+    $vars = @{}
+    if (-not (Test-Path $Path)) {
+        return $null
+    }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith("#")) {
+            $parts = $line -split "=", 2
+            if ($parts.Length -eq 2) {
+                $vars[$parts[0].Trim()] = $parts[1].Trim()
+            }
+        }
+    }
+    return $vars
+}
+
+# ------------------------------------------
 # Load environment variables for frontend build args
 # ------------------------------------------
 $EnvFile = Join-Path $RepoRoot "deploy\.env.staging"
@@ -41,18 +63,18 @@ if (-not (Test-Path $EnvFile)) {
     Write-Host "Copy deploy/.env.staging.example to deploy/.env.staging and fill in your values." -ForegroundColor Yellow
     exit 1
 }
+$EnvVars = Read-EnvFile -Path $EnvFile
 
-# Parse .env.staging file
-$EnvVars = @{}
-Get-Content $EnvFile | ForEach-Object {
-    $line = $_.Trim()
-    if ($line -and -not $line.StartsWith("#")) {
-        $parts = $line -split "=", 2
-        if ($parts.Length -eq 2) {
-            $EnvVars[$parts[0].Trim()] = $parts[1].Trim()
-        }
-    }
+# ------------------------------------------
+# Load backend secrets for deployment config
+# ------------------------------------------
+$BackendEnvFile = Join-Path $RepoRoot "deploy\.env.backend"
+if (-not (Test-Path $BackendEnvFile)) {
+    Write-Host "ERROR: deploy/.env.backend not found!" -ForegroundColor Red
+    Write-Host "Copy deploy/.env.backend.example to deploy/.env.backend and fill in your values." -ForegroundColor Yellow
+    exit 1
 }
+$BackendVars = Read-EnvFile -Path $BackendEnvFile
 
 # ------------------------------------------
 # Step 1: Build Docker images
@@ -125,8 +147,8 @@ if (-not $SkipPush) {
 # ------------------------------------------
 Write-Host "[5/5] Creating Lightsail deployment..." -ForegroundColor Yellow
 
-# Read deployment.json and update image references with latest pushed images
-$deploymentConfig = Get-Content (Join-Path $RepoRoot "deploy\deployment.json") -Raw | ConvertFrom-Json
+# Read deployment template and inject secrets
+$deploymentConfig = Get-Content (Join-Path $RepoRoot "deploy\deployment.template.json") -Raw | ConvertFrom-Json
 
 # Get the latest pushed image references from Lightsail
 Write-Host "  Fetching latest image references..." -ForegroundColor DarkGray
@@ -145,9 +167,22 @@ if (-not $backendImage -or -not $nginxImage) {
 Write-Host "  Backend image: $backendImage" -ForegroundColor DarkGray
 Write-Host "  Nginx image: $nginxImage" -ForegroundColor DarkGray
 
-# Update image references in deployment config
+# Update image references
 $deploymentConfig.containers.backend.image = $backendImage
 $deploymentConfig.containers.nginx.image = $nginxImage
+
+# Inject backend secrets from .env.backend
+$envMap = $deploymentConfig.containers.backend.environment
+$secretKeys = @(
+    "DATABASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
+    "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "CORS_ORIGIN",
+    "RECAPTCHA_SECRET_KEY", "SENDGRID_API_KEY"
+)
+foreach ($key in $secretKeys) {
+    if ($BackendVars.ContainsKey($key)) {
+        $envMap.$key = $BackendVars[$key]
+    }
+}
 
 # Write updated config to temp file
 $tempDeployment = Join-Path $env:TEMP "newmeca-deployment.json"
