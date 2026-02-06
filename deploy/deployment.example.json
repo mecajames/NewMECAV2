@@ -2,20 +2,20 @@
   "serviceName": "v2-container-service-1",
   "containers": {
     "backend": {
-      "image": ":v2-container-service-1.backend.3",
+      "image": ":v2-container-service-1.backend.LATEST",
       "command": [],
       "environment": {
         "NODE_ENV": "production",
         "PORT": "3000",
         "NODE_OPTIONS": "--max-old-space-size=512 --experimental-global-webcrypto",
-        "DATABASE_URL": "postgresql://postgres:3u0bDDIOAgUpI_OEb4wT_U0ivUiItgFE@44.201.29.162:5433/postgres",
-        "SUPABASE_URL": "http://44.201.29.162:8000",
-        "SUPABASE_ANON_KEY": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogImFub24iLCAiaXNzIjogInN1cGFiYXNlIiwgImlhdCI6IDE2NDE3NjkyMDAsICJleHAiOiAxNzk5NTM1NjAwfQ.KI3BDNrx23PDSBjtrOjDFHorcXcy7IfkxurGw9qjWNE",
-        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJyb2xlIjogInNlcnZpY2Vfcm9sZSIsICJpc3MiOiAic3VwYWJhc2UiLCAiaWF0IjogMTY0MTc2OTIwMCwgImV4cCI6IDE3OTk1MzU2MDB9.nch8f9G6rJaCCplUErMgOTnbC22hFCSgm5bEMLyX-4A",
+        "DATABASE_URL": "postgresql://postgres:YOUR_PASSWORD@YOUR_HOST:5433/postgres",
+        "SUPABASE_URL": "http://YOUR_SUPABASE_HOST:8000",
+        "SUPABASE_ANON_KEY": "YOUR_SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY": "YOUR_SUPABASE_SERVICE_ROLE_KEY",
         "STRIPE_SECRET_KEY": "sk_test_placeholder",
         "STRIPE_WEBHOOK_SECRET": "whsec_placeholder",
         "CORS_ORIGIN": "https://v2-container-service-1.4jtl2jdpv8nts.us-east-1.cs.amazonlightsail.com",
-        "RECAPTCHA_SECRET_KEY": "6LeeHw4sAAAAAJ_HGure8O2FTWoxX413ROGY7G5-",
+        "RECAPTCHA_SECRET_KEY": "YOUR_RECAPTCHA_SECRET_KEY",
         "EMAIL_PROVIDER": "sendgrid",
         "SENDGRID_API_KEY": "placeholder",
         "SENDGRID_FROM_EMAIL": "noreply@meca.com"
@@ -25,7 +25,7 @@
       }
     },
     "nginx": {
-      "image": ":v2-container-service-1.nginx.2",
+      "image": ":v2-container-service-1.nginx.LATEST",
       "command": [],
       "environment": {},
       "ports": {

@@ -40,6 +40,10 @@ dist-ssr
 apps/backend/.env
 apps/frontend/.env
 
+# Deploy secrets
+deploy/deployment.json
+deploy/.env.staging
+
 # Docker
 docker/analysis-output/*
 !docker/analysis-output/.gitkeep
