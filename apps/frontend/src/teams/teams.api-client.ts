@@ -28,28 +28,37 @@ export interface TeamMember {
 
 export type TeamType = 'competitive' | 'casual' | 'shop' | 'club';
 
+export type ExtendedTeamType = TeamType | 'retailer' | 'manufacturer' | 'competitor_team';
+
 export interface Team {
   id: string;
   name: string;
   description?: string;
   bio?: string; // Detailed bio/about section for team profile
   logoUrl?: string;
-  captainId: string; // Keep for backward compat - this is the owner ID
+  captainId?: string; // Keep for backward compat - this is the owner ID (may be missing for membership-based teams)
   seasonId?: string;
-  teamType: TeamType;
+  teamType: ExtendedTeamType;
   location?: string;
-  maxMembers: number;
+  maxMembers?: number;
   website?: string;
-  isPublic: boolean;
-  requiresApproval: boolean;
+  isPublic?: boolean;
+  requiresApproval?: boolean;
   galleryImages?: string[];
   coverImagePosition?: { x: number; y: number };
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  // Source of the team - 'legacy' for teams table, 'membership' for membership-based
+  source?: 'legacy' | 'membership';
+  // For membership-based teams
+  memberCount?: number;
+  representativeName?: string;
+  mecaId?: string;
+  userId?: string;
   // New field - owner info (replaces captain)
   owner?: {
-    id: string;
+    id?: string;
     first_name?: string;
     last_name?: string;
     meca_id?: string;

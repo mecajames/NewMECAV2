@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Store,
   Factory,
-  TrendingUp,
   Award,
   Edit,
   Plus,
@@ -13,6 +12,7 @@ import {
   Link,
   CheckCircle,
   Clock,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '@/auth';
 import {
@@ -26,6 +26,7 @@ import {
   ManufacturerListing,
   GalleryImage,
 } from '@/business-listings';
+import { membershipsApi } from '@/memberships/memberships.api-client';
 import { useNavigate } from 'react-router-dom';
 
 interface RetailerDashboardProps {
@@ -45,6 +46,9 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Membership category determines which listing type to show
+  const [membershipCategory, setMembershipCategory] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -75,12 +79,22 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
       setLoading(true);
       const userId = profile?.id;
       if (!userId) return;
-      const [retailer, manufacturer] = await Promise.all([
-        getMyRetailerListing(userId),
-        getMyManufacturerListing(userId),
-      ]);
-      setRetailerListing(retailer);
-      setManufacturerListing(manufacturer);
+
+      // First get the user's active membership to determine which listing type to show
+      const membership = await membershipsApi.getUserActiveMembership(userId);
+      const category = membership?.membershipTypeConfig?.category;
+      setMembershipCategory(category || null);
+
+      // Only fetch the relevant listing based on membership category
+      if (category === 'retail') {
+        const retailer = await getMyRetailerListing(userId);
+        setRetailerListing(retailer);
+        setActiveTab('retailer');
+      } else if (category === 'manufacturer') {
+        const manufacturer = await getMyManufacturerListing(userId);
+        setManufacturerListing(manufacturer);
+        setActiveTab('manufacturer');
+      }
     } catch (err: any) {
       console.error('Error fetching listings:', err);
     } finally {
@@ -645,12 +659,27 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
   // Main dashboard view
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Retailer/Manufacturer Dashboard
-          </h1>
-          <p className="text-gray-400">Manage your business listings and directory presence</p>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header with Back Button */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-400">My MECA</h2>
+          <button
+            onClick={() => navigate('/dashboard/mymeca')}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Go Back
+          </button>
+        </div>
+
+        {/* Title Row */}
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">
+              {membershipCategory === 'retail' ? 'Retailer' : membershipCategory === 'manufacturer' ? 'Manufacturer' : 'Business'} Directory Listing
+            </h1>
+            <p className="text-gray-400">Manage your business listing and directory presence</p>
+          </div>
         </div>
 
         {success && (
@@ -659,23 +688,24 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
           </div>
         )}
 
-        {/* Listing Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-          {/* Retailer Listing Card */}
-          <div className="bg-slate-800 rounded-xl overflow-hidden shadow-lg">
-            <div className="bg-gradient-to-r from-orange-600 to-orange-700 p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-                  <Store className="h-7 w-7 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Retailer Listing</h2>
-                  <p className="text-orange-200">For shops and installers</p>
-                </div>
-              </div>
-            </div>
+        {/* Show message if user doesn't have a retailer or manufacturer membership */}
+        {membershipCategory && membershipCategory !== 'retail' && membershipCategory !== 'manufacturer' && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-6 text-center">
+            <p className="text-yellow-400">
+              Business directory listings are only available for Retailer and Manufacturer members.
+            </p>
+          </div>
+        )}
 
-            <div className="p-6">
+        {/* Listing Card - matches Profile page style */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+          {/* Retailer Listing - Only for retail members */}
+          {membershipCategory === 'retail' && (
+            <>
+              <div className="flex items-center gap-3 mb-6">
+                <Store className="h-6 w-6 text-orange-500" />
+                <h2 className="text-xl font-bold text-white">Listing Information</h2>
+              </div>
               {retailerListing ? (
                 <div>
                   <div className="flex items-start gap-4 mb-6">
@@ -718,7 +748,6 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                       </div>
                     </div>
                   </div>
-
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleEditClick('retailer')}
@@ -732,12 +761,12 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                       className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
                     >
                       <Eye className="h-4 w-4" />
-                      View
+                      View Public Listing
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-6">
+                <div className="text-center py-8">
                   <Store className="h-12 w-12 text-gray-600 mx-auto mb-3" />
                   <p className="text-gray-400 mb-4">
                     You haven't created a retailer listing yet
@@ -751,24 +780,16 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                   </button>
                 </div>
               )}
-            </div>
-          </div>
+            </>
+          )}
 
-          {/* Manufacturer Listing Card */}
-          <div className="bg-slate-800 rounded-xl overflow-hidden shadow-lg">
-            <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-                  <Factory className="h-7 w-7 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Manufacturer Listing</h2>
-                  <p className="text-cyan-200">For brands and suppliers</p>
-                </div>
+          {/* Manufacturer Listing - Only for manufacturer members */}
+          {membershipCategory === 'manufacturer' && (
+            <>
+              <div className="flex items-center gap-3 mb-6">
+                <Factory className="h-6 w-6 text-cyan-500" />
+                <h2 className="text-xl font-bold text-white">Listing Information</h2>
               </div>
-            </div>
-
-            <div className="p-6">
               {manufacturerListing ? (
                 <div>
                   <div className="flex items-start gap-4 mb-6">
@@ -811,7 +832,6 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                       </div>
                     </div>
                   </div>
-
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleEditClick('manufacturer')}
@@ -825,12 +845,12 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                       className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
                     >
                       <Eye className="h-4 w-4" />
-                      View
+                      View Public Listing
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-6">
+                <div className="text-center py-8">
                   <Factory className="h-12 w-12 text-gray-600 mx-auto mb-3" />
                   <p className="text-gray-400 mb-4">
                     You haven't created a manufacturer listing yet
@@ -844,44 +864,10 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                   </button>
                 </div>
               )}
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-slate-800 rounded-xl p-8">
-          <h3 className="text-xl font-bold text-white mb-6">Quick Actions</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button
-              onClick={() => navigate('/retailers')}
-              className="flex items-center gap-3 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-left"
-            >
-              <Store className="h-6 w-6 text-orange-500" />
-              <span className="text-white">View Retailer Directory</span>
-            </button>
-            <button
-              onClick={() => navigate('/manufacturers')}
-              className="flex items-center gap-3 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-left"
-            >
-              <Factory className="h-6 w-6 text-cyan-500" />
-              <span className="text-white">View Manufacturer Directory</span>
-            </button>
-            <button
-              onClick={() => onNavigate('events')}
-              className="flex items-center gap-3 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-left"
-            >
-              <TrendingUp className="h-6 w-6 text-green-500" />
-              <span className="text-white">Browse Events</span>
-            </button>
-            <button
-              onClick={() => onNavigate('leaderboard')}
-              className="flex items-center gap-3 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-left"
-            >
-              <Award className="h-6 w-6 text-yellow-500" />
-              <span className="text-white">View Leaderboard</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

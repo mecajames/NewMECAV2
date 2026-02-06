@@ -32,6 +32,10 @@ const TEAM_TYPE_LABELS: Record<string, string> = {
   casual: 'Casual Team',
   shop: 'Shop Team',
   club: 'Club',
+  // Membership-based team types
+  retailer: 'Retailer',
+  manufacturer: 'Manufacturer',
+  competitor_team: 'Competitor Team',
 };
 
 const TEAM_TYPE_COLORS: Record<string, string> = {
@@ -39,6 +43,10 @@ const TEAM_TYPE_COLORS: Record<string, string> = {
   casual: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   shop: 'bg-green-500/10 text-green-400 border-green-500/20',
   club: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  // Membership-based team types
+  retailer: 'bg-green-500/10 text-green-400 border-green-500/20',
+  manufacturer: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  competitor_team: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
 };
 
 const ROLE_BADGES: Record<string, { label: string; color: string }> = {

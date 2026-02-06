@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Calendar, Shield, CreditCard, Lock, ArrowLeft, Phone, MapPin, Building, Pencil, Save, X, Users, Car, Loader2 } from 'lucide-react';
+import { User, Mail, Calendar, Shield, CreditCard, Lock, ArrowLeft, Phone, MapPin, Building, Pencil, Save, X, Users, Car, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/auth';
 import ChangePassword from '@/profiles/components/ChangePassword';
 import { CountrySelect, StateProvinceSelect, PhoneInput } from '@/shared/fields';
@@ -70,6 +70,9 @@ export default function ProfilePage() {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [isViewingSecondary, setIsViewingSecondary] = useState(false);
 
+  // Primary user's membership (for vehicle info)
+  const [primaryMembership, setPrimaryMembership] = useState<Membership | null>(null);
+
   const [formData, setFormData] = useState<AddressFormData>({
     phone: '',
     address: '',
@@ -102,13 +105,27 @@ export default function ProfilePage() {
     vehicleLicensePlate: '',
   });
 
-  // Load controlled MECA IDs to check if user has secondaries
+  // Load controlled MECA IDs and primary membership
   useEffect(() => {
     const loadControlledMecaIds = async () => {
       if (!profile?.id) return;
       try {
         const mecaIds = await membershipsApi.getControlledMecaIds(profile.id);
         setControlledMecaIds(mecaIds);
+
+        // Load primary membership for vehicle info
+        const ownMecaId = mecaIds.find(m => m.isOwn);
+        if (ownMecaId) {
+          const membership = await membershipsApi.getById(ownMecaId.membershipId);
+          setPrimaryMembership(membership);
+          // Initialize vehicle form data for primary user
+          setVehicleFormData({
+            vehicleMake: membership.vehicleMake || '',
+            vehicleModel: membership.vehicleModel || '',
+            vehicleColor: membership.vehicleColor || '',
+            vehicleLicensePlate: membership.vehicleLicensePlate || '',
+          });
+        }
       } catch (error) {
         console.error('Failed to load controlled MECA IDs:', error);
       }
@@ -226,6 +243,20 @@ export default function ProfilePage() {
       } else if (profile?.id) {
         // Save own profile
         await profilesApi.update(profile.id, formData);
+
+        // Save vehicle info for primary membership
+        if (primaryMembership) {
+          await membershipsApi.updateVehicleInfo(primaryMembership.id, {
+            vehicleMake: vehicleFormData.vehicleMake,
+            vehicleModel: vehicleFormData.vehicleModel,
+            vehicleColor: vehicleFormData.vehicleColor,
+            vehicleLicensePlate: vehicleFormData.vehicleLicensePlate,
+          });
+          // Reload the primary membership
+          const updatedMembership = await membershipsApi.getById(primaryMembership.id);
+          setPrimaryMembership(updatedMembership);
+        }
+
         await refreshProfile();
       }
 
@@ -272,6 +303,15 @@ export default function ProfilePage() {
         billing_zip: profile.billing_zip || '',
         billing_country: profile.billing_country || '',
       });
+      // Reset vehicle form data for primary user
+      if (primaryMembership) {
+        setVehicleFormData({
+          vehicleMake: primaryMembership.vehicleMake || '',
+          vehicleModel: primaryMembership.vehicleModel || '',
+          vehicleColor: primaryMembership.vehicleColor || '',
+          vehicleLicensePlate: primaryMembership.vehicleLicensePlate || '',
+        });
+      }
     }
     setIsEditing(false);
   };
@@ -551,13 +591,24 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Vehicle Information for Secondary */}
-              <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                    <Car className="h-5 w-5 text-blue-500" />
+              {/* Required Vehicle Details */}
+              <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-orange-500/30">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                    <Car className="h-5 w-5 text-orange-500" />
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Vehicle Information</h2>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Required Vehicle Details</h2>
+                    <p className="text-gray-400 text-sm">This information is required for competition entry</p>
+                  </div>
+                </div>
+
+                <div className="mb-4 p-3 bg-orange-500/10 rounded-lg border border-orange-500/30 flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-orange-400 shrink-0 mt-0.5" />
+                  <p className="text-orange-300 text-sm">
+                    Vehicle make, model, and license plate are required for all competitors to participate in MECA events.
+                    Your MECA ID will not be activated until this information is complete.
+                  </p>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-6">
@@ -565,20 +616,20 @@ export default function ProfilePage() {
                     {isEditing ? (
                       <>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Make
+                          Vehicle Make <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
                           value={vehicleFormData.vehicleMake}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleMake: e.target.value }))}
                           className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          placeholder="Toyota"
+                          placeholder="e.g., Toyota, Honda, Ford"
                         />
                       </>
                     ) : (
                       <>
                         <label className="block text-sm font-medium text-gray-400 mb-2">
-                          Make
+                          Vehicle Make <span className="text-red-500">*</span>
                         </label>
                         <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
                           {selectedMembership?.vehicleMake || 'Not set'}
@@ -591,20 +642,20 @@ export default function ProfilePage() {
                     {isEditing ? (
                       <>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Model
+                          Vehicle Model <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
                           value={vehicleFormData.vehicleModel}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleModel: e.target.value }))}
                           className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          placeholder="Camry"
+                          placeholder="e.g., Camry, Civic, F-150"
                         />
                       </>
                     ) : (
                       <>
                         <label className="block text-sm font-medium text-gray-400 mb-2">
-                          Model
+                          Vehicle Model <span className="text-red-500">*</span>
                         </label>
                         <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
                           {selectedMembership?.vehicleModel || 'Not set'}
@@ -617,20 +668,20 @@ export default function ProfilePage() {
                     {isEditing ? (
                       <>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Color
+                          Vehicle Color
                         </label>
                         <input
                           type="text"
                           value={vehicleFormData.vehicleColor}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleColor: e.target.value }))}
                           className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          placeholder="Blue"
+                          placeholder="e.g., Blue, Red, Black"
                         />
                       </>
                     ) : (
                       <>
                         <label className="block text-sm font-medium text-gray-400 mb-2">
-                          Color
+                          Vehicle Color
                         </label>
                         <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
                           {selectedMembership?.vehicleColor || 'Not set'}
@@ -643,20 +694,20 @@ export default function ProfilePage() {
                     {isEditing ? (
                       <>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          License Plate
+                          License Plate <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
                           value={vehicleFormData.vehicleLicensePlate}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleLicensePlate: e.target.value }))}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          placeholder="ABC123"
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                          placeholder="e.g., ABC1234"
                         />
                       </>
                     ) : (
                       <>
                         <label className="block text-sm font-medium text-gray-400 mb-2">
-                          License Plate
+                          License Plate <span className="text-red-500">*</span>
                         </label>
                         <div className="bg-slate-700 px-4 py-3 rounded-lg text-white font-mono">
                           {selectedMembership?.vehicleLicensePlate || 'Not set'}
@@ -1106,6 +1157,135 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
+
+          {/* Required Vehicle Details - Only show if user has a membership */}
+          {primaryMembership && (
+            <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-orange-500/30">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Car className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Required Vehicle Details</h2>
+                  <p className="text-gray-400 text-sm">This information is required for competition entry</p>
+                </div>
+              </div>
+
+              <div className="mb-4 p-3 bg-orange-500/10 rounded-lg border border-orange-500/30 flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-orange-400 shrink-0 mt-0.5" />
+                <p className="text-orange-300 text-sm">
+                  Vehicle make, model, and license plate are required for all competitors to participate in MECA events.
+                  Your MECA ID will not be activated until this information is complete.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  {isEditing ? (
+                    <>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Vehicle Make <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.vehicleMake}
+                        onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleMake: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g., Toyota, Honda, Ford"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Vehicle Make <span className="text-red-500">*</span>
+                      </label>
+                      <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
+                        {primaryMembership.vehicleMake || 'Not set'}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  {isEditing ? (
+                    <>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Vehicle Model <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.vehicleModel}
+                        onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleModel: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g., Camry, Civic, F-150"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Vehicle Model <span className="text-red-500">*</span>
+                      </label>
+                      <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
+                        {primaryMembership.vehicleModel || 'Not set'}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  {isEditing ? (
+                    <>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Vehicle Color
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.vehicleColor}
+                        onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleColor: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="e.g., Blue, Red, Black"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Vehicle Color
+                      </label>
+                      <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
+                        {primaryMembership.vehicleColor || 'Not set'}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  {isEditing ? (
+                    <>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        License Plate <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={vehicleFormData.vehicleLicensePlate}
+                        onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleLicensePlate: e.target.value }))}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                        placeholder="e.g., ABC1234"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        License Plate <span className="text-red-500">*</span>
+                      </label>
+                      <div className="bg-slate-700 px-4 py-3 rounded-lg text-white font-mono">
+                        {primaryMembership.vehicleLicensePlate || 'Not set'}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Billing Address */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">

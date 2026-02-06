@@ -12,7 +12,7 @@ import { ShopModule } from '../shop/shop.module';
 
 @Module({
   imports: [
-    MembershipsModule,
+    forwardRef(() => MembershipsModule),
     PaymentsModule,
     QuickBooksModule,
     EventRegistrationsModule,

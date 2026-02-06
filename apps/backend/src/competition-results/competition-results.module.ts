@@ -7,6 +7,7 @@ import { MembershipsModule } from '../memberships/memberships.module';
 import { WorldFinalsModule } from '../world-finals/world-finals.module';
 import { AchievementsModule } from '../achievements/achievements.module';
 import { PointsConfigurationModule } from '../points-configuration/points-configuration.module';
+import { ResultTeamsModule } from '../result-teams/result-teams.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PointsConfigurationModule } from '../points-configuration/points-config
     forwardRef(() => WorldFinalsModule),
     forwardRef(() => AchievementsModule),
     PointsConfigurationModule,
+    ResultTeamsModule,
   ],
   controllers: [CompetitionResultsController],
   providers: [CompetitionResultsService, ResultsImportService],

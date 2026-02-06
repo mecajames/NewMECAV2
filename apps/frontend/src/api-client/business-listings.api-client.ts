@@ -187,8 +187,10 @@ export async function getMyRetailerListing(userId: string): Promise<RetailerList
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('Failed to fetch your retailer listing');
-  const data = await response.json();
-  return transformListing<RetailerListing>(data);
+  const text = await response.text();
+  if (!text || text === 'null') return null;
+  const data = JSON.parse(text);
+  return data ? transformListing<RetailerListing>(data) : null;
 }
 
 export async function createMyRetailerListing(userId: string, data: CreateRetailerDto): Promise<RetailerListing> {
@@ -219,8 +221,10 @@ export async function getMyManufacturerListing(userId: string): Promise<Manufact
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('Failed to fetch your manufacturer listing');
-  const data = await response.json();
-  return transformListing<ManufacturerListing>(data);
+  const text = await response.text();
+  if (!text || text === 'null') return null;
+  const data = JSON.parse(text);
+  return data ? transformListing<ManufacturerListing>(data) : null;
 }
 
 export async function createMyManufacturerListing(userId: string, data: CreateManufacturerDto): Promise<ManufacturerListing> {
@@ -267,6 +271,32 @@ export async function adminCreateRetailer(userId: string, data: CreateRetailerDt
   if (!response.ok) throw new Error('Failed to create retailer');
   const result = await response.json();
   return transformListing<RetailerListing>(result);
+}
+
+// Get a specific user's retailer listing (admin only)
+export async function adminGetRetailerByUserId(adminUserId: string, targetUserId: string): Promise<RetailerListing | null> {
+  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/retailers/user/${targetUserId}`, {
+    headers: { 'x-user-id': adminUserId },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Failed to fetch retailer listing');
+  const text = await response.text();
+  if (!text || text === 'null') return null;
+  const data = JSON.parse(text);
+  return data ? transformListing<RetailerListing>(data) : null;
+}
+
+// Get a specific user's manufacturer listing (admin only)
+export async function adminGetManufacturerByUserId(adminUserId: string, targetUserId: string): Promise<ManufacturerListing | null> {
+  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/manufacturers/user/${targetUserId}`, {
+    headers: { 'x-user-id': adminUserId },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Failed to fetch manufacturer listing');
+  const text = await response.text();
+  if (!text || text === 'null') return null;
+  const data = JSON.parse(text);
+  return data ? transformListing<ManufacturerListing>(data) : null;
 }
 
 export async function adminUpdateRetailer(userId: string, id: string, data: Partial<CreateRetailerDto> & {

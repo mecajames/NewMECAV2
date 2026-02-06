@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, User, CreditCard, MapPin, XCircle } from 'lucide-react';
+import { ArrowLeft, Package, User, CreditCard, MapPin, XCircle, DollarSign, Ban } from 'lucide-react';
 import { billingApi, Order, ordersApi, invoicesApi } from '../../../api-client/billing.api-client';
 import { OrderStatusBadge } from '../components/BillingStatusBadge';
 import { OrderType, OrderStatus } from '../billing.types';
+import CancelRefundModal, { CancelRefundMode } from '../components/CancelRefundModal';
 
 const orderTypeLabels: Record<OrderType, string> = {
   [OrderType.MEMBERSHIP]: 'Membership',
@@ -20,6 +21,10 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState(false);
+
+  // Cancel/Refund modal state
+  const [cancelRefundModalOpen, setCancelRefundModalOpen] = useState(false);
+  const [cancelRefundMode, setCancelRefundMode] = useState<CancelRefundMode>('cancel');
 
   useEffect(() => {
     if (id) {
@@ -39,6 +44,59 @@ export default function OrderDetailPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Find the membership item in the order (if it's a membership order)
+  const membershipItem = useMemo(() => {
+    if (!order) return null;
+    // Look for items with itemType 'membership' that have a referenceId
+    return order.items.find(
+      (item) => item.itemType.toLowerCase() === 'membership' && item.referenceId
+    );
+  }, [order]);
+
+  // Determine if we should show Cancel/Refund buttons
+  // For membership orders, show buttons even without a specific membership item (legacy orders)
+  const canCancelOrRefund = useMemo(() => {
+    if (!order) return false;
+    // Show for COMPLETED MEMBERSHIP orders
+    // For legacy orders without membershipItem, admin will need to find the membership manually
+    return (
+      order.status === OrderStatus.COMPLETED &&
+      order.orderType === OrderType.MEMBERSHIP
+    );
+  }, [order]);
+
+  // Determine if we have a valid membership reference for the modal
+  const hasMembershipReference = useMemo(() => {
+    return !!membershipItem?.referenceId || !!order?.user?.id;
+  }, [membershipItem, order]);
+
+  // Check if there's a Stripe payment for refund
+  const hasStripePayment = useMemo(() => {
+    return !!order?.payment?.stripePaymentIntentId;
+  }, [order]);
+
+  const handleOpenCancelModal = () => {
+    if (!membershipItem?.referenceId) {
+      alert('This is a legacy order without a linked membership reference. Please go to the Members section to find and manage this member\'s membership directly.');
+      return;
+    }
+    setCancelRefundMode('cancel');
+    setCancelRefundModalOpen(true);
+  };
+
+  const handleOpenRefundModal = () => {
+    if (!membershipItem?.referenceId) {
+      alert('This is a legacy order without a linked membership reference. Please go to the Members section to find and manage this member\'s membership directly.');
+      return;
+    }
+    setCancelRefundMode('refund');
+    setCancelRefundModalOpen(true);
+  };
+
+  const handleCancelRefundSuccess = () => {
+    fetchOrder();
   };
 
   const handleCancelOrder = async () => {
@@ -133,6 +191,26 @@ export default function OrderDetailPage() {
                 Cancel Order
               </button>
             )}
+            {canCancelOrRefund && (
+              <>
+                <button
+                  onClick={handleOpenCancelModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-semibold rounded-lg transition-colors"
+                  title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
+                >
+                  <Ban className="h-4 w-4" />
+                  Cancel Membership
+                </button>
+                <button
+                  onClick={handleOpenRefundModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold rounded-lg transition-colors"
+                  title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Refund
+                </button>
+              </>
+            )}
             <button
               onClick={() => navigate('/admin/billing/orders')}
               className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
@@ -171,23 +249,31 @@ export default function OrderDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
-                    {order.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-4 py-3">
-                          <div className="text-sm text-white">{item.description}</div>
-                          <div className="text-xs text-gray-500 capitalize">{item.itemType.replace('_', ' ')}</div>
-                        </td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-300">
-                          {item.quantity}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-300">
-                          {formatCurrency(item.unitPrice, order.currency)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-medium text-white">
-                          {formatCurrency(item.total, order.currency)}
+                    {order.items.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-gray-500 text-sm">
+                          No itemized details available (legacy order)
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      order.items.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-white">{item.description}</div>
+                            <div className="text-xs text-gray-500 capitalize">{item.itemType.replace('_', ' ')}</div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm text-gray-300">
+                            {item.quantity}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-300">
+                            {formatCurrency(item.unitPrice, order.currency)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-medium text-white">
+                            {formatCurrency(item.total, order.currency)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -338,6 +424,21 @@ export default function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Cancel/Refund Modal */}
+      {membershipItem && (
+        <CancelRefundModal
+          isOpen={cancelRefundModalOpen}
+          onClose={() => setCancelRefundModalOpen(false)}
+          onSuccess={handleCancelRefundSuccess}
+          membershipId={membershipItem.referenceId!}
+          membershipType={membershipItem.description}
+          totalAmount={order.total}
+          endDate={undefined} // We don't have end date in order, modal will handle this
+          hasStripePayment={hasStripePayment}
+          mode={cancelRefundMode}
+        />
+      )}
     </div>
   );
 }

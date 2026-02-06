@@ -652,4 +652,294 @@ export class MembershipsController {
 
     return result;
   }
+
+  // =============================================================================
+  // Admin Cancellation Endpoints
+  // =============================================================================
+
+  /**
+   * Admin: Cancel a membership immediately.
+   * Deactivates the membership immediately and sets status to CANCELLED.
+   */
+  @Post(':id/admin/cancel-immediately')
+  @HttpCode(HttpStatus.OK)
+  async cancelMembershipImmediately(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { reason: string },
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const { profile } = await this.requireAdmin(authHeader);
+
+    if (!data.reason || data.reason.trim().length < 5) {
+      throw new BadRequestException('A reason (at least 5 characters) is required for cancellation');
+    }
+
+    this.logger.log(`Admin ${profile?.email} cancelling membership ${membershipId} immediately. Reason: ${data.reason}`);
+
+    return this.membershipsService.cancelMembershipImmediately(
+      membershipId,
+      data.reason,
+      profile?.id || 'unknown',
+    );
+  }
+
+  /**
+   * Admin: Schedule a membership to be cancelled at the end of its current period.
+   * The membership remains active until the end date.
+   */
+  @Post(':id/admin/cancel-at-renewal')
+  @HttpCode(HttpStatus.OK)
+  async cancelMembershipAtRenewal(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { reason: string },
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const { profile } = await this.requireAdmin(authHeader);
+
+    if (!data.reason || data.reason.trim().length < 5) {
+      throw new BadRequestException('A reason (at least 5 characters) is required for cancellation');
+    }
+
+    this.logger.log(`Admin ${profile?.email} scheduling cancellation at renewal for membership ${membershipId}. Reason: ${data.reason}`);
+
+    return this.membershipsService.cancelMembershipAtRenewal(
+      membershipId,
+      data.reason,
+      profile?.id || 'unknown',
+    );
+  }
+
+  /**
+   * Admin: Refund a membership.
+   * Cancels immediately, processes Stripe refund, and sends notification email.
+   */
+  @Post(':id/admin/refund')
+  @HttpCode(HttpStatus.OK)
+  async refundMembership(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { reason: string },
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    stripeRefund: { id: string; amount: number; status: string } | null;
+    message: string;
+  }> {
+    const { profile } = await this.requireAdmin(authHeader);
+
+    if (!data.reason || data.reason.trim().length < 5) {
+      throw new BadRequestException('A reason (at least 5 characters) is required for refund');
+    }
+
+    this.logger.log(`Admin ${profile?.email} refunding membership ${membershipId}. Reason: ${data.reason}`);
+
+    return this.membershipsService.refundMembership(
+      membershipId,
+      data.reason,
+      profile?.id || 'unknown',
+    );
+  }
+
+  /**
+   * Admin: Get cancellation information for a membership
+   */
+  @Get(':id/admin/cancellation-info')
+  async getCancellationInfo(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{
+    isCancelled: boolean;
+    cancelAtPeriodEnd: boolean;
+    cancelledAt?: Date;
+    cancellationReason?: string;
+    cancelledBy?: string;
+    effectiveEndDate?: Date;
+  }> {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.getCancellationInfo(membershipId);
+  }
+
+  // =============================================================================
+  // Member Self-Service Cancellation Endpoint
+  // =============================================================================
+
+  /**
+   * Member: Request cancellation of their own membership.
+   * This schedules cancellation at the end of the current period (NOT immediate).
+   * Members who want immediate cancellation must contact support.
+   */
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  async memberCancelMembership(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { reason?: string },
+  ): Promise<{
+    success: boolean;
+    message: string;
+    effectiveEndDate: Date;
+  }> {
+    // Get authenticated user
+    const { user } = await this.getAuthenticatedUser(authHeader);
+
+    // Verify the membership belongs to this user
+    const membership = await this.membershipsService.findById(membershipId);
+    if (membership.user.id !== user.id) {
+      throw new ForbiddenException('You can only cancel your own membership');
+    }
+
+    if (membership.cancelledAt) {
+      throw new BadRequestException('This membership has already been cancelled');
+    }
+
+    if (membership.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException('Can only cancel active (paid) memberships');
+    }
+
+    // Schedule cancellation at period end (NOT immediate for self-service)
+    const result = await this.membershipsService.cancelMembershipAtRenewal(
+      membershipId,
+      data.reason || 'Member requested cancellation',
+      user.id,
+    );
+
+    return {
+      success: true,
+      message: `Your membership has been scheduled for cancellation. You will continue to have access until ${result.membership.endDate?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. If you need immediate cancellation, please contact our support team.`,
+      effectiveEndDate: result.membership.endDate!,
+    };
+  }
+
+  // =============================================================================
+  // AUTO-RENEWAL / SUBSCRIPTION MANAGEMENT ENDPOINTS
+  // =============================================================================
+
+  /**
+   * Get auto-renewal/subscription status for a membership
+   */
+  @Get(':id/subscription-status')
+  async getSubscriptionStatus(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{
+    autoRenewStatus: 'on' | 'legacy' | 'off';
+    stripeSubscriptionId?: string;
+    hadLegacySubscription: boolean;
+    stripeSubscriptionStatus?: string;
+    currentPeriodEnd?: Date;
+    cancelAtPeriodEnd?: boolean;
+  }> {
+    const { user } = await this.getAuthenticatedUser(authHeader);
+    const membership = await this.membershipsService.findById(membershipId);
+
+    // Allow member to view their own, or admin to view any
+    const isOwner = membership.user.id === user.id;
+    const isAdmin = user.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('You can only view your own membership subscription status');
+    }
+
+    return this.membershipsService.getSubscriptionStatus(membershipId);
+  }
+
+  /**
+   * Admin: Cancel auto-renewal for a membership
+   * This cancels the Stripe subscription (if exists) at period end
+   */
+  @Post(':id/admin/cancel-auto-renewal')
+  @HttpCode(HttpStatus.OK)
+  async adminCancelAutoRenewal(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { reason?: string; cancelImmediately?: boolean },
+  ): Promise<{
+    success: boolean;
+    message: string;
+    membership: Membership;
+  }> {
+    const { profile } = await this.requireAdmin(authHeader);
+
+    this.logger.log(`Admin ${profile?.email} cancelling auto-renewal for membership ${membershipId}`);
+
+    return this.membershipsService.cancelAutoRenewal(
+      membershipId,
+      data.reason || 'Cancelled by admin',
+      profile?.id || 'unknown',
+      data.cancelImmediately || false,
+    );
+  }
+
+  /**
+   * Admin: Enable auto-renewal for a membership by creating a Stripe subscription
+   */
+  @Post(':id/admin/enable-auto-renewal')
+  @HttpCode(HttpStatus.OK)
+  async adminEnableAutoRenewal(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    checkoutUrl?: string;
+    membership: Membership;
+  }> {
+    const { profile } = await this.requireAdmin(authHeader);
+
+    this.logger.log(`Admin ${profile?.email} enabling auto-renewal for membership ${membershipId}`);
+
+    return this.membershipsService.enableAutoRenewal(membershipId, profile?.id || 'unknown');
+  }
+
+  /**
+   * Member: Disable auto-renewal (cancel subscription at period end)
+   */
+  @Post(':id/disable-auto-renewal')
+  @HttpCode(HttpStatus.OK)
+  async memberDisableAutoRenewal(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { reason?: string },
+  ): Promise<{
+    success: boolean;
+    message: string;
+    effectiveEndDate?: Date;
+  }> {
+    const { user } = await this.getAuthenticatedUser(authHeader);
+    const membership = await this.membershipsService.findById(membershipId);
+
+    if (membership.user.id !== user.id) {
+      throw new ForbiddenException('You can only modify your own membership');
+    }
+
+    const result = await this.membershipsService.cancelAutoRenewal(
+      membershipId,
+      data.reason || 'Member disabled auto-renewal',
+      user.id,
+      false, // Don't cancel immediately, cancel at period end
+    );
+
+    return {
+      success: true,
+      message: 'Auto-renewal has been disabled. Your membership will remain active until the end of your current billing period.',
+      effectiveEndDate: result.membership.endDate,
+    };
+  }
+
+  /**
+   * Member: Get Stripe billing portal URL to manage their subscription
+   */
+  @Post('billing-portal')
+  @HttpCode(HttpStatus.OK)
+  async getBillingPortalUrl(
+    @Headers('authorization') authHeader: string,
+    @Body() data: { returnUrl?: string },
+  ): Promise<{
+    url: string;
+  }> {
+    const { user } = await this.getAuthenticatedUser(authHeader);
+
+    const returnUrl = data.returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`;
+
+    return this.membershipsService.createBillingPortalSession(user.id, returnUrl);
+  }
 }

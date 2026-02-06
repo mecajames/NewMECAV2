@@ -72,7 +72,12 @@ export class BannersController {
   @Post('banners/engagement')
   @HttpCode(HttpStatus.OK)
   async recordEngagement(@Body() dto: RecordEngagementDto) {
-    await this.bannersService.recordEngagement(dto.bannerId, dto.type);
+    try {
+      await this.bannersService.recordEngagement(dto.bannerId, dto.type);
+    } catch (error) {
+      // Silently fail - engagement tracking shouldn't break the user experience
+      console.error('Failed to record banner engagement:', error);
+    }
     return { success: true };
   }
 

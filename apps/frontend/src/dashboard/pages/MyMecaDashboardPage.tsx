@@ -10,7 +10,7 @@ import { useAuth } from '@/auth';
 import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
 import axios from 'axios';
 import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
-import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter } from 'lucide-react';
+import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
 import type { Judge } from '@newmeca/shared';
@@ -21,6 +21,7 @@ import {
 import { EventRatingsPanel } from '@/ratings';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { AchievementsGallery } from '@/achievements';
+import { membershipsApi, Membership, MemberCancelMembershipModal } from '@/memberships';
 
 interface EventHostingRequest {
   id: string;
@@ -66,6 +67,28 @@ export default function MyMecaDashboardPage() {
   const [allTeams, setAllTeams] = useState<MyTeamsResponse>({ ownedTeams: [], memberTeams: [] });
   const [ownsTeam, setOwnsTeam] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
+  // Active membership for displaying membership type badge
+  const [activeMembership, setActiveMembership] = useState<Membership | null>(null);
+
+  // Auto-renewal/subscription status
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{
+    autoRenewalStatus: 'on' | 'legacy' | 'off';
+    stripeSubscriptionId: string | null;
+    hadLegacySubscription: boolean;
+    stripeSubscription: {
+      status: string;
+      currentPeriodEnd: string;
+      cancelAtPeriodEnd: boolean;
+    } | null;
+  } | null>(null);
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
+  const [disableAutoRenewalLoading, setDisableAutoRenewalLoading] = useState(false);
+  const [showDisableAutoRenewalModal, setShowDisableAutoRenewalModal] = useState(false);
+  const [disableAutoRenewalReason, setDisableAutoRenewalReason] = useState('');
+
+  // Cancel membership modal state
+  const [showCancelMembershipModal, setShowCancelMembershipModal] = useState(false);
 
   // Judge and Event Director state
   const [judgeProfile, setJudgeProfile] = useState<Judge | null>(null);
@@ -171,8 +194,71 @@ export default function MyMecaDashboardPage() {
       fetchTeamData();
       fetchJudgeEDData();
       fetchNotifications();
+      fetchActiveMembership();
     }
   }, [profile, authLoading]);
+
+  // Fetch active membership to display membership type badge and subscription status
+  const fetchActiveMembership = async () => {
+    if (!profile?.id) return;
+    try {
+      const membership = await membershipsApi.getUserActiveMembership(profile.id);
+      setActiveMembership(membership);
+
+      // Fetch subscription status if we have an active membership
+      if (membership) {
+        try {
+          const subStatus = await membershipsApi.getSubscriptionStatus(membership.id);
+          setSubscriptionStatus(subStatus);
+        } catch (subError) {
+          console.error('Error fetching subscription status:', subError);
+          // Default to using the membership fields directly if endpoint fails
+          setSubscriptionStatus({
+            autoRenewalStatus: membership.stripeSubscriptionId ? 'on' : (membership.hadLegacySubscription ? 'legacy' : 'off'),
+            stripeSubscriptionId: membership.stripeSubscriptionId || null,
+            hadLegacySubscription: membership.hadLegacySubscription || false,
+            stripeSubscription: null,
+          });
+        }
+      } else {
+        setSubscriptionStatus(null);
+      }
+    } catch (error) {
+      console.error('Error fetching active membership:', error);
+    }
+  };
+
+  // Open Stripe Billing Portal for managing payment methods and subscriptions
+  const handleOpenBillingPortal = async () => {
+    setBillingPortalLoading(true);
+    try {
+      const result = await membershipsApi.getBillingPortalUrl(window.location.href);
+      window.open(result.url, '_blank');
+    } catch (error: any) {
+      console.error('Error opening billing portal:', error);
+      alert(error.response?.data?.message || 'Failed to open billing portal. Please try again.');
+    } finally {
+      setBillingPortalLoading(false);
+    }
+  };
+
+  // Disable auto-renewal for the member
+  const handleDisableAutoRenewal = async () => {
+    if (!activeMembership) return;
+    setDisableAutoRenewalLoading(true);
+    try {
+      await membershipsApi.memberDisableAutoRenewal(activeMembership.id, disableAutoRenewalReason);
+      alert('Auto-renewal has been disabled. Your membership will remain active until the end of your current billing period.');
+      setShowDisableAutoRenewalModal(false);
+      setDisableAutoRenewalReason('');
+      fetchActiveMembership();
+    } catch (error: any) {
+      console.error('Error disabling auto-renewal:', error);
+      alert(error.response?.data?.message || 'Failed to disable auto-renewal. Please try again.');
+    } finally {
+      setDisableAutoRenewalLoading(false);
+    }
+  };
 
   // Fetch seasons for filtering
   useEffect(() => {
@@ -337,45 +423,64 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  // Sanitize team name - remove any variant of "team" from the name
-  const sanitizeTeamName = (name: string): string => {
-    // Regex pattern to match "team" and common leetspeak variants
-    // t/T, e/E/3, a/A/4/@, m/M
-    const teamPattern = /[tT][eE3][aA4@][mM]/gi;
-
-    // Also match with spaces or at word boundaries
-    let sanitized = name
-      .replace(teamPattern, '') // Remove "team" variants
-      .replace(/\s+/g, ' ')     // Collapse multiple spaces
-      .trim();
-
-    return sanitized;
-  };
-
-  // Check if name contains "team" variant
+  /**
+   * Check if team name contains any variation of "team"
+   * Includes: team, Team, TEAM, t3@m, T3AM, maet (backwards), spaced variations
+   * Returns true if the name is INVALID (contains team word)
+   */
   const containsTeamWord = (name: string): boolean => {
-    const teamPattern = /[tT][eE3][aA4@][mM]/i;
-    return teamPattern.test(name);
+    if (!name) return false;
+
+    const normalized = name.toLowerCase().trim();
+
+    // Direct match for "team"
+    if (normalized.includes('team')) return true;
+
+    // Backwards "team" -> "maet"
+    if (normalized.includes('maet')) return true;
+
+    // Leet speak variations: t3@m, t3am, te@m, t34m, etc.
+    const leetNormalized = normalized
+      .replace(/3/g, 'e')
+      .replace(/@/g, 'a')
+      .replace(/4/g, 'a')
+      .replace(/0/g, 'o')
+      .replace(/1/g, 'i')
+      .replace(/\$/g, 's')
+      .replace(/7/g, 't');
+
+    if (leetNormalized.includes('team') || leetNormalized.includes('maet')) return true;
+
+    // Check for spaced out variations: t e a m, t-e-a-m, t.e.a.m
+    const noSpaces = normalized.replace(/[\s\-._]/g, '');
+    const noSpacesLeet = noSpaces
+      .replace(/3/g, 'e')
+      .replace(/@/g, 'a')
+      .replace(/4/g, 'a');
+
+    if (noSpacesLeet.includes('team') || noSpacesLeet.includes('maet')) return true;
+
+    return false;
   };
 
   const handleCreateTeam = async () => {
-    if (!newTeam.name.trim()) {
+    const trimmedName = newTeam.name.trim();
+
+    if (!trimmedName) {
       setTeamError('Team name is required');
       return;
     }
 
-    // Sanitize the team name (remove "team" variants)
-    const sanitizedName = sanitizeTeamName(newTeam.name);
-
-    if (!sanitizedName) {
-      setTeamError('Please enter a valid team name (without the word "Team")');
+    // Reject team names containing "team" or variations
+    if (containsTeamWord(trimmedName)) {
+      setTeamError('Team name cannot contain the word "team" or variations (T3@M, TEAM, backwards, etc.). Please choose a different name.');
       return;
     }
 
     try {
       setTeamError('');
       const createdTeam = await teamsApi.createTeam({
-        name: sanitizedName,
+        name: trimmedName,
         description: newTeam.description?.trim() || undefined,
         logo_url: teamLogoUrl || undefined,
         team_type: newTeam.team_type,
@@ -431,17 +536,23 @@ export default function MyMecaDashboardPage() {
   const handleSaveEditTeam = async () => {
     if (!team || !editingTeam) return;
 
-    // Sanitize the team name
-    const sanitizedName = sanitizeTeamName(editingTeam.name);
-    if (!sanitizedName) {
-      setTeamError('Please enter a valid team name (without the word "Team")');
+    const trimmedName = editingTeam.name.trim();
+
+    if (!trimmedName) {
+      setTeamError('Team name is required');
+      return;
+    }
+
+    // Reject team names containing "team" or variations
+    if (containsTeamWord(trimmedName)) {
+      setTeamError('Team name cannot contain the word "team" or variations (T3@M, TEAM, backwards, etc.). Please choose a different name.');
       return;
     }
 
     try {
       setTeamError('');
       const updatedTeam = await teamsApi.updateTeam(team.id, {
-        name: sanitizedName,
+        name: trimmedName,
         description: editingTeam.description || undefined,
         bio: editingTeam.bio || undefined,
         team_type: editingTeam.team_type,
@@ -1648,7 +1759,7 @@ export default function MyMecaDashboardPage() {
           </button>
 
           <button
-            onClick={() => navigate('/membership')}
+            onClick={() => navigate(activeMembership ? '/dashboard/membership' : '/membership')}
             className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
           >
             <div className="flex items-center gap-4">
@@ -1657,7 +1768,9 @@ export default function MyMecaDashboardPage() {
               </div>
               <div>
                 <h3 className="text-white font-semibold text-lg">Membership</h3>
-                <p className="text-gray-400 text-sm mt-1">View membership options and upgrade your plan</p>
+                <p className="text-gray-400 text-sm mt-1">
+                  {activeMembership ? 'Manage your membership and billing' : 'View membership options and upgrade your plan'}
+                </p>
               </div>
             </div>
           </button>
@@ -1676,6 +1789,37 @@ export default function MyMecaDashboardPage() {
               </div>
             </div>
           </button>
+
+          {/* Business Listing Card - Only show for retail or manufacturer members */}
+          {(activeMembership?.membershipTypeConfig?.category === 'retail' ||
+            activeMembership?.membershipTypeConfig?.category === 'manufacturer') && (
+            <button
+              onClick={() => navigate('/dashboard/business-listing')}
+              className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                  activeMembership?.membershipTypeConfig?.category === 'manufacturer'
+                    ? 'bg-purple-500/10 group-hover:bg-purple-500/20'
+                    : 'bg-green-500/10 group-hover:bg-green-500/20'
+                }`}>
+                  <Store className={`h-7 w-7 ${
+                    activeMembership?.membershipTypeConfig?.category === 'manufacturer'
+                      ? 'text-purple-500'
+                      : 'text-green-500'
+                  }`} />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">
+                    {activeMembership?.membershipTypeConfig?.category === 'manufacturer'
+                      ? 'Manufacturer Listing'
+                      : 'Retailer Listing'}
+                  </h3>
+                  <p className="text-gray-400 text-sm mt-1">Manage your business directory listing</p>
+                </div>
+              </div>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -2244,15 +2388,18 @@ export default function MyMecaDashboardPage() {
                       value={editingTeam.name}
                       onChange={(e) => setEditingTeam({ ...editingTeam, name: e.target.value })}
                       className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
-                        containsTeamWord(editingTeam.name) ? 'border-yellow-500' : 'border-slate-600'
+                        containsTeamWord(editingTeam.name) ? 'border-red-500' : 'border-slate-600'
                       }`}
-                      placeholder="Enter team name (without 'Team')"
+                      placeholder="e.g., Thunder Audio, Bass Hunters, Sound Warriors"
                     />
                     {containsTeamWord(editingTeam.name) && (
-                      <p className="text-yellow-500 text-xs mt-1">
-                        The word "Team" will be removed. Final name: <span className="font-semibold">{sanitizeTeamName(editingTeam.name) || '(empty)'}</span>
+                      <p className="text-red-500 text-xs mt-1">
+                        Team name cannot contain "team" or variations (T3@M, TEAM, backwards, etc.)
                       </p>
                     )}
+                    <p className="text-gray-500 text-xs mt-1">
+                      Note: The word "team" is not allowed in team names.
+                    </p>
                   </div>
 
                   <div>
@@ -2941,15 +3088,18 @@ export default function MyMecaDashboardPage() {
                         value={newTeam.name}
                         onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
                         className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
-                          containsTeamWord(newTeam.name) ? 'border-yellow-500' : 'border-slate-600'
+                          containsTeamWord(newTeam.name) ? 'border-red-500' : 'border-slate-600'
                         }`}
-                        placeholder="Enter team name (without 'Team')"
+                        placeholder="e.g., Thunder Audio, Bass Hunters, Sound Warriors"
                       />
                       {containsTeamWord(newTeam.name) && (
-                        <p className="text-yellow-500 text-xs mt-1">
-                          The word "Team" will be removed. Final name: <span className="font-semibold">{sanitizeTeamName(newTeam.name) || '(empty)'}</span>
+                        <p className="text-red-500 text-xs mt-1">
+                          Team name cannot contain "team" or variations (T3@M, TEAM, backwards, etc.)
                         </p>
                       )}
+                      <p className="text-gray-500 text-xs mt-1">
+                        Note: The word "team" is not allowed in team names.
+                      </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-300 flex items-center gap-1 mb-2">
@@ -4173,12 +4323,28 @@ export default function MyMecaDashboardPage() {
               <p className="text-gray-400">Welcome back, {`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}</p>
             </div>
           </div>
-          {profile?.meca_id && (
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/10 rounded-lg">
-              <span className="text-gray-400 text-sm">MECA ID:</span>
-              <span className="text-orange-500 font-mono font-semibold">{profile.meca_id}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {profile?.meca_id && (
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/10 rounded-lg">
+                <span className="text-gray-400 text-sm">MECA ID:</span>
+                <span className="text-orange-500 font-mono font-semibold">{profile.meca_id}</span>
+              </div>
+            )}
+            {activeMembership?.membershipTypeConfig?.category && (
+              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg ${
+                activeMembership.membershipTypeConfig.category === 'competitor' ? 'bg-blue-500/10 text-blue-400' :
+                activeMembership.membershipTypeConfig.category === 'retail' ? 'bg-green-500/10 text-green-400' :
+                activeMembership.membershipTypeConfig.category === 'manufacturer' ? 'bg-purple-500/10 text-purple-400' :
+                activeMembership.membershipTypeConfig.category === 'team' ? 'bg-cyan-500/10 text-cyan-400' :
+                'bg-gray-500/10 text-gray-400'
+              }`}>
+                <span className="font-semibold capitalize">
+                  {activeMembership.membershipTypeConfig.category === 'retail' ? 'Retailer' :
+                   activeMembership.membershipTypeConfig.category}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -4362,6 +4528,92 @@ export default function MyMecaDashboardPage() {
                   )}
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Cancel Membership Modal */}
+        <MemberCancelMembershipModal
+          isOpen={showCancelMembershipModal}
+          onClose={() => setShowCancelMembershipModal(false)}
+          onSuccess={() => {
+            setShowCancelMembershipModal(false);
+            // Refresh membership data
+            fetchActiveMembership();
+          }}
+          membershipId={activeMembership?.id || ''}
+          membershipType={activeMembership?.membershipTypeConfig?.name || 'Membership'}
+          endDate={activeMembership?.endDate}
+        />
+
+        {/* Disable Auto-Renewal Modal */}
+        {showDisableAutoRenewalModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-white">Disable Auto-Renewal</h3>
+                <button
+                  onClick={() => {
+                    setShowDisableAutoRenewalModal(false);
+                    setDisableAutoRenewalReason('');
+                  }}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-slate-700/50 rounded-lg p-4">
+                  <p className="text-gray-300 text-sm">
+                    Your membership will remain active until <strong className="text-white">
+                      {activeMembership?.endDate
+                        ? new Date(activeMembership.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                        : 'the end of your billing period'}
+                    </strong>, but you will not be charged again.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">
+                    Reason for disabling (optional)
+                  </label>
+                  <textarea
+                    value={disableAutoRenewalReason}
+                    onChange={(e) => setDisableAutoRenewalReason(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-orange-500 focus:outline-none resize-none"
+                    rows={3}
+                    placeholder="Help us understand why you're disabling auto-renewal..."
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowDisableAutoRenewalModal(false);
+                      setDisableAutoRenewalReason('');
+                    }}
+                    className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+                    disabled={disableAutoRenewalLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDisableAutoRenewal}
+                    disabled={disableAutoRenewalLoading}
+                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    {disableAutoRenewalLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      'Disable Auto-Renewal'
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

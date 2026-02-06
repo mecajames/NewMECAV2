@@ -130,4 +130,29 @@ export class ResultTeamsController {
     await this.requireAdmin(authHeader);
     return this.resultTeamsService.deleteResultTeam(id);
   }
+
+  /**
+   * Get all teams with their members (admin only)
+   * Useful for debugging team membership issues
+   */
+  @Get('admin/teams-with-members')
+  async getAllTeamsWithMembers(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.resultTeamsService.getAllTeamsWithMembers();
+  }
+
+  /**
+   * Sync all existing competition results to teams (admin only)
+   * This is a one-time migration to populate existing data
+   */
+  @Post('admin/sync-all')
+  @HttpCode(HttpStatus.OK)
+  async syncAllResultsToTeams(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.resultTeamsService.syncAllResultsToTeams();
+  }
 }

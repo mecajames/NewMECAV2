@@ -83,8 +83,40 @@ export class Membership {
   @Property({ type: 'text', nullable: true, fieldName: 'business_name' })
   businessName?: string;
 
+  @Property({ type: 'text', nullable: true, fieldName: 'business_phone' })
+  businessPhone?: string;
+
   @Property({ type: 'text', nullable: true, fieldName: 'business_website' })
   businessWebsite?: string;
+
+  // Business address (structured, ISO standard)
+  @Property({ type: 'text', nullable: true, fieldName: 'business_street' })
+  businessStreet?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'business_city' })
+  businessCity?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'business_state' })
+  businessState?: string; // ISO 3166-2 state/province code
+
+  @Property({ type: 'text', nullable: true, fieldName: 'business_postal_code' })
+  businessPostalCode?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'business_country', default: 'US' })
+  businessCountry?: string = 'US'; // ISO 3166-1 alpha-2 country code
+
+  // Business directory listing
+  @Property({ type: 'text', nullable: true, fieldName: 'business_description' })
+  businessDescription?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'business_logo_url' })
+  businessLogoUrl?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'business_listing_status', default: 'pending_approval' })
+  businessListingStatus?: string = 'pending_approval'; // pending_approval, approved, rejected
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'business_listing_updated_at' })
+  businessListingUpdatedAt?: Date;
 
   // Billing information (kept for payment records)
   @Property({ type: 'text', nullable: true, fieldName: 'billing_first_name' })
@@ -148,6 +180,39 @@ export class Membership {
   @Property({ onUpdate: () => new Date(), fieldName: 'updated_at' })
   updatedAt: Date = new Date();
 
+  // =============================================================================
+  // Subscription / Auto-Renewal Fields
+  // =============================================================================
+
+  // Stripe Subscription ID for active recurring billing
+  @Property({ type: 'text', nullable: true, fieldName: 'stripe_subscription_id' })
+  stripeSubscriptionId?: string;
+
+  // True if this member had recurring billing enabled in the old PMPro system
+  // Used to identify members who need to re-setup auto-renewal
+  @Property({ type: 'boolean', default: false, fieldName: 'had_legacy_subscription' })
+  hadLegacySubscription: boolean = false;
+
+  // =============================================================================
+  // Cancellation Fields
+  // =============================================================================
+
+  // If true, membership will be deactivated at end_date rather than immediately
+  @Property({ type: 'boolean', default: false, fieldName: 'cancel_at_period_end' })
+  cancelAtPeriodEnd: boolean = false;
+
+  // Timestamp when the membership was cancelled
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'cancelled_at' })
+  cancelledAt?: Date;
+
+  // Reason provided for the cancellation
+  @Property({ type: 'text', nullable: true, fieldName: 'cancellation_reason' })
+  cancellationReason?: string;
+
+  // User ID or identifier of who cancelled the membership (admin ID)
+  @Property({ type: 'varchar', length: 50, nullable: true, fieldName: 'cancelled_by' })
+  cancelledBy?: string;
+
   /**
    * Check if this membership's MECA ID can be reactivated (within 90-day window)
    */
@@ -156,6 +221,30 @@ export class Membership {
     const now = new Date();
     const daysSinceExpiry = (now.getTime() - this.endDate.getTime()) / (1000 * 60 * 60 * 24);
     return daysSinceExpiry <= 90;
+  }
+
+  /**
+   * Get the auto-renewal status for display
+   * Returns: 'on' | 'legacy' | 'off'
+   */
+  getAutoRenewalStatus(): 'on' | 'legacy' | 'off' {
+    // Active Stripe subscription = auto-renewal is ON
+    if (this.stripeSubscriptionId) {
+      return 'on';
+    }
+    // Had recurring billing in old PMPro = Legacy (needs to re-setup)
+    if (this.hadLegacySubscription) {
+      return 'legacy';
+    }
+    // No subscription = OFF
+    return 'off';
+  }
+
+  /**
+   * Check if this membership has active auto-renewal via Stripe
+   */
+  hasActiveAutoRenewal(): boolean {
+    return !!this.stripeSubscriptionId;
   }
 
   /**
@@ -234,5 +323,55 @@ export class Membership {
       return this.masterBillingProfile;
     }
     return this.user;
+  }
+
+  // =============================================================================
+  // Cancellation Helper Methods
+  // =============================================================================
+
+  /**
+   * Check if this membership has been cancelled (either immediately or scheduled)
+   */
+  isCancelled(): boolean {
+    return !!this.cancelledAt;
+  }
+
+  /**
+   * Check if this membership is scheduled for cancellation at period end
+   */
+  isScheduledForCancellation(): boolean {
+    return this.cancelAtPeriodEnd && !this.isDeactivated();
+  }
+
+  /**
+   * Check if this membership has been deactivated (cancelled and no longer active)
+   */
+  isDeactivated(): boolean {
+    // Deactivated if: cancelled immediately (not at period end) OR
+    // cancelled at period end and we're past the end date
+    if (!this.cancelledAt) return false;
+
+    if (!this.cancelAtPeriodEnd) {
+      // Immediate cancellation
+      return true;
+    }
+
+    // Scheduled cancellation - check if past end date
+    if (this.endDate && new Date() >= this.endDate) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if this membership is currently active
+   * (paid, not expired, not deactivated)
+   */
+  isActive(): boolean {
+    if (this.paymentStatus !== PaymentStatus.PAID) return false;
+    if (this.isDeactivated()) return false;
+    if (this.endDate && this.endDate < new Date()) return false;
+    return true;
   }
 }

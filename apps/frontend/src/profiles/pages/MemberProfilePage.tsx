@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, Car, Music, ArrowLeft, Award, MapPin, Calendar, X, Move, Check, Trophy } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
+import { membershipsApi, Membership } from '@/memberships';
 import { useAuth } from '@/auth';
 import { AchievementsGallery } from '@/achievements';
 
@@ -11,6 +12,7 @@ export default function MemberProfilePage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [membership, setMembership] = useState<Membership | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
@@ -42,6 +44,15 @@ export default function MemberProfilePage() {
       setLoading(true);
       const data = await profilesApi.getPublicProfileById(id!);
       setProfile(data);
+
+      // Fetch active membership for vehicle info
+      try {
+        const membershipData = await membershipsApi.getUserActiveMembership(id!);
+        setMembership(membershipData);
+      } catch (err) {
+        // User may not have a membership, that's ok
+        console.log('No active membership found');
+      }
     } catch (err: any) {
       console.error('Error fetching profile:', err);
       setError('Profile not found or is not public');
@@ -280,8 +291,8 @@ export default function MemberProfilePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Vehicle Information */}
-          {profile.vehicle_info && (
+          {/* Vehicle Information - from membership */}
+          {membership && (membership.vehicleMake || membership.vehicleModel) && (
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
@@ -289,7 +300,26 @@ export default function MemberProfilePage() {
                 </div>
                 <h2 className="text-xl font-bold text-white">Vehicle</h2>
               </div>
-              <p className="text-gray-300 whitespace-pre-wrap">{profile.vehicle_info}</p>
+              <div className="grid grid-cols-2 gap-4">
+                {membership.vehicleMake && (
+                  <div>
+                    <p className="text-gray-400 text-xs mb-1">Make</p>
+                    <p className="text-white font-medium">{membership.vehicleMake}</p>
+                  </div>
+                )}
+                {membership.vehicleModel && (
+                  <div>
+                    <p className="text-gray-400 text-xs mb-1">Model</p>
+                    <p className="text-white font-medium">{membership.vehicleModel}</p>
+                  </div>
+                )}
+                {membership.vehicleColor && (
+                  <div>
+                    <p className="text-gray-400 text-xs mb-1">Color</p>
+                    <p className="text-white font-medium">{membership.vehicleColor}</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

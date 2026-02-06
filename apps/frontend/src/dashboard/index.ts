@@ -1,6 +1,8 @@
 export { default as DashboardPage } from './pages/DashboardPage';
 export { default as AdminDashboardPage } from './pages/AdminDashboardPage';
 export { default as MyMecaDashboardPage } from './pages/MyMecaDashboardPage';
+export { default as BusinessListingDashboardPage } from './pages/BusinessListingDashboardPage';
+export { default as MembershipDashboardPage } from './pages/MembershipDashboardPage';
 export { default as AdminDashboard } from './components/AdminDashboard';
 export { default as UserDashboard } from './components/UserDashboard';
 export { default as EventDirectorDashboard } from './components/EventDirectorDashboard';

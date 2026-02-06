@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft, Users, AlertCircle } from 'lucide-react';
+import { Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft, Users } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { profilesApi, Profile as ProfileType } from '@/profiles';
 import { membershipsApi, ControlledMecaId, Membership, RELATIONSHIP_TYPES } from '@/memberships';
@@ -11,6 +11,7 @@ export default function PublicProfilePage() {
   const navigate = useNavigate();
   const { profile, user, refreshProfile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioSystemRef = useRef<HTMLTextAreaElement>(null);
 
   const [_loading, _setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,16 +29,11 @@ export default function PublicProfilePage() {
 
   // Form state - Profile fields
   const [isPublic, setIsPublic] = useState(false);
-  const [vehicleInfo, setVehicleInfo] = useState('');
   const [carAudioSystem, setCarAudioSystem] = useState('');
   const [profileImages, setProfileImages] = useState<string[]>([]);
   const [selectedProfilePicture, setSelectedProfilePicture] = useState<string | null>(null);
 
-  // Required vehicle fields (per membership/MECA ID)
-  const [vehicleMake, setVehicleMake] = useState('');
-  const [vehicleModel, setVehicleModel] = useState('');
-  const [vehicleColor, setVehicleColor] = useState('');
-  const [vehicleLicensePlate, setVehicleLicensePlate] = useState('');
+  // Competitor name (per membership/MECA ID)
   const [competitorName, setCompetitorName] = useState('');
   const [relationshipToMaster, setRelationshipToMaster] = useState('');
 
@@ -54,11 +50,7 @@ export default function PublicProfilePage() {
         if (ownMecaId) {
           const membership = await membershipsApi.getById(ownMecaId.membershipId);
           setPrimaryMembership(membership);
-          // Initialize primary vehicle fields
-          setVehicleMake(membership.vehicleMake || '');
-          setVehicleModel(membership.vehicleModel || '');
-          setVehicleColor(membership.vehicleColor || '');
-          setVehicleLicensePlate(membership.vehicleLicensePlate || '');
+          // Initialize competitor name
           setCompetitorName(membership.competitorName || `${profile.first_name || ''} ${profile.last_name || ''}`.trim());
         }
       } catch (error) {
@@ -72,12 +64,19 @@ export default function PublicProfilePage() {
   useEffect(() => {
     if (profile && !isViewingSecondary) {
       setIsPublic(profile.is_public || false);
-      setVehicleInfo(profile.vehicle_info || '');
       setCarAudioSystem(profile.car_audio_system || '');
       setProfileImages(profile.profile_images || []);
       setSelectedProfilePicture(profile.profile_picture_url || null);
     }
   }, [profile, isViewingSecondary]);
+
+  // Auto-resize audio system textarea when content changes
+  useEffect(() => {
+    if (audioSystemRef.current) {
+      audioSystemRef.current.style.height = 'auto';
+      audioSystemRef.current.style.height = audioSystemRef.current.scrollHeight + 'px';
+    }
+  }, [carAudioSystem]);
 
   // Handle switching between profiles
   const handleProfileSwitch = async (_mecaId: number, membershipId: string, profileId: string, _competitorName: string) => {
@@ -111,14 +110,9 @@ export default function PublicProfilePage() {
 
       // Initialize form with secondary's data
       setIsPublic(secondaryProfile.is_public || false);
-      setVehicleInfo(secondaryProfile.vehicle_info || '');
       setCarAudioSystem(secondaryProfile.car_audio_system || '');
       setProfileImages(secondaryProfile.profile_images || []);
       setSelectedProfilePicture(secondaryProfile.profile_picture_url || null);
-      setVehicleMake(membership.vehicleMake || selectedMecaInfo?.vehicleMake || '');
-      setVehicleModel(membership.vehicleModel || selectedMecaInfo?.vehicleModel || '');
-      setVehicleColor(membership.vehicleColor || selectedMecaInfo?.vehicleColor || '');
-      setVehicleLicensePlate(membership.vehicleLicensePlate || selectedMecaInfo?.vehicleLicensePlate || '');
       setCompetitorName(membership.competitorName || selectedMecaInfo?.competitorName || `${secondaryProfile.first_name || ''} ${secondaryProfile.last_name || ''}`.trim());
       // Get relationshipToMaster from controlled MECA IDs data
       setRelationshipToMaster(selectedMecaInfo?.relationshipToMaster || '');
@@ -206,20 +200,10 @@ export default function PublicProfilePage() {
 
     if (!targetProfile) return;
 
-    // Vehicle info is required for all profiles with MECA ID
-    if (targetMembership) {
-      if (!competitorName.trim()) {
-        setError('Competitor name is required');
-        return;
-      }
-      if (!vehicleMake.trim() || !vehicleModel.trim()) {
-        setError('Vehicle make and model are required for competition');
-        return;
-      }
-      if (!vehicleLicensePlate.trim()) {
-        setError('Vehicle license plate is required for competition');
-        return;
-      }
+    // Competitor name validation
+    if (targetMembership && !competitorName.trim()) {
+      setError('Competitor name is required');
+      return;
     }
 
     setSaving(true);
@@ -230,37 +214,25 @@ export default function PublicProfilePage() {
       // Save profile public data
       await profilesApi.update(targetProfile.id, {
         is_public: isPublic,
-        vehicle_info: vehicleInfo,
         car_audio_system: carAudioSystem,
         profile_images: profileImages,
         profile_picture_url: selectedProfilePicture || undefined,
       });
 
-      // Save vehicle info for the membership
+      // Save competitor name and relationship for the membership
       if (targetMembership && profile) {
         if (isViewingSecondary) {
-          // For secondary profiles, use updateSecondaryDetails
+          // For secondary profiles, use updateSecondaryDetails (only name/relationship)
           await membershipsApi.updateSecondaryDetails(
             targetMembership.id,
             profile.id, // Master is the requesting user
             {
               competitorName: competitorName.trim(),
               relationshipToMaster: relationshipToMaster || undefined,
-              vehicleMake: vehicleMake.trim(),
-              vehicleModel: vehicleModel.trim(),
-              vehicleColor: vehicleColor.trim() || undefined,
-              vehicleLicensePlate: vehicleLicensePlate.trim(),
             }
           );
         } else {
-          // For primary profile, use updateVehicleInfo
-          await membershipsApi.updateVehicleInfo(targetMembership.id, {
-            vehicleMake: vehicleMake.trim(),
-            vehicleModel: vehicleModel.trim(),
-            vehicleColor: vehicleColor.trim() || undefined,
-            vehicleLicensePlate: vehicleLicensePlate.trim(),
-          });
-          // Also update competitor name via the membership update
+          // For primary profile, update competitor name via the membership update
           await membershipsApi.update(targetMembership.id, {
             competitorName: competitorName.trim(),
           });
@@ -500,83 +472,6 @@ export default function PublicProfilePage() {
             </div>
           )}
 
-          {/* Required Vehicle Details */}
-          {(primaryMembership || (isViewingSecondary && selectedMembership)) && (
-            <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-orange-500/30">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
-                  <Car className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Required Vehicle Details</h2>
-                  <p className="text-gray-400 text-sm">This information is required for competition entry</p>
-                </div>
-              </div>
-
-              <div className="mb-4 p-3 bg-orange-500/10 rounded-lg border border-orange-500/30 flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-400 shrink-0 mt-0.5" />
-                <p className="text-orange-300 text-sm">
-                  Vehicle make, model, and license plate are required for all competitors to participate in MECA events.
-                  Your MECA ID will not be activated until this information is complete.
-                </p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Vehicle Make <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={vehicleMake}
-                    onChange={(e) => setVehicleMake(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
-                    placeholder="e.g., Toyota, Honda, Ford"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Vehicle Model <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={vehicleModel}
-                    onChange={(e) => setVehicleModel(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
-                    placeholder="e.g., Camry, Civic, F-150"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Vehicle Color
-                  </label>
-                  <input
-                    type="text"
-                    value={vehicleColor}
-                    onChange={(e) => setVehicleColor(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
-                    placeholder="e.g., Blue, Red, Black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    License Plate <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={vehicleLicensePlate}
-                    onChange={(e) => setVehicleLicensePlate(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none font-mono"
-                    placeholder="e.g., ABC1234"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Profile Images */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <div className="flex items-center gap-3 mb-6">
@@ -660,28 +555,47 @@ export default function PublicProfilePage() {
             </p>
           </div>
 
-          {/* Vehicle Information */}
-          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                <Car className="h-5 w-5 text-blue-500" />
+          {/* Vehicle Information - Display from membership data */}
+          {(primaryMembership || (isViewingSecondary && selectedMembership)) && (
+            <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                  <Car className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Vehicle Information</h2>
+                  <p className="text-gray-400 text-sm">Edit in your Profile settings</p>
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-white">Vehicle Information</h2>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
-                Describe your vehicle (make, model, year, modifications, etc.)
-              </label>
-              <textarea
-                value={vehicleInfo}
-                onChange={(e) => setVehicleInfo(e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none resize-none"
-                placeholder="e.g., 2022 Honda Civic Si, custom wrap, aftermarket wheels..."
-              />
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-slate-700/50 rounded-lg p-4">
+                  <p className="text-gray-400 text-xs mb-1">Make</p>
+                  <p className="text-white font-medium">
+                    {(isViewingSecondary ? selectedMembership?.vehicleMake : primaryMembership?.vehicleMake) || 'Not set'}
+                  </p>
+                </div>
+                <div className="bg-slate-700/50 rounded-lg p-4">
+                  <p className="text-gray-400 text-xs mb-1">Model</p>
+                  <p className="text-white font-medium">
+                    {(isViewingSecondary ? selectedMembership?.vehicleModel : primaryMembership?.vehicleModel) || 'Not set'}
+                  </p>
+                </div>
+                <div className="bg-slate-700/50 rounded-lg p-4">
+                  <p className="text-gray-400 text-xs mb-1">Color</p>
+                  <p className="text-white font-medium">
+                    {(isViewingSecondary ? selectedMembership?.vehicleColor : primaryMembership?.vehicleColor) || 'Not set'}
+                  </p>
+                </div>
+                <div className="bg-slate-700/50 rounded-lg p-4">
+                  <p className="text-gray-400 text-xs mb-1">License Plate</p>
+                  <p className="text-white font-medium font-mono">
+                    {(isViewingSecondary ? selectedMembership?.vehicleLicensePlate : primaryMembership?.vehicleLicensePlate) || 'Not set'}
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Car Audio System */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
@@ -697,10 +611,12 @@ export default function PublicProfilePage() {
                 Describe your audio system (head unit, speakers, amps, subs, etc.)
               </label>
               <textarea
+                ref={audioSystemRef}
                 value={carAudioSystem}
                 onChange={(e) => setCarAudioSystem(e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none resize-none"
+                rows={2}
+                className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none resize-none overflow-hidden"
+                style={{ minHeight: '80px' }}
                 placeholder="e.g., Pioneer DMH-WT8600NEX head unit, JL Audio C3-650 components, Rockford Fosgate T1500-1bdCP amp..."
               />
             </div>

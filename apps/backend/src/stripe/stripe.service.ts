@@ -145,4 +145,224 @@ export class StripeService {
       throw new BadRequestException('Failed to create refund');
     }
   }
+
+  // =============================================================================
+  // SUBSCRIPTION METHODS
+  // =============================================================================
+
+  /**
+   * Create a Stripe Subscription for recurring membership billing
+   */
+  async createSubscription(params: {
+    customerId: string;
+    priceId: string;
+    metadata?: Record<string, string>;
+  }): Promise<Stripe.Subscription> {
+    const stripe = this.getStripeClient();
+
+    try {
+      const subscription = await stripe.subscriptions.create({
+        customer: params.customerId,
+        items: [{ price: params.priceId }],
+        payment_behavior: 'default_incomplete',
+        payment_settings: {
+          save_default_payment_method: 'on_subscription',
+        },
+        expand: ['latest_invoice.payment_intent'],
+        metadata: params.metadata,
+      });
+
+      return subscription;
+    } catch (error) {
+      this.logger.error('Stripe createSubscription error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to create subscription');
+    }
+  }
+
+  /**
+   * Get a Stripe Subscription by ID
+   */
+  async getSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    const stripe = this.getStripeClient();
+
+    try {
+      return await stripe.subscriptions.retrieve(subscriptionId);
+    } catch (error) {
+      this.logger.error('Stripe getSubscription error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to retrieve subscription');
+    }
+  }
+
+  /**
+   * Cancel a Stripe Subscription
+   * @param subscriptionId The Stripe subscription ID
+   * @param cancelImmediately If true, cancels immediately. If false, cancels at period end.
+   */
+  async cancelSubscription(
+    subscriptionId: string,
+    cancelImmediately: boolean = false,
+  ): Promise<Stripe.Subscription> {
+    const stripe = this.getStripeClient();
+
+    try {
+      if (cancelImmediately) {
+        // Cancel immediately - subscription ends now
+        return await stripe.subscriptions.cancel(subscriptionId);
+      } else {
+        // Cancel at period end - subscription continues until current period ends
+        return await stripe.subscriptions.update(subscriptionId, {
+          cancel_at_period_end: true,
+        });
+      }
+    } catch (error) {
+      this.logger.error('Stripe cancelSubscription error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to cancel subscription');
+    }
+  }
+
+  /**
+   * Reactivate a subscription that was set to cancel at period end
+   */
+  async reactivateSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    const stripe = this.getStripeClient();
+
+    try {
+      return await stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: false,
+      });
+    } catch (error) {
+      this.logger.error('Stripe reactivateSubscription error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to reactivate subscription');
+    }
+  }
+
+  /**
+   * Create a Stripe Billing Portal session for customer self-service
+   */
+  async createBillingPortalSession(
+    customerId: string,
+    returnUrl: string,
+  ): Promise<Stripe.BillingPortal.Session> {
+    const stripe = this.getStripeClient();
+
+    try {
+      return await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl,
+      });
+    } catch (error) {
+      this.logger.error('Stripe createBillingPortalSession error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to create billing portal session');
+    }
+  }
+
+  /**
+   * Create a Checkout Session for subscription signup
+   */
+  async createSubscriptionCheckoutSession(params: {
+    customerId?: string;
+    customerEmail?: string;
+    priceId: string;
+    successUrl: string;
+    cancelUrl: string;
+    metadata?: Record<string, string>;
+  }): Promise<Stripe.Checkout.Session> {
+    const stripe = this.getStripeClient();
+
+    try {
+      const sessionParams: Stripe.Checkout.SessionCreateParams = {
+        mode: 'subscription',
+        line_items: [
+          {
+            price: params.priceId,
+            quantity: 1,
+          },
+        ],
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+        metadata: params.metadata,
+      };
+
+      // Use existing customer or create new one from email
+      if (params.customerId) {
+        sessionParams.customer = params.customerId;
+      } else if (params.customerEmail) {
+        sessionParams.customer_email = params.customerEmail;
+      }
+
+      return await stripe.checkout.sessions.create(sessionParams);
+    } catch (error) {
+      this.logger.error('Stripe createSubscriptionCheckoutSession error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to create checkout session');
+    }
+  }
+
+  /**
+   * Get or create a Stripe Price for a membership type (for subscriptions)
+   * This is useful for dynamic pricing or when prices aren't pre-configured in Stripe
+   */
+  async getOrCreateRecurringPrice(params: {
+    productId: string;
+    unitAmount: number; // in cents
+    interval: 'month' | 'year';
+    currency?: string;
+  }): Promise<Stripe.Price> {
+    const stripe = this.getStripeClient();
+    const currency = params.currency || 'usd';
+
+    try {
+      // Search for existing price with matching params
+      const prices = await stripe.prices.list({
+        product: params.productId,
+        type: 'recurring',
+        active: true,
+        limit: 100,
+      });
+
+      const existingPrice = prices.data.find(
+        (p) =>
+          p.unit_amount === params.unitAmount &&
+          p.recurring?.interval === params.interval &&
+          p.currency === currency,
+      );
+
+      if (existingPrice) {
+        return existingPrice;
+      }
+
+      // Create new price
+      return await stripe.prices.create({
+        product: params.productId,
+        unit_amount: params.unitAmount,
+        currency: currency,
+        recurring: {
+          interval: params.interval,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Stripe getOrCreateRecurringPrice error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to get or create price');
+    }
+  }
 }

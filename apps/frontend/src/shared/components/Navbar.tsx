@@ -1,4 +1,4 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, Bell, Users, ClipboardList, Shield, ShoppingBag } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, ChevronRight, Bell, Users, ClipboardList, Shield, ShoppingBag } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth';
@@ -13,6 +13,7 @@ export default function Navbar() {
   const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
   const [membersMenuOpen, setMembersMenuOpen] = useState(false);
   const [resultsMenuOpen, setResultsMenuOpen] = useState(false);
+  const [teamsResultsMenuOpen, setTeamsResultsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
@@ -65,6 +66,8 @@ export default function Navbar() {
     if (path.startsWith('/results')) return 'results';
     if (path.startsWith('/standings')) return 'standings';
     if (path.startsWith('/leaderboard')) return 'leaderboard';
+    if (path.startsWith('/team-standings')) return 'team-standings';
+    if (path.startsWith('/team-leaderboard')) return 'team-leaderboard';
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/members')) return 'members';
     if (path.startsWith('/teams')) return 'teams';
@@ -128,11 +131,14 @@ export default function Navbar() {
             {/* Results Dropdown */}
             <div className="relative"
               onMouseEnter={() => setResultsMenuOpen(true)}
-              onMouseLeave={() => setResultsMenuOpen(false)}
+              onMouseLeave={() => {
+                setResultsMenuOpen(false);
+                setTeamsResultsMenuOpen(false);
+              }}
             >
               <button
                 className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                  currentPage === 'results' || currentPage === 'standings' || currentPage === 'leaderboard'
+                  currentPage === 'results' || currentPage === 'standings' || currentPage === 'leaderboard' || currentPage === 'team-standings' || currentPage === 'team-leaderboard'
                     ? 'bg-orange-600 text-white'
                     : 'text-gray-300 hover:bg-slate-800 hover:text-white'
                 }`}
@@ -175,6 +181,54 @@ export default function Navbar() {
                       <Trophy className="h-4 w-4" />
                       Top 10
                     </button>
+                    {/* Teams Results Nested Submenu */}
+                    <div
+                      className="relative"
+                      onMouseEnter={() => setTeamsResultsMenuOpen(true)}
+                      onMouseLeave={() => setTeamsResultsMenuOpen(false)}
+                    >
+                      <button
+                        className={`flex items-center justify-between gap-2 w-full text-left px-4 py-2 transition-colors whitespace-nowrap ${
+                          currentPage === 'team-standings' || currentPage === 'team-leaderboard'
+                            ? 'text-orange-500 bg-slate-700'
+                            : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          Teams Results
+                        </span>
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                      {teamsResultsMenuOpen && (
+                        <div className="absolute left-full top-0 ml-0 pl-2 w-48">
+                          <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                            <button
+                              onClick={() => {
+                                navigate('/team-standings');
+                                setResultsMenuOpen(false);
+                                setTeamsResultsMenuOpen(false);
+                              }}
+                              className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                            >
+                              <Award className="h-4 w-4" />
+                              Standings
+                            </button>
+                            <button
+                              onClick={() => {
+                                navigate('/team-leaderboard');
+                                setResultsMenuOpen(false);
+                                setTeamsResultsMenuOpen(false);
+                              }}
+                              className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                            >
+                              <Trophy className="h-4 w-4" />
+                              Top 10
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -582,6 +636,41 @@ export default function Navbar() {
             >
               <Trophy className="h-5 w-5" />
               Top 10
+            </button>
+
+            {/* Team Results Section */}
+            <div className="border-t border-slate-700 mt-2 pt-2">
+              <div className="px-3 py-1 text-xs font-semibold text-orange-500 uppercase tracking-wide">
+                Team Results
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                navigate('/team-standings');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'team-standings'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Shield className="h-5 w-5" />
+              Team Standings
+            </button>
+            <button
+              onClick={() => {
+                navigate('/team-leaderboard');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'team-leaderboard'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Trophy className="h-5 w-5" />
+              Team Top 10
             </button>
 
             {/* Members Directory */}
