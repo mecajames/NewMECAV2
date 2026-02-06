@@ -8,7 +8,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const cleanUrl = supabaseUrl.trim();
-const cleanKey = supabaseAnonKey.trim();
+const cleanKey = supabaseAnonKey.replace(/\s/g, '');
 
 export const supabase = createClient(cleanUrl, cleanKey, {
   auth: {
