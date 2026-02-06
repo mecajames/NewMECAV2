@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -9,39 +9,45 @@ export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const { ensureProfileExists } = useAuth();
+  const handled = useRef(false);
 
   useEffect(() => {
-    const handleCallback = async () => {
-      try {
-        // Get the session from the URL hash (Supabase OAuth callback)
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (handled.current) return;
+    handled.current = true;
 
-        if (sessionError) {
-          console.error('Error getting session:', sessionError);
-          setError(sessionError.message);
-          return;
-        }
-
-        if (session?.user) {
-          // Ensure profile exists for OAuth users
+    // Listen for auth state changes - this is the recommended way to handle OAuth callbacks
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        try {
           await ensureProfileExists(session.user);
-
-          // Get redirect URL from query params or default to dashboard
           const redirectTo = searchParams.get('redirect') || '/dashboard';
           navigate(redirectTo, { replace: true });
-        } else {
-          // No session found, redirect to login
-          setError('Authentication failed. Please try again.');
+        } catch (err) {
+          console.error('Profile creation error:', err);
+          setError('An unexpected error occurred. Please try again.');
           setTimeout(() => navigate('/login'), 3000);
         }
-      } catch (err) {
-        console.error('Callback error:', err);
-        setError('An unexpected error occurred. Please try again.');
+      }
+    });
+
+    // Fallback: if no auth event fires within 10 seconds, show error
+    const timeout = setTimeout(async () => {
+      // One last check for an existing session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await ensureProfileExists(session.user);
+        const redirectTo = searchParams.get('redirect') || '/dashboard';
+        navigate(redirectTo, { replace: true });
+      } else {
+        setError('Authentication failed. Please try again.');
         setTimeout(() => navigate('/login'), 3000);
       }
-    };
+    }, 10000);
 
-    handleCallback();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [navigate, searchParams, ensureProfileExists]);
 
   if (error) {
