@@ -46,7 +46,7 @@ interface MemberWithMembership extends Profile {
   masterProfileName?: string; // For secondary profiles, the name of their master
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export default function MembersPage() {
   const navigate = useNavigate();
