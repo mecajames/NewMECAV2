@@ -11,6 +11,10 @@ const cleanUrl = supabaseUrl.trim();
 const cleanKey = supabaseAnonKey.trim();
 
 export const supabase = createClient(cleanUrl, cleanKey, {
+  auth: {
+    flowType: 'implicit',
+    detectSessionInUrl: true,
+  },
   realtime: {
     params: {
       eventsPerSecond: 0
