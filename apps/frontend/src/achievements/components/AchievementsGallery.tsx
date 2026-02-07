@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Trophy, X, Loader2, ExternalLink } from 'lucide-react';
+import { Award, Trophy, ExternalLink, X, Loader2 } from 'lucide-react';
 import { achievementsApi, MemberAchievementsResponse } from '../achievements.api-client';
 import { MemberAchievement } from '@newmeca/shared';
-import { AchievementImage } from './AchievementImage';
 
 interface AchievementsGalleryProps {
   profileId?: string;
@@ -97,7 +96,17 @@ export function AchievementsGallery({
             className="group cursor-pointer"
           >
             <div className="relative aspect-[3/2] bg-slate-800 rounded-lg overflow-hidden border border-slate-700 hover:border-orange-500 transition-all duration-200 hover:shadow-lg hover:shadow-orange-500/10">
-              <AchievementImage achievement={achievement} />
+              {achievement.image_url ? (
+                <img
+                  src={achievement.image_url}
+                  alt={achievement.achievement_name}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-gradient-to-br from-orange-500/20 to-red-500/20">
+                  <Award className="h-12 w-12 text-orange-500" />
+                </div>
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end p-2">
                 <div className="text-white text-xs font-medium truncate w-full">
                   {achievement.achieved_value} {achievement.format === 'SPL' ? 'dB' : 'pts'}
@@ -128,9 +137,17 @@ export function AchievementsGallery({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative">
-              <div className="aspect-[3/2]">
-                <AchievementImage achievement={selectedAchievement} />
-              </div>
+              {selectedAchievement.image_url ? (
+                <img
+                  src={selectedAchievement.image_url}
+                  alt={selectedAchievement.achievement_name}
+                  className="w-full"
+                />
+              ) : (
+                <div className="aspect-[3/2] flex items-center justify-center bg-gradient-to-br from-orange-500/20 to-red-500/20">
+                  <Award className="h-24 w-24 text-orange-500" />
+                </div>
+              )}
               <button
                 onClick={() => setSelectedAchievement(null)}
                 className="absolute top-4 right-4 bg-black/50 rounded-full p-2 text-white hover:bg-black/70 transition-colors"

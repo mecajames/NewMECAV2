@@ -33,13 +33,23 @@ dist-ssr
 # Supabase local development
 .branches
 .temp
-supabase-export-complete/
 # Environment
 .env
 .env.local
 .env.production
 apps/backend/.env
 apps/frontend/.env
+
+# Deploy secrets (never commit real values)
+deploy/.env.staging
+deploy/.env.backend
+deploy/deployment.json
+
+# User data dumps
+auth_users_dump.csv
+db_emails.txt
+pmpro_emails.txt
+*_emails.txt
 
 # Docker
 docker/analysis-output/*
@@ -180,21 +190,3 @@ backups/backup-2025-11-13/manifest.txt
 backups/backup-2025-11-13/database.sql
 /backups
 CLAUDE.md
-supabase-storage-complete.tar.gz
-supabase-storage-export.tar.gz
-supabase-export/README.md
-supabase-export-full/import-storage.sh
-supabase-export-full/manifest.json
-supabase-export/bucket-config.json
-supabase-export/import-storage.ps1
-supabase-export/import-storage.sh
-supabase-export-full/buckets/banner-images/newsletter-logo.png
-supabase-export-full/buckets/achievement-images/test-upload-1768611936.png
-scripts/export-supabase-storage.js
-scripts/export-all-storage.js
-supabase-storage-backup (2).zip
-supabase-storage-backup.zip
-/supabase-storage-backup/achievement-images/templates
-/supabase-storage-backup
-supabase-export/buckets/banner-images/newsletter-logo.png
-supabase-export/buckets/achievement-images/test-upload-1768611936.png

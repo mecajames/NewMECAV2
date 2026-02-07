@@ -130,7 +130,7 @@ export default function HostEventPage() {
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/competition-formats/active`,
+          `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001'}/api/competition-formats/active`,
           { signal: controller.signal }
         );
         clearTimeout(timeoutId);

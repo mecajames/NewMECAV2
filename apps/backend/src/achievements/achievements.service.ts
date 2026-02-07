@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, Inject, forwardRef, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { EntityManager, FilterQuery } from '@mikro-orm/core';
 import { AchievementDefinition } from './achievement-definition.entity';
 import { AchievementRecipient } from './achievement-recipient.entity';
@@ -6,9 +6,6 @@ import { AchievementTemplate } from './achievement-template.entity';
 import { AchievementImageService } from './image-generator/achievement-image.service';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { Membership } from '../memberships/memberships.entity';
-import { Event } from '../events/events.entity';
-import { Season } from '../seasons/seasons.entity';
 import {
   CreateAchievementDefinitionDto,
   UpdateAchievementDefinitionDto,
@@ -18,8 +15,6 @@ import {
   AchievementMetricType,
   AchievementType,
   MemberAchievement,
-  PaymentStatus,
-  MembershipCategory,
 } from '@newmeca/shared';
 
 @Injectable()
@@ -31,59 +26,6 @@ export class AchievementsService {
     @Inject(forwardRef(() => AchievementImageService))
     private readonly imageService: AchievementImageService,
   ) {}
-
-  // =============================================================================
-  // Membership Eligibility Check
-  // =============================================================================
-
-  /**
-   * Check if a profile has an active membership eligible for achievements.
-   * Only Competitor, Retailer, and Manufacturer memberships qualify.
-   */
-  private async isActiveMember(profileId: string): Promise<boolean> {
-    const em = this.em.fork();
-
-    // Find active membership for this profile
-    // Must be: paid, not expired, not cancelled, and in eligible category
-    const now = new Date();
-    const activeMembership = await em.findOne(Membership, {
-      user: { id: profileId },
-      paymentStatus: PaymentStatus.PAID,
-      membershipTypeConfig: {
-        category: { $in: [MembershipCategory.COMPETITOR, MembershipCategory.RETAIL, MembershipCategory.MANUFACTURER] },
-      },
-      $or: [
-        { endDate: { $gte: now } },
-        { endDate: null },
-      ],
-      $and: [
-        { $or: [{ cancelledAt: null }, { cancelAtPeriodEnd: true, endDate: { $gte: now } }] },
-      ],
-    }, {
-      populate: ['membershipTypeConfig'],
-    });
-
-    return !!activeMembership;
-  }
-
-  /**
-   * Check if a MECA ID belongs to an active member.
-   */
-  private async isActiveMemberByMecaId(mecaId: string): Promise<boolean> {
-    if (!mecaId || mecaId === '0' || mecaId === '999999' || mecaId.startsWith('99')) {
-      return false;
-    }
-
-    const em = this.em.fork();
-
-    // Find profile by MECA ID
-    const profile = await em.findOne(Profile, { meca_id: mecaId });
-    if (!profile) {
-      return false;
-    }
-
-    return this.isActiveMember(profile.id);
-  }
 
   // =============================================================================
   // Achievement Definitions CRUD
@@ -206,28 +148,17 @@ export class AchievementsService {
   // =============================================================================
 
   async getRecipients(query: GetAchievementRecipientsQuery) {
-    const { achievement_id, profile_id, meca_id, season_id, search, group_name } = query;
+    const { achievement_id, profile_id, meca_id, season_id, search } = query;
     // Ensure page and limit are numbers (HTTP query params come as strings)
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
     const em = this.em.fork();
 
     const where: FilterQuery<AchievementRecipient> = {};
-    const achievementWhere: any = {};
 
     if (achievement_id) {
-      achievementWhere.id = achievement_id;
+      where.achievement = { id: achievement_id };
     }
-    if (group_name) {
-      this.logger.log(`Filtering recipients by group_name: ${group_name}`);
-      achievementWhere.groupName = group_name;
-    }
-
-    // Apply achievement filters if any
-    if (Object.keys(achievementWhere).length > 0) {
-      where.achievement = achievementWhere;
-    }
-
     if (profile_id) {
       where.profile = { id: profile_id };
     }
@@ -244,8 +175,6 @@ export class AchievementsService {
         { profile: { last_name: { $ilike: `%${search}%` } } },
       ] as any;
     }
-
-    this.logger.log(`Recipients filter: ${JSON.stringify(where)}`);
 
     const [items, total] = await em.findAndCount(AchievementRecipient, where, {
       populate: ['achievement', 'profile', 'event', 'season'],
@@ -273,40 +202,19 @@ export class AchievementsService {
       }
     );
 
-    // Get all unique template keys and fetch templates
-    const templateKeys = [...new Set(recipients.map(r => r.achievement.templateKey))];
-    const templates = await this.em.find(AchievementTemplate, { key: { $in: templateKeys } });
-    const templateMap = new Map(templates.map(t => [t.key, t]));
-
-    // Build base URL for template images
-    const supabaseUrl = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
-
-    return recipients.map((r) => {
-      const template = templateMap.get(r.achievement.templateKey);
-      // Use render_value from definition if set, otherwise use achieved_value
-      const renderValue = r.achievement.renderValue ?? Number(r.achievedValue);
-
-      return {
-        id: r.id,
-        achievement_name: r.achievement.name,
-        achievement_description: r.achievement.description ?? null,
-        template_key: r.achievement.templateKey,
-        format: r.achievement.format ?? null,
-        competition_type: r.achievement.competitionType,
-        achieved_value: Number(r.achievedValue),
-        threshold_value: Number(r.achievement.thresholdValue),
-        achieved_at: r.achievedAt,
-        event_name: r.event?.title ?? null,
-        image_url: r.imageUrl ?? null,
-        // Template info for CSS overlay
-        template_base_image_url: template ? `${supabaseUrl}/storage/v1/object/public/achievement-images/templates/${template.baseImagePath}` : null,
-        template_font_size: template?.fontSize ?? null,
-        template_text_x: template?.textX ?? null,
-        template_text_y: template?.textY ?? null,
-        template_text_color: template?.textColor ?? null,
-        render_value: renderValue,
-      };
-    });
+    return recipients.map((r) => ({
+      id: r.id,
+      achievement_name: r.achievement.name,
+      achievement_description: r.achievement.description ?? null,
+      template_key: r.achievement.templateKey,
+      format: r.achievement.format ?? null,
+      competition_type: r.achievement.competitionType,
+      achieved_value: Number(r.achievedValue),
+      threshold_value: Number(r.achievement.thresholdValue),
+      achieved_at: r.achievedAt,
+      event_name: r.event?.title ?? null,
+      image_url: r.imageUrl ?? null,
+    }));
   }
 
   async getAchievementsForMecaId(mecaId: string): Promise<MemberAchievement[]> {
@@ -319,40 +227,19 @@ export class AchievementsService {
       }
     );
 
-    // Get all unique template keys and fetch templates
-    const templateKeys = [...new Set(recipients.map(r => r.achievement.templateKey))];
-    const templates = await this.em.find(AchievementTemplate, { key: { $in: templateKeys } });
-    const templateMap = new Map(templates.map(t => [t.key, t]));
-
-    // Build base URL for template images
-    const supabaseUrl = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
-
-    return recipients.map((r) => {
-      const template = templateMap.get(r.achievement.templateKey);
-      // Use render_value from definition if set, otherwise use achieved_value
-      const renderValue = r.achievement.renderValue ?? Number(r.achievedValue);
-
-      return {
-        id: r.id,
-        achievement_name: r.achievement.name,
-        achievement_description: r.achievement.description ?? null,
-        template_key: r.achievement.templateKey,
-        format: r.achievement.format ?? null,
-        competition_type: r.achievement.competitionType,
-        achieved_value: Number(r.achievedValue),
-        threshold_value: Number(r.achievement.thresholdValue),
-        achieved_at: r.achievedAt,
-        event_name: r.event?.title ?? null,
-        image_url: r.imageUrl ?? null,
-        // Template info for CSS overlay
-        template_base_image_url: template ? `${supabaseUrl}/storage/v1/object/public/achievement-images/templates/${template.baseImagePath}` : null,
-        template_font_size: template?.fontSize ?? null,
-        template_text_x: template?.textX ?? null,
-        template_text_y: template?.textY ?? null,
-        template_text_color: template?.textColor ?? null,
-        render_value: renderValue,
-      };
-    });
+    return recipients.map((r) => ({
+      id: r.id,
+      achievement_name: r.achievement.name,
+      achievement_description: r.achievement.description ?? null,
+      template_key: r.achievement.templateKey,
+      format: r.achievement.format ?? null,
+      competition_type: r.achievement.competitionType,
+      achieved_value: Number(r.achievedValue),
+      threshold_value: Number(r.achievement.thresholdValue),
+      achieved_at: r.achievedAt,
+      event_name: r.event?.title ?? null,
+      image_url: r.imageUrl ?? null,
+    }));
   }
 
   // =============================================================================
@@ -397,13 +284,6 @@ export class AchievementsService {
     // Skip if no competitor linked (guest entry)
     if (!result.competitor) {
       this.logger.debug(`Skipping achievement check for result ${resultId} - no competitor linked`);
-      return [];
-    }
-
-    // Skip if member does not have an active membership
-    const isActive = await this.isActiveMember(result.competitor.id);
-    if (!isActive) {
-      this.logger.debug(`Skipping achievement check for result ${resultId} - member ${result.competitor.email} is not an active member`);
       return [];
     }
 
@@ -516,40 +396,16 @@ export class AchievementsService {
    * This should be called once after the initial migration.
    * Automatically generates images for newly awarded achievements.
    */
-  /**
-   * Re-check achievements with optional date filtering
-   * Returns final result (for non-streaming calls)
-   */
-  async backfillAchievements(options?: {
-    startDate?: Date;
-    endDate?: Date;
-  }): Promise<{ processed: number; awarded: number; total: number }> {
-    const { startDate, endDate } = options || {};
+  async backfillAchievements(): Promise<{ processed: number; awarded: number; imagesGenerated: number; imagesFailed: number }> {
+    this.logger.log('Starting achievement backfill...');
 
-    this.logger.log(`Starting achievement re-check...${startDate ? ` from ${startDate.toISOString()}` : ''}${endDate ? ` to ${endDate.toISOString()}` : ''}`);
-
-    // Build filter for competition results
-    const where: any = { competitor: { $ne: null } };
-
-    // Add date filtering if provided
-    if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) {
-        where.createdAt.$gte = startDate;
-      }
-      if (endDate) {
-        where.createdAt.$lte = endDate;
-      }
-    }
-
-    // Get competition results with linked competitors
+    // Get all competition results with linked competitors
     const results = await this.em.find(
       CompetitionResult,
-      where,
+      { competitor: { $ne: null } },
       { populate: ['competitor', 'event', 'season'], orderBy: { score: 'DESC' } }
     );
 
-    const total = results.length;
     let processed = 0;
     let awarded = 0;
 
@@ -559,308 +415,25 @@ export class AchievementsService {
       awarded += newAwards.length;
 
       if (processed % 100 === 0) {
-        this.logger.log(`Re-check progress: ${processed}/${total} results processed, ${awarded} awards given`);
+        this.logger.log(`Backfill progress: ${processed}/${results.length} results processed, ${awarded} awards given`);
       }
     }
 
-    this.logger.log(`Re-check complete: ${processed} results processed, ${awarded} achievements awarded`);
+    this.logger.log(`Achievement awarding complete: ${processed} results processed, ${awarded} achievements awarded`);
+
+    // Now generate images for all recipients that don't have one
+    this.logger.log('Generating images for achievements...');
+    const imageResult = await this.imageService.generateMissingImages();
+
+    this.logger.log(`Backfill complete: ${processed} results processed, ${awarded} achievements awarded, ` +
+      `${imageResult.generated} images generated, ${imageResult.failed} image failures`);
 
     return {
       processed,
       awarded,
-      total,
+      imagesGenerated: imageResult.generated,
+      imagesFailed: imageResult.failed,
     };
-  }
-
-  /**
-   * Re-check achievements with streaming progress updates
-   * Yields progress updates for SSE streaming
-   */
-  async *backfillAchievementsWithProgress(options?: {
-    startDate?: Date;
-    endDate?: Date;
-  }): AsyncGenerator<{ type: 'progress' | 'complete'; processed: number; awarded: number; total: number; percentage: number }> {
-    const { startDate, endDate } = options || {};
-
-    this.logger.log(`Starting achievement re-check with progress...${startDate ? ` from ${startDate.toISOString()}` : ''}${endDate ? ` to ${endDate.toISOString()}` : ''}`);
-
-    // Build filter for competition results
-    const where: any = { competitor: { $ne: null } };
-
-    // Add date filtering if provided
-    if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) {
-        where.createdAt.$gte = startDate;
-      }
-      if (endDate) {
-        where.createdAt.$lte = endDate;
-      }
-    }
-
-    // Get competition results with linked competitors
-    const results = await this.em.find(
-      CompetitionResult,
-      where,
-      { populate: ['competitor', 'event', 'season'], orderBy: { score: 'DESC' } }
-    );
-
-    const total = results.length;
-    let processed = 0;
-    let awarded = 0;
-
-    // Yield initial progress
-    yield {
-      type: 'progress',
-      processed: 0,
-      awarded: 0,
-      total,
-      percentage: 0,
-    };
-
-    for (const result of results) {
-      processed++;
-      const newAwards = await this.checkAndAwardAchievements(result.id);
-      awarded += newAwards.length;
-
-      // Yield progress update every 10 results or at the end
-      if (processed % 10 === 0 || processed === total) {
-        const percentage = total > 0 ? Math.round((processed / total) * 100) : 100;
-        yield {
-          type: 'progress',
-          processed,
-          awarded,
-          total,
-          percentage,
-        };
-      }
-    }
-
-    this.logger.log(`Re-check complete: ${processed} results processed, ${awarded} achievements awarded`);
-
-    // Yield final complete message
-    yield {
-      type: 'complete',
-      processed,
-      awarded,
-      total,
-      percentage: 100,
-    };
-  }
-
-  // =============================================================================
-  // Manual Award (Admin)
-  // =============================================================================
-
-  /**
-   * Manually award an achievement to a profile (admin only).
-   * This bypasses the normal score-based logic but still checks for active membership.
-   */
-  async manualAwardAchievement(dto: {
-    profile_id: string;
-    achievement_id: string;
-    achieved_value: number;
-    notes?: string;
-  }): Promise<AchievementRecipient> {
-    const { profile_id, achievement_id, achieved_value, notes } = dto;
-    const em = this.em.fork();
-
-    // Get the profile
-    const profile = await em.findOne(Profile, { id: profile_id });
-    if (!profile) {
-      throw new NotFoundException(`Profile with ID ${profile_id} not found`);
-    }
-
-    // Check if profile has active membership
-    const isActive = await this.isActiveMember(profile_id);
-    if (!isActive) {
-      throw new BadRequestException(`Member ${profile.email || profile.meca_id} does not have an active membership`);
-    }
-
-    // Get the achievement definition
-    const achievement = await em.findOne(AchievementDefinition, { id: achievement_id });
-    if (!achievement) {
-      throw new NotFoundException(`Achievement definition with ID ${achievement_id} not found`);
-    }
-
-    // Check if member already has this specific achievement
-    const existingRecipient = await em.findOne(AchievementRecipient, {
-      profile: { id: profile_id },
-      achievement: { id: achievement_id },
-    });
-
-    if (existingRecipient) {
-      throw new BadRequestException(`Member already has the "${achievement.name}" achievement`);
-    }
-
-    // Check if member already has a higher achievement in this group
-    if (achievement.groupName) {
-      const existingInGroup = await em.findOne(AchievementRecipient, {
-        profile: { id: profile_id },
-        achievement: { groupName: achievement.groupName },
-      }, {
-        populate: ['achievement'],
-      });
-
-      if (existingInGroup) {
-        const existingThreshold = Number(existingInGroup.achievement.thresholdValue);
-        const newThreshold = Number(achievement.thresholdValue);
-
-        if (existingThreshold >= newThreshold) {
-          throw new BadRequestException(
-            `Member already has a higher or equal achievement in the "${achievement.groupName}" group: ` +
-            `${existingInGroup.achievement.name} (${existingThreshold}+)`
-          );
-        }
-
-        // Remove the lower achievement to upgrade
-        this.logger.log(`Manual award: Removing lower achievement "${existingInGroup.achievement.name}" for ${profile.email}`);
-        await em.removeAndFlush(existingInGroup);
-      }
-    }
-
-    // Create the award
-    const now = new Date();
-    const recipient = em.create(AchievementRecipient, {
-      achievement,
-      profile,
-      mecaId: profile.meca_id,
-      achievedValue: achieved_value,
-      achievedAt: now,
-      createdAt: now,
-    });
-
-    // Log notes for manual awards (not stored in DB yet)
-    if (notes) {
-      this.logger.log(`Manual award notes: ${notes}`);
-    }
-
-    await em.persistAndFlush(recipient);
-
-    this.logger.log(`Manual award: Awarded "${achievement.name}" to ${profile.email || profile.meca_id} (value: ${achieved_value})`);
-
-    return recipient;
-  }
-
-  /**
-   * Remove an achievement award from a member (admin only).
-   * Also deletes any associated image from storage.
-   */
-  async deleteRecipient(recipientId: string): Promise<{ success: boolean; deleted: { id: string; achievement_name: string; profile_name: string } }> {
-    const em = this.em.fork();
-
-    // Get the recipient with related data for logging
-    const recipient = await em.findOne(AchievementRecipient, { id: recipientId }, {
-      populate: ['achievement', 'profile'],
-    });
-
-    if (!recipient) {
-      throw new NotFoundException(`Achievement recipient with ID ${recipientId} not found`);
-    }
-
-    const achievementName = recipient.achievement?.name || 'Unknown';
-    const profileName = recipient.profile
-      ? `${recipient.profile.first_name || ''} ${recipient.profile.last_name || ''}`.trim() || recipient.profile.email || 'Unknown'
-      : 'Unknown';
-    const mecaId = recipient.mecaId || recipient.profile?.meca_id || 'N/A';
-
-    // Delete the image from storage if it exists
-    if (recipient.imageUrl) {
-      try {
-        await this.imageService.deleteImage(recipient.imageUrl);
-        this.logger.log(`Deleted achievement image for recipient ${recipientId}`);
-      } catch (error) {
-        this.logger.warn(`Failed to delete achievement image for recipient ${recipientId}: ${error}`);
-        // Continue with deletion even if image deletion fails
-      }
-    }
-
-    // Delete the recipient record
-    await em.removeAndFlush(recipient);
-
-    this.logger.log(`Deleted achievement award: "${achievementName}" from ${profileName} (MECA ID: ${mecaId})`);
-
-    return {
-      success: true,
-      deleted: {
-        id: recipientId,
-        achievement_name: achievementName,
-        profile_name: profileName,
-      },
-    };
-  }
-
-  /**
-   * Get profiles that can receive a specific achievement (for admin dropdown).
-   * Returns active members who don't already have this achievement or a higher one in the same group.
-   */
-  async getEligibleProfilesForAchievement(achievementId: string, search?: string): Promise<Array<{
-    id: string;
-    meca_id: string;
-    name: string;
-    email: string;
-  }>> {
-    const em = this.em.fork();
-
-    // Get the achievement definition
-    const achievement = await em.findOne(AchievementDefinition, { id: achievementId });
-    if (!achievement) {
-      throw new NotFoundException(`Achievement definition with ID ${achievementId} not found`);
-    }
-
-    // Get all active memberships (Competitor, Retailer, Manufacturer)
-    const now = new Date();
-    const activeMemberships = await em.find(Membership, {
-      paymentStatus: PaymentStatus.PAID,
-      membershipTypeConfig: {
-        category: { $in: [MembershipCategory.COMPETITOR, MembershipCategory.RETAIL, MembershipCategory.MANUFACTURER] },
-      },
-      $or: [
-        { endDate: { $gte: now } },
-        { endDate: null },
-      ],
-      $and: [
-        { $or: [{ cancelledAt: null }, { cancelAtPeriodEnd: true, endDate: { $gte: now } }] },
-      ],
-    }, {
-      populate: ['user', 'membershipTypeConfig'],
-    });
-
-    // Get profiles that already have this achievement or higher in the same group
-    const existingRecipients = achievement.groupName
-      ? await em.find(AchievementRecipient, {
-          achievement: { groupName: achievement.groupName, thresholdValue: { $gte: achievement.thresholdValue } },
-        }, { populate: ['profile'] })
-      : await em.find(AchievementRecipient, {
-          achievement: { id: achievementId },
-        }, { populate: ['profile'] });
-
-    const excludedProfileIds = new Set(existingRecipients.map(r => r.profile?.id).filter(Boolean));
-
-    // Filter to eligible profiles (using 'user' which is the Profile relationship on Membership)
-    let eligibleProfiles = activeMemberships
-      .filter(m => m.user && !excludedProfileIds.has(m.user.id))
-      .map(m => ({
-        id: m.user.id,
-        meca_id: m.user.meca_id || '',
-        name: `${m.user.first_name || ''} ${m.user.last_name || ''}`.trim() || 'Unknown',
-        email: m.user.email || '',
-      }));
-
-    // Apply search filter if provided
-    if (search) {
-      const searchLower = search.toLowerCase();
-      eligibleProfiles = eligibleProfiles.filter(p =>
-        p.name.toLowerCase().includes(searchLower) ||
-        p.meca_id.toLowerCase().includes(searchLower) ||
-        p.email.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // Sort by name and limit results
-    return eligibleProfiles
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 50);
   }
 
   // =============================================================================
@@ -1004,7 +577,6 @@ export class AchievementsService {
       achieved_at: recipient.achievedAt,
       competition_result_id: recipient.competitionResult?.id ?? null,
       event_id: recipient.event?.id ?? null,
-      event_name: recipient.event?.title ?? null,
       season_id: recipient.season?.id ?? null,
       season_name: recipient.season?.name ?? null,
       image_url: recipient.imageUrl ?? null,

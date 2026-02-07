@@ -30,21 +30,26 @@ export interface MemberAchievementsResponse {
 export interface BackfillResult {
   processed: number;
   awarded: number;
-  total: number;
+  imagesGenerated?: number;
+  imagesFailed?: number;
 }
 
-export interface BackfillProgress {
-  type: 'progress' | 'complete' | 'error';
-  processed: number;
-  awarded: number;
-  total: number;
-  percentage: number;
-  message?: string;
+export interface GenerateImagesResult {
+  generated: number;
+  failed: number;
 }
 
-export interface BackfillOptions {
-  startDate?: string; // ISO date string
-  endDate?: string;   // ISO date string
+export interface CheckAssetsResult {
+  assetsPath: string;
+  templatesPath: string;
+  fontsPath: string;
+  templatesExist: boolean;
+  fontsExist: boolean;
+  canvasAvailable: boolean;
+  templateFiles: string[];
+  fontFiles: string[];
+  supabaseBucketAccessible: boolean;
+  supabaseBucketError?: string;
 }
 
 export interface CheckResultResponse {
@@ -159,7 +164,6 @@ export const achievementsApi = {
     profile_id?: string;
     meca_id?: string;
     season_id?: string;
-    group_name?: string;
     search?: string;
     page?: number;
     limit?: number;
@@ -170,55 +174,10 @@ export const achievementsApi = {
 
   /**
    * Trigger backfill of achievements for existing results (admin)
-   * Non-streaming version - returns when complete
    */
-  triggerBackfill: async (options?: BackfillOptions): Promise<BackfillResult> => {
-    const params = new URLSearchParams();
-    if (options?.startDate) params.append('startDate', options.startDate);
-    if (options?.endDate) params.append('endDate', options.endDate);
-
-    const url = `/api/achievements/admin/backfill${params.toString() ? `?${params.toString()}` : ''}`;
-    const response = await axios.post(url);
+  triggerBackfill: async (): Promise<BackfillResult> => {
+    const response = await axios.post('/api/achievements/admin/backfill');
     return response.data;
-  },
-
-  /**
-   * Stream backfill progress via Server-Sent Events (admin)
-   * Returns an EventSource for real-time progress updates
-   */
-  createBackfillStream: (options?: BackfillOptions): EventSource => {
-    const params = new URLSearchParams();
-    if (options?.startDate) params.append('startDate', options.startDate);
-    if (options?.endDate) params.append('endDate', options.endDate);
-
-    // Get the auth token from localStorage (Supabase stores it there)
-    const authData = localStorage.getItem('sb-127-auth-token') || localStorage.getItem('supabase.auth.token');
-    let token = '';
-    if (authData) {
-      try {
-        const parsed = JSON.parse(authData);
-        token = parsed.access_token || parsed.currentSession?.access_token || '';
-      } catch {
-        // Try to find it in any supabase key
-        for (const key of Object.keys(localStorage)) {
-          if (key.includes('supabase') && key.includes('auth')) {
-            try {
-              const data = JSON.parse(localStorage.getItem(key) || '{}');
-              token = data.access_token || data.currentSession?.access_token || '';
-              if (token) break;
-            } catch {
-              // ignore
-            }
-          }
-        }
-      }
-    }
-
-    // Add authorization to params (SSE doesn't support custom headers easily)
-    if (token) params.append('authorization', `Bearer ${token}`);
-
-    const url = `/api/achievements/admin/backfill-stream${params.toString() ? `?${params.toString()}` : ''}`;
-    return new EventSource(url);
   },
 
   /**
@@ -229,59 +188,40 @@ export const achievementsApi = {
     return response.data;
   },
 
-  // ==========================================
-  // ADMIN ENDPOINTS - Manual Award
-  // ==========================================
-
   /**
-   * Get profiles eligible to receive a specific achievement (admin)
+   * Generate images for all recipients that don't have one yet (admin)
    */
-  getEligibleProfiles: async (achievementId: string, search?: string): Promise<Array<{
-    id: string;
-    meca_id: string;
-    name: string;
-    email: string;
-  }>> => {
-    const params = search ? { search } : {};
-    const response = await axios.get(`/api/achievements/admin/definitions/${achievementId}/eligible-profiles`, { params });
+  generateMissingImages: async (): Promise<GenerateImagesResult> => {
+    const response = await axios.post('/api/achievements/admin/generate-images');
     return response.data;
   },
 
   /**
-   * Manually award an achievement to a profile (admin)
+   * Check if image generation assets are properly configured (admin)
    */
-  manualAwardAchievement: async (dto: {
-    profile_id: string;
-    achievement_id: string;
-    achieved_value: number;
-    notes?: string;
-  }): Promise<{
-    success: boolean;
-    recipient: {
-      id: string;
-      achievement_name: string;
-      profile_name: string;
-      meca_id: string;
-      achieved_value: number;
-    };
-  }> => {
-    const response = await axios.post('/api/achievements/admin/manual-award', dto);
+  checkAssets: async (): Promise<CheckAssetsResult> => {
+    const response = await axios.get('/api/achievements/admin/check-assets');
     return response.data;
   },
 
   /**
-   * Delete an achievement recipient (admin)
-   * Removes the award from the member and deletes any associated image
+   * Retry image generation for a specific recipient (admin)
    */
-  deleteRecipient: async (recipientId: string): Promise<{
+  regenerateImage: async (recipientId: string): Promise<{
     success: boolean;
-    deleted: {
-      id: string;
-      achievement_name: string;
-      profile_name: string;
+    error?: string;
+    debug: {
+      recipientId: string;
+      achievementId?: string;
+      achievementName?: string;
+      templateKey?: string;
+      renderValue?: number;
+      achievedValue: number;
+      existingImageUrl?: string;
     };
+    newImageUrl?: string;
   }> => {
-    const response = await axios.delete(`/api/achievements/admin/recipients/${recipientId}`);
+    const response = await axios.post(`/api/achievements/admin/recipients/${recipientId}/regenerate-image`);
     return response.data;
   },
 };

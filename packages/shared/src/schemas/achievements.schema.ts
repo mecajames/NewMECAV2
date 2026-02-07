@@ -112,7 +112,6 @@ export const AchievementRecipientSchema = z.object({
   achieved_at: z.coerce.date(),
   competition_result_id: z.string().uuid().nullable(),
   event_id: z.string().uuid().nullable(),
-  event_name: z.string().nullable(),
   season_id: z.string().uuid().nullable(),
   season_name: z.string().nullable(),
   image_url: z.string().nullable(),
@@ -164,10 +163,9 @@ export const GetAchievementRecipientsQuerySchema = z.object({
   profile_id: z.string().uuid().optional(),
   meca_id: z.string().optional(),
   season_id: z.string().uuid().optional(),
-  group_name: z.string().optional(), // Filter by achievement group
   search: z.string().optional(), // Search by MECA ID or name
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(250).default(50),
+  limit: z.coerce.number().int().positive().max(100).default(20),
 });
 
 export type GetAchievementRecipientsQuery = z.infer<typeof GetAchievementRecipientsQuerySchema>;
@@ -212,14 +210,6 @@ export const MemberAchievementSchema = z.object({
   achieved_at: z.coerce.date(),
   event_name: z.string().nullable(),
   image_url: z.string().nullable(),
-  // Template info for CSS overlay rendering
-  template_base_image_url: z.string().nullable(),
-  template_font_size: z.number().nullable(),
-  template_text_x: z.number().nullable(),
-  template_text_y: z.number().nullable(),
-  template_text_color: z.string().nullable(),
-  // Render value (may differ from achieved_value for display, e.g., "130" instead of "130.5")
-  render_value: z.number().nullable(),
 });
 
 export type MemberAchievement = z.infer<typeof MemberAchievementSchema>;
