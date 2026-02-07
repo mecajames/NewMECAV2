@@ -47,6 +47,9 @@ deploy/deployment.json
 
 # User data dumps
 auth_users_dump.csv
+db_emails.txt
+pmpro_emails.txt
+*_emails.txt
 
 # Docker
 docker/analysis-output/*

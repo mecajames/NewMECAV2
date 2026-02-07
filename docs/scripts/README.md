@@ -215,7 +215,7 @@ psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -f my-backup.sql
 
 **Backup production database:**
 ```bash
-npx supabase db dump --db-url "postgresql://postgres.qykahrgwtktqycfgxqep:XWGCMaster123!@aws-0-us-east-1.pooler.supabase.com:6543/postgres" -f production-backup.sql
+npx supabase db dump --db-url "$DATABASE_URL" -f production-backup.sql
 ```
 
 **Restore production database:**
@@ -314,7 +314,7 @@ forfiles /p "backups" /d -30 /c "cmd /c if @isdir==TRUE rmdir /s /q @path"
 
 ```bash
 # Dump production database
-npx supabase db dump --db-url "postgresql://postgres.qykahrgwtktqycfgxqep:XWGCMaster123!@aws-0-us-east-1.pooler.supabase.com:6543/postgres" -f prod-sync.sql
+npx supabase db dump --db-url "$DATABASE_URL" -f prod-sync.sql
 
 # Import to local
 psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -f prod-sync.sql

@@ -129,7 +129,7 @@ NewMECAV2/
 ### Local Development
 - **URL**: http://127.0.0.1:54321
 - **Service Key**: (in local Supabase)
-- **Admin Login**: james@mecacaraudio.com / Admin123!
+- **Admin Login**: james@mecacaraudio.com / (see environment variables)
 
 ### Production
 - **URL**: https://qykahrgwtktqycfgxqep.supabase.co
@@ -197,9 +197,8 @@ NewMECAV2/
 - Verify URLs in production database
 
 ### Can't Login
-- **Local**: Password is `Admin123!`
-- **Production**: After deployment, same password
-- Reset if needed: `node scripts/reset-admin-password.js`
+- **Local**: Check admin credentials in your local environment
+- **Production**: Use password reset flow or Supabase dashboard
 
 ### Need to Start Over
 - Restore from backup: `/restore`

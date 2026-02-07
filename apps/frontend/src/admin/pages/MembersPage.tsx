@@ -471,8 +471,10 @@ export default function MembersPage() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
-        // Search profile fields
+        // Search profile fields (including combined full name)
+        const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
         if (
+          fullName.includes(term) ||
           member.first_name?.toLowerCase().includes(term) ||
           member.last_name?.toLowerCase().includes(term) ||
           member.email.toLowerCase().includes(term) ||

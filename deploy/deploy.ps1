@@ -176,7 +176,7 @@ $envMap = $deploymentConfig.containers.backend.environment
 $secretKeys = @(
     "DATABASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
     "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "CORS_ORIGIN",
-    "RECAPTCHA_SECRET_KEY", "SENDGRID_API_KEY"
+    "RECAPTCHA_SECRET_KEY", "SENDGRID_API_KEY", "SUPER_ADMIN_PASSWORD"
 )
 foreach ($key in $secretKeys) {
     if ($BackendVars.ContainsKey($key)) {

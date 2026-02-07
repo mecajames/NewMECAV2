@@ -98,6 +98,7 @@ jobs:
             --arg cors_origin "${{ secrets.CORS_ORIGIN }}" \
             --arg recaptcha_secret_key "${{ secrets.RECAPTCHA_SECRET_KEY }}" \
             --arg sendgrid_api_key "${{ secrets.SENDGRID_API_KEY }}" \
+            --arg super_admin_password "${{ secrets.SUPER_ADMIN_PASSWORD }}" \
             '
             .containers.backend.image = $backend |
             .containers.nginx.image = $nginx |
@@ -109,7 +110,8 @@ jobs:
             .containers.backend.environment.STRIPE_WEBHOOK_SECRET = $stripe_webhook_secret |
             .containers.backend.environment.CORS_ORIGIN = $cors_origin |
             .containers.backend.environment.RECAPTCHA_SECRET_KEY = $recaptcha_secret_key |
-            .containers.backend.environment.SENDGRID_API_KEY = $sendgrid_api_key
+            .containers.backend.environment.SENDGRID_API_KEY = $sendgrid_api_key |
+            .containers.backend.environment.SUPER_ADMIN_PASSWORD = $super_admin_password
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"

@@ -559,7 +559,7 @@ export class MembershipsController {
   }
 
   // Super Admin password for protected MECA ID operations
-  private readonly SUPER_ADMIN_PASSWORD = '*cvStFU@yxEb6QQg';
+  private readonly SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || '';
 
   /**
    * Super Admin: Override MECA ID on a membership

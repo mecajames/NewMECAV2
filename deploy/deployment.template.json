@@ -18,7 +18,8 @@
         "RECAPTCHA_SECRET_KEY": "PLACEHOLDER",
         "EMAIL_PROVIDER": "sendgrid",
         "SENDGRID_API_KEY": "PLACEHOLDER",
-        "SENDGRID_FROM_EMAIL": "noreply@meca.com"
+        "SENDGRID_FROM_EMAIL": "noreply@meca.com",
+        "SUPER_ADMIN_PASSWORD": "PLACEHOLDER"
       },
       "ports": {
         "3000": "HTTP"
