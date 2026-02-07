@@ -33,6 +33,7 @@ dist-ssr
 # Supabase local development
 .branches
 .temp
+supabase-export-complete/
 # Environment
 .env
 .env.local

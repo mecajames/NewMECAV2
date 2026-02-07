@@ -273,6 +273,39 @@ export class AchievementImageService {
   }
 
   /**
+   * Delete an achievement image from Supabase storage
+   */
+  async deleteImage(imageUrl: string): Promise<boolean> {
+    try {
+      // Extract the path from the URL
+      // URL format: https://xxx.supabase.co/storage/v1/object/public/achievement-images/achievements/xxx.png
+      const urlParts = imageUrl.split('/achievement-images/');
+      if (urlParts.length !== 2) {
+        this.logger.warn(`Could not parse image URL for deletion: ${imageUrl}`);
+        return false;
+      }
+
+      const storagePath = urlParts[1];
+      this.logger.debug(`Deleting image from storage: ${storagePath}`);
+
+      const { error } = await this.supabase.storage
+        .from('achievement-images')
+        .remove([storagePath]);
+
+      if (error) {
+        this.logger.error(`Failed to delete achievement image: ${error.message}`);
+        return false;
+      }
+
+      this.logger.log(`Successfully deleted achievement image: ${storagePath}`);
+      return true;
+    } catch (error: any) {
+      this.logger.error(`Exception deleting achievement image: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
    * Check if the canvas library is available
    */
   async isCanvasAvailable(): Promise<boolean> {
