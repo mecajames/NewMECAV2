@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Award, Plus, Edit3, Trash2, Eye, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Loader2, RefreshCw, Users, X, Check, PlusCircle, RotateCcw, AlertCircle,
-  Search, ArrowLeft
+  Award, Plus, Edit3, Trash2, ChevronLeft, ChevronRight,
+  Loader2, RefreshCw, Users, X, Check, PlusCircle, Calendar,
+  Search, ArrowLeft, Gift
 } from 'lucide-react';
-import { achievementsApi } from '../achievements.api-client';
+import { achievementsApi, BackfillProgress } from '../achievements.api-client';
 import { seasonsApi } from '../../seasons/seasons.api-client';
+import { useAuth } from '@/auth';
 import {
   AchievementDefinition,
   AchievementRecipient,
@@ -37,20 +38,23 @@ export default function AchievementsAdminPage() {
   const [definitionsLoading, setDefinitionsLoading] = useState(true);
   const [definitionsPagination, setDefinitionsPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 50,
     total: 0,
     totalPages: 0,
   });
+  const [definitionsPageSize, setDefinitionsPageSize] = useState(50);
+  const [definitionsGroupFilter, setDefinitionsGroupFilter] = useState('');
 
   // Recipients state
   const [recipients, setRecipients] = useState<AchievementRecipient[]>([]);
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientsPagination, setRecipientsPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 50,
     total: 0,
     totalPages: 0,
   });
+  const [recipientsPageSize, setRecipientsPageSize] = useState(50);
 
   // Templates state
   const [templates, setTemplates] = useState<AchievementTemplate[]>([]);
@@ -80,26 +84,44 @@ export default function AchievementsAdminPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Backfill state
+  // Re-check modal state
+  const [showRecheckModal, setShowRecheckModal] = useState(false);
+  const [recheckTimeframe, setRecheckTimeframe] = useState<'30days' | '90days' | 'thisYear' | 'custom' | 'all'>('30days');
+  const [recheckCustomStart, setRecheckCustomStart] = useState('');
+  const [recheckCustomEnd, setRecheckCustomEnd] = useState('');
+
+  // Backfill/Re-check progress state
   const [backfilling, setBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<BackfillProgress | null>(null);
   const [backfillResult, setBackfillResult] = useState<{
     processed: number;
     awarded: number;
-    imagesGenerated?: number;
-    imagesFailed?: number;
   } | null>(null);
 
-  // Generate images state
-  const [generatingImages, setGeneratingImages] = useState(false);
-  const [generateImagesResult, setGenerateImagesResult] = useState<{ generated: number; failed: number } | null>(null);
-
-  // Regenerate single image state
-  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  // Auth context for session token
+  const { session } = useAuth();
 
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Manual Award modal state
+  const [showManualAwardModal, setShowManualAwardModal] = useState(false);
+  const [manualAwardData, setManualAwardData] = useState({
+    achievement_id: '',
+    profile_id: '',
+    achieved_value: '',
+    notes: '',
+  });
+  const [eligibleProfiles, setEligibleProfiles] = useState<Array<{
+    id: string;
+    meca_id: string;
+    name: string;
+    email: string;
+  }>>([]);
+  const [profileSearch, setProfileSearch] = useState('');
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [awardingManual, setAwardingManual] = useState(false);
 
   // Seasons list for filter
   const [seasons, setSeasons] = useState<Array<{ id: string; name: string }>>([]);
@@ -109,10 +131,17 @@ export default function AchievementsAdminPage() {
     achievement_id: '',
     season_id: '',
     search: '',
+    group_name: '',
   });
 
-  // Image preview modal
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // Delete recipient state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [recipientToDelete, setRecipientToDelete] = useState<AchievementRecipient | null>(null);
+  const [deletingRecipient, setDeletingRecipient] = useState(false);
+
+  // Get unique group names from definitions for filter dropdown
+  const uniqueGroups = [...new Set(definitions.map(d => d.group_name).filter(Boolean))];
+
 
   useEffect(() => {
     fetchDefinitions();
@@ -142,10 +171,10 @@ export default function AchievementsAdminPage() {
     }
   }, [activeTab, recipientFilters]);
 
-  const fetchDefinitions = async (page = 1) => {
+  const fetchDefinitions = async (page = 1, limit = definitionsPageSize) => {
     try {
       setDefinitionsLoading(true);
-      const response = await achievementsApi.getAllDefinitions({ page, limit: 20 });
+      const response = await achievementsApi.getAllDefinitions({ page, limit });
       setDefinitions(response.items);
       setDefinitionsPagination({
         page: response.page,
@@ -160,13 +189,14 @@ export default function AchievementsAdminPage() {
     }
   };
 
-  const fetchRecipients = async (page = 1) => {
+  const fetchRecipients = async (page = 1, limit = recipientsPageSize) => {
     try {
       setRecipientsLoading(true);
-      const params: Record<string, unknown> = { page, limit: 20 };
+      const params: Record<string, unknown> = { page, limit };
       if (recipientFilters.achievement_id) params.achievement_id = recipientFilters.achievement_id;
       if (recipientFilters.season_id) params.season_id = recipientFilters.season_id;
       if (recipientFilters.search) params.search = recipientFilters.search;
+      if (recipientFilters.group_name) params.group_name = recipientFilters.group_name;
 
       const response = await achievementsApi.getRecipients(params);
       setRecipients(response.items);
@@ -181,6 +211,29 @@ export default function AchievementsAdminPage() {
     } finally {
       setRecipientsLoading(false);
     }
+  };
+
+  const handleDeleteRecipient = async () => {
+    if (!recipientToDelete) return;
+
+    try {
+      setDeletingRecipient(true);
+      await achievementsApi.deleteRecipient(recipientToDelete.id);
+      // Refresh the recipients list
+      await fetchRecipients(recipientsPagination.page, recipientsPageSize);
+      setShowDeleteConfirm(false);
+      setRecipientToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete recipient:', err);
+      alert('Failed to delete achievement award. Please try again.');
+    } finally {
+      setDeletingRecipient(false);
+    }
+  };
+
+  const openDeleteConfirm = (recipient: AchievementRecipient) => {
+    setRecipientToDelete(recipient);
+    setShowDeleteConfirm(true);
   };
 
   const fetchTemplates = async () => {
@@ -392,63 +445,159 @@ export default function AchievementsAdminPage() {
     }
   };
 
-  const handleBackfill = async () => {
-    if (!confirm('This will check all existing competition results, award achievements, and generate images. This may take a while. Continue?')) {
-      return;
+  // Calculate date range based on timeframe selection
+  const getDateRange = useCallback(() => {
+    const now = new Date();
+    let startDate: string | undefined;
+    let endDate: string | undefined;
+
+    switch (recheckTimeframe) {
+      case '30days':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      case '90days':
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      case 'thisYear':
+        startDate = new Date(now.getFullYear(), 0, 1).toISOString();
+        break;
+      case 'custom':
+        if (recheckCustomStart) startDate = new Date(recheckCustomStart).toISOString();
+        if (recheckCustomEnd) endDate = new Date(recheckCustomEnd + 'T23:59:59').toISOString();
+        break;
+      case 'all':
+        // No date filter
+        break;
     }
 
+    return { startDate, endDate };
+  }, [recheckTimeframe, recheckCustomStart, recheckCustomEnd]);
+
+  const handleBackfill = async () => {
+    setShowRecheckModal(false);
+    setBackfilling(true);
+    setBackfillResult(null);
+    setBackfillProgress(null);
+
+    const { startDate, endDate } = getDateRange();
+
     try {
-      setBackfilling(true);
-      setBackfillResult(null);
-      setGenerateImagesResult(null);
-      const result = await achievementsApi.triggerBackfill();
-      setBackfillResult(result);
-      fetchRecipients();
+      // Build URL with params
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (session?.access_token) params.append('authorization', `Bearer ${session.access_token}`);
+
+      const url = `/api/achievements/admin/backfill-stream${params.toString() ? `?${params.toString()}` : ''}`;
+      const eventSource = new EventSource(url);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as BackfillProgress;
+          setBackfillProgress(data);
+
+          if (data.type === 'complete') {
+            setBackfillResult({
+              processed: data.processed,
+              awarded: data.awarded,
+            });
+            setBackfilling(false);
+            eventSource.close();
+            fetchRecipients();
+            fetchRecipientsCount();
+          } else if (data.type === 'error') {
+            alert(data.message || 'Re-check failed');
+            setBackfilling(false);
+            eventSource.close();
+          }
+        } catch (parseError) {
+          console.error('Failed to parse SSE data:', parseError);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error);
+        alert('Connection error during re-check. Please try again.');
+        setBackfilling(false);
+        eventSource.close();
+      };
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Backfill failed');
-    } finally {
+      alert(err.response?.data?.message || 'Re-check failed');
       setBackfilling(false);
     }
   };
 
-  const handleGenerateImages = async () => {
-    if (!confirm('This will generate images for all achievements that are missing images. Continue?')) {
-      return;
-    }
+  // Manual Award handlers
+  const handleOpenManualAward = () => {
+    setManualAwardData({ achievement_id: '', profile_id: '', achieved_value: '', notes: '' });
+    setEligibleProfiles([]);
+    setProfileSearch('');
+    setShowManualAwardModal(true);
+  };
 
-    try {
-      setGeneratingImages(true);
-      setGenerateImagesResult(null);
-      const result = await achievementsApi.generateMissingImages();
-      setGenerateImagesResult(result);
-      fetchRecipients();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Image generation failed');
-    } finally {
-      setGeneratingImages(false);
+  const handleAchievementSelect = async (achievementId: string) => {
+    setManualAwardData(prev => ({ ...prev, achievement_id: achievementId, profile_id: '' }));
+    setEligibleProfiles([]);
+    setProfileSearch('');
+
+    if (achievementId) {
+      // Get the selected achievement's threshold value as default
+      const selectedDef = definitions.find(d => d.id === achievementId);
+      if (selectedDef) {
+        setManualAwardData(prev => ({ ...prev, achieved_value: String(selectedDef.threshold_value) }));
+      }
+
+      // Load eligible profiles
+      setLoadingProfiles(true);
+      try {
+        const profiles = await achievementsApi.getEligibleProfiles(achievementId);
+        setEligibleProfiles(profiles);
+      } catch (err) {
+        console.error('Failed to load eligible profiles:', err);
+      } finally {
+        setLoadingProfiles(false);
+      }
     }
   };
 
-  const handleRegenerateImage = async (recipientId: string) => {
-    try {
-      setRegeneratingId(recipientId);
-      setRegenerateError(null);
-      const result = await achievementsApi.regenerateImage(recipientId);
+  const handleProfileSearch = async (search: string) => {
+    setProfileSearch(search);
+    if (!manualAwardData.achievement_id) return;
 
-      // Success if explicitly true OR if we got a new image URL
-      if (result.success || result.newImageUrl) {
-        // Refresh the recipients list to show the new image
-        fetchRecipients();
-      } else {
-        setRegenerateError(result.error || 'Image regeneration failed. Check server logs for details.');
-        console.error('Regenerate failed:', result);
-      }
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.message || 'Image regeneration failed';
-      setRegenerateError(errorMsg);
-      console.error('Regenerate error:', err);
+    setLoadingProfiles(true);
+    try {
+      const profiles = await achievementsApi.getEligibleProfiles(manualAwardData.achievement_id, search);
+      setEligibleProfiles(profiles);
+    } catch (err) {
+      console.error('Failed to search profiles:', err);
     } finally {
-      setRegeneratingId(null);
+      setLoadingProfiles(false);
+    }
+  };
+
+  const handleManualAward = async () => {
+    if (!manualAwardData.achievement_id || !manualAwardData.profile_id || !manualAwardData.achieved_value) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setAwardingManual(true);
+    try {
+      const result = await achievementsApi.manualAwardAchievement({
+        profile_id: manualAwardData.profile_id,
+        achievement_id: manualAwardData.achievement_id,
+        achieved_value: parseFloat(manualAwardData.achieved_value),
+        notes: manualAwardData.notes || undefined,
+      });
+
+      alert(`Successfully awarded "${result.recipient.achievement_name}" to ${result.recipient.profile_name}`);
+      setShowManualAwardModal(false);
+      fetchRecipients(); // Refresh recipients list
+      fetchRecipientsCount();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to award achievement');
+    } finally {
+      setAwardingManual(false);
     }
   };
 
@@ -466,29 +615,25 @@ export default function AchievementsAdminPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={handleGenerateImages}
-              disabled={generatingImages || backfilling}
+              onClick={() => setShowRecheckModal(true)}
+              disabled={backfilling}
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
-              title="Generate images for achievements missing images"
-            >
-              {generatingImages ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Award className="h-4 w-4" />
-              )}
-              Generate Images
-            </button>
-            <button
-              onClick={handleBackfill}
-              disabled={backfilling || generatingImages}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
+              title="Re-check competition results and award any missing achievements"
             >
               {backfilling ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-              Backfill Achievements
+              Re-check Results
+            </button>
+            <button
+              onClick={handleOpenManualAward}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
+              title="Manually award an achievement to a member"
+            >
+              <Gift className="h-4 w-4" />
+              Manual Award
             </button>
             <button
               onClick={handleCreateNew}
@@ -507,47 +652,40 @@ export default function AchievementsAdminPage() {
           </div>
         </div>
 
-        {/* Backfill Result */}
-        {backfillResult && (
-          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-6">
-            <p className="text-green-400">
-              Backfill complete: Processed {backfillResult.processed} results, awarded {backfillResult.awarded} achievements.
-              {backfillResult.imagesGenerated !== undefined && (
-                <span className="ml-2">
-                  Images: {backfillResult.imagesGenerated} generated
-                  {backfillResult.imagesFailed && backfillResult.imagesFailed > 0 && (
-                    <span className="text-yellow-400 ml-1">({backfillResult.imagesFailed} failed)</span>
-                  )}
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-
-        {/* Generate Images Result */}
-        {generateImagesResult && (
+        {/* Re-check Progress */}
+        {backfilling && backfillProgress && (
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-6">
-            <p className="text-blue-400">
-              Image generation complete: {generateImagesResult.generated} images generated
-              {generateImagesResult.failed > 0 && (
-                <span className="text-yellow-400 ml-1">({generateImagesResult.failed} failed)</span>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-blue-400 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Re-checking results...
+              </p>
+              <span className="text-blue-300 font-mono">{backfillProgress.percentage}%</span>
+            </div>
+            <div className="w-full bg-slate-700 rounded-full h-3 mb-2">
+              <div
+                className="bg-blue-500 h-3 rounded-full transition-all duration-300"
+                style={{ width: `${backfillProgress.percentage}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-400">
+              {backfillProgress.processed} of {backfillProgress.total} results processed
+              {backfillProgress.awarded > 0 && (
+                <span className="text-green-400 ml-2">• {backfillProgress.awarded} achievements awarded</span>
               )}
             </p>
           </div>
         )}
 
-        {/* Regenerate Error */}
-        {regenerateError && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-red-400 font-medium">Image regeneration failed</p>
-              <p className="text-red-300 text-sm mt-1">{regenerateError}</p>
-              <p className="text-gray-500 text-xs mt-2">Check the backend logs for more details.</p>
-            </div>
+        {/* Re-check Result */}
+        {backfillResult && !backfilling && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
+            <p className="text-green-400">
+              Re-check complete: Processed {backfillResult.processed} results, awarded {backfillResult.awarded} new achievements.
+            </p>
             <button
-              onClick={() => setRegenerateError(null)}
-              className="ml-auto p-1 hover:bg-red-500/20 rounded text-red-400"
+              onClick={() => setBackfillResult(null)}
+              className="p-1 hover:bg-green-500/20 rounded text-green-400"
             >
               <X className="h-4 w-4" />
             </button>
@@ -580,7 +718,38 @@ export default function AchievementsAdminPage() {
 
         {/* Content */}
         {activeTab === 'definitions' && (
-          <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+          <div className="space-y-4">
+            {/* Definitions Filters */}
+            <div className="bg-slate-800 rounded-xl p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Group Filter */}
+                <select
+                  value={definitionsGroupFilter}
+                  onChange={(e) => {
+                    setDefinitionsGroupFilter(e.target.value);
+                    // Re-fetch will happen via filtered definitions
+                  }}
+                  className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white min-w-[200px]"
+                >
+                  <option value="">All Groups</option>
+                  {uniqueGroups.map((group) => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
+
+                {/* Clear Filters */}
+                {definitionsGroupFilter && (
+                  <button
+                    onClick={() => setDefinitionsGroupFilter('')}
+                    className="px-3 py-2 text-gray-400 hover:text-white"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
             {definitionsLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -604,7 +773,9 @@ export default function AchievementsAdminPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700">
-                  {definitions.map((def) => (
+                  {definitions
+                    .filter(def => !definitionsGroupFilter || def.group_name === definitionsGroupFilter)
+                    .map((def) => (
                     <tr key={def.id} className="hover:bg-slate-700/50">
                       <td className="px-4 py-3">
                         <span className="text-gray-400 text-sm">{def.group_name || '-'}</span>
@@ -675,24 +846,40 @@ export default function AchievementsAdminPage() {
             )}
 
             {/* Pagination */}
-            {definitionsPagination.totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700">
-                <p className="text-sm text-gray-400">
-                  Showing {(definitionsPagination.page - 1) * definitionsPagination.limit + 1} to{' '}
-                  {Math.min(definitionsPagination.page * definitionsPagination.limit, definitionsPagination.total)} of{' '}
-                  {definitionsPagination.total}
-                </p>
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-gray-400">
+                    Page {definitionsPagination.page} of {definitionsPagination.totalPages || 1}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-400">Show:</span>
+                    <select
+                      value={definitionsPageSize}
+                      onChange={(e) => {
+                        const newSize = Number(e.target.value);
+                        setDefinitionsPageSize(newSize);
+                        fetchDefinitions(1, newSize);
+                      }}
+                      className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                    >
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={250}>250</option>
+                    </select>
+                    <span className="text-sm text-gray-400">per page</span>
+                  </div>
+                </div>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => fetchDefinitions(1)}
+                    onClick={() => fetchDefinitions(1, definitionsPageSize)}
                     disabled={definitionsPagination.page <= 1}
-                    className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
-                    title="First page"
+                    className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 text-sm disabled:opacity-50"
                   >
-                    <ChevronsLeft className="h-4 w-4 text-gray-400" />
+                    First
                   </button>
                   <button
-                    onClick={() => fetchDefinitions(definitionsPagination.page - 1)}
+                    onClick={() => fetchDefinitions(definitionsPagination.page - 1, definitionsPageSize)}
                     disabled={definitionsPagination.page <= 1}
                     className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
                     title="Previous page"
@@ -700,10 +887,10 @@ export default function AchievementsAdminPage() {
                     <ChevronLeft className="h-4 w-4 text-gray-400" />
                   </button>
                   <span className="text-gray-400 text-sm px-2">
-                    {definitionsPagination.page} / {definitionsPagination.totalPages}
+                    {definitionsPagination.page}
                   </span>
                   <button
-                    onClick={() => fetchDefinitions(definitionsPagination.page + 1)}
+                    onClick={() => fetchDefinitions(definitionsPagination.page + 1, definitionsPageSize)}
                     disabled={definitionsPagination.page >= definitionsPagination.totalPages}
                     className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
                     title="Next page"
@@ -711,16 +898,15 @@ export default function AchievementsAdminPage() {
                     <ChevronRight className="h-4 w-4 text-gray-400" />
                   </button>
                   <button
-                    onClick={() => fetchDefinitions(definitionsPagination.totalPages)}
+                    onClick={() => fetchDefinitions(definitionsPagination.totalPages, definitionsPageSize)}
                     disabled={definitionsPagination.page >= definitionsPagination.totalPages}
-                    className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
-                    title="Last page"
+                    className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 text-sm disabled:opacity-50"
                   >
-                    <ChevronsRight className="h-4 w-4 text-gray-400" />
+                    Last
                   </button>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -753,6 +939,18 @@ export default function AchievementsAdminPage() {
                   ))}
                 </select>
 
+                {/* Group Filter */}
+                <select
+                  value={recipientFilters.group_name}
+                  onChange={(e) => setRecipientFilters({ ...recipientFilters, group_name: e.target.value })}
+                  className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white min-w-[180px]"
+                >
+                  <option value="">All Groups</option>
+                  {uniqueGroups.map((group) => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
+
                 {/* Season Filter */}
                 <select
                   value={recipientFilters.season_id}
@@ -766,9 +964,9 @@ export default function AchievementsAdminPage() {
                 </select>
 
                 {/* Clear Filters */}
-                {(recipientFilters.search || recipientFilters.achievement_id || recipientFilters.season_id) && (
+                {(recipientFilters.search || recipientFilters.achievement_id || recipientFilters.season_id || recipientFilters.group_name) && (
                   <button
-                    onClick={() => setRecipientFilters({ achievement_id: '', season_id: '', search: '' })}
+                    onClick={() => setRecipientFilters({ achievement_id: '', season_id: '', search: '', group_name: '' })}
                     className="px-3 py-2 text-gray-400 hover:text-white"
                   >
                     Clear
@@ -792,22 +990,27 @@ export default function AchievementsAdminPage() {
                 <table className="w-full">
                   <thead className="bg-slate-700">
                     <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Group</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Achievement</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Event</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">MECA ID</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Value</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Earned</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Image</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Actions</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-300">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
                     {recipients.map((recipient) => (
                       <tr key={recipient.id} className="hover:bg-slate-700/50">
                         <td className="px-4 py-3">
+                          <span className="text-gray-400 text-sm">{recipient.achievement?.group_name || '-'}</span>
+                        </td>
+                        <td className="px-4 py-3">
                           <p className="text-white font-medium">{recipient.achievement?.name}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-300">{recipient.profile_name || 'N/A'}</td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">{recipient.event_name || '-'}</td>
                         <td className="px-4 py-3 text-gray-300 font-mono">{recipient.meca_id || 'N/A'}</td>
                         <td className="px-4 py-3">
                           <span className="text-orange-400 font-mono">
@@ -818,32 +1021,13 @@ export default function AchievementsAdminPage() {
                         <td className="px-4 py-3 text-gray-300">
                           {new Date(recipient.achieved_at).toLocaleDateString()}
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          {recipient.image_url ? (
-                            <button
-                              onClick={() => setPreviewImage(recipient.image_url)}
-                              className="text-orange-400 hover:text-orange-300"
-                              title="View image"
-                            >
-                              <Eye className="h-4 w-4 inline" />
-                            </button>
-                          ) : (
-                            <span className="text-gray-500 text-sm">No image</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-right">
                           <button
-                            onClick={() => handleRegenerateImage(recipient.id)}
-                            disabled={regeneratingId === recipient.id}
-                            className="text-yellow-500 hover:text-yellow-400 flex items-center gap-1 mx-auto disabled:opacity-50"
-                            title="Regenerate image"
+                            onClick={() => openDeleteConfirm(recipient)}
+                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                            title="Remove award"
                           >
-                            {regeneratingId === recipient.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <RotateCcw className="h-4 w-4" />
-                            )}
-                            <span className="text-xs">Retry</span>
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </td>
                       </tr>
@@ -853,24 +1037,40 @@ export default function AchievementsAdminPage() {
               )}
 
               {/* Pagination */}
-              {recipientsPagination.totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700">
-                  <p className="text-sm text-gray-400">
-                    Showing {(recipientsPagination.page - 1) * recipientsPagination.limit + 1} to{' '}
-                    {Math.min(recipientsPagination.page * recipientsPagination.limit, recipientsPagination.total)} of{' '}
-                    {recipientsPagination.total}
-                  </p>
+                  <div className="flex items-center gap-4">
+                    <p className="text-sm text-gray-400">
+                      Page {recipientsPagination.page} of {recipientsPagination.totalPages || 1}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-400">Show:</span>
+                      <select
+                        value={recipientsPageSize}
+                        onChange={(e) => {
+                          const newSize = Number(e.target.value);
+                          setRecipientsPageSize(newSize);
+                          fetchRecipients(1, newSize);
+                        }}
+                        className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={250}>250</option>
+                      </select>
+                      <span className="text-sm text-gray-400">per page</span>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => fetchRecipients(1)}
+                      onClick={() => fetchRecipients(1, recipientsPageSize)}
                       disabled={recipientsPagination.page <= 1}
-                      className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
-                      title="First page"
+                      className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 text-sm disabled:opacity-50"
                     >
-                      <ChevronsLeft className="h-4 w-4 text-gray-400" />
+                      First
                     </button>
                     <button
-                      onClick={() => fetchRecipients(recipientsPagination.page - 1)}
+                      onClick={() => fetchRecipients(recipientsPagination.page - 1, recipientsPageSize)}
                       disabled={recipientsPagination.page <= 1}
                       className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
                       title="Previous page"
@@ -878,10 +1078,10 @@ export default function AchievementsAdminPage() {
                       <ChevronLeft className="h-4 w-4 text-gray-400" />
                     </button>
                     <span className="text-gray-400 text-sm px-2">
-                      {recipientsPagination.page} / {recipientsPagination.totalPages}
+                      {recipientsPagination.page}
                     </span>
                     <button
-                      onClick={() => fetchRecipients(recipientsPagination.page + 1)}
+                      onClick={() => fetchRecipients(recipientsPagination.page + 1, recipientsPageSize)}
                       disabled={recipientsPagination.page >= recipientsPagination.totalPages}
                       className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
                       title="Next page"
@@ -889,16 +1089,14 @@ export default function AchievementsAdminPage() {
                       <ChevronRight className="h-4 w-4 text-gray-400" />
                     </button>
                     <button
-                      onClick={() => fetchRecipients(recipientsPagination.totalPages)}
+                      onClick={() => fetchRecipients(recipientsPagination.totalPages, recipientsPageSize)}
                       disabled={recipientsPagination.page >= recipientsPagination.totalPages}
-                      className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-50"
-                      title="Last page"
+                      className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 text-sm disabled:opacity-50"
                     >
-                      <ChevronsRight className="h-4 w-4 text-gray-400" />
+                      Last
                     </button>
                   </div>
                 </div>
-              )}
             </div>
           </div>
         )}
@@ -1155,28 +1353,335 @@ export default function AchievementsAdminPage() {
           </div>
         )}
 
-        {/* Image Preview Modal */}
-        {previewImage && (
-          <div
-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-            onClick={() => setPreviewImage(null)}
-          >
-            <div className="relative max-w-md" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => setPreviewImage(null)}
-                className="absolute -top-10 right-0 p-2 text-white hover:text-orange-400"
-              >
-                <X className="h-6 w-6" />
-              </button>
-              <img
-                src={previewImage}
-                alt="Achievement"
-                className="max-w-full h-auto rounded-lg shadow-2xl"
-                style={{ maxHeight: '400px' }}
-              />
+        {/* Re-check Results Modal */}
+        {showRecheckModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl max-w-md w-full">
+              <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-orange-500" />
+                  Re-check Results
+                </h2>
+                <button
+                  onClick={() => setShowRecheckModal(false)}
+                  className="p-2 hover:bg-slate-700 rounded-lg text-gray-400 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-gray-400 text-sm">
+                  Select a time frame to re-check competition results and award any missing achievements.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="timeframe"
+                      value="30days"
+                      checked={recheckTimeframe === '30days'}
+                      onChange={(e) => setRecheckTimeframe(e.target.value as typeof recheckTimeframe)}
+                      className="text-orange-500 focus:ring-orange-500"
+                    />
+                    <span className="text-white">Last 30 days</span>
+                    <span className="text-gray-500 text-sm ml-auto">(Recommended)</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="timeframe"
+                      value="90days"
+                      checked={recheckTimeframe === '90days'}
+                      onChange={(e) => setRecheckTimeframe(e.target.value as typeof recheckTimeframe)}
+                      className="text-orange-500 focus:ring-orange-500"
+                    />
+                    <span className="text-white">Last 90 days</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="timeframe"
+                      value="thisYear"
+                      checked={recheckTimeframe === 'thisYear'}
+                      onChange={(e) => setRecheckTimeframe(e.target.value as typeof recheckTimeframe)}
+                      className="text-orange-500 focus:ring-orange-500"
+                    />
+                    <span className="text-white">This year ({new Date().getFullYear()})</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="timeframe"
+                      value="custom"
+                      checked={recheckTimeframe === 'custom'}
+                      onChange={(e) => setRecheckTimeframe(e.target.value as typeof recheckTimeframe)}
+                      className="text-orange-500 focus:ring-orange-500"
+                    />
+                    <span className="text-white">Custom date range</span>
+                  </label>
+
+                  {recheckTimeframe === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3 pl-8 mt-2">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          value={recheckCustomStart}
+                          onChange={(e) => setRecheckCustomStart(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">End Date</label>
+                        <input
+                          type="date"
+                          value={recheckCustomEnd}
+                          onChange={(e) => setRecheckCustomEnd(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="timeframe"
+                      value="all"
+                      checked={recheckTimeframe === 'all'}
+                      onChange={(e) => setRecheckTimeframe(e.target.value as typeof recheckTimeframe)}
+                      className="text-orange-500 focus:ring-orange-500"
+                    />
+                    <span className="text-white">All time</span>
+                    <span className="text-yellow-500 text-sm ml-auto">(May take a while)</span>
+                  </label>
+                </div>
+              </div>
+              <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowRecheckModal(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBackfill}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Start Re-check
+                </button>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Manual Award Modal */}
+        {showManualAwardModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Gift className="h-5 w-5 text-green-500" />
+                  Manual Award Achievement
+                </h2>
+                <button
+                  onClick={() => setShowManualAwardModal(false)}
+                  className="p-2 hover:bg-slate-700 rounded-lg text-gray-400 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-gray-400 text-sm">
+                  Manually award an achievement to an active member. Only members with active memberships can receive achievements.
+                </p>
+
+                {/* Achievement Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Achievement <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={manualAwardData.achievement_id}
+                    onChange={(e) => handleAchievementSelect(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                  >
+                    <option value="">Select an achievement...</option>
+                    {definitions.map((def) => (
+                      <option key={def.id} value={def.id}>
+                        {def.name} ({def.group_name || def.competition_type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Profile Selection */}
+                {manualAwardData.achievement_id && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Member <span className="text-red-400">*</span>
+                    </label>
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search by name, MECA ID, or email..."
+                          value={profileSearch}
+                          onChange={(e) => handleProfileSearch(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400"
+                        />
+                      </div>
+                      {loadingProfiles ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
+                        </div>
+                      ) : eligibleProfiles.length === 0 ? (
+                        <p className="text-gray-500 text-sm py-2">
+                          {profileSearch ? 'No matching members found' : 'No eligible members for this achievement'}
+                        </p>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto border border-slate-600 rounded-lg divide-y divide-slate-700">
+                          {eligibleProfiles.map((profile) => (
+                            <button
+                              key={profile.id}
+                              onClick={() => setManualAwardData(prev => ({ ...prev, profile_id: profile.id }))}
+                              className={`w-full px-3 py-2 text-left hover:bg-slate-700 transition-colors ${
+                                manualAwardData.profile_id === profile.id ? 'bg-orange-500/20 border-l-2 border-orange-500' : ''
+                              }`}
+                            >
+                              <p className="text-white font-medium">{profile.name}</p>
+                              <p className="text-gray-400 text-sm">
+                                MECA ID: {profile.meca_id} • {profile.email}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Achieved Value */}
+                {manualAwardData.profile_id && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Achieved Value <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={manualAwardData.achieved_value}
+                      onChange={(e) => setManualAwardData(prev => ({ ...prev, achieved_value: e.target.value }))}
+                      placeholder="e.g., 155.5"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400"
+                    />
+                    <p className="text-gray-500 text-xs mt-1">
+                      The score or points value for this achievement
+                    </p>
+                  </div>
+                )}
+
+                {/* Notes */}
+                {manualAwardData.profile_id && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Notes (optional)
+                    </label>
+                    <textarea
+                      value={manualAwardData.notes}
+                      onChange={(e) => setManualAwardData(prev => ({ ...prev, notes: e.target.value }))}
+                      placeholder="Reason for manual award..."
+                      rows={2}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 resize-none"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowManualAwardModal(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleManualAward}
+                  disabled={!manualAwardData.achievement_id || !manualAwardData.profile_id || !manualAwardData.achieved_value || awardingManual}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {awardingManual ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Gift className="h-4 w-4" />
+                  )}
+                  Award Achievement
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && recipientToDelete && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4 border border-slate-700">
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center">
+                    <Trash2 className="h-5 w-5 text-red-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Remove Achievement Award</h3>
+                </div>
+                <p className="text-gray-300 mb-2">
+                  Are you sure you want to remove this achievement award?
+                </p>
+                <div className="bg-slate-700/50 rounded-lg p-3 mb-4">
+                  <p className="text-white font-medium">{recipientToDelete.achievement?.name}</p>
+                  <p className="text-gray-400 text-sm">
+                    Awarded to: {recipientToDelete.profile_name || 'Unknown'} (MECA ID: {recipientToDelete.meca_id || 'N/A'})
+                  </p>
+                  <p className="text-orange-400 text-sm font-mono">
+                    Value: {recipientToDelete.achieved_value} {recipientToDelete.achievement?.metric_type === 'score' ? 'dB' : 'pts'}
+                  </p>
+                </div>
+                <p className="text-red-400 text-sm">
+                  This action cannot be undone. The achievement image will also be deleted.
+                </p>
+              </div>
+              <div className="p-4 border-t border-slate-700 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setRecipientToDelete(null);
+                  }}
+                  disabled={deletingRecipient}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteRecipient}
+                  disabled={deletingRecipient}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
+                >
+                  {deletingRecipient ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Remove Award
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

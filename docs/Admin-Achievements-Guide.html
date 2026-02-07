@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Guide: Achievement System - MECA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Achievement System</h1>
+    <p class="subtitle">Admin Guide for Managing Achievements, Definitions, and Templates</p>
+
+    <div class="toc">
+        <h3>Table of Contents</h3>
+        <ul>
+            <li><a href="#overview">1. System Overview</a></li>
+            <li><a href="#key-concepts">2. Key Concepts</a></li>
+            <li><a href="#business-logic">3. Business Logic (Auto-Award)</a></li>
+            <li><a href="#competition-types">4. Competition Types</a></li>
+            <li><a href="#creating-definitions">5. Creating Achievement Definitions</a></li>
+            <li><a href="#templates">6. Achievement Templates</a></li>
+            <li><a href="#image-display">7. Image Display System</a></li>
+            <li><a href="#admin-tools">8. Admin Tools</a></li>
+            <li><a href="#troubleshooting">9. Troubleshooting</a></li>
+        </ul>
+    </div>
+
+    <h2 id="overview">1. System Overview</h2>
+
+    <div class="workflow-container">
+        <p>The MECA Achievement System automatically awards digital badges to competitors when they reach specific score thresholds in competitions. These "dB Club" and "Points Club" achievements are displayed on member profiles and dashboards.</p>
+        <ol>
+            <li>Admin creates <strong>Achievement Definitions</strong> with thresholds (e.g., "130+ dB Club")</li>
+            <li>When competition results are entered, the system checks if scores qualify</li>
+            <li>Qualifying members automatically receive <strong>Achievement Recipients</strong> records</li>
+            <li>Achievements display on member dashboards with dynamically overlaid scores</li>
+        </ol>
+    </div>
+
+    <h3>Admin Page Location</h3>
+    <div class="nav-path">/admin/achievements</div>
+
+    <h2 id="key-concepts">2. Key Concepts</h2>
+
+    <h3>Achievement Definitions</h3>
+    <div class="workflow-container">
+        <p>The rules that define when an achievement is earned. Each definition specifies:</p>
+        <ul>
+            <li><strong>Name</strong> - Display name (e.g., "150+dB Club")</li>
+            <li><strong>Competition Type</strong> - Which competition format it applies to</li>
+            <li><strong>Threshold Value</strong> - Minimum score required</li>
+            <li><strong>Format</strong> - SPL (decibels) or SQL (points)</li>
+            <li><strong>Template Key</strong> - Links to the image template</li>
+            <li><strong>Group Name</strong> - Groups related achievements (e.g., "dB Clubs - CATH")</li>
+        </ul>
+    </div>
+
+    <h3>Achievement Recipients</h3>
+    <div class="workflow-container">
+        <p>Records of members who have earned achievements. Contains:</p>
+        <ul>
+            <li>Link to the achievement definition</li>
+            <li>Link to the member's profile</li>
+            <li>The actual score achieved</li>
+            <li>The competition result that triggered the award</li>
+            <li>Date earned</li>
+        </ul>
+    </div>
+
+    <h3>Achievement Templates</h3>
+    <div class="workflow-container">
+        <p>Image templates that define how achievements are displayed:</p>
+        <ul>
+            <li><strong>Base Image</strong> - The background template image</li>
+            <li><strong>Text Position (X, Y)</strong> - Where the score number is overlaid</li>
+            <li><strong>Font Size</strong> - Size of the overlaid score text</li>
+            <li><strong>Text Color</strong> - Color of the overlaid text (default: #CC0F00)</li>
+        </ul>
+    </div>
+
+    <h2 id="business-logic">3. Business Logic (Auto-Award)</h2>
+
+    <div class="info-box warning">
+        <h4>Key Rule: One Achievement Per Group</h4>
+        <p>A member can only hold <strong>ONE achievement per competition type group</strong>. If they already have a 130+ dB Club and then score 145 dB, the system:</p>
+        <ol style="margin-left: 20px; margin-top: 10px;">
+            <li>Removes the old 130+ achievement</li>
+            <li>Awards the new 145+ achievement</li>
+        </ol>
+        <p style="margin-top: 10px;">This prevents members from having multiple "dB Club" badges for the same competition type.</p>
+    </div>
+
+    <h3>Award Logic Flow</h3>
+    <div class="flow-diagram">
+Competition Result Entered
+        |
+        v
+Check if competitor has linked profile
+        |
+        v
+Get all active achievement definitions
+        |
+        v
+For each competition type group:
+    |
+    v
+    Does result match competition type?
+        | YES
+        v
+    Find HIGHEST threshold score qualifies for
+    (e.g., 153.4 dB qualifies for 150+, not 155+)
+        |
+        v
+    Does member already have achievement in this group?
+        | YES                    | NO
+        v                        v
+    Is new threshold HIGHER?     Award achievement
+        | YES      | NO
+        v          v
+    Upgrade!    Skip (keep existing)</div>
+
+    <h3>Threshold Matching</h3>
+    <div class="workflow-container">
+        <p>The system uses <strong>"rounded down"</strong> matching:</p>
+        <ul>
+            <li>Score of <code>153.4 dB</code> with thresholds [150, 155, 160] &rarr; Awards <code>150+</code></li>
+            <li>Score of <code>155.0 dB</code> with thresholds [150, 155, 160] &rarr; Awards <code>155+</code></li>
+            <li>Score of <code>149.9 dB</code> with thresholds [150, 155, 160] &rarr; No award</li>
+        </ul>
+    </div>
+
+    <h2 id="competition-types">4. Competition Types</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Competition Type</th>
+                <th>Format</th>
+                <th>Metric</th>
+                <th>Template</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Certified at the Headrest (CATH)</td>
+                <td><span class="status-badge badge-red">SPL</span></td>
+                <td>Decibels (dB)</td>
+                <td>certified-at-the-headrest.v1</td>
+            </tr>
+            <tr>
+                <td>Radical X</td>
+                <td><span class="status-badge badge-red">SPL</span></td>
+                <td>Decibels (dB)</td>
+                <td>radicalx.v1</td>
+            </tr>
+            <tr>
+                <td>Park and Pound</td>
+                <td><span class="status-badge badge-red">SPL</span></td>
+                <td>Decibels (dB)</td>
+                <td>park-pound.v1</td>
+            </tr>
+            <tr>
+                <td>Certified Sound</td>
+                <td><span class="status-badge badge-blue">SQL</span></td>
+                <td>Points</td>
+                <td>certified-sound.v1</td>
+            </tr>
+            <tr>
+                <td>Dueling Demos</td>
+                <td><span class="status-badge badge-blue">SQL</span></td>
+                <td>Points</td>
+                <td>dueling-demos.v1</td>
+            </tr>
+            <tr>
+                <td>Dueling Demos - Certified 360 Sound</td>
+                <td><span class="status-badge badge-blue">SQL</span></td>
+                <td>Points</td>
+                <td>dueling-demos.certified-360-sound.v1</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Competition Type Matching</h3>
+    <div class="workflow-container">
+        <p>The system matches competition results to achievement definitions using class filters:</p>
+        <ul>
+            <li><strong>Radical X</strong> - Class contains "radical"</li>
+            <li><strong>Park and Pound</strong> - Class contains "park" AND "pound"</li>
+            <li><strong>Dueling Demos C360S</strong> - Class contains "360" or "c360"</li>
+            <li><strong>Dueling Demos</strong> - Class contains "duel" or "demo" (but NOT 360)</li>
+            <li><strong>Certified Sound</strong> - Class contains "install" OR format is SQL</li>
+            <li><strong>CATH</strong> - Default for SPL classes that don't match above</li>
+        </ul>
+    </div>
+
+    <h2 id="creating-definitions">5. Creating Achievement Definitions</h2>
+
+    <p>Follow these steps to add a new dB Club tier or achievement definition.</p>
+
+    <div class="workflow-container">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <div class="step-title">Navigate to Achievements Admin</div>
+                <div class="step-details">
+                    Go to <code>/admin/achievements</code>
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <div class="step-title">Click "Create Definition"</div>
+                <div class="step-details">
+                    Button is in the top right of the Definitions tab
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <div class="step-title">Fill in the Form</div>
+                <div class="step-details">
+                    Complete all required fields (see table below)
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <div class="step-title">Click "Create"</div>
+                <div class="step-details">
+                    The definition is now active and will be checked when results are entered
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h3>Definition Form Fields</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>Example Value</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Name</td>
+                <td><code>145+dB Club</code></td>
+                <td>Display name shown to members</td>
+            </tr>
+            <tr>
+                <td>Description</td>
+                <td><code>Achieved 145+ dB in CATH competition</code></td>
+                <td>Optional description</td>
+            </tr>
+            <tr>
+                <td>Group Name</td>
+                <td><code>dB Clubs - CATH</code></td>
+                <td>Groups achievements (one per group per member)</td>
+            </tr>
+            <tr>
+                <td>Competition Type</td>
+                <td><code>Certified at the Headrest</code></td>
+                <td>Select from dropdown</td>
+            </tr>
+            <tr>
+                <td>Format</td>
+                <td><code>SPL</code></td>
+                <td>SPL for decibels, SQL for points</td>
+            </tr>
+            <tr>
+                <td>Metric Type</td>
+                <td><code>Score</code></td>
+                <td>Usually "Score"</td>
+            </tr>
+            <tr>
+                <td>Threshold Value</td>
+                <td><code>145</code></td>
+                <td>Minimum score to qualify</td>
+            </tr>
+            <tr>
+                <td>Threshold Operator</td>
+                <td><code>&gt;=</code></td>
+                <td>Usually "&gt;=" (greater than or equal)</td>
+            </tr>
+            <tr>
+                <td>Template Key</td>
+                <td><code>certified-at-the-headrest.v1</code></td>
+                <td>Must match an existing template</td>
+            </tr>
+            <tr>
+                <td>Render Value</td>
+                <td><code>145</code></td>
+                <td>Number displayed on badge (usually same as threshold)</td>
+            </tr>
+            <tr>
+                <td>Is Active</td>
+                <td><code>Yes</code></td>
+                <td>Must be active to award</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="info-box success">
+        <h4>Existing Threshold Tiers</h4>
+        <p><strong>SPL (dB) Thresholds:</strong> 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195</p>
+        <p style="margin-bottom: 0;"><strong>SQL (Points) Thresholds:</strong> 65, 70, 75, 80, 85, 90, 95</p>
+    </div>
+
+    <h3>Adding a New Competition Type</h3>
+    <div class="workflow-container">
+        <p>If you need to add achievements for a completely new competition type:</p>
+        <ol>
+            <li>Create a new <strong>Template</strong> with appropriate base image and text positioning</li>
+            <li>Add the competition type to the <code>AchievementCompetitionType</code> enum in <code>packages/shared/src/schemas/achievements.schema.ts</code></li>
+            <li>Update the <code>matchesCompetitionType()</code> function in the backend service if needed</li>
+            <li>Create achievement definitions for each threshold tier</li>
+        </ol>
+    </div>
+
+    <h2 id="templates">6. Achievement Templates</h2>
+
+    <h3>Template Storage</h3>
+    <div class="workflow-container">
+        <p>Template images are stored in Supabase Storage:</p>
+        <div class="nav-path">achievement-images/templates/{filename}.png</div>
+    </div>
+
+    <h3>Current Templates</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Template Key</th>
+                <th>Image File</th>
+                <th>Text X</th>
+                <th>Text Y</th>
+                <th>Font Size</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>certified-at-the-headrest.v1</td>
+                <td>v1.cath.png</td>
+                <td>110</td>
+                <td>1350</td>
+                <td>700</td>
+            </tr>
+            <tr>
+                <td>radicalx.v1</td>
+                <td>v1.radx.png</td>
+                <td>110</td>
+                <td>1350</td>
+                <td>700</td>
+            </tr>
+            <tr>
+                <td>park-pound.v1</td>
+                <td>v1.pp.png</td>
+                <td>110</td>
+                <td>1350</td>
+                <td>700</td>
+            </tr>
+            <tr>
+                <td>certified-sound.v1</td>
+                <td>v1.cs.png</td>
+                <td>110</td>
+                <td>1350</td>
+                <td>700</td>
+            </tr>
+            <tr>
+                <td>dueling-demos.v1</td>
+                <td>v1.dd.png</td>
+                <td>110</td>
+                <td>1350</td>
+                <td>700</td>
+            </tr>
+            <tr>
+                <td>dueling-demos.certified-360-sound.v1</td>
+                <td>v1.dd.c360s.png</td>
+                <td>40</td>
+                <td>640</td>
+                <td>250</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Adding a New Template</h3>
+    <div class="workflow-container">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <div class="step-title">Create the Base Image</div>
+                <div class="step-details">
+                    Recommended size: 1000x1500px. Leave a blank area where the score number will be overlaid.
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <div class="step-title">Upload to Storage</div>
+                <div class="step-details">
+                    Upload to Supabase Storage: <code>achievement-images/templates/</code>
+                </div>
+            </div>
+            <div class="connector"></div>
+        </div>
+
+        <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <div class="step-title">Create Template Record</div>
+                <div class="step-details">
+                    Insert a record into the <code>achievement_templates</code> table with:
+                    <ul>
+                        <li><code>key</code> - Unique identifier (e.g., "new-competition.v1")</li>
+                        <li><code>name</code> - Display name</li>
+                        <li><code>base_image_path</code> - Filename in storage</li>
+                        <li><code>text_x</code>, <code>text_y</code> - Pixel coordinates for text baseline</li>
+                        <li><code>font_size</code> - Font size in pixels (at original image scale)</li>
+                        <li><code>text_color</code> - Hex color (default: #CC0F00)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h2 id="image-display">7. Image Display System</h2>
+
+    <div class="info-box">
+        <h4>CSS Overlay Approach</h4>
+        <p>Achievement images use <strong>dynamic CSS overlay</strong> rather than pre-generated images:</p>
+        <ul style="margin-left: 20px; margin-top: 10px;">
+            <li><strong>Storage Efficient</strong> - Only 6 template images instead of thousands of per-recipient images</li>
+            <li><strong>Dynamic</strong> - Score values rendered in real-time via CSS</li>
+            <li><strong>Responsive</strong> - Text scales correctly at any display size</li>
+            <li><strong>Maintainable</strong> - Update template once, affects all achievements</li>
+        </ul>
+    </div>
+
+    <h3>How It Works</h3>
+    <div class="workflow-container">
+        <ol>
+            <li>Backend returns achievement data with template positioning info</li>
+            <li>Frontend loads the base template image</li>
+            <li>CSS absolutely positions a <code>&lt;span&gt;</code> with the score value</li>
+            <li>Position and font size scale proportionally with rendered image size</li>
+        </ol>
+    </div>
+
+    <h3>Key Frontend Component</h3>
+    <div class="nav-path">apps/frontend/src/achievements/components/AchievementImage.tsx</div>
+    <div class="workflow-container">
+        <p>This component handles:</p>
+        <ul>
+            <li>Loading template base images</li>
+            <li>Calculating scaled positions based on rendered image size</li>
+            <li>Handling <code>object-contain</code> centering offsets</li>
+            <li>Rendering the score overlay with Impact font</li>
+        </ul>
+    </div>
+
+    <h2 id="admin-tools">8. Admin Tools</h2>
+
+    <h3>Re-check Results</h3>
+    <div class="workflow-container">
+        <p>Re-processes competition results to award any missing achievements. Click the button to open the time frame selector:</p>
+        <div class="nav-path">/admin/achievements &rarr; Click "Re-check Results"</div>
+
+        <p style="margin-top: 15px;"><strong>Time Frame Options:</strong></p>
+        <ul>
+            <li><strong>Last 30 days</strong> (Recommended) - Fast, covers recent events</li>
+            <li><strong>Last 90 days</strong> - Covers a full season</li>
+            <li><strong>This year</strong> - All results from the current year</li>
+            <li><strong>Custom date range</strong> - Specify exact start/end dates</li>
+            <li><strong>All time</strong> - Processes entire database (may take a while)</li>
+        </ul>
+
+        <p style="margin-top: 15px;"><strong>Progress Indicator:</strong></p>
+        <p>During the re-check, you'll see a real-time progress bar showing:</p>
+        <ul>
+            <li>Percentage complete</li>
+            <li>Number of results processed vs total</li>
+            <li>Number of achievements awarded</li>
+        </ul>
+
+        <p style="margin-top: 15px;"><strong>Use this after:</strong></p>
+        <ul>
+            <li>Adding new achievement definitions</li>
+            <li>Changing threshold values</li>
+            <li>Fixing bugs in the award logic</li>
+        </ul>
+    </div>
+
+    <h3>Check Specific Result</h3>
+    <div class="workflow-container">
+        <p>Manually trigger achievement check for a single competition result:</p>
+        <div class="nav-path">POST /api/achievements/admin/check-result/{resultId}</div>
+    </div>
+
+    <h3>View Recipients</h3>
+    <div class="workflow-container">
+        <p>See all members who have earned a specific achievement:</p>
+        <div class="nav-path">/admin/achievements &rarr; Recipients tab &rarr; Filter by achievement</div>
+    </div>
+
+    <h2 id="troubleshooting">9. Troubleshooting</h2>
+
+    <h3>Member didn't receive expected achievement</h3>
+    <div class="info-box">
+        <h4>Check the following:</h4>
+        <ol style="margin-left: 20px; margin-top: 10px;">
+            <li>Is the achievement definition <strong>active</strong>?</li>
+            <li>Does the member have a <strong>linked profile</strong> in the competition result?</li>
+            <li>Does the result's <strong>competition class</strong> match the achievement's competition type?</li>
+            <li>Is the score <strong>at or above</strong> the threshold?</li>
+            <li>Does the member already have a <strong>higher achievement</strong> in the same group?</li>
+        </ol>
+    </div>
+
+    <h3>Achievement image not displaying score</h3>
+    <div class="info-box warning">
+        <h4>Check the following:</h4>
+        <ol style="margin-left: 20px; margin-top: 10px;">
+            <li>Does the achievement definition have a valid <code>template_key</code>?</li>
+            <li>Does the template exist in <code>achievement_templates</code> table?</li>
+            <li>Is the template image uploaded to <code>achievement-images/templates/</code>?</li>
+            <li>Are <code>text_x</code>, <code>text_y</code>, <code>font_size</code> set on the template?</li>
+        </ol>
+    </div>
+
+    <h3>Score position is wrong on image</h3>
+    <div class="info-box">
+        <h4>Adjust Template Coordinates</h4>
+        <p>The template's <code>text_x</code>, <code>text_y</code>, <code>font_size</code> values may need adjustment:</p>
+        <ul style="margin-left: 20px; margin-top: 10px;">
+            <li><code>text_x</code> - Pixels from left edge (at original image size)</li>
+            <li><code>text_y</code> - Pixels from top edge, measured to text <strong>baseline</strong></li>
+            <li><code>font_size</code> - Font size in pixels (at original image size)</li>
+        </ul>
+        <p style="margin-top: 10px;">Update these values in the <code>achievement_templates</code> table and refresh.</p>
+    </div>
+
+    <h3>Wrong member received achievement</h3>
+    <div class="info-box warning">
+        <h4>Verify Result Linking</h4>
+        <p>Check if the competition result is linked to the correct profile:</p>
+        <ol style="margin-left: 20px; margin-top: 10px;">
+            <li>Go to <code>/admin/results/{eventId}</code></li>
+            <li>Find the result and check the "Competitor" column</li>
+            <li>Verify it's linked to the correct member profile</li>
+        </ol>
+    </div>
+
+    <footer>
+        <p>MECA Competition System - Admin Achievement System Guide</p>
+        <p style="font-size: 0.9rem; margin-top: 5px;">Last Updated: February 2026</p>
+    </footer>
+</body>
+</html>

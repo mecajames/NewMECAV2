@@ -4,7 +4,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
-import { Navbar, Footer, ScrollToTop, ImpersonationBanner } from '@/shared/components';
+import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
 // Static pages
 import HomePage from '@/pages/HomePage';
 import ContactPage from '@/pages/ContactPage';
@@ -79,6 +79,7 @@ const PageLoader = () => (
 function App() {
   return (
     <HelmetProvider>
+      <StagingNoIndex />
       <AuthProvider>
         <SiteSettingsProvider>
           <SeasonsProvider>

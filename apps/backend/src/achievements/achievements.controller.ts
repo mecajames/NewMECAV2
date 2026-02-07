@@ -11,7 +11,10 @@ import {
   Headers,
   UnauthorizedException,
   ForbiddenException,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { AchievementsService } from './achievements.service';
 import { AchievementImageService } from './image-generator/achievement-image.service';
@@ -183,12 +186,101 @@ export class AchievementsController {
   }
 
   /**
+   * Delete an achievement recipient (admin)
+   * Removes the award from the member and deletes any associated image
+   */
+  @Delete('admin/recipients/:id')
+  async deleteRecipient(
+    @Headers('authorization') authHeader: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.achievementsService.deleteRecipient(id);
+  }
+
+  /**
    * Trigger backfill of achievements for existing results (admin)
+   * Supports optional date filtering via query params
    */
   @Post('admin/backfill')
-  async triggerBackfill(@Headers('authorization') authHeader: string) {
+  async triggerBackfill(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDateStr?: string,
+    @Query('endDate') endDateStr?: string,
+  ) {
     await this.requireAdmin(authHeader);
-    return this.achievementsService.backfillAchievements();
+
+    const options: { startDate?: Date; endDate?: Date } = {};
+    if (startDateStr) {
+      options.startDate = new Date(startDateStr);
+    }
+    if (endDateStr) {
+      options.endDate = new Date(endDateStr);
+    }
+
+    return this.achievementsService.backfillAchievements(options);
+  }
+
+  /**
+   * Stream backfill progress via Server-Sent Events (admin)
+   * Returns real-time progress updates during the re-check process
+   * Note: Accepts authorization via query param since EventSource doesn't support headers
+   */
+  @Sse('admin/backfill-stream')
+  backfillStream(
+    @Headers('authorization') authHeader?: string,
+    @Query('authorization') authQuery?: string,
+    @Query('startDate') startDateStr?: string,
+    @Query('endDate') endDateStr?: string,
+  ): Observable<MessageEvent> {
+    const subject = new Subject<MessageEvent>();
+
+    // Use header auth first, fall back to query param (for EventSource)
+    const effectiveAuth = authHeader || authQuery;
+
+    // Run authentication and streaming in background
+    (async () => {
+      try {
+        // Custom auth check that accepts the effective auth
+        if (!effectiveAuth || !effectiveAuth.startsWith('Bearer ')) {
+          throw new UnauthorizedException('No authorization token provided');
+        }
+
+        const token = effectiveAuth.substring(7);
+        const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+        if (error || !user) {
+          throw new UnauthorizedException('Invalid authorization token');
+        }
+
+        const em = this.em.fork();
+        const profile = await em.findOne(Profile, { id: user.id });
+        if (profile?.role !== UserRole.ADMIN) {
+          throw new ForbiddenException('Admin access required');
+        }
+
+        const options: { startDate?: Date; endDate?: Date } = {};
+        if (startDateStr) {
+          options.startDate = new Date(startDateStr);
+        }
+        if (endDateStr) {
+          options.endDate = new Date(endDateStr);
+        }
+
+        const generator = this.achievementsService.backfillAchievementsWithProgress(options);
+
+        for await (const progress of generator) {
+          subject.next({ data: progress } as MessageEvent);
+        }
+
+        subject.complete();
+      } catch (error: any) {
+        subject.next({ data: { type: 'error', message: error.message } } as MessageEvent);
+        subject.complete();
+      }
+    })();
+
+    return subject.asObservable();
   }
 
   /**
@@ -282,5 +374,50 @@ export class AchievementsController {
   async checkAssets(@Headers('authorization') authHeader: string) {
     await this.requireAdmin(authHeader);
     return this.imageService.checkAssets();
+  }
+
+  // =============================================================================
+  // Admin Endpoints - Manual Award
+  // =============================================================================
+
+  /**
+   * Get profiles eligible to receive a specific achievement (admin)
+   * Used for the manual award dropdown
+   */
+  @Get('admin/definitions/:id/eligible-profiles')
+  async getEligibleProfiles(
+    @Headers('authorization') authHeader: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('search') search?: string
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.achievementsService.getEligibleProfilesForAchievement(id, search);
+  }
+
+  /**
+   * Manually award an achievement to a profile (admin)
+   */
+  @Post('admin/manual-award')
+  async manualAwardAchievement(
+    @Headers('authorization') authHeader: string,
+    @Body() dto: {
+      profile_id: string;
+      achievement_id: string;
+      achieved_value: number;
+      notes?: string;
+    }
+  ) {
+    await this.requireAdmin(authHeader);
+    const recipient = await this.achievementsService.manualAwardAchievement(dto);
+    return {
+      success: true,
+      recipient: {
+        id: recipient.id,
+        achievement_name: recipient.achievement?.name,
+        profile_name: recipient.profile ? `${recipient.profile.first_name || ''} ${recipient.profile.last_name || ''}`.trim() : 'Unknown',
+        meca_id: recipient.mecaId,
+        achieved_value: recipient.achievedValue,
+      },
+    };
   }
 }
