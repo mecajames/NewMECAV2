@@ -9,20 +9,20 @@ export default function ContactPage() {
     <>
       <SEOHead {...seoProps} />
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
+      <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-12 sm:py-16 md:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold text-white mb-4">Contact Us</h1>
-          <p className="text-xl text-white/90 max-w-3xl mx-auto">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">Contact Us</h1>
+          <p className="text-base sm:text-lg md:text-xl text-white/90 max-w-3xl mx-auto">
             Have questions or want to get involved? We'd love to hear from you!
           </p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 md:py-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
           {/* Contact Information */}
           <div>
-            <h2 className="text-3xl font-bold text-white mb-6">Get in Touch</h2>
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-4 sm:mb-6">Get in Touch</h2>
             <p className="text-gray-300 mb-8">
               Whether you're a competitor, shop owner, or just curious about MECA events,
               we're here to help. Reach out with any questions, suggestions, or partnership opportunities.
@@ -62,7 +62,7 @@ export default function ContactPage() {
               </p>
               <Link
                 to="/host-event"
-                className="inline-flex items-center px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-sm sm:text-base transition-colors"
               >
                 Host an Event
               </Link>
@@ -110,9 +110,9 @@ export default function ContactPage() {
 
             <Link
               to="/member-support"
-              className="w-full flex items-center justify-center px-6 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="w-full flex items-center justify-center px-4 sm:px-6 py-3 sm:py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-sm sm:text-base transition-colors"
             >
-              <Ticket className="h-5 w-5 mr-2" />
+              <Ticket className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
               Open a Support Ticket
             </Link>
           </div>

@@ -178,20 +178,20 @@ export default function StandingsPage() {
   return (
     <>
       <SEOHead {...seoProps} />
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-4">Competition Standings</h1>
-          <p className="text-gray-400 text-lg">
+          <div className="mb-6 sm:mb-8">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 sm:mb-4">Competition Standings</h1>
+          <p className="text-gray-400 text-sm sm:text-base md:text-lg">
             Point standings aggregated from competition results
           </p>
         </div>
 
         {/* View Mode Tabs */}
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-4 sm:mb-6 flex flex-wrap gap-2">
           <button
             onClick={() => setViewMode('overall')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium text-sm sm:text-base transition-colors ${
               viewMode === 'overall'
                 ? 'bg-orange-500 text-white'
                 : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
@@ -201,7 +201,7 @@ export default function StandingsPage() {
           </button>
           <button
             onClick={() => setViewMode('byFormat')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium text-sm sm:text-base transition-colors ${
               viewMode === 'byFormat'
                 ? 'bg-orange-500 text-white'
                 : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
@@ -211,7 +211,7 @@ export default function StandingsPage() {
           </button>
           <button
             onClick={() => setViewMode('byClass')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium text-sm sm:text-base transition-colors ${
               viewMode === 'byClass'
                 ? 'bg-orange-500 text-white'
                 : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
@@ -222,8 +222,8 @@ export default function StandingsPage() {
         </div>
 
         {/* Filters */}
-        <div className="mb-8 bg-slate-800 rounded-xl p-6">
-          <div className="flex flex-wrap items-center gap-6 mb-6">
+        <div className="mb-6 sm:mb-8 bg-slate-800 rounded-xl p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-4 sm:gap-6 mb-4 sm:mb-6">
             <SeasonSelector
               selectedSeasonId={selectedSeasonId}
               onSeasonChange={setSelectedSeasonId}
@@ -232,10 +232,10 @@ export default function StandingsPage() {
             />
 
             {(viewMode === 'byFormat' || viewMode === 'byClass') && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 text-gray-300">
-                  <Filter className="h-5 w-5 text-orange-500" />
-                  <span className="font-medium">Format:</span>
+                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />
+                  <span className="font-medium text-sm sm:text-base whitespace-nowrap">Format:</span>
                 </div>
                 <select
                   value={selectedFormat}
@@ -243,7 +243,7 @@ export default function StandingsPage() {
                     setSelectedFormat(e.target.value);
                     setSelectedClass(''); // Reset class when format changes
                   }}
-                  className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="px-3 sm:px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
                   {FORMATS.map((fmt) => (
                     <option key={fmt} value={fmt}>{fmt}</option>
@@ -253,15 +253,15 @@ export default function StandingsPage() {
             )}
 
             {viewMode === 'byClass' && classes.length > 0 && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 text-gray-300">
-                  <Users className="h-5 w-5 text-orange-500" />
-                  <span className="font-medium">Class:</span>
+                  <Users className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />
+                  <span className="font-medium text-sm sm:text-base whitespace-nowrap">Class:</span>
                 </div>
                 <select
                   value={selectedClass}
                   onChange={(e) => setSelectedClass(e.target.value)}
-                  className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="px-3 sm:px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
                   {classes.map((cls) => (
                     <option key={cls.className} value={cls.className}>
@@ -273,7 +273,7 @@ export default function StandingsPage() {
             )}
           </div>
 
-          <label className="block text-sm font-medium text-gray-300 mb-3">
+          <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
             Search by Name or MECA ID
           </label>
           <div className="relative">
@@ -441,7 +441,7 @@ export default function StandingsPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-orange-500">*</span>
-                    <span>Only top 5 placements receive points</span>
+                    <span>Only top 5 placements who are active members receive points</span>
                   </li>
                 </ul>
               </div>

@@ -245,12 +245,12 @@ export default function LeaderboardPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <SEOHead {...seoProps} />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-yellow-400 to-orange-600 rounded-full mb-4">
-            <Trophy className="h-10 w-10 text-white" />
+        <div className="text-center mb-8 sm:mb-12">
+          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-r from-yellow-400 to-orange-600 rounded-full mb-4">
+            <Trophy className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
           </div>
-          <h1 className="text-5xl font-bold text-white mb-4">Top 10 Leaderboard</h1>
-          <p className="text-gray-400 text-lg">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">Top 10 Leaderboard</h1>
+          <p className="text-gray-400 text-sm sm:text-base md:text-lg">
             The best competitors based on {rankBy === 'points' ? 'total points earned' : 'highest score achieved'}
           </p>
         </div>

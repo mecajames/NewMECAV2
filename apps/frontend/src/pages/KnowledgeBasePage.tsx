@@ -2,16 +2,16 @@ import { Link } from 'react-router-dom';
 
 export default function KnowledgeBasePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">MECA Knowledge Base</h1>
-          <p className="text-xl text-gray-300">
+        <div className="text-center mb-8 sm:mb-12">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">MECA Knowledge Base</h1>
+          <p className="text-base sm:text-lg md:text-xl text-gray-300">
             Your comprehensive resource for all things MECA
           </p>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-8">
+        <div className="bg-slate-800 rounded-xl p-4 sm:p-6 md:p-8">
           <div className="text-center py-16">
             <div className="inline-flex items-center justify-center w-24 h-24 bg-slate-700 rounded-full mb-6">
               <svg

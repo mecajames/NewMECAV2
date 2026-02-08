@@ -67,12 +67,12 @@ export default function CompetitionGuidesPage() {
         </div>
 
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-500/10 rounded-full mb-4">
-            <BookOpen className="w-8 h-8 text-orange-500" />
+        <div className="text-center mb-8 sm:mb-12">
+          <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-orange-500/10 rounded-full mb-4">
+            <BookOpen className="w-7 h-7 sm:w-8 sm:h-8 text-orange-500" />
           </div>
-          <h1 className="text-4xl font-bold text-white mb-4">Competition Guides</h1>
-          <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Competition Guides</h1>
+          <p className="text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
             Learn about different MECA competition formats, classes, and what to expect at events.
           </p>
         </div>
@@ -132,17 +132,17 @@ export default function CompetitionGuidesPage() {
         </div>
 
         {/* Additional Info */}
-        <div className="mt-12 bg-slate-800 rounded-xl p-8 max-w-4xl mx-auto">
-          <h2 className="text-2xl font-bold text-white mb-4">Official Rulebooks</h2>
-          <p className="text-gray-400 mb-6">
+        <div className="mt-8 sm:mt-12 bg-slate-800 rounded-xl p-4 sm:p-6 md:p-8 max-w-4xl mx-auto">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">Official Rulebooks</h2>
+          <p className="text-gray-400 text-sm sm:text-base mb-4 sm:mb-6">
             While these guides provide a quick overview, we always recommend reading the official MECA rulebooks
             for complete and up-to-date competition rules.
           </p>
           <Link
             to="/rulebooks"
-            className="inline-flex items-center px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-sm sm:text-base transition-colors"
           >
-            <BookOpen className="w-5 h-5 mr-2" />
+            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
             View Rulebooks
           </Link>
           </div>
