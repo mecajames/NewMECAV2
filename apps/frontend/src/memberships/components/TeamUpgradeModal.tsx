@@ -107,7 +107,7 @@ function PaymentForm({
           type="button"
           onClick={onBack}
           disabled={submitting}
-          className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+          className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
         >
           Back
         </button>
@@ -287,7 +287,7 @@ export default function TeamUpgradeModal({
             <p className="text-gray-400 mb-6">{error}</p>
             <button
               onClick={onClose}
-              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
               Close
             </button>
@@ -435,7 +435,7 @@ export default function TeamUpgradeModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                 >
                   Cancel
                 </button>

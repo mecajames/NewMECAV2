@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Trophy, TrendingUp, Filter, Medal } from 'lucide-react';
-import { competitionResultsApi, CompetitionResult } from '@/competition-results';
-import { eventsApi } from '@/events';
+import { competitionResultsApi } from '@/competition-results';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useLeaderboardSEO } from '@/shared/seo';
 
@@ -39,182 +38,104 @@ export default function LeaderboardPage() {
     fetchLeaderboard();
   }, [selectedSeasonId, selectedClass, selectedFormat, rankBy]);
 
-  const processResults = (results: any[], sortBy: RankByType = 'points', allEvents: any[] = []): LeaderboardEntry[] => {
-    const aggregated: { [key: string]: LeaderboardEntry } = {};
-
-    // Build a map of event_id -> event data for quick lookup
-    const eventMap = new Map<string, any>();
-    allEvents.forEach(event => {
-      eventMap.set(event.id, event);
-    });
-
-    results.forEach((result) => {
-      const compClass = result.competitionClass || result.competition_class || '';
-      const key = `${result.competitor_id || result.competitor_name}_${compClass}`;
-      const mecaId = result.mecaId || result.meca_id;
-      const membershipExpiry = result.competitor?.membership_expiry;
-      const score = result.score || 0;
-      const eventId = result.event_id || result.eventId || '';
-
-      // Get event data to check if it's a multi-day State/World Finals
-      const eventData = eventMap.get(eventId);
-      const isMultiDayFinals = eventData?.multi_day_group_id &&
-        (eventData?.event_type === 'state_finals' || eventData?.event_type === 'world_finals');
-
-      // For multi-day State/World Finals, use the group ID to count as 1 event
-      // For regular events (including regular multi-day), use event_id (each day = separate event)
-      const eventKey = isMultiDayFinals ? eventData.multi_day_group_id : eventId;
-
-      if (!aggregated[key]) {
-        aggregated[key] = {
-          competitor_id: result.competitor_id || '',
-          competitor_name: result.competitor_name,
-          competition_class: compClass,
-          total_points: 0,
-          events_participated: 0,
-          event_ids: new Set<string>(),
-          first_place: 0,
-          second_place: 0,
-          third_place: 0,
-          best_score: score,
-          meca_id: mecaId,
-          membership_expiry: membershipExpiry,
-        };
-      }
-
-      aggregated[key].total_points += result.points_earned || 0;
-      // Track unique events - uses group ID for State/World Finals, event ID for others
-      if (eventKey) {
-        aggregated[key].event_ids.add(eventKey);
-      }
-      aggregated[key].best_score = Math.max(aggregated[key].best_score, score);
-
-      if (result.placement === 1) aggregated[key].first_place += 1;
-      if (result.placement === 2) aggregated[key].second_place += 1;
-      if (result.placement === 3) aggregated[key].third_place += 1;
-    });
-
-    // Calculate events_participated from unique event IDs and sort
-    const entries = Object.values(aggregated);
-    entries.forEach(entry => {
-      entry.events_participated = entry.event_ids.size;
-    });
-
-    return entries.sort((a, b) => {
-      if (sortBy === 'score') {
-        return b.best_score - a.best_score;
-      }
-      return b.total_points - a.total_points;
-    });
-  };
-
   const fetchLeaderboard = async () => {
     setLoading(true);
     try {
-      // Fetch both results and events in parallel
-      const [results, allEvents] = await Promise.all([
-        competitionResultsApi.getAll(1, 1000),
-        eventsApi.getAll(1, 1000)
-      ]);
-
-      // Extract unique classes based on selected format, and all formats
-      const classSet = new Set<string>();
-      const formatSet = new Set<string>();
-      results.forEach((r: any) => {
-        const compClass = r.competitionClass || r.competition_class;
-        const format = r.format;
-        if (format) formatSet.add(format);
-        // Only add class if it matches selected format (or all formats selected)
-        if (compClass && (selectedFormat === 'all' || format === selectedFormat)) {
-          classSet.add(compClass);
-        }
+      // Use optimized backend endpoint with SQL aggregation
+      const leaderboardData = await competitionResultsApi.getLeaderboard({
+        seasonId: selectedSeasonId || undefined,
+        format: selectedFormat !== 'all' ? selectedFormat : undefined,
+        competitionClass: selectedClass !== 'all' ? selectedClass : undefined,
+        rankBy,
+        limit: 10,
       });
-      setClasses(Array.from(classSet).sort());
-      setFormats(Array.from(formatSet).sort());
 
-      // Filter by season if selected
-      let filtered = selectedSeasonId
-        ? results.filter((r: CompetitionResult) => r.season_id === selectedSeasonId)
-        : results;
+      // Transform backend data to match frontend interface
+      const processed: LeaderboardEntry[] = leaderboardData.map((entry: any) => ({
+        competitor_id: entry.competitor_id || '',
+        competitor_name: entry.competitor_name,
+        competition_class: entry.competition_class || 'Overall',
+        total_points: entry.total_points || 0,
+        events_participated: entry.events_participated || 0,
+        event_ids: new Set<string>(), // Not used with backend aggregation
+        first_place: entry.first_place || 0,
+        second_place: entry.second_place || 0,
+        third_place: entry.third_place || 0,
+        best_score: entry.best_score || 0,
+        meca_id: entry.meca_id,
+        membership_expiry: entry.membership_expiry,
+      }));
 
-      // Filter by format if selected
-      if (selectedFormat !== 'all') {
-        filtered = filtered.filter((r: any) => r.format === selectedFormat);
-      }
+      setLeaderboard(processed);
 
-      // Process results to aggregate by competitor and class
-      // Pass events so we can check for multi-day State/World Finals
-      let processed = processResults(filtered, rankBy, allEvents);
-
-      // Filter by class if selected
-      if (selectedClass !== 'all') {
-        processed = processed.filter(entry => entry.competition_class === selectedClass);
-        // Clear these stats when a specific class is selected
-        setMostEventsAttended([]);
-        setHighestSPLScores([]);
-      } else {
-        // For "All Classes", aggregate across all classes for each competitor
-        const overallAggregated: { [key: string]: LeaderboardEntry } = {};
-
-        processed.forEach(entry => {
-          const key = entry.competitor_id || entry.competitor_name;
-
-          if (!overallAggregated[key]) {
-            overallAggregated[key] = {
-              ...entry,
-              competition_class: 'Overall',
-              event_ids: new Set(entry.event_ids), // Clone the Set
-            };
-          } else {
-            // Aggregate data across classes
-            overallAggregated[key].total_points += entry.total_points;
-            // Merge event_ids from all classes to count unique events
-            entry.event_ids.forEach(id => overallAggregated[key].event_ids.add(id));
-            overallAggregated[key].first_place += entry.first_place;
-            overallAggregated[key].second_place += entry.second_place;
-            overallAggregated[key].third_place += entry.third_place;
-            overallAggregated[key].best_score = Math.max(
-              overallAggregated[key].best_score,
-              entry.best_score
-            );
-          }
+      // Fetch additional stats for "All Classes" view (only if showing all classes)
+      if (selectedClass === 'all') {
+        // Get top 3 by events attended
+        const byEventsData = await competitionResultsApi.getLeaderboard({
+          seasonId: selectedSeasonId || undefined,
+          format: selectedFormat !== 'all' ? selectedFormat : undefined,
+          rankBy: 'points', // Sorted by points, but we'll re-sort by events
+          limit: 50, // Get more to find top event attendees
         });
-
-        // Calculate events_participated from merged event_ids
-        Object.values(overallAggregated).forEach(entry => {
-          entry.events_participated = entry.event_ids.size;
-        });
-
-        // Sort by the selected criterion
-        processed = Object.values(overallAggregated).sort((a, b) => {
-          if (rankBy === 'score') {
-            return b.best_score - a.best_score;
-          }
-          return b.total_points - a.total_points;
-        });
-
-        // Calculate additional stats for "All Classes" view
-        // Top 3 by events attended
-        const byEvents = [...processed].sort((a, b) => b.events_participated - a.events_participated).slice(0, 3);
+        const byEvents = byEventsData
+          .map((e: any) => ({
+            competitor_id: e.competitor_id || '',
+            competitor_name: e.competitor_name,
+            competition_class: 'Overall',
+            total_points: e.total_points || 0,
+            events_participated: e.events_participated || 0,
+            event_ids: new Set<string>(),
+            first_place: e.first_place || 0,
+            second_place: e.second_place || 0,
+            third_place: e.third_place || 0,
+            best_score: e.best_score || 0,
+            meca_id: e.meca_id,
+            membership_expiry: e.membership_expiry,
+          }))
+          .sort((a: LeaderboardEntry, b: LeaderboardEntry) => b.events_participated - a.events_participated)
+          .slice(0, 3);
         setMostEventsAttended(byEvents);
 
-        // Top 3 by highest SPL score
-        const splResults = filtered.filter((r: any) => r.format === 'SPL' && r.score);
-        const splByScore = splResults
-          .map((r: any) => ({
-            competitor_name: r.competitorName || r.competitor_name,
-            meca_id: r.mecaId || r.meca_id,
-            score: r.score,
-            competition_class: r.competitionClass || r.competition_class,
-            membership_expiry: r.competitor?.membership_expiry,
-          }))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3);
+        // Get top 3 SPL scores
+        const splData = await competitionResultsApi.getLeaderboard({
+          seasonId: selectedSeasonId || undefined,
+          format: 'SPL',
+          rankBy: 'score',
+          limit: 3,
+        });
+        const splByScore = splData.map((e: any) => ({
+          competitor_name: e.competitor_name,
+          meca_id: e.meca_id,
+          score: e.best_score || 0,
+          competition_class: e.competition_class,
+          membership_expiry: e.membership_expiry,
+        }));
         setHighestSPLScores(splByScore);
+      } else {
+        setMostEventsAttended([]);
+        setHighestSPLScores([]);
       }
 
-      // Take top 10
-      setLeaderboard(processed.slice(0, 10));
+      // Fetch available classes for the dropdown (lightweight call)
+      // Only fetch if we don't have classes yet or format changed
+      if (classes.length === 0 || selectedFormat !== 'all') {
+        try {
+          const classesData = await competitionResultsApi.getLeaderboard({
+            seasonId: selectedSeasonId || undefined,
+            format: selectedFormat !== 'all' ? selectedFormat : undefined,
+            limit: 100,
+          });
+          const classSet = new Set<string>();
+          classesData.forEach((r: any) => {
+            if (r.competition_class && r.competition_class !== 'Overall') {
+              classSet.add(r.competition_class);
+            }
+          });
+          setClasses(Array.from(classSet).sort());
+        } catch {
+          // Ignore error for classes fetch
+        }
+      }
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
     }
@@ -667,7 +588,7 @@ export default function LeaderboardPage() {
           </>
         ) : (
           <div className="text-center py-20">
-            <h2 className="text-4xl font-bold text-red-500 mb-4">NO RESULTS</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-red-500 mb-4">NO RESULTS</h2>
             <p className="text-2xl text-red-500">No competitors competed in this class for the selected season</p>
           </div>
         )}

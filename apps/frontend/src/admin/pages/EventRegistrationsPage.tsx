@@ -245,14 +245,14 @@ export default function EventRegistrationsPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Event Registrations</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Event Registrations</h1>
             <p className="text-gray-400">
               Manage competitor registrations for all events
             </p>
           </div>
           <button
             onClick={() => navigate('/dashboard/admin')}
-            className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
             Back to Dashboard

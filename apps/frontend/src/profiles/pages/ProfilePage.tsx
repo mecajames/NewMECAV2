@@ -427,12 +427,12 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">
               {isViewingSecondary ? `${selectedProfile?.first_name || ''} ${selectedProfile?.last_name || ''}`.trim() || 'Secondary Member' : 'My Account'}
             </h1>
-            <p className="text-gray-400">
+            <p className="text-gray-400 text-sm sm:text-base">
               {isViewingSecondary
                 ? 'Manage this secondary member\'s profile and vehicle information'
                 : 'Manage your profile and account settings'}

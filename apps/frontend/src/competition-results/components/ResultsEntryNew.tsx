@@ -1735,7 +1735,7 @@ export default function ResultsEntryNew() {
                 <button
                   onClick={handleConfirmImport}
                   disabled={uploading}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
                 >
                   <Upload className="h-5 w-5" />
                   {uploading ? 'Importing...' : 'Confirm & Import'}
@@ -1746,7 +1746,7 @@ export default function ResultsEntryNew() {
                     setSelectedFile(null);
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
-                  className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -1985,7 +1985,7 @@ export default function ResultsEntryNew() {
                         if (r.missingFields.includes('frequency') && !d?.frequency) return false;
                         return true;
                       }).length === 0}
-                      className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Upload className="h-4 w-4" />
                       {uploading ? 'Importing...' : 'Import Results'}

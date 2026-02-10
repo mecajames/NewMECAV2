@@ -1313,7 +1313,7 @@ export default function HostEventPage() {
             <button
               type="submit"
               disabled={isSubmitting || formData.selectedFormats.length === 0}
-              className={`w-full flex items-center justify-center px-6 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors ${
+              className={`w-full flex items-center justify-center px-4 sm:px-6 py-2.5 sm:py-4 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors ${
                 isSubmitting || formData.selectedFormats.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >

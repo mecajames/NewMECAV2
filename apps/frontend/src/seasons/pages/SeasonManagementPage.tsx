@@ -198,12 +198,12 @@ export default function SeasonManagementPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Season Management</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Season Management</h1>
             <p className="text-gray-400">Manage competition seasons and their dates</p>
           </div>
           <button
             onClick={() => navigate('/dashboard/admin')}
-            className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
             Back to Dashboard
@@ -213,14 +213,14 @@ export default function SeasonManagementPage() {
         <div className="mb-6 flex gap-4">
           <button
             onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             <Plus className="h-5 w-5" />
             Create New Season
           </button>
           <button
             onClick={() => setShowCopyDialog(!showCopyDialog)}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
           >
             <Copy className="h-5 w-5" />
             Copy Classes Between Seasons
@@ -348,14 +348,14 @@ export default function SeasonManagementPage() {
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                 >
                   {editingSeason ? 'Update Season' : 'Create Season'}
                 </button>
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -427,7 +427,7 @@ export default function SeasonManagementPage() {
                 <button
                   onClick={handleCopyClasses}
                   disabled={copying || !copyFromSeasonId || !copyToSeasonId}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {copying ? 'Copying...' : 'Copy Classes'}
                 </button>
@@ -438,7 +438,7 @@ export default function SeasonManagementPage() {
                     setCopyToSeasonId('');
                     setCopyFormat('all');
                   }}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -545,7 +545,7 @@ export default function SeasonManagementPage() {
               <p className="text-gray-400 mb-4">No seasons created yet</p>
               <button
                 onClick={() => setShowForm(true)}
-                className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
               >
                 Create Your First Season
               </button>

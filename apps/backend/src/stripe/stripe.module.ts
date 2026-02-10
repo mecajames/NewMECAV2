@@ -9,6 +9,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { AuthModule } from '../auth/auth.module';
 import { ShopModule } from '../shop/shop.module';
+import { SiteSettingsModule } from '../site-settings/site-settings.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ShopModule } from '../shop/shop.module';
     InvoicesModule,
     AuthModule,
     forwardRef(() => ShopModule),
+    SiteSettingsModule,
   ],
   providers: [StripeService],
   controllers: [StripeController],

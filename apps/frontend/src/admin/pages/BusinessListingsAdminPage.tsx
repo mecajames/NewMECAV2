@@ -788,7 +788,7 @@ export default function BusinessListingsAdminPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Business Listings Management</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Business Listings Management</h1>
             <p className="text-gray-400">Manage retailer and manufacturer directory listings</p>
           </div>
           <button
@@ -868,7 +868,7 @@ export default function BusinessListingsAdminPage() {
           <div className="flex gap-4">
             <button
               onClick={() => setActiveTab('retailers')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base rounded-lg font-medium transition-colors ${
                 activeTab === 'retailers'
                   ? 'bg-orange-600 text-white'
                   : 'bg-slate-800 text-gray-400 hover:text-white'
@@ -884,7 +884,7 @@ export default function BusinessListingsAdminPage() {
             </button>
             <button
               onClick={() => setActiveTab('manufacturers')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base rounded-lg font-medium transition-colors ${
                 activeTab === 'manufacturers'
                   ? 'bg-cyan-600 text-white'
                   : 'bg-slate-800 text-gray-400 hover:text-white'
@@ -901,7 +901,7 @@ export default function BusinessListingsAdminPage() {
           </div>
           <button
             onClick={() => openCreateModal(activeTab)}
-            className="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors bg-green-600 hover:bg-green-700 text-white"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base rounded-lg font-medium transition-colors bg-green-600 hover:bg-green-700 text-white"
           >
             <Plus className="h-5 w-5" />
             Add New Listing
@@ -1405,7 +1405,7 @@ export default function BusinessListingsAdminPage() {
               <button
                 onClick={handleCreate}
                 disabled={saving || !selectedUser || !createForm.business_name}
-                className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 ${
+                className={`flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base ${
                   createType === 'retailers'
                     ? 'bg-orange-600 hover:bg-orange-700'
                     : 'bg-cyan-600 hover:bg-cyan-700'
@@ -1416,7 +1416,7 @@ export default function BusinessListingsAdminPage() {
               </button>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -1842,7 +1842,7 @@ export default function BusinessListingsAdminPage() {
                 <button
                   onClick={handleEdit}
                   disabled={saving || !editForm.business_name}
-                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base ${
                     editType === 'retailers'
                       ? 'bg-orange-600 hover:bg-orange-700'
                       : 'bg-cyan-600 hover:bg-cyan-700'
@@ -1856,7 +1856,7 @@ export default function BusinessListingsAdminPage() {
                     setShowEditModal(false);
                     setEditingListing(null);
                   }}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -1864,7 +1864,7 @@ export default function BusinessListingsAdminPage() {
               <button
                 onClick={handleConvertListingType}
                 disabled={saving}
-                className={`w-full flex items-center justify-center gap-2 px-6 py-3 ${
+                className={`w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base ${
                   editType === 'retailers'
                     ? 'bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-600/50'
                     : 'bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 border border-orange-600/50'

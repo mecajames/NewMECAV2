@@ -122,10 +122,10 @@ export default function UserDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">My MECA</h1>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">My MECA</h1>
           <p className="text-gray-400">Welcome back, {`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}</p>
           {profile?.meca_id && (
             <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-orange-500/10 rounded-lg">
@@ -202,7 +202,7 @@ export default function UserDashboard() {
               </div>
               <button
                 onClick={() => navigate('/membership')}
-                className="px-6 py-3 bg-white text-orange-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-white text-orange-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
               >
                 <CreditCard className="h-5 w-5" />
                 Purchase Membership
@@ -477,7 +477,7 @@ export default function UserDashboard() {
                       setShowRequestModal(false);
                       setSelectedRequest(null);
                     }}
-                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   >
                     Close
                   </button>

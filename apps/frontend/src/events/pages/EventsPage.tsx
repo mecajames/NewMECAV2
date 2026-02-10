@@ -84,15 +84,16 @@ export default function EventsPage() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const data = selectedSeason === 'all'
-        ? await eventsApi.getAll(1, 1000)
-        : await eventsApi.getAllBySeason(selectedSeason, 1, 1000);
+      // Use optimized endpoint with server-side filtering
+      const result = await eventsApi.getPublicEvents({
+        page: 1,
+        limit: 200, // Reduced from 1000 for better performance
+        seasonId: selectedSeason !== 'all' ? selectedSeason : undefined,
+        status: filter !== 'all' ? filter : undefined,
+      });
 
-      // Filter out not_public events (public page should never show them)
-      const publicEvents = data.filter(e => e.status !== 'not_public');
-
-      // Sort by event_date descending (newest first)
-      publicEvents.sort((a, b) =>
+      // Sort by event_date descending (newest first) - backend should do this but ensure it
+      const publicEvents = result.events.sort((a, b) =>
         new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
       );
 

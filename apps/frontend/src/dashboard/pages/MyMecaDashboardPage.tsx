@@ -1137,7 +1137,7 @@ export default function MyMecaDashboardPage() {
           <p className="text-gray-400 text-xl mb-4">Please sign in to view your dashboard</p>
           <button
             onClick={() => navigate('/login')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Sign In
           </button>
@@ -1248,7 +1248,7 @@ export default function MyMecaDashboardPage() {
             </div>
             <button
               onClick={() => navigate('/membership')}
-              className="px-6 py-3 bg-white text-orange-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-white text-orange-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
             >
               <CreditCard className="h-5 w-5" />
               Purchase Membership
@@ -2512,13 +2512,13 @@ export default function MyMecaDashboardPage() {
                       setEditingTeam(null);
                       setTeamError('');
                     }}
-                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveEditTeam}
-                    className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
                   >
                     Save Changes
                   </button>
@@ -2769,14 +2769,14 @@ export default function MyMecaDashboardPage() {
                       setLookupResult(null);
                       setInviteMessage('');
                     }}
-                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSendInvite}
                     disabled={!lookupResult?.member?.canInvite || sendingInvite}
-                    className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                   >
                     {sendingInvite ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -2851,7 +2851,7 @@ export default function MyMecaDashboardPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={() => navigate('/teams')}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               <UserPlus className="h-5 w-5" />
               Browse Teams
@@ -2860,7 +2860,7 @@ export default function MyMecaDashboardPage() {
             {showCreateButton ? (
               <button
                 onClick={() => setShowCreateTeamModal(true)}
-                className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <Plus className="h-5 w-5" />
                 Create a Team
@@ -2868,7 +2868,7 @@ export default function MyMecaDashboardPage() {
             ) : showUpgradeButton ? (
               <button
                 onClick={() => navigate('/membership/checkout/afcf450a-0beb-4575-a5d1-a8fb81105cb4')}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <CreditCard className="h-5 w-5" />
                 Upgrade to Team
@@ -2876,7 +2876,7 @@ export default function MyMecaDashboardPage() {
             ) : (
               <button
                 onClick={() => navigate('/membership')}
-                className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <CreditCard className="h-5 w-5" />
                 Get Membership
@@ -3219,13 +3219,13 @@ export default function MyMecaDashboardPage() {
                     setShowCreateTeamModal(false);
                     resetTeamForm();
                   }}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreateTeam}
-                  className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
                   Create Team
@@ -3449,7 +3449,7 @@ export default function MyMecaDashboardPage() {
             <p className="text-gray-400 mb-4">No registrations match your filters</p>
             <button
               onClick={clearFilters}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               Clear Filters
             </button>
@@ -3460,7 +3460,7 @@ export default function MyMecaDashboardPage() {
             <p className="text-gray-400 mb-4">No event registrations yet</p>
             <button
               onClick={() => navigate('/events')}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               Browse Events
             </button>
@@ -4319,7 +4319,7 @@ export default function MyMecaDashboardPage() {
               </div>
             </div>
             <div>
-              <h1 className="text-4xl font-bold text-white">My MECA</h1>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">My MECA</h1>
               <p className="text-gray-400">Welcome back, {`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}</p>
             </div>
           </div>
@@ -4451,7 +4451,7 @@ export default function MyMecaDashboardPage() {
                       setShowRequestModal(false);
                       setSelectedRequest(null);
                     }}
-                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   >
                     Close
                   </button>

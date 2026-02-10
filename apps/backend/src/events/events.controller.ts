@@ -73,6 +73,25 @@ export class EventsController {
     return this.eventsService.findUpcoming();
   }
 
+  @Get('public')
+  async getPublicEvents(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+    @Query('season_id') seasonId?: string,
+    @Query('status') status?: string,
+  ): Promise<{ events: Event[]; total: number; page: number; limit: number }> {
+    return this.eventsService.findPublicEvents({ page, limit, seasonId, status });
+  }
+
+  @Get('completed-with-results')
+  async getCompletedEventsWithResults(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+    @Query('season_id') seasonId?: string,
+  ): Promise<{ events: any[]; total: number }> {
+    return this.eventsService.findCompletedWithResultCounts({ page, limit, seasonId });
+  }
+
   @Get('multi-day-group/:groupId')
   async getEventsByMultiDayGroup(@Param('groupId') groupId: string): Promise<Event[]> {
     return this.eventsService.findByMultiDayGroup(groupId);

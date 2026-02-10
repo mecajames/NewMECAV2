@@ -147,9 +147,9 @@ export default function ResultsPage() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      // Fetch events and result counts in parallel
+      // Fetch events with a reasonable limit for better performance
       const [data, resultCounts] = await Promise.all([
-        eventsApi.getAll(1, 1000),
+        eventsApi.getAll(1, 200),
         competitionResultsApi.getResultCountsByEvent().catch(() => ({} as Record<string, number>))
       ]);
 

@@ -1,14 +1,70 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, Inject, Optional } from '@nestjs/common';
 import Stripe from 'stripe';
 import { CreatePaymentIntentDto, PaymentIntentResult } from '@newmeca/shared';
+import { SiteSettingsService } from '../site-settings/site-settings.service';
 
 @Injectable()
 export class StripeService {
   private readonly logger = new Logger(StripeService.name);
   private stripe: Stripe | null = null;
 
-  constructor() {
+  // Staging mode cache to avoid DB queries for every payment
+  private stagingModeCache: Map<string, { value: any; timestamp: number }> = new Map();
+  private readonly CACHE_TTL = 60000; // 1 minute
+
+  constructor(
+    @Optional() @Inject(SiteSettingsService)
+    private readonly siteSettingsService?: SiteSettingsService,
+  ) {
     // Stripe client is lazily initialized when needed
+  }
+
+  /**
+   * Get a staging mode setting with caching
+   */
+  private async getStagingModeSetting(key: string): Promise<any> {
+    if (!this.siteSettingsService) {
+      return null;
+    }
+
+    const cached = this.stagingModeCache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      return cached.value;
+    }
+
+    try {
+      const setting = await this.siteSettingsService.findByKey(key);
+      let value: any = setting?.setting_value;
+
+      // Parse based on type
+      if (setting?.setting_type === 'boolean') {
+        value = value === 'true';
+      }
+
+      this.stagingModeCache.set(key, { value, timestamp: Date.now() });
+      return value;
+    } catch (error) {
+      this.logger.warn(`Failed to fetch staging mode setting ${key}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Check if staging mode is enabled
+   */
+  private async checkStagingMode(): Promise<boolean> {
+    return await this.getStagingModeSetting('staging_mode_enabled') === true;
+  }
+
+  /**
+   * Check if payments should be blocked in staging mode
+   */
+  private async checkBlockPayments(): Promise<boolean> {
+    const enabled = await this.checkStagingMode();
+    if (!enabled) return false;
+
+    const blockPayments = await this.getStagingModeSetting('staging_mode_block_payments');
+    return blockPayments !== false; // Default true when staging enabled
   }
 
   private getStripeClient(): Stripe {
@@ -28,6 +84,17 @@ export class StripeService {
    * Create a Payment Intent for a membership purchase
    */
   async createPaymentIntent(data: CreatePaymentIntentDto): Promise<PaymentIntentResult> {
+    // Check staging mode
+    if (await this.checkBlockPayments()) {
+      this.logger.warn('[STAGING MODE] Payment blocked - returning mock payment intent');
+      return {
+        clientSecret: 'staging_mode_blocked',
+        paymentIntentId: `staging_${Date.now()}`,
+        stagingMode: true,
+        message: 'Payments are blocked in staging mode',
+      } as PaymentIntentResult;
+    }
+
     const stripe = this.getStripeClient();
 
     try {

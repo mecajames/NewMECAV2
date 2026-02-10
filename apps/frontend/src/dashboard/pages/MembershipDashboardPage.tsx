@@ -123,7 +123,7 @@ export default function MembershipDashboardPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <p className="text-gray-400 text-sm">Dashboard</p>
-              <h1 className="text-3xl font-bold text-white">Membership</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white">Membership</h1>
             </div>
             <button
               onClick={() => navigate('/dashboard/mymeca?tab=profile')}
@@ -154,7 +154,7 @@ export default function MembershipDashboardPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <p className="text-gray-400 text-sm">Dashboard</p>
-              <h1 className="text-3xl font-bold text-white">Membership</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white">Membership</h1>
             </div>
             <button
               onClick={() => navigate('/dashboard/mymeca?tab=profile')}
@@ -170,7 +170,7 @@ export default function MembershipDashboardPage() {
             <p className="text-gray-400 mb-6">You don't have an active membership yet.</p>
             <button
               onClick={() => navigate('/membership')}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-lg transition-colors"
             >
               View Membership Options
             </button>
@@ -187,7 +187,7 @@ export default function MembershipDashboardPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <p className="text-gray-400 text-sm">Dashboard</p>
-            <h1 className="text-3xl font-bold text-white">Membership</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">Membership</h1>
             <p className="text-gray-400 mt-1">Manage your membership and billing</p>
           </div>
           <button

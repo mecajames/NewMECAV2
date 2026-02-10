@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider, ForcePasswordChangeGuard } from '@/auth';
+import { AuthProvider, ForcePasswordChangeGuard, MaintenanceModeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
@@ -81,6 +81,7 @@ function App() {
     <HelmetProvider>
       <StagingNoIndex />
       <AuthProvider>
+        <MaintenanceModeGuard>
         <SiteSettingsProvider>
           <SeasonsProvider>
             <CartProvider>
@@ -249,6 +250,7 @@ function App() {
             </CartProvider>
           </SeasonsProvider>
         </SiteSettingsProvider>
+        </MaintenanceModeGuard>
       </AuthProvider>
     </HelmetProvider>
   );

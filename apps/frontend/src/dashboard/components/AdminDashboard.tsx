@@ -581,14 +581,14 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">
               {currentView === 'hosting-requests' ? 'Event Request Admin' : 'Admin Dashboard'}
             </h1>
-            <p className="text-gray-400">
+            <p className="text-gray-400 text-sm sm:text-base">
               {currentView === 'hosting-requests'
                 ? 'Manage and approve event hosting requests'
                 : 'Complete system management and oversight'}
@@ -597,7 +597,7 @@ export default function AdminDashboard() {
           {currentView !== 'overview' && (
             <button
               onClick={() => setCurrentView('overview')}
-              className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base transition-colors"
             >
               ← Back to Dashboard
             </button>

@@ -123,7 +123,7 @@ export function GuestTicketViewPage() {
             <p className="text-gray-400 mb-6">{error || 'Unable to load ticket'}</p>
             <Link
               to="/support/guest"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
               Back to Support
@@ -273,7 +273,7 @@ export function GuestTicketViewPage() {
               <button
                 type="submit"
                 disabled={submittingComment}
-                className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submittingComment ? (
                   <>

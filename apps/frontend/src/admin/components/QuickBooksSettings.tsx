@@ -223,7 +223,7 @@ export default function QuickBooksSettings() {
           {/* Connect Button */}
           <button
             onClick={handleConnect}
-            className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
           >
             <Link2 className="h-5 w-5" />
             Connect QuickBooks

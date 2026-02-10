@@ -21,7 +21,7 @@ export default function AdminDashboardPage() {
           <p className="text-gray-400 text-xl mb-4">Please sign in to view the admin dashboard</p>
           <button
             onClick={() => navigate('/login')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Sign In
           </button>
@@ -37,7 +37,7 @@ export default function AdminDashboardPage() {
           <p className="text-gray-400 text-xl mb-4">You do not have permission to access the admin dashboard</p>
           <button
             onClick={() => navigate('/dashboard/mymeca')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Go to My MECA
           </button>

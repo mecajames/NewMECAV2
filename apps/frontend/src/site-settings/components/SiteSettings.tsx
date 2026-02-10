@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2 } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { mediaFilesApi, MediaFile } from '@/media-files';
@@ -7,8 +7,18 @@ import { getStorageUrl } from '@/lib/storage';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 import { scheduledTasksApi } from '@/scheduled-tasks';
 
+// Tab definitions
+type SettingsTab = 'appearance' | 'integrations' | 'system';
+
+const TABS: { id: SettingsTab; label: string; icon: React.ReactNode; description: string }[] = [
+  { id: 'appearance', label: 'Appearance', icon: <Palette className="h-5 w-5" />, description: 'Homepage, media, and social settings' },
+  { id: 'integrations', label: 'Integrations', icon: <Link2 className="h-5 w-5" />, description: 'Third-party service connections' },
+  { id: 'system', label: 'System', icon: <Settings2 className="h-5 w-5" />, description: 'Staging mode, tasks, and environment' },
+];
+
 export default function SiteSettings() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const [_settings, setSettings] = useState<SiteSetting[]>([]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +66,15 @@ export default function SiteSettings() {
     youtube_auto_fetch_frequency: 'daily',
     youtube_auto_fetch_time: '03:00',
     youtube_last_fetch: '',
+    // Staging Mode settings
+    staging_mode_enabled: false,
+    staging_mode_test_email: '',
+    staging_mode_allowed_emails: [] as string[],
+    staging_mode_allowed_domains: [] as string[],
+    staging_mode_block_payments: true,
+    // Maintenance Mode settings
+    maintenance_mode_enabled: false,
+    maintenance_mode_message: '',
   });
 
   useEffect(() => {
@@ -85,6 +104,17 @@ export default function SiteSettings() {
       } catch {
         imageUrls = settingsMap['hero_image_urls'] ? [settingsMap['hero_image_urls']] : [];
       }
+
+      // Helper to parse JSON arrays safely
+      const parseJsonArray = (value: string | undefined): string[] => {
+        if (!value) return [];
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      };
 
       setFormData({
         hero_image_urls: imageUrls,
@@ -120,6 +150,15 @@ export default function SiteSettings() {
         youtube_auto_fetch_frequency: settingsMap['youtube_auto_fetch_frequency'] || 'daily',
         youtube_auto_fetch_time: settingsMap['youtube_auto_fetch_time'] || '03:00',
         youtube_last_fetch: settingsMap['youtube_last_fetch'] || '',
+        // Staging Mode settings
+        staging_mode_enabled: settingsMap['staging_mode_enabled'] === 'true',
+        staging_mode_test_email: settingsMap['staging_mode_test_email'] || '',
+        staging_mode_allowed_emails: parseJsonArray(settingsMap['staging_mode_allowed_emails']),
+        staging_mode_allowed_domains: parseJsonArray(settingsMap['staging_mode_allowed_domains']),
+        staging_mode_block_payments: settingsMap['staging_mode_block_payments'] !== 'false',
+        // Maintenance Mode settings
+        maintenance_mode_enabled: settingsMap['maintenance_mode_enabled'] === 'true',
+        maintenance_mode_message: settingsMap['maintenance_mode_message'] || '',
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -180,6 +219,15 @@ export default function SiteSettings() {
         saveSetting('youtube_auto_fetch_enabled', formData.youtube_auto_fetch_enabled.toString(), 'boolean', 'Enable automatic video fetching'),
         saveSetting('youtube_auto_fetch_frequency', formData.youtube_auto_fetch_frequency, 'text', 'Auto-fetch frequency'),
         saveSetting('youtube_auto_fetch_time', formData.youtube_auto_fetch_time, 'text', 'Auto-fetch time'),
+        // Staging Mode settings
+        saveSetting('staging_mode_enabled', formData.staging_mode_enabled.toString(), 'boolean', 'Enable staging mode to redirect/block emails and payments'),
+        saveSetting('staging_mode_test_email', formData.staging_mode_test_email, 'text', 'Redirect all emails to this test address'),
+        saveSetting('staging_mode_allowed_emails', JSON.stringify(formData.staging_mode_allowed_emails), 'json', 'Emails that receive real emails (whitelist)'),
+        saveSetting('staging_mode_allowed_domains', JSON.stringify(formData.staging_mode_allowed_domains), 'json', 'Domains that receive real emails'),
+        saveSetting('staging_mode_block_payments', formData.staging_mode_block_payments.toString(), 'boolean', 'Block Stripe payment processing'),
+        // Maintenance Mode settings
+        saveSetting('maintenance_mode_enabled', formData.maintenance_mode_enabled.toString(), 'boolean', 'Enable maintenance mode to block non-admin users'),
+        saveSetting('maintenance_mode_message', formData.maintenance_mode_message, 'text', 'Custom maintenance message shown to users'),
       ]);
 
       alert('Settings saved successfully!');
@@ -402,6 +450,34 @@ export default function SiteSettings() {
         <p className="text-gray-400">Configure homepage and site-wide settings</p>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="bg-slate-800 rounded-xl p-2">
+        <div className="flex flex-wrap gap-2">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
+                activeTab === tab.id
+                  ? 'bg-orange-600 text-white shadow-lg'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600 hover:text-white'
+              }`}
+            >
+              {tab.icon}
+              <div className="text-left">
+                <div className="text-sm font-semibold">{tab.label}</div>
+                <div className={`text-xs ${activeTab === tab.id ? 'text-orange-200' : 'text-gray-400'}`}>
+                  {tab.description}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ==================== APPEARANCE TAB ==================== */}
+      {activeTab === 'appearance' && (
+        <>
       <div className="bg-slate-800 rounded-xl p-6 space-y-6">
         <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
           Homepage Hero Section
@@ -988,15 +1064,250 @@ export default function SiteSettings() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
         >
           <Save className="h-5 w-5" />
           {saving ? 'Saving...' : 'Save All Settings'}
         </button>
       </div>
+        </>
+      )}
 
+      {/* ==================== INTEGRATIONS TAB ==================== */}
+      {activeTab === 'integrations' && (
+        <>
       {/* QuickBooks Integration */}
       <QuickBooksSettings />
+
+      {/* Future integrations can be added here */}
+      <div className="bg-slate-800 rounded-xl p-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3 mb-4">
+          Additional Integrations
+        </h3>
+        <p className="text-gray-400 text-sm">
+          More integrations (Stripe settings, Constant Contact, etc.) can be configured here in the future.
+        </p>
+      </div>
+        </>
+      )}
+
+      {/* ==================== SYSTEM TAB ==================== */}
+      {activeTab === 'system' && (
+        <>
+      {/* Staging Mode Section */}
+      <div className="bg-yellow-900/20 border border-yellow-600 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-yellow-700 pb-3">
+          <AlertTriangle className="h-6 w-6 text-yellow-500" />
+          <div>
+            <h3 className="text-xl font-semibold text-yellow-400">Staging Mode</h3>
+            <p className="text-sm text-yellow-200/70">
+              Enable staging mode to prevent emails and payments from affecting real members.
+              Use this when testing with production data copies.
+            </p>
+          </div>
+        </div>
+
+        {/* What Staging Mode Blocks */}
+        <div className="bg-yellow-950/50 rounded-lg p-4 border border-yellow-800">
+          <h4 className="text-sm font-semibold text-yellow-300 mb-2">What Staging Mode Blocks/Prevents:</h4>
+          <ul className="text-sm text-yellow-200/80 space-y-1 list-disc list-inside">
+            <li><strong>Email Sending:</strong> All outgoing emails are redirected to the test email address, or blocked entirely if no test email is set</li>
+            <li><strong>Payment Processing:</strong> Stripe payment intents return mock responses - no real charges are made</li>
+            <li><strong>Membership Notifications:</strong> Expiration warnings, welcome emails, and renewal reminders are filtered</li>
+            <li><strong>Event Communications:</strong> Registration confirmations and event reminders are redirected</li>
+          </ul>
+          <p className="text-xs text-yellow-200/60 mt-3 italic">
+            Note: Emails to addresses in the allowed list or allowed domains will still be sent normally.
+          </p>
+        </div>
+
+        {/* Master Toggle */}
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="staging_mode_enabled"
+            checked={formData.staging_mode_enabled}
+            onChange={(e) => setFormData({...formData, staging_mode_enabled: e.target.checked})}
+            className="w-6 h-6 rounded bg-slate-700 border-yellow-600 text-yellow-600 focus:ring-yellow-500"
+          />
+          <label htmlFor="staging_mode_enabled" className="font-semibold text-yellow-300 text-lg">
+            Enable Staging Mode
+          </label>
+        </div>
+
+        {formData.staging_mode_enabled && (
+          <div className="space-y-5 ml-2 border-l-2 border-yellow-600 pl-5">
+            {/* Test Email Redirect */}
+            <div>
+              <label className="block text-sm font-medium text-yellow-200 mb-2">
+                Test Email (redirect all emails to this address)
+              </label>
+              <input
+                type="email"
+                value={formData.staging_mode_test_email}
+                onChange={(e) => setFormData({...formData, staging_mode_test_email: e.target.value})}
+                placeholder="admin@example.com"
+                className="w-full px-4 py-2 bg-slate-700 border border-yellow-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              />
+              <p className="text-xs text-yellow-200/60 mt-1">
+                All emails will be redirected to this address (unless recipient is in the allowed list)
+              </p>
+            </div>
+
+            {/* Allowed Emails */}
+            <div>
+              <label className="block text-sm font-medium text-yellow-200 mb-2">
+                Allowed Emails (one per line - these receive real emails)
+              </label>
+              <textarea
+                value={formData.staging_mode_allowed_emails.join('\n')}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  staging_mode_allowed_emails: e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
+                })}
+                rows={4}
+                placeholder="admin@mecacaraudio.com&#10;tester@example.com"
+                className="w-full px-4 py-2 bg-slate-700 border border-yellow-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 font-mono text-sm"
+              />
+              <p className="text-xs text-yellow-200/60 mt-1">
+                These email addresses will receive emails normally (not redirected)
+              </p>
+            </div>
+
+            {/* Allowed Domains */}
+            <div>
+              <label className="block text-sm font-medium text-yellow-200 mb-2">
+                Allowed Domains (one per line - e.g., mecacaraudio.com)
+              </label>
+              <textarea
+                value={formData.staging_mode_allowed_domains.join('\n')}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  staging_mode_allowed_domains: e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
+                })}
+                rows={3}
+                placeholder="mecacaraudio.com&#10;meca-test.com"
+                className="w-full px-4 py-2 bg-slate-700 border border-yellow-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 font-mono text-sm"
+              />
+              <p className="text-xs text-yellow-200/60 mt-1">
+                All emails to addresses at these domains will be sent normally
+              </p>
+            </div>
+
+            {/* Block Payments */}
+            <div className="flex items-center gap-3 pt-2">
+              <input
+                type="checkbox"
+                id="staging_mode_block_payments"
+                checked={formData.staging_mode_block_payments}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  staging_mode_block_payments: e.target.checked
+                })}
+                className="w-5 h-5 rounded bg-slate-700 border-yellow-600 text-yellow-600 focus:ring-yellow-500"
+              />
+              <label htmlFor="staging_mode_block_payments" className="text-yellow-200">
+                Block Stripe payment processing
+              </label>
+            </div>
+            <p className="text-xs text-yellow-200/60 ml-8 -mt-3">
+              When enabled, payment intents will return mock responses instead of contacting Stripe
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-black font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+        >
+          <Save className="h-5 w-5" />
+          {saving ? 'Saving...' : 'Save Staging Mode Settings'}
+        </button>
+      </div>
+
+      {/* Maintenance Mode Section */}
+      <div className="bg-orange-900/20 border border-orange-600 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-orange-700 pb-3">
+          <Server className="h-6 w-6 text-orange-500" />
+          <div>
+            <h3 className="text-xl font-semibold text-orange-400">Maintenance Mode</h3>
+            <p className="text-sm text-orange-200/70">
+              Enable maintenance mode to temporarily restrict site access while performing updates or maintenance.
+            </p>
+          </div>
+        </div>
+
+        {/* What Maintenance Mode Blocks */}
+        <div className="bg-orange-950/50 rounded-lg p-4 border border-orange-800">
+          <h4 className="text-sm font-semibold text-orange-300 mb-2">What Maintenance Mode Blocks/Prevents:</h4>
+          <ul className="text-sm text-orange-200/80 space-y-1 list-disc list-inside">
+            <li><strong>User Access:</strong> All non-admin users are blocked from accessing the site</li>
+            <li><strong>Login:</strong> Regular users can authenticate but will see the maintenance page instead of the site</li>
+            <li><strong>Registrations:</strong> New user signups are effectively blocked (they would see maintenance page)</li>
+            <li><strong>All Features:</strong> Event registration, membership purchases, shop orders - all blocked for regular users</li>
+          </ul>
+          <p className="text-xs text-orange-200/60 mt-3 italic">
+            Note: Admin users can still access all site features. A maintenance banner will be shown to admins.
+          </p>
+        </div>
+
+        {/* Master Toggle */}
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="maintenance_mode_enabled"
+            checked={formData.maintenance_mode_enabled}
+            onChange={(e) => setFormData({...formData, maintenance_mode_enabled: e.target.checked})}
+            className="w-6 h-6 rounded bg-slate-700 border-orange-600 text-orange-600 focus:ring-orange-500"
+          />
+          <label htmlFor="maintenance_mode_enabled" className="font-semibold text-orange-300 text-lg">
+            Enable Maintenance Mode
+          </label>
+        </div>
+
+        {formData.maintenance_mode_enabled && (
+          <div className="space-y-5 ml-2 border-l-2 border-orange-600 pl-5">
+            {/* Custom Message */}
+            <div>
+              <label className="block text-sm font-medium text-orange-200 mb-2">
+                Maintenance Message (shown to users)
+              </label>
+              <textarea
+                value={formData.maintenance_mode_message}
+                onChange={(e) => setFormData({...formData, maintenance_mode_message: e.target.value})}
+                rows={3}
+                placeholder="The system is currently undergoing scheduled maintenance. Please check back later."
+                className="w-full px-4 py-2 bg-slate-700 border border-orange-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <p className="text-xs text-orange-200/60 mt-1">
+                This message will be displayed to users on the maintenance page. Leave blank for default message.
+              </p>
+            </div>
+
+            {/* Warning */}
+            <div className="bg-red-900/30 border border-red-600 rounded-lg p-3 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-red-300 font-medium">Warning</p>
+                <p className="text-xs text-red-200/80">
+                  Enabling maintenance mode will immediately block all non-admin users from accessing the site.
+                  Make sure you have admin access before enabling this mode.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+        >
+          <Save className="h-5 w-5" />
+          {saving ? 'Saving...' : 'Save Maintenance Mode Settings'}
+        </button>
+      </div>
 
       {/* Scheduled Tasks & System Settings */}
       <div className="bg-slate-800 rounded-xl p-6 space-y-6">
@@ -1248,6 +1559,8 @@ QUICKBOOKS_ENVIRONMENT=production`}
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {/* Media Picker Modal */}
       {showMediaPicker && (
