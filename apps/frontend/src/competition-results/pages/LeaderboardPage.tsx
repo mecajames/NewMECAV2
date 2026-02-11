@@ -116,25 +116,18 @@ export default function LeaderboardPage() {
         setHighestSPLScores([]);
       }
 
-      // Fetch available classes for the dropdown (lightweight call)
-      // Only fetch if we don't have classes yet or format changed
-      if (classes.length === 0 || selectedFormat !== 'all') {
-        try {
-          const classesData = await competitionResultsApi.getLeaderboard({
-            seasonId: selectedSeasonId || undefined,
-            format: selectedFormat !== 'all' ? selectedFormat : undefined,
-            limit: 100,
-          });
-          const classSet = new Set<string>();
-          classesData.forEach((r: any) => {
-            if (r.competition_class && r.competition_class !== 'Overall') {
-              classSet.add(r.competition_class);
-            }
-          });
-          setClasses(Array.from(classSet).sort());
-        } catch {
-          // Ignore error for classes fetch
-        }
+      // Fetch available classes for the dropdown using dedicated endpoint
+      try {
+        const classesData = await competitionResultsApi.getClassesWithResults(
+          selectedFormat !== 'all' ? selectedFormat : undefined,
+          selectedSeasonId || undefined
+        );
+        const classNames = classesData
+          .map((c) => c.className)
+          .filter(Boolean);
+        setClasses(Array.from(new Set(classNames)).sort());
+      } catch {
+        // Ignore error for classes fetch
       }
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
@@ -204,7 +197,7 @@ export default function LeaderboardPage() {
             </div>
 
             {/* Class Filter */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="flex items-center gap-2 text-gray-300">
                 <Filter className="h-5 w-5 text-orange-500 flex-shrink-0" />
                 <span className="font-medium whitespace-nowrap">Class:</span>
@@ -212,7 +205,7 @@ export default function LeaderboardPage() {
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 hover:bg-slate-600 transition-colors"
+                className="min-w-0 max-w-[200px] sm:max-w-[250px] px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 hover:bg-slate-600 transition-colors truncate"
               >
                 <option value="all">All Classes</option>
                 {classes.map((cls) => (

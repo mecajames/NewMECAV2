@@ -38,7 +38,7 @@ interface AdminSection {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<AdminView>('overview');
-  const [_selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
@@ -454,7 +454,7 @@ export default function AdminDashboard() {
           }}
         />;
       case 'results':
-        return <ResultsEntry />;
+        return <ResultsEntry initialEventId={selectedEventId || undefined} />;
       case 'rulebooks':
         return <RulebookManagement />;
       case 'media':
