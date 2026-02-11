@@ -467,51 +467,14 @@ export default function MembersPage() {
   const filterAndSortMembers = () => {
     let filtered = [...members];
 
-    // Apply search filter
+    // Apply search filter - only searches first name and last name
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
-        // Search profile fields
-        if (
+        return (
           member.first_name?.toLowerCase().includes(term) ||
-          member.last_name?.toLowerCase().includes(term) ||
-          member.email.toLowerCase().includes(term) ||
-          member.meca_id?.toString().includes(term)
-        ) {
-          return true;
-        }
-
-        // Search membership MECA ID (primary membership)
-        if (member.membershipInfo?.mecaId?.toString().includes(term)) {
-          return true;
-        }
-
-        // Search secondary membership MECA IDs
-        if (member.membershipInfo?.secondaries?.some(
-          (secondary) => secondary.mecaId?.toString().includes(term)
-        )) {
-          return true;
-        }
-
-        // Search secondary competitor names
-        if (member.membershipInfo?.secondaries?.some(
-          (secondary) => secondary.competitorName?.toLowerCase().includes(term)
-        )) {
-          return true;
-        }
-
-        // Search secondary vehicle info
-        if (member.membershipInfo?.secondaries?.some(
-          (secondary) =>
-            secondary.vehicleMake?.toLowerCase().includes(term) ||
-            secondary.vehicleModel?.toLowerCase().includes(term) ||
-            secondary.vehicleColor?.toLowerCase().includes(term) ||
-            secondary.vehicleLicensePlate?.toLowerCase().includes(term)
-        )) {
-          return true;
-        }
-
-        return false;
+          member.last_name?.toLowerCase().includes(term)
+        );
       });
     }
 
@@ -753,7 +716,7 @@ export default function MembersPage() {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, email, MECA ID (profile or membership)..."
+                  placeholder="Search by first or last name..."
                   className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 text-white placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>
