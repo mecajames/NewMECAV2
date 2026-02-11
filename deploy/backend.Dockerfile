@@ -76,10 +76,14 @@ COPY --from=builder /app/apps/backend/node_modules/ ./node_modules/
 COPY --from=builder /app/apps/backend/dist/ ./dist/
 COPY --from=builder /app/apps/backend/package.json ./
 
+# Copy entrypoint script that runs migrations before starting
+COPY deploy/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=512
 ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["/app/entrypoint.sh"]
