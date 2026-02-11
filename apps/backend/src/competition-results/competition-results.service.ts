@@ -750,6 +750,10 @@ export class CompetitionResultsService {
       return; // Cache is still valid
     }
 
+    // Update timestamp FIRST to prevent repeated failing queries
+    // If the query fails, we'll use stale/empty cache for this TTL period
+    this.pointsEligibleCacheTimestamp = now;
+
     const em = this.em.fork();
     const today = new Date();
 
@@ -1025,36 +1029,61 @@ export class CompetitionResultsService {
    * This is the main entry point for recalculating points
    */
   async updateEventPoints(eventId: string): Promise<void> {
+    this.logger.log(`[updateEventPoints] Starting for event ${eventId}`);
     const em = this.em.fork();
     const connection = em.getConnection();
 
-    // Fetch the event with its multiplier using raw SQL to avoid MikroORM populating Season
-    const eventRows = await connection.execute(
-      `SELECT id, points_multiplier, season_id FROM events WHERE id = ?`, [eventId]
-    );
-    if (!eventRows || eventRows.length === 0) {
-      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    // Step 1: Fetch the event with its multiplier using raw SQL
+    let multiplier = 2;
+    let seasonId: string | null = null;
+    try {
+      const eventRows = await connection.execute(
+        `SELECT id, points_multiplier, season_id FROM events WHERE id = ?`, [eventId]
+      );
+      if (!eventRows || eventRows.length === 0) {
+        throw new NotFoundException(`Event with ID ${eventId} not found`);
+      }
+      const eventData = eventRows[0];
+      multiplier = Number(eventData.points_multiplier) || 2;
+      seasonId = eventData.season_id;
+      this.logger.log(`[updateEventPoints] Step 1 OK - multiplier=${multiplier}, seasonId=${seasonId}`);
+    } catch (sqlError: any) {
+      // If the raw SQL fails (e.g., missing column), try a simpler query
+      this.logger.warn(`[updateEventPoints] Step 1 raw SQL failed: ${sqlError.message}`);
+      try {
+        const eventRows = await connection.execute(
+          `SELECT id, season_id FROM events WHERE id = ?`, [eventId]
+        );
+        if (!eventRows || eventRows.length === 0) {
+          throw new NotFoundException(`Event with ID ${eventId} not found`);
+        }
+        seasonId = eventRows[0].season_id;
+        this.logger.log(`[updateEventPoints] Step 1 fallback OK - using default multiplier=${multiplier}, seasonId=${seasonId}`);
+      } catch (fallbackError: any) {
+        this.logger.error(`[updateEventPoints] Step 1 fallback also failed: ${fallbackError.message}`);
+        throw fallbackError;
+      }
     }
 
-    const eventData = eventRows[0];
-    const multiplier = Number(eventData.points_multiplier) || 2; // Default to 2x if not set
-    const seasonId = eventData.season_id;
-
-    // Fetch the points configuration for this event's season
+    // Step 2: Fetch points configuration
     let pointsConfig: PointsConfiguration | null = null;
-    if (seasonId) {
-      pointsConfig = await this.pointsConfigService.getConfigForSeason(seasonId);
-    } else {
-      // Fall back to current season config if event has no season
-      pointsConfig = await this.pointsConfigService.getConfigForCurrentSeason();
+    try {
+      if (seasonId) {
+        pointsConfig = await this.pointsConfigService.getConfigForSeason(seasonId);
+      } else {
+        pointsConfig = await this.pointsConfigService.getConfigForCurrentSeason();
+      }
+      this.logger.log(`[updateEventPoints] Step 2 OK - pointsConfig=${pointsConfig ? 'found' : 'null'}`);
+    } catch (configError) {
+      this.logger.warn(`[updateEventPoints] Step 2 failed to fetch points config: ${configError}`);
     }
 
-    // If still no config, log warning and use hardcoded defaults
     if (!pointsConfig) {
-      this.logger.warn(`No points configuration found for event ${eventId}, using hardcoded defaults`);
+      this.logger.warn(`[updateEventPoints] No points config for event ${eventId}, points will not be awarded`);
     }
 
-    // Fetch all results for this event, populated with competitor and class info
+    // Step 3: Fetch all results for this event
+    this.logger.log(`[updateEventPoints] Step 3 - fetching results...`);
     const results = await em.find(
       CompetitionResult,
       { event: eventId },
@@ -1062,11 +1091,18 @@ export class CompetitionResultsService {
         populate: ['competitor'],
       }
     );
+    this.logger.log(`[updateEventPoints] Step 3 OK - found ${results.length} results`);
 
-    // Get all class IDs from results
+    // Step 4: Get competition classes
     const classIds = [...new Set(results.map(r => r.classId).filter((id): id is string => Boolean(id)))];
-    const classes = await em.find(CompetitionClass, { id: { $in: classIds } });
-    const classMap = new Map(classes.map(c => [c.id, c]));
+    let classMap = new Map<string, CompetitionClass>();
+    try {
+      const classes = await em.find(CompetitionClass, { id: { $in: classIds } });
+      classMap = new Map(classes.map(c => [c.id, c]));
+      this.logger.log(`[updateEventPoints] Step 4 OK - found ${classes.length} classes`);
+    } catch (classError) {
+      this.logger.warn(`[updateEventPoints] Step 4 failed to fetch classes: ${classError}`);
+    }
 
     // Group results by class and format for placement calculation
     // Note: ALL results get placements, but only eligible formats get points
@@ -1092,14 +1128,17 @@ export class CompetitionResultsService {
       groupedResults.get(key)!.results.push(result);
     }
 
-    // Refresh the points-eligible MECA IDs cache before processing
+    this.logger.log(`[updateEventPoints] Step 5 OK - grouped into ${groupedResults.size} groups`);
+
+    // Step 6: Refresh the points-eligible MECA IDs cache before processing
     try {
       await this.refreshPointsEligibleCache();
+      this.logger.log(`[updateEventPoints] Step 6 OK - cache refreshed`);
     } catch (cacheError) {
-      this.logger.warn(`Failed to refresh points-eligible cache, continuing with stale cache: ${cacheError}`);
+      this.logger.warn(`[updateEventPoints] Step 6 failed to refresh cache: ${cacheError}`);
     }
 
-    // Process each group
+    // Step 7: Process each group - assign placements and calculate points
     for (const [key, group] of groupedResults) {
       const { results: groupResults, format, isEligible: isFormatEligible } = group;
 
@@ -1140,10 +1179,12 @@ export class CompetitionResultsService {
       }
     }
 
-    // Persist all changes
+    // Step 8: Persist all changes
+    this.logger.log(`[updateEventPoints] Step 8 - flushing changes...`);
     await em.flush();
+    this.logger.log(`[updateEventPoints] Step 8 OK - changes persisted`);
 
-    // Check World Finals qualifications for all affected competitors
+    // Step 9: Check World Finals qualifications for all affected competitors
     // Tracked per MECA ID + class combination (a competitor can qualify in multiple classes)
     // Wrapped in try/catch so it doesn't break the points update if World Finals has issues
     if (this.worldFinalsService && seasonId) {
@@ -1180,7 +1221,7 @@ export class CompetitionResultsService {
       }
     }
 
-    // Check achievements for all results with linked competitors
+    // Step 10: Check achievements for all results with linked competitors
     if (this.achievementsService) {
       for (const result of results) {
         if (result.competitor?.id) {
@@ -1192,6 +1233,8 @@ export class CompetitionResultsService {
         }
       }
     }
+
+    this.logger.log(`[updateEventPoints] Complete for event ${eventId}`);
   }
 
   /**
