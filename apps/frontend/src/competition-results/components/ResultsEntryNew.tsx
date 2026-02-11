@@ -77,7 +77,7 @@ interface UserDecision {
 
 type EntryMethod = 'manual' | 'excel' | 'termlab';
 
-export default function ResultsEntryNew() {
+export default function ResultsEntryNew({ initialEventId }: { initialEventId?: string } = {}) {
   const { profile } = useAuth();
 
   // Season and Event Selection
@@ -165,6 +165,20 @@ export default function ResultsEntryNew() {
     fetchCompetitionClasses();
     fetchEvents();
   }, []);
+
+  // Auto-select event when initialEventId is provided and events are loaded
+  useEffect(() => {
+    if (initialEventId && events.length > 0 && !selectedEventId) {
+      const event = events.find(e => e.id === initialEventId);
+      if (event) {
+        // Set the season filter to match the event's season
+        if (event.season_id) {
+          setSelectedSeasonId(event.season_id);
+        }
+        setSelectedEventId(initialEventId);
+      }
+    }
+  }, [initialEventId, events]);
 
   // Filter events by season
   useEffect(() => {

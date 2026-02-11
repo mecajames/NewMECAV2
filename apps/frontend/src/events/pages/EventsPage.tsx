@@ -264,11 +264,11 @@ export default function EventsPage() {
           {/* Accordion Header */}
           <button
             onClick={() => setFiltersOpen(!filtersOpen)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-slate-700 hover:bg-slate-600 transition-colors"
+            className="w-full px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-700 hover:bg-slate-600 transition-colors"
           >
-            <div className="flex items-center gap-3">
-              <Filter className="h-5 w-5 text-orange-500" />
-              <span className="text-lg font-semibold text-white">Search and Filter Events</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
+              <span className="text-sm sm:text-lg font-semibold text-white">Search and Filter Events</span>
             </div>
             <ChevronDown
               className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
@@ -283,7 +283,7 @@ export default function EventsPage() {
               filtersOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
             }`}
           >
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
           {/* Search Field and Date Filter */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="md:col-span-3">
@@ -409,7 +409,7 @@ export default function EventsPage() {
                 <button
                   key={option.value}
                   onClick={() => setSelectedMultiplier(option.value)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                     selectedMultiplier === option.value
                       ? 'bg-orange-600 text-white'
                       : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
@@ -436,7 +436,7 @@ export default function EventsPage() {
                 <button
                   key={option.value}
                   onClick={() => setFilter(option.value as EventStatus | 'all')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                     filter === option.value
                       ? 'bg-orange-600 text-white'
                       : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
@@ -556,7 +556,7 @@ export default function EventsPage() {
                 className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1"
               >
                 {event.flyer_url ? (
-                  <div className="h-48 overflow-hidden relative">
+                  <div className="h-40 sm:h-48 overflow-hidden relative">
                     <img
                       src={getStorageUrl(event.flyer_url)}
                       alt={event.title}
@@ -583,30 +583,30 @@ export default function EventsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-48 bg-slate-700 flex items-center justify-center">
+                  <div className="h-40 sm:h-48 bg-slate-700 flex items-center justify-center">
                     <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-32 w-auto opacity-50" />
                   </div>
                 )}
 
-                <div className="p-6">
-                  {/* Title row with Day, Multiplier, and Status badges on the right */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <h3 className="text-2xl font-bold text-white">
+                <div className="p-4 sm:p-6">
+                  {/* Title and badges */}
+                  <div className="mb-3">
+                    <h3 className="text-base sm:text-xl md:text-2xl font-bold text-white mb-2">
                       {event.title}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       {event.day_number && (
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-blue-500/10 text-blue-400 border-blue-500">
+                        <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border bg-blue-500/10 text-blue-400 border-blue-500">
                           Day {event.day_number}
                         </span>
                       )}
                       {event.points_multiplier !== undefined && event.points_multiplier !== null && (
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-orange-500/10 text-orange-400 border-orange-500">
+                        <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border bg-orange-500/10 text-orange-400 border-orange-500">
                           {event.points_multiplier}X Points Event
                         </span>
                       )}
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(
+                        className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${getStatusColor(
                           event.status
                         )}`}
                       >
@@ -615,14 +615,14 @@ export default function EventsPage() {
                     </div>
                   </div>
 
-                  {/* Format Badges - Second Line */}
+                  {/* Format Badges */}
                   {(event.formats && event.formats.length > 0) || event.format ? (
-                    <div className="flex flex-wrap gap-2 mb-4">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3 sm:mb-4">
                       {event.formats && event.formats.length > 0 ? (
                         event.formats.map((format) => (
                           <span
                             key={format}
-                            className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(
+                            className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${getFormatColor(
                               format
                             )}`}
                           >
@@ -631,7 +631,7 @@ export default function EventsPage() {
                         ))
                       ) : event.format ? (
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(
+                          className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${getFormatColor(
                             event.format
                           )}`}
                         >
@@ -641,9 +641,9 @@ export default function EventsPage() {
                     </div>
                   ) : null}
 
-                  <div className="space-y-3 mb-4">
-                    <div className="flex items-center gap-2 text-gray-300">
-                      <Calendar className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                  <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
+                    <div className="flex items-center gap-2 text-gray-300 text-sm sm:text-base">
+                      <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />
                       <span>
                         {new Date(event.event_date).toLocaleDateString('en-US', {
                           weekday: 'long',
@@ -656,12 +656,12 @@ export default function EventsPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-start gap-2 text-gray-300">
-                      <MapPin className="h-5 w-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex items-start gap-2 text-gray-300 text-sm sm:text-base">
+                      <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0 mt-0.5" />
                       <div>
                         <div>{event.venue_name}</div>
                         {(event.venue_address || event.venue_city || event.venue_state) && (
-                          <div className="text-sm text-gray-400">
+                          <div className="text-xs sm:text-sm text-gray-400">
                             {event.venue_address && <span>{event.venue_address}</span>}
                             {event.venue_address && (event.venue_city || event.venue_state) && <span>, </span>}
                             {event.venue_city && <span>{event.venue_city}</span>}
@@ -673,48 +673,48 @@ export default function EventsPage() {
                     </div>
 
                     {event.registration_fee > 0 && (
-                      <div className="flex items-center gap-2 text-gray-300">
-                        <DollarSign className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                      <div className="flex items-center gap-2 text-gray-300 text-sm sm:text-base">
+                        <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />
                         <span>Registration Fee: ${event.registration_fee}</span>
                       </div>
                     )}
 
                     {event.max_participants && (
-                      <div className="flex items-center gap-2 text-gray-300">
-                        <Users className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                      <div className="flex items-center gap-2 text-gray-300 text-sm sm:text-base">
+                        <Users className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />
                         <span>Max Participants: {event.max_participants}</span>
                       </div>
                     )}
                   </div>
 
                   {event.description && (
-                    <p className="text-gray-400 mb-4 line-clamp-2">
+                    <p className="text-gray-400 text-sm sm:text-base mb-3 sm:mb-4 line-clamp-2">
                       {event.description}
                     </p>
                   )}
 
-                  {/* Buttons - Two buttons for completed events, one for others */}
+                  {/* Buttons */}
                   {event.status === 'completed' ? (
-                    <div className="flex gap-3">
+                    <div className="flex gap-2 sm:gap-3">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/events/${event.id}`);
                         }}
-                        className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 sm:gap-2"
                       >
-                        <Calendar className="h-5 w-5" />
-                        View Event Details
+                        <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
+                        Event Details
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/results?eventId=${event.id}`);
                         }}
-                        className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-2 sm:py-3 text-sm sm:text-base bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 sm:gap-2"
                       >
-                        <TrendingUp className="h-5 w-5" />
-                        View Event Results
+                        <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />
+                        Event Results
                       </button>
                     </div>
                   ) : (
@@ -723,7 +723,7 @@ export default function EventsPage() {
                         e.stopPropagation();
                         navigate(`/events/${event.id}`);
                       }}
-                      className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                      className="w-full py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                     >
                       View Event Details
                     </button>
