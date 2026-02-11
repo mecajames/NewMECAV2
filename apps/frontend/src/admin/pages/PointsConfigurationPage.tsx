@@ -9,7 +9,7 @@ import {
   getPointsPreview,
 } from '../../api-client/points-configuration.api-client';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 interface Season {
   id: string;

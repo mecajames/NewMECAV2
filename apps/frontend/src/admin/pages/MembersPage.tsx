@@ -46,7 +46,7 @@ interface MemberWithMembership extends Profile {
   masterProfileName?: string; // For secondary profiles, the name of their master
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export default function MembersPage() {
   const navigate = useNavigate();
@@ -471,7 +471,10 @@ export default function MembersPage() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
+        // Search profile fields (including combined full name)
+        const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
         return (
+          fullName.includes(term) ||
           member.first_name?.toLowerCase().includes(term) ||
           member.last_name?.toLowerCase().includes(term)
         );

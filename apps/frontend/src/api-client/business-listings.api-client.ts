@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 // Helper to transform API response to ensure camelCase (handles MikroORM serialization)
 function transformListing<T>(data: any): T {

@@ -170,7 +170,7 @@ Visit your production URL (e.g., `https://your-site.netlify.app`) and verify:
 
 - [ ] Homepage loads correctly
 - [ ] Carousel images display
-- [ ] Login works (james@mecacaraudio.com / Admin123!)
+- [ ] Login works (admin credentials from environment)
 - [ ] Rulebooks page shows all 5 rulebooks
 - [ ] Rulebook PDFs download correctly
 - [ ] Media library shows all images
@@ -222,7 +222,7 @@ npx supabase db push --include-all
    - Go to Supabase Dashboard > Authentication > Users
    - Click "Add user"
    - Email: james@mecacaraudio.com
-   - Password: Admin123!
+   - Password: (use a strong password, do not commit to git)
    - Then insert profile in SQL editor:
    ```sql
    INSERT INTO profiles (id, email, first_name, last_name, meca_id, role)
