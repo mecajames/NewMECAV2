@@ -2219,7 +2219,7 @@ export default function EDEventManagementPage() {
                         if (r.missingFields.includes('frequency') && !d?.frequency) return false;
                         return true;
                       }).length === 0}
-                      className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Upload className="h-4 w-4" />
                       {uploading ? 'Importing...' : 'Import Results'}

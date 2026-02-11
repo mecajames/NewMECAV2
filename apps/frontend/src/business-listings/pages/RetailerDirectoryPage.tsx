@@ -68,14 +68,14 @@ export default function RetailerDirectoryPage() {
   return (
     <>
       <SEOHead {...seoProps} />
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <Store className="h-10 w-10 text-orange-500" />
-              <h1 className="text-4xl font-bold text-white">Retailer Directory</h1>
+          <div className="mb-6 sm:mb-8">
+            <div className="flex items-center gap-2 sm:gap-3 mb-2">
+              <Store className="h-8 w-8 sm:h-10 sm:w-10 text-orange-500" />
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Retailer Directory</h1>
             </div>
-            <p className="text-gray-400">Browse MECA authorized retailers and shops</p>
+            <p className="text-gray-400 text-sm sm:text-base">Browse MECA authorized retailers and shops</p>
           </div>
 
         {error && (

@@ -102,7 +102,7 @@ export default function RulebookArchivePage() {
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <Archive className="h-10 w-10 text-orange-500" />
-            <h1 className="text-4xl font-bold text-white">Rulebook Archive</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Rulebook Archive</h1>
           </div>
           <p className="text-gray-400">Browse historical rulebooks by category and season</p>
         </div>

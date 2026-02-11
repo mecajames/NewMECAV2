@@ -22,7 +22,7 @@ export function CartPage() {
           <p className="text-gray-400 mb-8">Looks like you haven't added any items yet.</p>
           <Link
             to="/shop"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ShoppingBag className="h-5 w-5" />
             Browse Shop
@@ -181,7 +181,7 @@ export function CartPage() {
 
               <Link
                 to="/shop/checkout"
-                className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-4 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
               >
                 Proceed to Checkout
                 <ArrowRight className="h-5 w-5" />
@@ -189,7 +189,7 @@ export function CartPage() {
 
               <Link
                 to="/shop"
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 mt-4 text-gray-400 hover:text-white transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base mt-4 text-gray-400 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-5 w-5" />
                 Continue Shopping

@@ -87,12 +87,12 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         <div className="bg-slate-800 rounded-2xl shadow-2xl p-8">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-600 rounded-full mb-4">
-              <LogIn className="h-8 w-8 text-white" />
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-orange-600 rounded-full mb-4">
+              <LogIn className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
             </div>
-            <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
-            <p className="text-gray-400">Sign in to your MECACARAUDIO account</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Welcome Back</h2>
+            <p className="text-gray-400 text-sm sm:text-base">Sign in to your MECACARAUDIO account</p>
           </div>
 
           {error && (

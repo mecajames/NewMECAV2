@@ -33,8 +33,19 @@ export class CompetitionResultsController {
   }
 
   @Get('leaderboard')
-  async getLeaderboard(@Query('seasonId') seasonId?: string): Promise<any[]> {
-    return this.competitionResultsService.getLeaderboard(seasonId);
+  async getLeaderboard(
+    @Query('seasonId') seasonId?: string,
+    @Query('format') format?: string,
+    @Query('class') competitionClass?: string,
+    @Query('rankBy') rankBy?: 'points' | 'score',
+    @Query('limit') limit?: number,
+  ): Promise<any[]> {
+    return this.competitionResultsService.getLeaderboard(seasonId, {
+      format,
+      competitionClass,
+      rankBy: rankBy || 'points',
+      limit: limit ? Number(limit) : 10,
+    });
   }
 
   // Get result counts for all events in a single call (efficient bulk endpoint)

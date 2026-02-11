@@ -731,7 +731,7 @@ export default function EventHostingRequestsManagement() {
             </select>
             <button
               onClick={handleSearch}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
             >
               <Search className="h-5 w-5" />
               Search
@@ -1357,7 +1357,7 @@ export default function EventHostingRequestsManagement() {
               <div className="flex gap-4 justify-end">
                 <button
                   onClick={() => setShowAssignModal(false)}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   disabled={submitting}
                 >
                   Cancel
@@ -1365,7 +1365,7 @@ export default function EventHostingRequestsManagement() {
                 <button
                   onClick={handleAssignToED}
                   disabled={submitting || !selectedEDId}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <UserPlus className="h-5 w-5" />
                   {submitting ? 'Assigning...' : 'Assign'}
@@ -1540,7 +1540,7 @@ export default function EventHostingRequestsManagement() {
               <div className="flex gap-4 justify-end">
                 <button
                   onClick={() => setShowFinalApprovalModal(false)}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   disabled={submitting}
                 >
                   Cancel
@@ -1548,7 +1548,7 @@ export default function EventHostingRequestsManagement() {
                 <button
                   onClick={handleSubmitFinalApproval}
                   disabled={submitting || ((finalStatus === FinalApprovalStatus.REJECTED || finalStatus === FinalApprovalStatus.PENDING_INFO) && !finalReason.trim())}
-                  className={`px-6 py-3 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+                  className={`px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
                     finalStatus === FinalApprovalStatus.REJECTED ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
                   }`}
                 >
@@ -1599,7 +1599,7 @@ export default function EventHostingRequestsManagement() {
                     setShowRevokeModal(false);
                     setRevokeReason('');
                   }}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   disabled={submitting}
                 >
                   Cancel
@@ -1607,7 +1607,7 @@ export default function EventHostingRequestsManagement() {
                 <button
                   onClick={handleRevokeAssignment}
                   disabled={submitting}
-                  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <UserMinus className="h-5 w-5" />
                   {submitting ? 'Revoking...' : 'Revoke Assignment'}
@@ -1657,7 +1657,7 @@ export default function EventHostingRequestsManagement() {
                     setShowResponseModal(false);
                     setResponseText('');
                   }}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   disabled={submitting}
                 >
                   Cancel
@@ -1665,7 +1665,7 @@ export default function EventHostingRequestsManagement() {
                 <button
                   onClick={handleSubmitResponse}
                   disabled={submitting || !responseText.trim()}
-                  className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <MessageSquare className="h-5 w-5" />
                   {submitting ? 'Sending...' : 'Send Response'}
@@ -2100,7 +2100,7 @@ export default function EventHostingRequestsManagement() {
               <div className="flex gap-4 justify-end pt-4 border-t border-slate-600">
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   disabled={submitting}
                 >
                   Cancel
@@ -2108,7 +2108,7 @@ export default function EventHostingRequestsManagement() {
                 <button
                   onClick={handleSubmitEdit}
                   disabled={submitting}
-                  className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <Pencil className="h-5 w-5" />
                   {submitting ? 'Saving...' : 'Save Changes'}

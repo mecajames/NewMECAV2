@@ -347,7 +347,7 @@ export default function EDHostingRequestsPage() {
         {/* Header */}
         <div className="mb-8 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Event Hosting Requests</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Event Hosting Requests</h1>
             <p className="text-gray-400">Review and manage event hosting requests assigned to you</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -360,7 +360,7 @@ export default function EDHostingRequestsPage() {
             </button>
             <button
               onClick={() => navigate('/event-directors/submit-event')}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
             >
               <Calendar className="h-5 w-5" />
               Submit New Event
@@ -808,7 +808,7 @@ export default function EDHostingRequestsPage() {
                         <button
                           onClick={handleSendMessage}
                           disabled={sendingMessage || !newMessage.trim()}
-                          className="px-6 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                          className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
                         >
                           {sendingMessage ? (
                             <div className="h-5 w-5 animate-spin rounded-full border-2 border-solid border-white border-r-transparent" />

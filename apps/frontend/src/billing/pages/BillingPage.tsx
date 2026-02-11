@@ -127,7 +127,7 @@ export default function BillingPage() {
           <p className="text-gray-400 text-xl mb-4">Please sign in to view billing</p>
           <button
             onClick={() => navigate('/login')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Sign In
           </button>
@@ -144,7 +144,7 @@ export default function BillingPage() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <CreditCard className="h-10 w-10 text-orange-500" />
-              <h1 className="text-4xl font-bold text-white">Billing</h1>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Billing</h1>
             </div>
             <p className="text-gray-400">Manage your payments and view invoices</p>
           </div>

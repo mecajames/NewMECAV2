@@ -376,7 +376,7 @@ export function TicketList({
           {showCreateButton && (
             <button
               onClick={onCreateClick}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               Create First Ticket
             </button>

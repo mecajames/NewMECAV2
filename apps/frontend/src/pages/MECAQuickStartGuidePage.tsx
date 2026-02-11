@@ -94,7 +94,7 @@ export default function MECAQuickStartGuidePage() {
 
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">MECA Quick Start Guide</h1>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">MECA Quick Start Guide</h1>
           <p className="text-xl text-gray-300">Part 1 - SPL & SQL Overview</p>
         </div>
 
@@ -622,13 +622,13 @@ export default function MECAQuickStartGuidePage() {
           <div className="flex flex-wrap justify-center gap-4">
             <Link
               to="/events"
-              className="inline-flex items-center px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
             >
               View Events
             </Link>
             <Link
               to="/rulebooks"
-              className="inline-flex items-center px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
               <BookOpen className="w-5 h-5 mr-2" />
               Full Rulebooks

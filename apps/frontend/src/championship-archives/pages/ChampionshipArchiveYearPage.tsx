@@ -340,7 +340,7 @@ export default function ChampionshipArchiveYearPage() {
             <div className="inline-block bg-white/20 px-6 py-2 rounded-full mb-4">
               <span className="text-white font-bold text-5xl">{archive.year}</span>
             </div>
-            <h1 className="text-4xl font-bold text-white mb-4">{archive.title}</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">{archive.title}</h1>
 
             {/* Admin Controls */}
             {isAdmin && (

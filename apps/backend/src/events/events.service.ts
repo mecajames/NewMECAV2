@@ -77,6 +77,101 @@ export class EventsService {
   }
 
   /**
+   * Find public events with server-side filtering and pagination
+   * Excludes 'not_public' events
+   */
+  async findPublicEvents(options: {
+    page?: number;
+    limit?: number;
+    seasonId?: string;
+    status?: string;
+  }): Promise<{ events: Event[]; total: number; page: number; limit: number }> {
+    const em = this.em.fork();
+    const { page = 1, limit = 20, seasonId, status } = options;
+    const offset = (page - 1) * limit;
+
+    // Build filter - exclude not_public events
+    const filter: any = {
+      status: { $ne: EventStatus.NOT_PUBLIC }
+    };
+
+    if (seasonId) {
+      filter.season = seasonId;
+    }
+
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    const [events, total] = await Promise.all([
+      em.find(Event, filter, {
+        limit,
+        offset,
+        orderBy: { eventDate: 'DESC' }
+      }),
+      em.count(Event, filter)
+    ]);
+
+    return { events, total, page, limit };
+  }
+
+  /**
+   * Find completed events with result counts - optimized for Results page
+   */
+  async findCompletedWithResultCounts(options: {
+    page?: number;
+    limit?: number;
+    seasonId?: string;
+  }): Promise<{ events: any[]; total: number }> {
+    const em = this.em.fork();
+    const { page = 1, limit = 20, seasonId } = options;
+    const offset = (page - 1) * limit;
+
+    // Build WHERE conditions for count query
+    const conditions: string[] = [`e.status = 'completed'`];
+    const countParams: any[] = [];
+    let paramIndex = 1;
+
+    if (seasonId) {
+      conditions.push(`e.season_id = $${paramIndex++}`);
+      countParams.push(seasonId);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Get total count
+    const countSql = `SELECT COUNT(*) as total FROM events e WHERE ${whereClause}`;
+    const countResult = await em.getConnection().execute(countSql, countParams);
+    const total = Number(countResult[0]?.total || 0);
+
+    // Build params for main query (separate array to avoid mutation issues)
+    const mainParams: any[] = [...countParams];
+    const limitParamIndex = paramIndex++;
+    const offsetParamIndex = paramIndex;
+    mainParams.push(limit, offset);
+
+    // Get events with result counts using a single efficient query
+    const sql = `
+      SELECT
+        e.*,
+        COALESCE(rc.result_count, 0)::integer as result_count
+      FROM events e
+      LEFT JOIN (
+        SELECT event_id, COUNT(*)::integer as result_count
+        FROM competition_results
+        GROUP BY event_id
+      ) rc ON rc.event_id = e.id
+      WHERE ${whereClause}
+      ORDER BY e.event_date DESC
+      LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
+    `;
+
+    const events = await em.getConnection().execute(sql, mainParams);
+
+    return { events, total };
+  }
+
+  /**
    * Find the appropriate season for a given event date
    */
   private async findSeasonForEventDate(em: EntityManager, eventDate: Date): Promise<Season | null> {

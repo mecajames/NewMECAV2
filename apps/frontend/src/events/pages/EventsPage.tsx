@@ -84,15 +84,16 @@ export default function EventsPage() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const data = selectedSeason === 'all'
-        ? await eventsApi.getAll(1, 1000)
-        : await eventsApi.getAllBySeason(selectedSeason, 1, 1000);
+      // Use optimized endpoint with server-side filtering
+      const result = await eventsApi.getPublicEvents({
+        page: 1,
+        limit: 200, // Reduced from 1000 for better performance
+        seasonId: selectedSeason !== 'all' ? selectedSeason : undefined,
+        status: filter !== 'all' ? filter : undefined,
+      });
 
-      // Filter out not_public events (public page should never show them)
-      const publicEvents = data.filter(e => e.status !== 'not_public');
-
-      // Sort by event_date descending (newest first)
-      publicEvents.sort((a, b) =>
+      // Sort by event_date descending (newest first) - backend should do this but ensure it
+      const publicEvents = result.events.sort((a, b) =>
         new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
       );
 
@@ -249,11 +250,11 @@ export default function EventsPage() {
   return (
     <>
       <SEOHead {...seoData} />
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-4">Competition Events</h1>
-          <p className="text-gray-400 text-lg">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Competition Events</h1>
+          <p className="text-gray-400 text-sm sm:text-base md:text-lg">
             Browse upcoming and past car audio competition events
           </p>
         </div>

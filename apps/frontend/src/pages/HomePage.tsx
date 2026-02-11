@@ -179,7 +179,7 @@ export default function HomePage() {
     <>
       <SEOHead {...seoData} />
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <div className="relative h-[600px] flex items-center justify-center overflow-hidden">
+      <div className="relative h-[400px] sm:h-[450px] md:h-[500px] lg:h-[600px] flex items-center justify-center overflow-hidden">
         {/* Carousel Images */}
         {heroSettings.image_urls.map((url, index) => (
           <div
@@ -194,23 +194,23 @@ export default function HomePage() {
         ))}
 
         {/* Content Overlay */}
-        <div className="relative z-10 text-center text-white px-4">
-          <h1 className="text-5xl md:text-7xl font-bold mb-6">
+        <div className="relative z-10 text-center text-white px-6 sm:px-8 md:px-12 max-w-4xl mx-auto">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold mb-3 sm:mb-6">
             {heroSettings.title}
           </h1>
-          <p className="text-xl md:text-2xl mb-8 text-gray-200">
+          <p className="text-base sm:text-lg md:text-xl lg:text-2xl mb-4 sm:mb-8 text-gray-200">
             {heroSettings.subtitle}
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center">
             <button
               onClick={() => navigate('/events')}
-              className="px-8 py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
+              className="px-5 sm:px-8 py-2.5 sm:py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-105 shadow-lg"
             >
               {heroSettings.button_text}
             </button>
             <button
               onClick={() => navigate('/membership')}
-              className="px-8 py-4 bg-white hover:bg-gray-100 text-slate-900 font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
+              className="px-5 sm:px-8 py-2.5 sm:py-4 bg-white hover:bg-gray-100 text-slate-900 font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-105 shadow-lg"
             >
               Become a Member
             </button>
@@ -239,10 +239,10 @@ export default function HomePage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="mb-16">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-bold text-white">Upcoming Events</h2>
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">Upcoming Events</h2>
             <button
               onClick={() => navigate('/events')}
-              className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-1.5 sm:py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-sm sm:text-base transition-colors"
             >
               View All Events
             </button>
@@ -433,9 +433,9 @@ export default function HomePage() {
         </div>
 
         {/* MECA Information Section */}
-        <div className="mb-16 bg-slate-800 rounded-2xl p-8 md:p-12">
+        <div className="mb-16 bg-slate-800 rounded-2xl p-4 sm:p-8 md:p-12">
           <div className="max-w-5xl mx-auto">
-            <h2 className="text-4xl font-bold text-white mb-8 text-center">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-6 sm:mb-8 text-center">
               MECA Car Audio Competitions
             </h2>
 
@@ -446,7 +446,7 @@ export default function HomePage() {
                   MECA is the abbreviation for Mobile Electronics Competition Association, which is a club and contest organization that has been promoting car audio competitions for over 25+ years. MECA leads the industry to promote car shows and events with music, fair and fun contests for people who love loud and clear audio in their cars and trucks.
                 </p>
 
-                <h3 className="text-2xl font-bold text-white mt-8 mb-4">
+                <h3 className="text-xl sm:text-2xl font-bold text-white mt-6 sm:mt-8 mb-4">
                   Sound Pressure League Competitions
                 </h3>
                 <p>
@@ -482,7 +482,7 @@ export default function HomePage() {
                   We also offer 2 additional formats which is our Park and Pound and Dueling Demos competitions and as of the start of the 2022 season we had overhauled the Dueling Demos format and have now added a new score sheet which makes this a more competitive format.
                 </p>
 
-                <h3 className="text-2xl font-bold text-white mt-8 mb-4">
+                <h3 className="text-xl sm:text-2xl font-bold text-white mt-6 sm:mt-8 mb-4">
                   Sound Quality League Competitions
                 </h3>
                 <p>
@@ -501,7 +501,7 @@ export default function HomePage() {
                   Everyone is invited to participate in our club and contest activities. MECA State Champion credentials earn bragging rights, and our World Champions are recognized among the most accomplished competitors in organized car audio sports around the world.
                 </p>
 
-                <h3 className="text-2xl font-bold text-white mt-8 mb-4">
+                <h3 className="text-xl sm:text-2xl font-bold text-white mt-6 sm:mt-8 mb-4">
                   Car Audio Competitions Near Me?
                 </h3>
                 <p>
@@ -550,10 +550,10 @@ export default function HomePage() {
                   <span className="text-sm font-medium text-orange-400">Our Sponsors</span>
                   <Sparkles className="h-4 w-4 text-cyan-400" />
                 </div>
-                <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
+                <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3">
                   Proudly Supported By Industry Leaders
                 </h2>
-                <p className="text-gray-400 whitespace-nowrap">
+                <p className="text-sm sm:text-base text-gray-400">
                   Our sponsors are the backbone of the MECA community, supporting events and competitors worldwide
                 </p>
               </div>
@@ -610,17 +610,17 @@ export default function HomePage() {
               )}
 
               {/* View Directories Links - Always visible */}
-              <div className="flex flex-col sm:flex-row justify-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
                 <button
                   onClick={() => navigate('/retailers')}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-white font-medium rounded-lg transition-all hover:scale-105"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-white font-medium rounded-lg text-sm sm:text-base transition-all hover:scale-105"
                 >
                   <Store className="h-4 w-4 text-orange-400" />
                   View Retailer Directory
                 </button>
                 <button
                   onClick={() => navigate('/manufacturers')}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-white font-medium rounded-lg transition-all hover:scale-105"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-white font-medium rounded-lg text-sm sm:text-base transition-all hover:scale-105"
                 >
                   <Factory className="h-4 w-4 text-cyan-400" />
                   View Manufacturer Directory
@@ -631,23 +631,23 @@ export default function HomePage() {
 
         {/* Retailer & Manufacturer Membership Section */}
         <div className="mb-16">
-          <div className="text-center mb-10">
-            <h2 className="text-4xl font-bold text-white mb-4">Partner With MECA</h2>
-            <p className="text-gray-300 text-lg whitespace-nowrap">
+          <div className="text-center mb-6 sm:mb-10">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Partner With MECA</h2>
+            <p className="text-gray-300 text-sm sm:text-base md:text-lg">
               Join our network of retailers and manufacturers to grow your business and connect with the car audio community
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
             {/* Retailer Membership Card */}
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-8 border border-slate-700 hover:border-orange-500/50 transition-all">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center">
-                  <Store className="h-8 w-8 text-orange-500" />
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 sm:p-6 md:p-8 border border-slate-700 hover:border-orange-500/50 transition-all">
+              <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-orange-500/10 flex items-center justify-center">
+                  <Store className="h-6 w-6 sm:h-8 sm:w-8 text-orange-500" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-white">Retailer Membership</h3>
-                  <p className="text-orange-400 font-medium">For Shops & Installers</p>
+                  <h3 className="text-xl sm:text-2xl font-bold text-white">Retailer Membership</h3>
+                  <p className="text-orange-400 font-medium text-sm sm:text-base">For Shops & Installers</p>
                 </div>
               </div>
 
@@ -680,22 +680,22 @@ export default function HomePage() {
 
               <button
                 onClick={() => navigate('/membership/checkout/9ad7c4ee-f3d8-45f5-94c2-5259d032314b')}
-                className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2"
+                className="w-full py-2.5 sm:py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2"
               >
                 Become a Retailer Member
-                <ArrowRight className="h-5 w-5" />
+                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
 
             {/* Manufacturer Membership Card */}
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-8 border border-slate-700 hover:border-cyan-500/50 transition-all">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center">
-                  <Factory className="h-8 w-8 text-cyan-500" />
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 sm:p-6 md:p-8 border border-slate-700 hover:border-cyan-500/50 transition-all">
+              <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                  <Factory className="h-6 w-6 sm:h-8 sm:w-8 text-cyan-500" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-white">Manufacturer Membership</h3>
-                  <p className="text-cyan-400 font-medium">For Brands & Suppliers</p>
+                  <h3 className="text-xl sm:text-2xl font-bold text-white">Manufacturer Membership</h3>
+                  <p className="text-cyan-400 font-medium text-sm sm:text-base">For Brands & Suppliers</p>
                 </div>
               </div>
 
@@ -728,17 +728,17 @@ export default function HomePage() {
 
               <button
                 onClick={() => navigate('/manufacturer-membership')}
-                className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2"
+                className="w-full py-2.5 sm:py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-[1.02] shadow-lg flex items-center justify-center gap-2"
               >
                 Become a Manufacturer Partner
-                <ArrowRight className="h-5 w-5" />
+                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
           </div>
         </div>
 
         {/* Feature Cards Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8 mb-12 sm:mb-20">
           {features.map((feature, index) => (
             <div
               key={index}
@@ -756,10 +756,10 @@ export default function HomePage() {
 
         {/* YouTube Videos Section */}
         {youtubeVideos.active && youtubeVideos.videos.length > 0 && (
-          <div className="mb-20">
-            <div className="text-center mb-10">
-              <h2 className="text-4xl font-bold text-white mb-4">Latest from MECA</h2>
-              <p className="text-gray-300 text-lg">
+          <div className="mb-12 sm:mb-20">
+            <div className="text-center mb-6 sm:mb-10">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Latest from MECA</h2>
+              <p className="text-gray-300 text-sm sm:text-base md:text-lg">
                 Check out our latest videos and event highlights
               </p>
             </div>
@@ -788,14 +788,14 @@ export default function HomePage() {
           </div>
         )}
 
-        <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-12 text-center text-white">
-          <h2 className="text-4xl font-bold mb-4">Are you ready to be a MECA World Champion?</h2>
-          <p className="text-xl mb-8">
+        <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-6 sm:p-8 md:p-12 text-center text-white">
+          <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-4">Are you ready to be a MECA World Champion?</h2>
+          <p className="text-base sm:text-lg md:text-xl mb-6 sm:mb-8">
             Join thousands of car audio enthusiasts and showcase your skills
           </p>
           <button
             onClick={() => navigate('/membership')}
-            className="px-8 py-4 bg-white text-orange-600 font-semibold rounded-lg text-lg hover:bg-gray-100 transition-all transform hover:scale-105 shadow-lg"
+            className="px-5 sm:px-8 py-2.5 sm:py-4 bg-white text-orange-600 font-semibold rounded-lg text-base sm:text-lg hover:bg-gray-100 transition-all transform hover:scale-105 shadow-lg"
           >
             Start Your Journey Today!
           </button>

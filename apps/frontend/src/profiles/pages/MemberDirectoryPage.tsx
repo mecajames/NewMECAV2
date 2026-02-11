@@ -83,7 +83,7 @@ export default function MemberDirectoryPage() {
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <Users className="h-10 w-10 text-orange-500" />
-            <h1 className="text-4xl font-bold text-white">Member Directory</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Member Directory</h1>
           </div>
           <p className="text-gray-400">Browse MECA members who have made their profiles public</p>
         </div>

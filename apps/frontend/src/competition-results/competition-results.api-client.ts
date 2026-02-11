@@ -80,9 +80,23 @@ export const competitionResultsApi = {
     return response.json();
   },
 
-  getLeaderboard: async (seasonId?: string): Promise<any[]> => {
-    const url = seasonId
-      ? `${API_BASE_URL}/api/competition-results/leaderboard?seasonId=${seasonId}`
+  getLeaderboard: async (options?: {
+    seasonId?: string;
+    format?: string;
+    competitionClass?: string;
+    rankBy?: 'points' | 'score';
+    limit?: number;
+  }): Promise<any[]> => {
+    const params = new URLSearchParams();
+    if (options?.seasonId) params.append('seasonId', options.seasonId);
+    if (options?.format) params.append('format', options.format);
+    if (options?.competitionClass) params.append('class', options.competitionClass);
+    if (options?.rankBy) params.append('rankBy', options.rankBy);
+    if (options?.limit) params.append('limit', options.limit.toString());
+
+    const queryString = params.toString();
+    const url = queryString
+      ? `${API_BASE_URL}/api/competition-results/leaderboard?${queryString}`
       : `${API_BASE_URL}/api/competition-results/leaderboard`;
     const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch leaderboard');

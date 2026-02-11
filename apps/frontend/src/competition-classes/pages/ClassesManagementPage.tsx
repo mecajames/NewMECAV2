@@ -301,12 +301,12 @@ export default function ClassesManagementPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Competition Classes Management</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Competition Classes Management</h1>
             <p className="text-gray-400">Manage competition classes for each season and format</p>
           </div>
           <button
             onClick={() => navigate('/dashboard/admin')}
-            className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
             Back to Dashboard
@@ -419,7 +419,7 @@ export default function ClassesManagementPage() {
             <div className="mb-6 flex gap-4">
               <button
                 onClick={() => setShowForm(!showForm)}
-                className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
               >
                 <Plus className="h-5 w-5" />
                 Create New Class
@@ -428,7 +428,7 @@ export default function ClassesManagementPage() {
                 <button
                   onClick={handleBulkDelete}
                   disabled={deleting}
-                  className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
                 >
                   <Trash2 className="h-5 w-5" />
                   Delete Selected ({selectedClassIds.size})
@@ -517,14 +517,14 @@ export default function ClassesManagementPage() {
                   <div className="flex gap-4">
                     <button
                       type="submit"
-                      className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                      className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                     >
                       {editingClass ? 'Update Class' : 'Create Class'}
                     </button>
                     <button
                       type="button"
                       onClick={resetForm}
-                      className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                      className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                     >
                       Cancel
                     </button>
@@ -615,7 +615,7 @@ export default function ClassesManagementPage() {
                   <p className="text-gray-400 mb-4">No classes match your search/filter criteria</p>
                   <button
                     onClick={clearFilters}
-                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
                   >
                     Clear Filters
                   </button>
@@ -628,7 +628,7 @@ export default function ClassesManagementPage() {
                   <p className="text-gray-400 mb-4">No classes found for this season/format</p>
                   <button
                     onClick={() => setShowForm(true)}
-                    className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                   >
                     Create Your First Class
                   </button>

@@ -75,7 +75,7 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Event Director Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Event Director Dashboard</h1>
           <p className="text-gray-400">Manage your competition events and results</p>
         </div>
 
@@ -235,7 +235,7 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
                 <div className="text-center py-12">
                   <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
                   <p className="text-gray-400 mb-4">No events created yet</p>
-                  <button className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors">
+                  <button className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors">
                     Create Your First Event
                   </button>
                 </div>

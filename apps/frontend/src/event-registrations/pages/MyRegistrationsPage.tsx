@@ -145,7 +145,7 @@ export default function MyRegistrationsPage() {
           <p className="text-gray-400 mb-6">Please sign in to view your event registrations.</p>
           <Link
             to="/login"
-            className="inline-flex items-center px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Sign In
           </Link>
@@ -174,7 +174,7 @@ export default function MyRegistrationsPage() {
           <p className="text-gray-400 mb-6">{error}</p>
           <button
             onClick={fetchRegistrations}
-            className="inline-flex items-center px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Try Again
           </button>
@@ -188,7 +188,7 @@ export default function MyRegistrationsPage() {
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">My Registrations</h1>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">My Registrations</h1>
           <p className="text-gray-400">
             View and manage your event registrations
           </p>
@@ -242,7 +242,7 @@ export default function MyRegistrationsPage() {
             </p>
             <Link
               to="/events"
-              className="inline-flex items-center px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               Browse Events
             </Link>
@@ -380,7 +380,7 @@ export default function MyRegistrationsPage() {
           <div className="mt-8 text-center">
             <Link
               to="/events"
-              className="inline-flex items-center px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
               Browse More Events
             </Link>

@@ -180,7 +180,7 @@ export default function EventDirectorApplicationsAdminPage() {
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Event Director Applications</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Event Director Applications</h1>
             <p className="text-slate-400">Review and manage event director applications</p>
           </div>
           <div className="flex gap-3">

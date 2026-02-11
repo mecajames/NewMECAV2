@@ -305,7 +305,7 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
               ) : (
                 <Factory className="h-8 w-8 text-cyan-500" />
               )}
-              <h1 className="text-3xl font-bold text-white">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
                 {retailerListing || manufacturerListing ? 'Edit' : 'Create'}{' '}
                 {activeTab === 'retailer' ? 'Retailer' : 'Manufacturer'} Listing
               </h1>
@@ -638,14 +638,14 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
               >
                 <Save className="h-5 w-5" />
                 {saving ? 'Saving...' : 'Save Listing'}
               </button>
               <button
                 onClick={() => setIsEditing(false)}
-                className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -675,10 +675,10 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
         {/* Title Row */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">
               {membershipCategory === 'retail' ? 'Retailer' : membershipCategory === 'manufacturer' ? 'Manufacturer' : 'Business'} Directory Listing
             </h1>
-            <p className="text-gray-400">Manage your business listing and directory presence</p>
+            <p className="text-gray-400 text-sm sm:text-base">Manage your business listing and directory presence</p>
           </div>
         </div>
 
@@ -773,7 +773,7 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                   </p>
                   <button
                     onClick={() => handleCreateClick('retailer')}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                    className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
                   >
                     <Plus className="h-5 w-5" />
                     Create Retailer Listing
@@ -857,7 +857,7 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                   </p>
                   <button
                     onClick={() => handleCreateClick('manufacturer')}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
+                    className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg transition-colors"
                   >
                     <Plus className="h-5 w-5" />
                     Create Manufacturer Listing

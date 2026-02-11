@@ -90,7 +90,7 @@ export default function EventDirectorsDirectoryPage() {
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-purple-500/20 mb-6">
               <Megaphone className="h-10 w-10 text-purple-500" />
             </div>
-            <h1 className="text-4xl font-bold text-white mb-4">MECA Event Directors</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">MECA Event Directors</h1>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
             Find certified MECA event directors in your area. Our directors are experienced
             professionals who organize and run car audio competitions.
@@ -310,7 +310,7 @@ export default function EventDirectorsDirectoryPage() {
           </p>
           <Link
             to="/apply/event-director"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
           >
             Apply to Become an Event Director
           </Link>

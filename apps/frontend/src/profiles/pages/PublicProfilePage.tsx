@@ -263,7 +263,7 @@ export default function PublicProfilePage() {
           <p className="text-gray-400 text-xl mb-4">Please sign in to manage your public profile</p>
           <button
             onClick={() => navigate('/login')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Sign In
           </button>
@@ -353,11 +353,11 @@ export default function PublicProfilePage() {
           </div>
         )}
 
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">
             {isViewingSecondary ? `${currentProfileName}'s Public Profile` : 'Public Profile'}
           </h1>
-          <p className="text-gray-400">
+          <p className="text-gray-400 text-sm sm:text-base">
             {isViewingSecondary
               ? 'Manage how this competitor appears to other MECA members'
               : 'Manage how other MECA members see your profile'}
@@ -626,14 +626,14 @@ export default function PublicProfilePage() {
           <div className="flex justify-end gap-4">
             <button
               onClick={() => navigate('/dashboard')}
-              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               {saving ? (
                 <>

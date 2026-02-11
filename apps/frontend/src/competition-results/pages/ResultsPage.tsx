@@ -147,9 +147,9 @@ export default function ResultsPage() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      // Fetch events and result counts in parallel
+      // Fetch events with a reasonable limit for better performance
       const [data, resultCounts] = await Promise.all([
-        eventsApi.getAll(1, 1000),
+        eventsApi.getAll(1, 200),
         competitionResultsApi.getResultCountsByEvent().catch(() => ({} as Record<string, number>))
       ]);
 
@@ -402,19 +402,19 @@ export default function ResultsPage() {
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
       <SEOHead {...seoProps} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-4">Competition Results</h1>
-          <p className="text-gray-400 text-lg">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 sm:mb-4">Competition Results</h1>
+          <p className="text-gray-400 text-sm sm:text-base md:text-lg">
             View detailed results from completed events
           </p>
         </div>
 
         {/* Season and Event Selectors - Same Row */}
-        <div className="mb-8 bg-slate-800 rounded-xl p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="mb-6 sm:mb-8 bg-slate-800 rounded-xl p-4 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Season Selector */}
             <SeasonSelector
               selectedSeasonId={selectedSeasonId}
@@ -425,7 +425,7 @@ export default function ResultsPage() {
 
             {/* Event Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-3">
+              <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
                 Select Event
               </label>
               <div className="relative">
@@ -477,13 +477,13 @@ export default function ResultsPage() {
               </div>
 
               {/* Legend for dropdown colors */}
-              <div className="mt-2 flex items-center gap-4 text-sm">
+              <div className="mt-2 flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
                 <div className="flex items-center gap-1">
-                  <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: '#166534' }}></span>
+                  <span className="inline-block w-2.5 h-2.5 sm:w-3 sm:h-3 rounded" style={{ backgroundColor: '#166534' }}></span>
                   <span className="text-gray-400">Results Available</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: '#854d0e' }}></span>
+                  <span className="inline-block w-2.5 h-2.5 sm:w-3 sm:h-3 rounded" style={{ backgroundColor: '#854d0e' }}></span>
                   <span className="text-gray-400">Results Pending</span>
                 </div>
               </div>

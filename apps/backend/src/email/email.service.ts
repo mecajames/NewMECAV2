@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import { SiteSettingsService } from '../site-settings/site-settings.service';
 
 export interface SendEmailDto {
   to: string;
@@ -292,8 +293,97 @@ export class EmailService {
   private transporter: Transporter | null = null;
   private fromEmail: string = 'noreply@mecacaraudio.com';
 
-  constructor() {
+  // Staging mode cache to avoid DB queries for every email
+  private stagingModeCache: Map<string, { value: any; timestamp: number }> = new Map();
+  private readonly CACHE_TTL = 60000; // 1 minute
+
+  constructor(
+    @Optional() @Inject(SiteSettingsService)
+    private readonly siteSettingsService?: SiteSettingsService,
+  ) {
     this.checkConfiguration();
+  }
+
+  /**
+   * Get a staging mode setting with caching
+   */
+  private async getStagingModeSetting(key: string): Promise<any> {
+    if (!this.siteSettingsService) {
+      return null;
+    }
+
+    const cached = this.stagingModeCache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      return cached.value;
+    }
+
+    try {
+      const setting = await this.siteSettingsService.findByKey(key);
+      let value: any = setting?.setting_value;
+
+      // Parse based on type
+      if (setting?.setting_type === 'boolean') {
+        value = value === 'true';
+      } else if (setting?.setting_type === 'json') {
+        try {
+          value = JSON.parse(value || '[]');
+        } catch {
+          value = [];
+        }
+      }
+
+      this.stagingModeCache.set(key, { value, timestamp: Date.now() });
+      return value;
+    } catch (error) {
+      this.logger.warn(`Failed to fetch staging mode setting ${key}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Filter email recipient based on staging mode settings
+   */
+  private async filterEmailRecipient(originalEmail: string): Promise<{
+    shouldSend: boolean;
+    recipientEmail: string;
+    reason?: string;
+  }> {
+    // Check if staging mode is enabled
+    const stagingEnabled = await this.getStagingModeSetting('staging_mode_enabled');
+
+    if (!stagingEnabled) {
+      return { shouldSend: true, recipientEmail: originalEmail };
+    }
+
+    // Check allowed emails list
+    const allowedEmails: string[] = (await this.getStagingModeSetting('staging_mode_allowed_emails')) || [];
+    if (allowedEmails.some(email => email.toLowerCase() === originalEmail.toLowerCase())) {
+      return { shouldSend: true, recipientEmail: originalEmail };
+    }
+
+    // Check allowed domains
+    const allowedDomains: string[] = (await this.getStagingModeSetting('staging_mode_allowed_domains')) || [];
+    const emailDomain = originalEmail.split('@')[1]?.toLowerCase();
+    if (emailDomain && allowedDomains.some(d => emailDomain === d.toLowerCase().replace('@', ''))) {
+      return { shouldSend: true, recipientEmail: originalEmail };
+    }
+
+    // Redirect to test email if configured
+    const testEmail = await this.getStagingModeSetting('staging_mode_test_email');
+    if (testEmail) {
+      return {
+        shouldSend: true,
+        recipientEmail: testEmail,
+        reason: `Redirected from ${originalEmail} (staging mode)`,
+      };
+    }
+
+    // Block the email
+    return {
+      shouldSend: false,
+      recipientEmail: originalEmail,
+      reason: `Blocked in staging mode: ${originalEmail}`,
+    };
   }
 
   private checkConfiguration() {
@@ -388,13 +478,27 @@ export class EmailService {
       };
     }
 
+    // Apply staging mode filter
+    const filtered = await this.filterEmailRecipient(dto.to);
+    if (!filtered.shouldSend) {
+      this.logger.warn(`[STAGING MODE] ${filtered.reason}`);
+      return { success: true, error: filtered.reason }; // Success=true so callers don't retry
+    }
+
+    if (filtered.reason) {
+      this.logger.log(`[STAGING MODE] ${filtered.reason}`);
+    }
+
+    // Use filtered email address
+    const emailToSend = { ...dto, to: filtered.recipientEmail };
+
     try {
       if (this.provider === 'smtp' || this.provider === 'mailgun') {
-        return await this.sendViaNodemailer(dto);
+        return await this.sendViaNodemailer(emailToSend);
       } else if (this.provider === 'sendgrid') {
-        return await this.sendViaSendGrid(dto);
+        return await this.sendViaSendGrid(emailToSend);
       } else if (this.provider === 'resend') {
-        return await this.sendViaResend(dto);
+        return await this.sendViaResend(emailToSend);
       }
 
       return { success: false, error: 'No provider configured' };

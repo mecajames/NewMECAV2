@@ -31,16 +31,16 @@ export default function SeasonSelector({
   }, [autoSelectCurrent, selectedSeasonId, currentSeason, onSeasonChange, loading]);
 
   return (
-    <div className={`flex items-center gap-3 ${className}`}>
+    <div className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 ${className}`}>
       <div className="flex items-center gap-2 text-gray-300">
-        <Calendar className="h-5 w-5 text-orange-500" />
-        <span className="font-medium">{label}:</span>
+        <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />
+        <span className="font-medium text-sm sm:text-base whitespace-nowrap">{label}:</span>
       </div>
       <select
         value={selectedSeasonId}
         onChange={(e) => onSeasonChange(e.target.value)}
         disabled={loading}
-        className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-3 sm:px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-orange-500 hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
       >
         {showAllOption && <option value="">All Seasons</option>}
         {seasons.map((season) => (

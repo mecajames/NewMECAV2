@@ -271,7 +271,7 @@ export default function EventDetailPage() {
           <p className="text-gray-400 text-xl mb-4">Event not found</p>
           <button
             onClick={() => navigate('/events')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Back to Events
           </button>
@@ -365,9 +365,9 @@ export default function EventDetailPage() {
           </div>
         )}
 
-        <div className="bg-slate-800 rounded-xl shadow-2xl p-8 mb-8">
-          <div className="flex items-start justify-between mb-6">
-            <h1 className="text-4xl font-bold text-white">{event.title}</h1>
+        <div className="bg-slate-800 rounded-xl shadow-2xl p-4 sm:p-6 md:p-8 mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+            <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white">{event.title}</h1>
             <div className="flex items-center gap-2">
               {event.day_number && (
                 <span className="px-4 py-2 rounded-full text-sm font-semibold bg-blue-500/10 text-blue-400 border border-blue-500">
