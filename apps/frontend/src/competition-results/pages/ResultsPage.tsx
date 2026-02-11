@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
@@ -30,6 +30,7 @@ export default function ResultsPage() {
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
+  const [selectedClass, setSelectedClass] = useState<string>('all');
   const [availableFormats, setAvailableFormats] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
@@ -40,8 +41,8 @@ export default function ResultsPage() {
   const [isAggregatedView, setIsAggregatedView] = useState(false);
   const [eventResultCounts, setEventResultCounts] = useState<Record<string, number>>({});
 
-  // Computed list of recent events (past 10 days to capture weekend events)
-  const recentEvents = (() => {
+  // Memoized list of recent events (past 10 days to capture weekend events)
+  const recentEvents = useMemo(() => {
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
     tenDaysAgo.setHours(0, 0, 0, 0);
@@ -75,10 +76,10 @@ export default function ResultsPage() {
 
     // Sort by date descending (most recent first)
     return recent.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
-  })();
+  }, [events]);
 
-  // Computed list of events for the dropdown - groups multi-day State/World Finals into single entries
-  const displayEvents = (() => {
+  // Memoized list of events for the dropdown - groups multi-day State/World Finals into single entries
+  const displayEvents = useMemo(() => {
     const grouped: Event[] = [];
     const processedGroups = new Set<string>();
 
@@ -101,7 +102,7 @@ export default function ResultsPage() {
     });
 
     return grouped;
-  })();
+  }, [events]);
 
   useEffect(() => {
     fetchEvents();
@@ -368,36 +369,59 @@ export default function ResultsPage() {
     });
   };
 
-  // Group results by format and class with search filtering
-  const groupedResults: GroupedResults = {};
-  results.forEach(result => {
-    const classData = classes.find(c => c.id === (result.classId || result.class_id));
-    const format = classData?.format || 'Unknown';
-    const className = result.competitionClass || result.competition_class || 'Unknown';
+  // Memoized available classes based on loaded results and selected format
+  const availableClasses = useMemo(() => {
+    const classSet = new Set<string>();
+    results.forEach(result => {
+      const classData = classes.find(c => c.id === (result.classId || result.class_id));
+      const format = classData?.format || 'Unknown';
+      const className = result.competitionClass || result.competition_class || 'Unknown';
 
-    if (selectedFormat !== 'all' && format !== selectedFormat) {
-      return;
-    }
+      // Only include classes for the selected format (or all if no format filter)
+      if (selectedFormat === 'all' || format === selectedFormat) {
+        classSet.add(className);
+      }
+    });
+    return Array.from(classSet).sort();
+  }, [results, classes, selectedFormat]);
 
-    // Apply search filter
-    if (searchTerm) {
-      const competitorName = (result.competitorName || result.competitor_name || '').toLowerCase();
-      const mecaId = (result.mecaId || result.meca_id || '').toLowerCase();
-      const search = searchTerm.toLowerCase();
+  // Memoized grouped results by format and class with search/filter applied
+  const groupedResults: GroupedResults = useMemo(() => {
+    const grouped: GroupedResults = {};
+    results.forEach(result => {
+      const classData = classes.find(c => c.id === (result.classId || result.class_id));
+      const format = classData?.format || 'Unknown';
+      const className = result.competitionClass || result.competition_class || 'Unknown';
 
-      if (!competitorName.includes(search) && !mecaId.includes(search)) {
+      if (selectedFormat !== 'all' && format !== selectedFormat) {
         return;
       }
-    }
 
-    if (!groupedResults[format]) {
-      groupedResults[format] = {};
-    }
-    if (!groupedResults[format][className]) {
-      groupedResults[format][className] = [];
-    }
-    groupedResults[format][className].push(result);
-  });
+      if (selectedClass !== 'all' && className !== selectedClass) {
+        return;
+      }
+
+      // Apply search filter
+      if (searchTerm) {
+        const competitorName = (result.competitorName || result.competitor_name || '').toLowerCase();
+        const mecaId = (result.mecaId || result.meca_id || '').toLowerCase();
+        const search = searchTerm.toLowerCase();
+
+        if (!competitorName.includes(search) && !mecaId.includes(search)) {
+          return;
+        }
+      }
+
+      if (!grouped[format]) {
+        grouped[format] = {};
+      }
+      if (!grouped[format][className]) {
+        grouped[format][className] = [];
+      }
+      grouped[format][className].push(result);
+    });
+    return grouped;
+  }, [results, classes, selectedFormat, selectedClass, searchTerm]);
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
@@ -499,7 +523,7 @@ export default function ResultsPage() {
           <>
             {/* Selected Event Info */}
             {selectedEvent && (
-              <div className="mb-8 bg-slate-800 rounded-xl p-6">
+              <div className="mb-6 sm:mb-8 bg-slate-800 rounded-xl p-4 sm:p-6">
                 {(() => {
                   // Check if this is an aggregated multi-day State/World Finals
                   const isMultiDayFinals = selectedEvent.multi_day_group_id &&
@@ -507,22 +531,22 @@ export default function ResultsPage() {
                   const showDayBadge = selectedEvent.day_number && !isMultiDayFinals;
 
                   return (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-xl font-semibold text-white mb-1">
-                          {selectedEvent.title}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                      <div className="min-w-0">
+                        <h3 className="text-lg sm:text-xl font-semibold text-white mb-1 flex flex-wrap items-center gap-2">
+                          <span className="break-words">{selectedEvent.title}</span>
                           {showDayBadge && (
-                            <span className="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500">
+                            <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500 whitespace-nowrap">
                               Day {selectedEvent.day_number}
                             </span>
                           )}
                           {isMultiDayFinals && multiDayEvents.length > 1 && (
-                            <span className="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500">
+                            <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500 whitespace-nowrap">
                               {multiDayEvents.length}-Day Event
                             </span>
                           )}
                         </h3>
-                        <p className="text-gray-400">
+                        <p className="text-sm sm:text-base text-gray-400">
                           {isMultiDayFinals && multiDayEvents.length > 1
                             ? `${new Date(multiDayEvents[0]?.event_date || selectedEvent.event_date).toLocaleDateString('en-US', {
                                 month: 'long',
@@ -543,7 +567,7 @@ export default function ResultsPage() {
                       </div>
                       <button
                         onClick={() => navigate(`/events/${selectedEvent.id}`)}
-                        className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                        className="w-full sm:w-auto px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm sm:text-base font-semibold rounded-lg transition-colors text-center flex-shrink-0"
                       >
                         View Event
                       </button>
@@ -553,22 +577,22 @@ export default function ResultsPage() {
 
                 {/* Aggregated Results Banner */}
                 {isAggregatedView && multiDayEvents.length > 1 && (
-                  <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Layers className="h-6 w-6 text-purple-400 flex-shrink-0" />
-                      <div>
-                        <h4 className="text-purple-400 font-semibold">
+                  <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-purple-500/10 border border-purple-500 rounded-lg">
+                    <div className="flex items-start gap-2 sm:gap-3">
+                      <Layers className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400 flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <h4 className="text-sm sm:text-base text-purple-400 font-semibold">
                           Combined Results from {multiDayEvents.length} Days
                         </h4>
-                        <p className="text-gray-400 text-sm mt-1">
+                        <p className="text-gray-400 text-xs sm:text-sm mt-1">
                           Showing highest score per competitor per class across all days of this{' '}
                           {selectedEvent?.event_type === 'world_finals' ? 'World Finals' : 'State Finals'} event.
                         </p>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
                           {multiDayEvents.map((dayEvent) => (
                             <span
                               key={dayEvent.id}
-                              className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-700 text-gray-300"
+                              className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-slate-700 text-gray-300"
                             >
                               Day {dayEvent.day_number}: {new Date(dayEvent.event_date).toLocaleDateString('en-US', {
                                 month: 'short',
@@ -586,9 +610,9 @@ export default function ResultsPage() {
 
             {/* Recent Events Section */}
             {recentEvents.length > 0 && !selectedEventId && (
-              <div className="mb-8 bg-slate-800 rounded-xl p-6">
-                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-orange-500" />
+              <div className="mb-6 sm:mb-8 bg-slate-800 rounded-xl p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 flex items-center gap-2">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
                   Recent Events (Past 10 Days)
                 </h2>
                 <div className="space-y-3">
@@ -611,23 +635,23 @@ export default function ResultsPage() {
                     return (
                       <div
                         key={event.id}
-                        className={`flex items-center justify-between p-4 rounded-lg border-l-4 ${
+                        className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 rounded-lg border-l-4 gap-3 ${
                           hasResults
                             ? 'bg-green-900/20 border-green-500'
                             : 'bg-yellow-900/20 border-yellow-500'
                         }`}
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <h3 className="text-lg font-semibold text-white">
+                          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                            <h3 className="text-base sm:text-lg font-semibold text-white">
                               {event.title}
                             </h3>
                             {isMultiDayFinals && groupEvents.length > 1 && (
-                              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-500/20 text-purple-400 border border-purple-500">
+                              <span className="px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-semibold bg-purple-500/20 text-purple-400 border border-purple-500">
                                 {groupEvents.length}-Day
                               </span>
                             )}
-                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                            <span className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-semibold ${
                               hasResults
                                 ? 'bg-green-500/20 text-green-400'
                                 : 'bg-yellow-500/20 text-yellow-400'
@@ -635,9 +659,9 @@ export default function ResultsPage() {
                               {hasResults ? 'Results Available' : 'Results Pending'}
                             </span>
                           </div>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-gray-400 flex-wrap">
+                          <div className="flex items-center gap-3 sm:gap-4 mt-1 text-xs sm:text-sm text-gray-400 flex-wrap">
                             <span className="flex items-center gap-1">
-                              <Calendar className="h-4 w-4" />
+                              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               {isMultiDayFinals && groupEvents.length > 1
                                 ? `${new Date(groupEvents[0]?.event_date || event.event_date).toLocaleDateString('en-US', {
                                     month: 'short',
@@ -657,7 +681,7 @@ export default function ResultsPage() {
                             </span>
                             {location && (
                               <span className="flex items-center gap-1">
-                                <MapPin className="h-4 w-4" />
+                                <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                 {location}
                               </span>
                             )}
@@ -665,7 +689,7 @@ export default function ResultsPage() {
                         </div>
                         <button
                           onClick={() => setSelectedEventId(event.id)}
-                          className={`ml-4 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2 whitespace-nowrap ${
+                          className={`w-full sm:w-auto px-4 py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
                             hasResults
                               ? 'bg-green-600 hover:bg-green-700 text-white'
                               : 'bg-yellow-600 hover:bg-yellow-700 text-white'
@@ -682,10 +706,10 @@ export default function ResultsPage() {
             )}
 
             {!selectedEventId && recentEvents.length === 0 ? (
-              <div className="text-center py-20 bg-slate-800 rounded-xl">
-                <Calendar className="h-20 w-20 text-gray-500 mx-auto mb-4" />
-                <p className="text-gray-400 text-xl">Please select an event from the dropdown above</p>
-                <p className="text-gray-500 mt-2">Choose an event to view its competition results.</p>
+              <div className="text-center py-12 sm:py-20 bg-slate-800 rounded-xl px-4">
+                <Calendar className="h-14 w-14 sm:h-20 sm:w-20 text-gray-500 mx-auto mb-3 sm:mb-4" />
+                <p className="text-gray-400 text-base sm:text-xl">Please select an event from the dropdown above</p>
+                <p className="text-gray-500 text-sm sm:text-base mt-2">Choose an event to view its competition results.</p>
               </div>
             ) : !selectedEventId ? (
               null
@@ -696,14 +720,14 @@ export default function ResultsPage() {
             ) : results.length > 0 ? (
               <>
                 {/* Format Filter and Search */}
-                <div className="mb-6 bg-slate-800 rounded-xl p-6">
-                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                <div className="mb-4 sm:mb-6 bg-slate-800 rounded-xl p-4 sm:p-6">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
                     Filter by Format/Division:
                   </label>
-                  <div className="flex flex-wrap gap-2 mb-6">
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4 sm:mb-6">
                     <button
-                      onClick={() => setSelectedFormat('all')}
-                      className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                      onClick={() => { setSelectedFormat('all'); setSelectedClass('all'); }}
+                      className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-colors ${
                         selectedFormat === 'all'
                           ? 'bg-orange-600 text-white'
                           : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
@@ -714,8 +738,11 @@ export default function ResultsPage() {
                     {availableFormats.map((format) => (
                       <button
                         key={format}
-                        onClick={() => setSelectedFormat(format)}
-                        className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                        onClick={() => {
+                          setSelectedFormat(format);
+                          setSelectedClass('all');
+                        }}
+                        className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-colors ${
                           selectedFormat === format
                             ? 'bg-orange-600 text-white'
                             : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
@@ -726,41 +753,127 @@ export default function ResultsPage() {
                     ))}
                   </div>
 
-                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                  {/* Class Filter Dropdown */}
+                  {availableClasses.length > 1 && (
+                    <div className="mb-4 sm:mb-6">
+                      <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
+                        Filter by Class:
+                      </label>
+                      <select
+                        value={selectedClass}
+                        onChange={(e) => setSelectedClass(e.target.value)}
+                        className="w-full sm:w-64 px-4 py-2.5 sm:py-3 bg-slate-700 border border-slate-600 rounded-lg text-sm sm:text-base text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      >
+                        <option value="all">All Classes</option>
+                        {availableClasses.map((cls) => (
+                          <option key={cls} value={cls}>{cls}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
                     Search by Name or MECA ID
                   </label>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Enter competitor name or MECA ID..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 bg-slate-700 border border-slate-600 rounded-lg text-sm sm:text-base text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
                 </div>
 
                 {/* Results grouped by format and class */}
-                <div className="space-y-8">
+                <div className="space-y-6 sm:space-y-8">
                   {Object.entries(groupedResults).map(([format, classesByName]) => (
                     <div key={format} className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
-                      <div className="bg-slate-700 px-6 py-4">
-                        <h2 className="text-2xl font-bold text-white">
+                      <div className="bg-slate-700 px-4 sm:px-6 py-3 sm:py-4">
+                        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
                           {format} Results
-                          <span className="ml-3 text-sm bg-orange-500 text-white px-2.5 py-1 rounded-full">
+                          <span className="text-xs sm:text-sm bg-orange-500 text-white px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full">
                             {Object.values(classesByName).reduce((sum, arr) => sum + arr.length, 0)}
                           </span>
                         </h2>
                       </div>
 
-                      <div className="p-6 space-y-6">
+                      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
                         {Object.entries(classesByName).map(([className, classResults]) => (
                           <div key={className}>
-                            <h3 className="text-lg font-semibold text-orange-400 mb-3 px-3">
+                            <h3 className="text-base sm:text-lg font-semibold text-orange-400 mb-2 sm:mb-3 px-1 sm:px-3">
                               {className}
                             </h3>
-                            <div className="overflow-x-auto rounded-lg">
+
+                            {/* Mobile Card Layout */}
+                            <div className="sm:hidden space-y-2">
+                              {sortResults(classResults).map((result) => {
+                                const mecaId = result.mecaId || result.meca_id;
+                                const membershipExpiry = result.competitor?.membership_expiry;
+                                const mecaDisplay = getMecaIdDisplay(mecaId, membershipExpiry);
+                                const state = result.stateCode || result.state_code || 'N/E';
+
+                                return (
+                                  <div
+                                    key={result.id}
+                                    className="bg-slate-700/50 rounded-lg p-3 flex items-start gap-3"
+                                  >
+                                    {/* Placement Badge */}
+                                    <span
+                                      className={`inline-flex items-center justify-center w-9 h-9 rounded-full font-bold text-sm flex-shrink-0 ${getPlacementBadge(
+                                        result.placement
+                                      )}`}
+                                    >
+                                      {result.placement}
+                                    </span>
+
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-semibold text-white text-sm">
+                                        {result.competitorName || result.competitor_name}
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-400">
+                                        <span>{state}</span>
+                                        {mecaId && mecaId !== '999999' ? (
+                                          <Link
+                                            to={`/results/member/${mecaId}`}
+                                            className={`font-semibold ${mecaDisplay.color} hover:underline hover:text-orange-400 transition-colors`}
+                                          >
+                                            ID: {mecaDisplay.text}
+                                          </Link>
+                                        ) : (
+                                          <span className={`font-semibold ${mecaDisplay.color}`}>
+                                            {mecaDisplay.text}
+                                          </span>
+                                        )}
+                                        {format === 'SPL' && result.wattage && (
+                                          <span>{result.wattage}W</span>
+                                        )}
+                                        {format === 'SPL' && result.frequency && (
+                                          <span>{result.frequency}Hz</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Score & Points */}
+                                    <div className="text-right flex-shrink-0">
+                                      <div className="text-base font-bold text-white">
+                                        {result.score}
+                                      </div>
+                                      <div className="flex items-center justify-end gap-0.5 text-orange-500 text-xs font-semibold">
+                                        <Award className="h-3 w-3" />
+                                        {result.pointsEarned ?? result.points_earned}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Desktop Table Layout */}
+                            <div className="hidden sm:block overflow-x-auto rounded-lg">
                               <table className="w-full">
                                 <thead className="bg-slate-700">
                                   <tr>
@@ -898,22 +1011,22 @@ export default function ResultsPage() {
                 </div>
               </>
             ) : (
-              <div className="text-center py-20 bg-slate-800 rounded-xl">
-                <Trophy className="h-20 w-20 text-gray-500 mx-auto mb-4" />
-                <p className="text-gray-400 text-xl">
+              <div className="text-center py-12 sm:py-20 bg-slate-800 rounded-xl px-4">
+                <Trophy className="h-14 w-14 sm:h-20 sm:w-20 text-gray-500 mx-auto mb-3 sm:mb-4" />
+                <p className="text-gray-400 text-base sm:text-xl">
                   Results have not been entered for this event yet.
                 </p>
-                <p className="text-gray-500 mt-2">
+                <p className="text-gray-500 text-sm sm:text-base mt-2">
                   Please check back later or contact the event director.
                 </p>
               </div>
             )}
           </>
         ) : (
-          <div className="text-center py-20 bg-slate-800 rounded-xl">
-            <Calendar className="h-20 w-20 text-gray-500 mx-auto mb-4" />
-            <p className="text-gray-400 text-xl">No completed events with results for this season.</p>
-            <p className="text-gray-500 mt-2">Try selecting a different season above to view past results.</p>
+          <div className="text-center py-12 sm:py-20 bg-slate-800 rounded-xl px-4">
+            <Calendar className="h-14 w-14 sm:h-20 sm:w-20 text-gray-500 mx-auto mb-3 sm:mb-4" />
+            <p className="text-gray-400 text-base sm:text-xl">No completed events with results for this season.</p>
+            <p className="text-gray-500 text-sm sm:text-base mt-2">Try selecting a different season above to view past results.</p>
           </div>
         )}
       </div>

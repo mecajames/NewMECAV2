@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Trophy, TrendingUp, Filter, Medal } from 'lucide-react';
 import { competitionResultsApi } from '@/competition-results';
 import { SeasonSelector } from '@/seasons';
@@ -143,7 +143,7 @@ export default function LeaderboardPage() {
     setLoading(false);
   };
 
-  const getMecaIdDisplay = (mecaId?: string, membershipExpiry?: string) => {
+  const getMecaIdDisplay = useCallback((mecaId?: string, membershipExpiry?: string) => {
     // Non-member
     if (!mecaId || mecaId === '999999') {
       return { text: 'Non Member', color: 'text-gray-500' };
@@ -160,7 +160,7 @@ export default function LeaderboardPage() {
 
     // Valid membership
     return { text: mecaId, color: 'text-green-500' };
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
