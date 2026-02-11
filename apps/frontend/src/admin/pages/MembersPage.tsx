@@ -467,53 +467,17 @@ export default function MembersPage() {
   const filterAndSortMembers = () => {
     let filtered = [...members];
 
-    // Apply search filter
+    // Apply search filter - only searches first name and last name
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
         // Search profile fields (including combined full name)
         const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
-        if (
+        return (
           fullName.includes(term) ||
           member.first_name?.toLowerCase().includes(term) ||
-          member.last_name?.toLowerCase().includes(term) ||
-          member.email.toLowerCase().includes(term) ||
-          member.meca_id?.toString().includes(term)
-        ) {
-          return true;
-        }
-
-        // Search membership MECA ID (primary membership)
-        if (member.membershipInfo?.mecaId?.toString().includes(term)) {
-          return true;
-        }
-
-        // Search secondary membership MECA IDs
-        if (member.membershipInfo?.secondaries?.some(
-          (secondary) => secondary.mecaId?.toString().includes(term)
-        )) {
-          return true;
-        }
-
-        // Search secondary competitor names
-        if (member.membershipInfo?.secondaries?.some(
-          (secondary) => secondary.competitorName?.toLowerCase().includes(term)
-        )) {
-          return true;
-        }
-
-        // Search secondary vehicle info
-        if (member.membershipInfo?.secondaries?.some(
-          (secondary) =>
-            secondary.vehicleMake?.toLowerCase().includes(term) ||
-            secondary.vehicleModel?.toLowerCase().includes(term) ||
-            secondary.vehicleColor?.toLowerCase().includes(term) ||
-            secondary.vehicleLicensePlate?.toLowerCase().includes(term)
-        )) {
-          return true;
-        }
-
-        return false;
+          member.last_name?.toLowerCase().includes(term)
+        );
       });
     }
 
@@ -714,14 +678,14 @@ export default function MembersPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Members Management</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Members Management</h1>
             <p className="text-gray-400">
               Manage member accounts, permissions, and information
             </p>
           </div>
           <button
             onClick={() => navigate('/dashboard/admin')}
-            className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
             Back to Dashboard
@@ -733,7 +697,7 @@ export default function MembersPage() {
           <div className="mb-6 flex justify-end">
             <button
               onClick={() => setShowUserWizard(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
             >
               <UserPlus className="h-5 w-5" />
               Add User
@@ -755,7 +719,7 @@ export default function MembersPage() {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name, email, MECA ID (profile or membership)..."
+                  placeholder="Search by first or last name..."
                   className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 text-white placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 />
               </div>

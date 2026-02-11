@@ -443,7 +443,7 @@ export default function RulebookManagement() {
             <button
               type="submit"
               disabled={uploading}
-              className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+              className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
             >
               {uploading ? 'Uploading...' : editingId ? 'Update Rulebook' : 'Upload Rulebook'}
             </button>
@@ -454,7 +454,7 @@ export default function RulebookManagement() {
                   setEditingId(null);
                   resetForm();
                 }}
-                className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
               >
                 Cancel
               </button>

@@ -101,7 +101,7 @@ export default function JudgesDirectoryPage() {
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-orange-500/20 mb-6">
               <Scale className="h-10 w-10 text-orange-500" />
             </div>
-            <h1 className="text-4xl font-bold text-white mb-4">MECA Certified Judges</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">MECA Certified Judges</h1>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
             Find certified MECA judges in your area. Our judges are trained professionals
             dedicated to fair and accurate competition scoring.
@@ -316,7 +316,7 @@ export default function JudgesDirectoryPage() {
           </p>
           <Link
             to="/apply/judge"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Apply to Become a Judge
           </Link>

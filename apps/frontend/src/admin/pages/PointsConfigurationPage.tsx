@@ -320,7 +320,7 @@ export default function PointsConfigurationPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Points Configuration</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Points Configuration</h1>
             <p className="text-gray-400">
               Configure competition points for each season
             </p>
@@ -343,7 +343,7 @@ export default function PointsConfigurationPage() {
             </div>
             <button
               onClick={() => navigate('/dashboard/admin')}
-              className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
               Back to Dashboard
@@ -372,7 +372,7 @@ export default function PointsConfigurationPage() {
           <div className="text-blue-300 text-sm">
             <p className="font-medium mb-1">How Points Work</p>
             <ul className="list-disc list-inside space-y-1 text-blue-300/80">
-              <li><strong>Standard Events (1X, 2X, 3X):</strong> Base points multiplied by the event multiplier. Only top 5 placements receive points.</li>
+              <li><strong>Standard Events (1X, 2X, 3X):</strong> Base points multiplied by the event multiplier. Only top 5 placements who are active members receive points.</li>
               <li><strong>4X Events (Championship):</strong> Special fixed point values for each placement. Can optionally award participation points to placements 6th through the configured maximum.</li>
             </ul>
           </div>

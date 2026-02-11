@@ -333,7 +333,7 @@ export default function TeamLeaderboardPage() {
         ) : (
           <div className="text-center py-20">
             <Shield className="h-20 w-20 text-gray-500 mx-auto mb-4" />
-            <h2 className="text-4xl font-bold text-gray-400 mb-4">No Teams</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-400 mb-4">No Teams</h2>
             <p className="text-xl text-gray-500">No teams have competed in the selected season</p>
           </div>
         )}

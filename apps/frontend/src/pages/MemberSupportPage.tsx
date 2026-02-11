@@ -8,33 +8,33 @@ export default function MemberSupportPage() {
   // Route to /tickets if logged in, otherwise to /support/guest
   const ticketRoute = profile ? '/tickets' : '/support/guest';
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Member Support</h1>
-          <p className="text-xl text-gray-300">
+        <div className="text-center mb-8 sm:mb-12">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Member Support</h1>
+          <p className="text-base sm:text-lg md:text-xl text-gray-300">
             Your comprehensive resource for all things MECA
           </p>
         </div>
 
         {/* Support Ticket CTA */}
-        <div className="bg-gradient-to-r from-orange-600 to-orange-700 rounded-xl p-8 mb-12 shadow-lg">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center">
-                <Ticket className="w-8 h-8 text-white" />
+        <div className="bg-gradient-to-r from-orange-600 to-orange-700 rounded-xl p-4 sm:p-6 md:p-8 mb-8 sm:mb-12 shadow-lg">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/10 rounded-full flex items-center justify-center">
+                <Ticket className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-white mb-1">Need Help?</h2>
-                <p className="text-orange-100">
+                <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">Need Help?</h2>
+                <p className="text-orange-100 text-sm sm:text-base">
                   Submit a support ticket and our team will assist you as soon as possible.
                 </p>
               </div>
             </div>
             <Link
               to={ticketRoute}
-              className="px-8 py-4 bg-white text-orange-600 font-bold rounded-lg hover:bg-gray-100 transition-colors shadow-lg whitespace-nowrap"
+              className="px-5 sm:px-8 py-2.5 sm:py-4 bg-white text-orange-600 font-bold rounded-lg hover:bg-gray-100 transition-colors shadow-lg whitespace-nowrap text-sm sm:text-base"
             >
               Open Support Ticket
             </Link>
@@ -42,7 +42,7 @@ export default function MemberSupportPage() {
         </div>
 
         {/* Knowledge Base Section */}
-        <div className="bg-slate-800 rounded-xl p-8 mb-12">
+        <div className="bg-slate-800 rounded-xl p-4 sm:p-6 md:p-8 mb-8 sm:mb-12">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-slate-700 rounded-full mb-4">
               <BookOpen className="w-10 h-10 text-orange-500" />
@@ -109,39 +109,39 @@ export default function MemberSupportPage() {
         </div>
 
         {/* Contact Section */}
-        <div className="bg-slate-800 rounded-xl p-8">
-          <h2 className="text-2xl font-bold text-white mb-6 text-center">Other Ways to Reach Us</h2>
+        <div className="bg-slate-800 rounded-xl p-4 sm:p-6 md:p-8">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 text-center">Other Ways to Reach Us</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
             {/* Support Tickets */}
-            <div className="bg-slate-700 rounded-xl p-8 text-center hover:bg-slate-600/50 transition-colors">
-              <div className="w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-5">
-                <MessageSquare className="w-8 h-8 text-orange-500" />
+            <div className="bg-slate-700 rounded-xl p-4 sm:p-6 md:p-8 text-center hover:bg-slate-600/50 transition-colors">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5">
+                <MessageSquare className="w-6 h-6 sm:w-8 sm:h-8 text-orange-500" />
               </div>
-              <h3 className="text-xl text-white font-semibold mb-3">Support Tickets</h3>
-              <p className="text-gray-400 mb-6">
+              <h3 className="text-lg sm:text-xl text-white font-semibold mb-2 sm:mb-3">Support Tickets</h3>
+              <p className="text-gray-400 text-sm sm:text-base mb-4 sm:mb-6">
                 Best for detailed inquiries and tracking your requests. Our team typically responds within 24-48 hours.
               </p>
               <Link
                 to={ticketRoute}
-                className="inline-block px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                className="inline-block px-4 sm:px-6 py-2 sm:py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-sm sm:text-base transition-colors"
               >
                 Submit Ticket
               </Link>
             </div>
 
             {/* Phone */}
-            <div className="bg-slate-700 rounded-xl p-8 text-center hover:bg-slate-600/50 transition-colors">
-              <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-5">
-                <Phone className="w-8 h-8 text-green-500" />
+            <div className="bg-slate-700 rounded-xl p-4 sm:p-6 md:p-8 text-center hover:bg-slate-600/50 transition-colors">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-5">
+                <Phone className="w-6 h-6 sm:w-8 sm:h-8 text-green-500" />
               </div>
-              <h3 className="text-xl text-white font-semibold mb-3">Call Us</h3>
-              <p className="text-gray-400 mb-6">
+              <h3 className="text-lg sm:text-xl text-white font-semibold mb-2 sm:mb-3">Call Us</h3>
+              <p className="text-gray-400 text-sm sm:text-base mb-4 sm:mb-6">
                 For urgent matters and immediate assistance, give us a call during business hours.
               </p>
               <a
                 href="tel:6158517428"
-                className="inline-block px-6 py-3 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg transition-colors"
+                className="inline-block px-4 sm:px-6 py-2 sm:py-3 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg text-sm sm:text-base transition-colors"
               >
                 615-851-PHAT
               </a>

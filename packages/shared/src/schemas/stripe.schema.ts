@@ -15,6 +15,8 @@ export type CreatePaymentIntentDto = z.infer<typeof CreatePaymentIntentSchema>;
 export const PaymentIntentResultSchema = z.object({
   clientSecret: z.string(),
   paymentIntentId: z.string(),
+  stagingMode: z.boolean().optional(),
+  message: z.string().optional(),
 });
 export type PaymentIntentResult = z.infer<typeof PaymentIntentResultSchema>;
 

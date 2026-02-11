@@ -84,7 +84,7 @@ export function OrderHistoryPage() {
             </p>
             <Link
               to="/shop"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
             >
               <ShoppingBag className="h-5 w-5" />
               Browse Shop

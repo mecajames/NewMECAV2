@@ -336,7 +336,7 @@ export default function TeamPublicProfilePage() {
           <p className="text-gray-400 mb-6">{error || 'This team is not available'}</p>
           <button
             onClick={() => navigate('/teams')}
-            className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
           >
             Back to Team Directory
           </button>

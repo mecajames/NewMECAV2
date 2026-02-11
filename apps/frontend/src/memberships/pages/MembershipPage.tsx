@@ -98,18 +98,18 @@ export default function MembershipPage() {
     <>
       <SEOHead {...seoProps} />
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-        <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-20">
+        <div className="relative bg-gradient-to-r from-orange-600 to-red-600 py-12 sm:py-16 md:py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-5xl font-bold text-white mb-4">Membership Benefits</h1>
-          <p className="text-xl text-white/90 max-w-3xl mx-auto">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">Membership Benefits</h1>
+          <p className="text-base sm:text-lg md:text-xl text-white/90 max-w-3xl mx-auto">
             Join the MECA community and unlock exclusive benefits for competitive car audio enthusiasts
           </p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="mb-20">
-          <h2 className="text-3xl font-bold text-white text-center mb-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 md:py-16">
+        <div className="mb-12 sm:mb-16 md:mb-20">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white text-center mb-8 sm:mb-12">
             Why Become a Member?
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -128,8 +128,8 @@ export default function MembershipPage() {
           </div>
         </div>
 
-        <div className="mb-16">
-          <h2 className="text-3xl font-bold text-white text-center mb-12">
+        <div className="mb-8 sm:mb-12 md:mb-16">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white text-center mb-8 sm:mb-12">
             Choose Your Membership
           </h2>
 
@@ -176,10 +176,10 @@ export default function MembershipPage() {
                     {membership.description || getCategoryDescription(membership.category)}
                   </p>
                   <div className="mb-6">
-                    <span className="text-5xl font-bold text-white">
+                    <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
                       ${membership.price.toFixed(0)}
                     </span>
-                    <span className="text-gray-400 ml-2">per year</span>
+                    <span className="text-gray-400 ml-2 text-sm sm:text-base">per year</span>
                   </div>
                   <ul className="space-y-4 mb-8 flex-grow">
                     {membership.benefits && membership.benefits.length > 0 ? (
@@ -212,7 +212,7 @@ export default function MembershipPage() {
                   </ul>
                   <button
                     onClick={() => handleSelectMembership(membership)}
-                    className={`w-full py-4 rounded-lg font-semibold text-lg transition-all ${
+                    className={`w-full py-2.5 sm:py-3 md:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all ${
                       membership.isFeatured
                         ? 'bg-orange-600 hover:bg-orange-700 text-white'
                         : 'bg-slate-700 hover:bg-slate-600 text-white'
@@ -226,8 +226,8 @@ export default function MembershipPage() {
           )}
         </div>
 
-        <div className="bg-slate-800 rounded-2xl p-8 md:p-12">
-          <h2 className="text-3xl font-bold text-white mb-6 text-center">
+        <div className="bg-slate-800 rounded-2xl p-4 sm:p-6 md:p-8 lg:p-12">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-4 sm:mb-6 text-center">
             Frequently Asked Questions
           </h2>
           <div className="space-y-6 max-w-3xl mx-auto">

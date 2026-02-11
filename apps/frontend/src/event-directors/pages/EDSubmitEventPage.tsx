@@ -319,7 +319,7 @@ export default function EDSubmitEventPage() {
 
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Submit New Event</h1>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Submit New Event</h1>
           <p className="text-gray-400">
             Submit a new event for admin approval. Once approved, it will be added to the events calendar.
           </p>
@@ -985,7 +985,7 @@ export default function EDSubmitEventPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-8 py-4 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+              className="px-5 sm:px-8 py-2.5 sm:py-4 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
             >
               {isSubmitting ? (
                 <>

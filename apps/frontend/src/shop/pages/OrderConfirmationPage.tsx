@@ -54,7 +54,7 @@ export function OrderConfirmationPage() {
           <p className="text-gray-400 mb-6">{error || 'The order could not be found.'}</p>
           <Link
             to="/shop"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ShoppingBag className="h-5 w-5" />
             Return to Shop
@@ -213,13 +213,13 @@ export function OrderConfirmationPage() {
         <div className="flex flex-col sm:flex-row gap-4 mt-8">
           <Link
             to="/shop/orders"
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-4 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             View All Orders
           </Link>
           <Link
             to="/shop"
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-4 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
           >
             Continue Shopping
             <ArrowRight className="h-5 w-5" />

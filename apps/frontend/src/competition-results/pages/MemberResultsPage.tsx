@@ -182,7 +182,7 @@ export default function MemberResultsPage() {
             </p>
             <Link
               to="/login"
-              className="inline-block px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="inline-block px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               Log In
             </Link>
@@ -205,7 +205,7 @@ export default function MemberResultsPage() {
             </p>
             <Link
               to="/membership"
-              className="inline-block px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="inline-block px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               View Membership Options
             </Link>

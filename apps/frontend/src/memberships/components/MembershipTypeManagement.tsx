@@ -199,7 +199,7 @@ export default function MembershipTypeManagement() {
       <div className="mb-6 flex gap-4 flex-wrap">
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
         >
           <Plus className="h-5 w-5" />
           Create New Membership Type
@@ -443,14 +443,14 @@ export default function MembershipTypeManagement() {
             <div className="flex gap-4">
               <button
                 type="submit"
-                className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
               >
                 {editingConfig ? 'Update Membership Type' : 'Create Membership Type'}
               </button>
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -561,7 +561,7 @@ export default function MembershipTypeManagement() {
             <p className="text-gray-400 mb-4">No membership type configurations found</p>
             <button
               onClick={() => setShowForm(true)}
-              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               Create Your First Config
             </button>

@@ -141,7 +141,7 @@ export default function BillingDashboardPage() {
         <p className="text-red-400 mb-4">{error}</p>
         <button
           onClick={() => fetchStats()}
-          className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+          className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
         >
           Retry
         </button>
@@ -155,7 +155,7 @@ export default function BillingDashboardPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">
               Billing Dashboard
             </h1>
             <p className="text-gray-400">

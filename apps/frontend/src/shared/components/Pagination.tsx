@@ -22,20 +22,20 @@ export default function Pagination({
   if (totalItems === 0) return null;
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-t border-slate-600">
-      <div className="flex items-center gap-4">
-        <div className="text-sm text-gray-400">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 bg-slate-800 border-t border-slate-600">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+        <div className="text-xs sm:text-sm text-gray-400 whitespace-nowrap">
           Page {currentPage} of {totalPages || 1}
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-400">Show:</label>
+          <label className="text-xs sm:text-sm text-gray-400">Show:</label>
           <select
             value={itemsPerPage}
             onChange={(e) => {
               onItemsPerPageChange(Number(e.target.value));
               onPageChange(1);
             }}
-            className="bg-slate-700 text-white text-sm rounded px-2 py-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="bg-slate-700 text-white text-xs sm:text-sm rounded px-2 py-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
           >
             {itemsPerPageOptions.map((option) => (
               <option key={option} value={option}>
@@ -43,15 +43,15 @@ export default function Pagination({
               </option>
             ))}
           </select>
-          <span className="text-sm text-gray-400">per page</span>
+          <span className="text-xs sm:text-sm text-gray-400 whitespace-nowrap">per page</span>
         </div>
       </div>
       {totalPages > 1 && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <button
             onClick={() => onPageChange(1)}
             disabled={currentPage === 1}
-            className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+            className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
             First
           </button>
@@ -60,9 +60,9 @@ export default function Pagination({
             disabled={currentPage === 1}
             className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
-          <span className="px-3 py-1 text-sm text-white">
+          <span className="px-2 sm:px-3 py-1 text-xs sm:text-sm text-white">
             {currentPage}
           </span>
           <button
@@ -70,12 +70,12 @@ export default function Pagination({
             disabled={currentPage === totalPages}
             className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
-            <ChevronRight className="h-5 w-5" />
+            <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
           <button
             onClick={() => onPageChange(totalPages)}
             disabled={currentPage === totalPages}
-            className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
+            className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
             Last
           </button>

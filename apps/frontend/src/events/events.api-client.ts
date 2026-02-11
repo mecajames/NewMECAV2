@@ -57,6 +57,43 @@ export const eventsApi = {
     return response.data;
   },
 
+  /**
+   * Get public events with server-side filtering (excludes not_public)
+   * Optimized endpoint that reduces client-side filtering
+   */
+  getPublicEvents: async (options?: {
+    page?: number;
+    limit?: number;
+    seasonId?: string;
+    status?: string;
+  }): Promise<{ events: Event[]; total: number; page: number; limit: number }> => {
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.seasonId) params.append('season_id', options.seasonId);
+    if (options?.status) params.append('status', options.status);
+
+    const response = await axios.get(`${API_BASE_URL}/api/events/public?${params.toString()}`);
+    return response.data;
+  },
+
+  /**
+   * Get completed events with result counts - optimized for Results page
+   */
+  getCompletedEventsWithResults: async (options?: {
+    page?: number;
+    limit?: number;
+    seasonId?: string;
+  }): Promise<{ events: any[]; total: number }> => {
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.seasonId) params.append('season_id', options.seasonId);
+
+    const response = await axios.get(`${API_BASE_URL}/api/events/completed-with-results?${params.toString()}`);
+    return response.data;
+  },
+
   getById: async (id: string): Promise<Event> => {
     const response = await axios.get(`${API_BASE_URL}/api/events/${id}`);
     return response.data;

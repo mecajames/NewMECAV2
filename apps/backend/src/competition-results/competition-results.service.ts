@@ -552,69 +552,136 @@ export class CompetitionResultsService {
     }
   }
 
-  async getLeaderboard(seasonId?: string): Promise<any[]> {
-    const em = this.em.fork();
+  async getLeaderboard(
+    seasonId?: string,
+    options?: {
+      format?: string;
+      competitionClass?: string;
+      rankBy?: 'points' | 'score';
+      limit?: number;
+    }
+  ): Promise<any[]> {
+    try {
+      const em = this.em.fork();
+      const { format, competitionClass, rankBy = 'points', limit = 10 } = options || {};
 
-    // Build the query filter
-    const filter: any = {};
-    let effectiveSeasonId = seasonId;
-
-    if (seasonId) {
-      filter.season = seasonId;
-    } else {
-      // Get current season for qualification status
+      // Get effective season ID
+      let effectiveSeasonId = seasonId;
+      if (!seasonId) {
       const currentSeason = await em.findOne(Season, { isCurrent: true });
       if (currentSeason) {
         effectiveSeasonId = currentSeason.id;
       }
     }
 
-    // Fetch all results with the filter
+    // Build filter for MikroORM query
+    // Use event.season instead of direct season_id to ensure consistency
+    const filter: any = {};
+    if (effectiveSeasonId) {
+      // Filter by event's season_id (more reliable than direct season_id on result)
+      filter.event = { season: effectiveSeasonId };
+    }
+    if (format) {
+      filter.format = format;
+    }
+    if (competitionClass) {
+      filter.competitionClass = competitionClass;
+    }
+
+    // Fetch results using MikroORM (simpler and more reliable)
     const results = await em.find(CompetitionResult, filter, {
-      populate: ['competitor']
+      populate: ['competitor', 'event', 'event.season'],
     });
 
-    // Aggregate results by MECA ID (per-membership, not per-user)
-    // This allows users with multiple memberships to have separate leaderboard entries
-    const aggregated = new Map<string, any>();
+    // Aggregate results in memory
+    const competitorMap = new Map<string, {
+      competitor_id: string;
+      competitor_name: string;
+      meca_id: string | null;
+      total_points: number;
+      events_participated: Set<string>;
+      first_place: number;
+      second_place: number;
+      third_place: number;
+      best_score: number;
+      is_guest: boolean;
+    }>();
 
     for (const result of results) {
-      // Use MECA ID as the primary key for aggregation
-      // Fall back to competitor name for guests (999999) to group by name
       const mecaId = result.mecaId;
-      const isGuest = !mecaId || mecaId === '999999' || mecaId === '0';
-      const aggregationKey = isGuest ? `guest_${result.competitorName}` : `meca_${mecaId}`;
+      const isGuest = !mecaId || mecaId === '999999' || mecaId === '0' || mecaId === '';
 
-      if (!aggregated.has(aggregationKey)) {
-        aggregated.set(aggregationKey, {
+      // Create a unique key - use meca_id for members, name for guests
+      const key = isGuest
+        ? `guest_${result.competitorName || 'unknown'}`
+        : `meca_${mecaId}`;
+
+      let entry = competitorMap.get(key);
+      if (!entry) {
+        entry = {
           competitor_id: result.competitor?.id || '',
-          competitor_name: result.competitorName,
+          competitor_name: result.competitorName || '',
+          meca_id: isGuest ? null : mecaId!,
           total_points: 0,
-          events_participated: 0,
+          events_participated: new Set(),
           first_place: 0,
           second_place: 0,
           third_place: 0,
-          meca_id: isGuest ? null : mecaId,
+          best_score: 0,
           is_guest: isGuest,
-          is_qualified: false, // Will be updated below
-        });
+        };
+        competitorMap.set(key, entry);
       }
 
-      const entry = aggregated.get(aggregationKey);
+      // Aggregate data
       entry.total_points += result.pointsEarned || 0;
-      entry.events_participated += 1;
-
-      if (result.placement === 1) entry.first_place += 1;
-      if (result.placement === 2) entry.second_place += 1;
-      if (result.placement === 3) entry.third_place += 1;
+      // Use event relation or eventId property
+      const eventId = result.event?.id || (result as any).eventId;
+      if (eventId) {
+        entry.events_participated.add(eventId);
+      }
+      if (result.placement === 1) entry.first_place++;
+      if (result.placement === 2) entry.second_place++;
+      if (result.placement === 3) entry.third_place++;
+      if (result.score > entry.best_score) {
+        entry.best_score = result.score;
+      }
     }
 
-    // Get qualification statuses for all MECA IDs
+    // Convert to array and sort
+    let entries = Array.from(competitorMap.values())
+      .filter(e => e.total_points > 0) // Only include entries with points
+      .map(e => ({
+        competitor_id: e.competitor_id,
+        competitor_name: e.competitor_name,
+        competition_class: competitionClass || 'Overall',
+        total_points: e.total_points,
+        events_participated: e.events_participated.size,
+        first_place: e.first_place,
+        second_place: e.second_place,
+        third_place: e.third_place,
+        best_score: e.best_score,
+        meca_id: e.meca_id,
+        is_guest: e.is_guest,
+        is_qualified: false,
+      }));
+
+    // Sort by the appropriate field
+    if (rankBy === 'score') {
+      entries.sort((a, b) => b.best_score - a.best_score);
+    } else {
+      entries.sort((a, b) => b.total_points - a.total_points);
+    }
+
+    // Limit results
+    entries = entries.slice(0, limit);
+
+    // Get qualification statuses for all MECA IDs (only if we have world finals service)
     if (effectiveSeasonId && this.worldFinalsService) {
-      const mecaIds = Array.from(aggregated.values())
-        .filter(e => e.meca_id)
-        .map(e => parseInt(e.meca_id, 10))
-        .filter(id => !isNaN(id));
+      const mecaIds = entries
+        .filter((e: any) => e.meca_id)
+        .map((e: any) => parseInt(e.meca_id, 10))
+        .filter((id: number) => !isNaN(id));
 
       if (mecaIds.length > 0) {
         const qualificationStatuses = await this.worldFinalsService.getQualificationStatuses(
@@ -622,22 +689,24 @@ export class CompetitionResultsService {
           effectiveSeasonId
         );
 
-        // Update entries with qualification status
-        for (const entry of aggregated.values()) {
+        for (const entry of entries) {
           if (entry.meca_id) {
             const mecaIdNum = parseInt(entry.meca_id, 10);
             if (!isNaN(mecaIdNum)) {
-              entry.is_qualified = qualificationStatuses.get(mecaIdNum) || false;
+              const status = qualificationStatuses.get(mecaIdNum);
+              // status is either an array of qualified classes or false
+              entry.is_qualified = Array.isArray(status) ? status.length > 0 : !!status;
             }
           }
         }
       }
     }
 
-    // Convert to array and sort by total points descending
-    // Guests (no points) will naturally be at the bottom
-    return Array.from(aggregated.values())
-      .sort((a, b) => b.total_points - a.total_points);
+      return entries;
+    } catch (error) {
+      this.logger.error('Error in getLeaderboard:', error);
+      throw error;
+    }
   }
 
   /**

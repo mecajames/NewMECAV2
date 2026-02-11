@@ -94,7 +94,7 @@ export function GuestSupportPage() {
           <div className="inline-flex items-center justify-center p-3 bg-orange-500/10 rounded-xl mb-4">
             <HelpCircle className="w-8 h-8 text-orange-400" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Support Center</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Support Center</h1>
           <p className="text-gray-400">
             Get help with your MECA-related questions
           </p>

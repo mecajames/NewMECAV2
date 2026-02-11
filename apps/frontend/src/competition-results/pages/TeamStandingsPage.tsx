@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Search, ArrowUpDown, ArrowUp, ArrowDown, Medal, Users, Calendar } from 'lucide-react';
 import { competitionResultsApi, TeamStandingsEntry } from '@/competition-results';
@@ -82,7 +82,8 @@ export default function TeamStandingsPage() {
     setCurrentPage(1);
   }, [selectedSeasonId, searchTerm, sortColumn, sortDirection]);
 
-  const getDisplayData = () => {
+  // Memoize filtered and sorted display data to avoid recalculating on every render
+  const displayData = useMemo(() => {
     // Apply search filter
     let filtered = standings.filter(entry => {
       if (!searchTerm) return true;
@@ -115,7 +116,7 @@ export default function TeamStandingsPage() {
     });
 
     return filtered;
-  };
+  }, [standings, searchTerm, sortColumn, sortDirection]);
 
   const handleTeamClick = (teamId: string) => {
     navigate(`/teams/${teamId}`);
@@ -131,7 +132,7 @@ export default function TeamStandingsPage() {
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-4">Team Standings</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Team Standings</h1>
             <p className="text-gray-400 text-lg">
               Point standings aggregated by team from competition results
             </p>
@@ -168,7 +169,6 @@ export default function TeamStandingsPage() {
               <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
             </div>
           ) : (() => {
-            const displayData = getDisplayData();
             const totalPages = Math.ceil(displayData.length / itemsPerPage);
             const startIndex = (currentPage - 1) * itemsPerPage;
             const paginatedData = displayData.slice(startIndex, startIndex + itemsPerPage);

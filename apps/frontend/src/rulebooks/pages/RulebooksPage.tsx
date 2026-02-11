@@ -75,7 +75,7 @@ export default function RulebooksPage() {
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <BookOpen className="h-10 w-10 text-orange-500" />
-                <h1 className="text-4xl font-bold text-white">Rulebooks</h1>
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Rulebooks</h1>
               </div>
               <p className="text-gray-400">
                 Official competition rulebooks for all MECA categories
@@ -83,7 +83,7 @@ export default function RulebooksPage() {
           </div>
           <button
             onClick={() => navigate('/rulebooks/archive')}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArchiveIcon className="h-5 w-5" />
             View Archive
@@ -154,7 +154,7 @@ export default function RulebooksPage() {
             </p>
             <button
               onClick={() => navigate('/rulebooks/archive')}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               <ArchiveIcon className="h-5 w-5" />
               Browse Archive

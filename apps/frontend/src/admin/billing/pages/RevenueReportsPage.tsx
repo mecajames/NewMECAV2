@@ -88,7 +88,7 @@ export default function RevenueReportsPage() {
         <p className="text-red-400 mb-4">{error}</p>
         <button
           onClick={() => fetchStats()}
-          className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+          className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
         >
           Retry
         </button>

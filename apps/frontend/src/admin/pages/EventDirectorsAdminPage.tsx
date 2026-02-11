@@ -123,7 +123,7 @@ export default function EventDirectorsAdminPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white">Manage Event Directors</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Event Directors</h1>
             <p className="text-gray-400 mt-2">View and manage all approved event directors</p>
           </div>
           <div className="flex gap-3">

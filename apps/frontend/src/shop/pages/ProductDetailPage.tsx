@@ -111,7 +111,7 @@ export function ProductDetailPage() {
           <p className="text-gray-400 mb-6">{error || 'The product you are looking for does not exist.'}</p>
           <Link
             to="/shop"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
             Back to Shop
@@ -268,7 +268,7 @@ export function ProductDetailPage() {
                 {/* Add to Cart */}
                 <button
                   onClick={handleAddToCart}
-                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 font-semibold rounded-lg transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-semibold rounded-lg transition-colors ${
                     addedToCart
                       ? 'bg-green-500 text-white'
                       : 'bg-orange-500 hover:bg-orange-600 text-white'
