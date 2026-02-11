@@ -12,6 +12,8 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  InternalServerErrorException,
+  Logger,
   Req
 } from '@nestjs/common';
 import { Request } from 'express';
@@ -22,6 +24,8 @@ import { ResultsImportService } from './results-import.service';
 
 @Controller('api/competition-results')
 export class CompetitionResultsController {
+  private readonly logger = new Logger(CompetitionResultsController.name);
+
   constructor(
     private readonly competitionResultsService: CompetitionResultsService,
     private readonly resultsImportService: ResultsImportService
@@ -132,8 +136,13 @@ export class CompetitionResultsController {
   @Post('recalculate-points/:eventId')
   @HttpCode(HttpStatus.OK)
   async recalculateEventPoints(@Param('eventId') eventId: string): Promise<{ message: string }> {
-    await this.competitionResultsService.updateEventPoints(eventId);
-    return { message: 'Points recalculated successfully' };
+    try {
+      await this.competitionResultsService.updateEventPoints(eventId);
+      return { message: 'Points recalculated successfully' };
+    } catch (error: any) {
+      this.logger.error(`Failed to recalculate points for event ${eventId}: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Failed to recalculate points: ${error.message}`);
+    }
   }
 
   @Post('recalculate-season/:seasonId')
