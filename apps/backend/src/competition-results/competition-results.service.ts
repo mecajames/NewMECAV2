@@ -279,10 +279,14 @@ export class CompetitionResultsService {
 
     // Automatically recalculate points for all results in this event
     if (eventId) {
-      await this.updateEventPoints(eventId);
+      try {
+        await this.updateEventPoints(eventId);
 
-      // Reload the result to get updated points
-      await em.refresh(result);
+        // Reload the result to get updated points
+        await em.refresh(result);
+      } catch (pointsError) {
+        this.logger.error(`Failed to recalculate points for event ${eventId} after creating result: ${pointsError}`);
+      }
     }
 
     // Auto-link this result to the competitor's team(s)
@@ -452,10 +456,16 @@ export class CompetitionResultsService {
 
     // Automatically recalculate points for all results in this event
     if (eventId) {
-      await this.updateEventPoints(eventId);
+      try {
+        await this.updateEventPoints(eventId);
 
-      // Reload the result to get updated points
-      await em.refresh(result);
+        // Reload the result to get updated points
+        await em.refresh(result);
+      } catch (pointsError) {
+        this.logger.error(`Failed to recalculate points for event ${eventId} after updating result ${id}: ${pointsError}`);
+        // The result itself was already saved successfully, so we don't throw here.
+        // Points will be recalculated on the next update or manual recalculation.
+      }
     }
 
     // Log to audit if userId is provided
@@ -1020,14 +1030,14 @@ export class CompetitionResultsService {
 
     // Fetch the event with its multiplier using raw SQL to avoid MikroORM populating Season
     const eventRows = await connection.execute(
-      `SELECT id, points_multiplier, season_id FROM events WHERE id = '${eventId}'`
+      `SELECT id, points_multiplier, season_id FROM events WHERE id = ?`, [eventId]
     );
     if (!eventRows || eventRows.length === 0) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
     const eventData = eventRows[0];
-    const multiplier = eventData.points_multiplier || 2; // Default to 2x if not set
+    const multiplier = Number(eventData.points_multiplier) || 2; // Default to 2x if not set
     const seasonId = eventData.season_id;
 
     // Fetch the points configuration for this event's season
@@ -1083,14 +1093,19 @@ export class CompetitionResultsService {
     }
 
     // Refresh the points-eligible MECA IDs cache before processing
-    await this.refreshPointsEligibleCache();
+    try {
+      await this.refreshPointsEligibleCache();
+    } catch (cacheError) {
+      this.logger.warn(`Failed to refresh points-eligible cache, continuing with stale cache: ${cacheError}`);
+    }
 
     // Process each group
     for (const [key, group] of groupedResults) {
       const { results: groupResults, format, isEligible: isFormatEligible } = group;
 
       // Sort by score (descending - higher score is better)
-      groupResults.sort((a, b) => b.score - a.score);
+      // Note: score is type 'decimal' which PostgreSQL returns as strings, so use Number() conversion
+      groupResults.sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
 
       // Assign placement and calculate points
       let currentPlacement = 1;
@@ -1130,33 +1145,38 @@ export class CompetitionResultsService {
 
     // Check World Finals qualifications for all affected competitors
     // Tracked per MECA ID + class combination (a competitor can qualify in multiple classes)
+    // Wrapped in try/catch so it doesn't break the points update if World Finals has issues
     if (this.worldFinalsService && seasonId) {
-      const processedCombinations = new Set<string>();
+      try {
+        const processedCombinations = new Set<string>();
 
-      for (const result of results) {
-        // Skip guests
-        if (!result.mecaId || result.mecaId === '999999' || result.mecaId === '0') {
-          continue;
-        }
+        for (const result of results) {
+          // Skip guests
+          if (!result.mecaId || result.mecaId === '999999' || result.mecaId === '0') {
+            continue;
+          }
 
-        // Skip already-processed MECA ID + class combinations
-        const comboKey = `${result.mecaId}:${result.competitionClass}`;
-        if (processedCombinations.has(comboKey)) {
-          continue;
-        }
-        processedCombinations.add(comboKey);
+          // Skip already-processed MECA ID + class combinations
+          const comboKey = `${result.mecaId}:${result.competitionClass}`;
+          if (processedCombinations.has(comboKey)) {
+            continue;
+          }
+          processedCombinations.add(comboKey);
 
-        // Check if this competitor qualifies in this class
-        const mecaIdNum = parseInt(result.mecaId, 10);
-        if (!isNaN(mecaIdNum)) {
-          await this.worldFinalsService.checkAndUpdateQualification(
-            mecaIdNum,
-            result.competitorName,
-            result.competitor?.id || null,
-            seasonId,
-            result.competitionClass,
-          );
+          // Check if this competitor qualifies in this class
+          const mecaIdNum = parseInt(result.mecaId, 10);
+          if (!isNaN(mecaIdNum)) {
+            await this.worldFinalsService.checkAndUpdateQualification(
+              mecaIdNum,
+              result.competitorName,
+              result.competitor?.id || null,
+              seasonId,
+              result.competitionClass,
+            );
+          }
         }
+      } catch (wfError) {
+        this.logger.warn(`Failed to check World Finals qualifications for event ${eventId}, continuing: ${wfError}`);
       }
     }
 

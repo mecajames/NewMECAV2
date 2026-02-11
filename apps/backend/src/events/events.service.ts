@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
@@ -10,6 +10,8 @@ import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -86,33 +88,40 @@ export class EventsService {
     seasonId?: string;
     status?: string;
   }): Promise<{ events: Event[]; total: number; page: number; limit: number }> {
-    const em = this.em.fork();
-    const { page = 1, limit = 20, seasonId, status } = options;
-    const offset = (page - 1) * limit;
+    try {
+      const em = this.em.fork();
+      const { page = 1, limit = 20, seasonId, status } = options;
+      const offset = (page - 1) * limit;
 
-    // Build filter - exclude not_public events
-    const filter: any = {
-      status: { $ne: EventStatus.NOT_PUBLIC }
-    };
+      // Build filter - only include public-facing statuses
+      // Use $in with known valid statuses instead of $ne with 'not_public'
+      // because the PostgreSQL enum may not include 'not_public' yet
+      const filter: any = {};
 
-    if (seasonId) {
-      filter.season = seasonId;
+      if (status && status !== 'all') {
+        filter.status = status;
+      } else {
+        filter.status = { $in: [EventStatus.UPCOMING, EventStatus.ONGOING, EventStatus.COMPLETED, EventStatus.CANCELLED] };
+      }
+
+      if (seasonId) {
+        filter.season = seasonId;
+      }
+
+      const [events, total] = await Promise.all([
+        em.find(Event, filter, {
+          limit,
+          offset,
+          orderBy: { eventDate: 'DESC' }
+        }),
+        em.count(Event, filter)
+      ]);
+
+      return { events, total, page, limit };
+    } catch (error) {
+      this.logger.error('Error in findPublicEvents:', error);
+      throw error;
     }
-
-    if (status && status !== 'all') {
-      filter.status = status;
-    }
-
-    const [events, total] = await Promise.all([
-      em.find(Event, filter, {
-        limit,
-        offset,
-        orderBy: { eventDate: 'DESC' }
-      }),
-      em.count(Event, filter)
-    ]);
-
-    return { events, total, page, limit };
   }
 
   /**
