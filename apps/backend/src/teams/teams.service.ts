@@ -1286,27 +1286,45 @@ export class TeamsService {
       memberUserIds = members.map(m => m.userId);
     } else {
       // Not a legacy team - check if it's a membership-based team
-      const membershipResult = await em.getConnection().execute(`
-        SELECT m.user_id
-        FROM memberships m
-        JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
-        WHERE m.id = ?
-        AND m.status = 'active'
-        AND (
-          mtc.category = 'retail'
-          OR mtc.category = 'manufacturer'
-          OR mtc.category = 'team'
-          OR mtc.includes_team = true
-          OR mtc.name LIKE '%Team%'
-          OR m.has_team_addon = true
-        )
-      `, [teamId]);
+      try {
+        const membershipResult = await em.getConnection().execute(`
+          SELECT m.user_id
+          FROM memberships m
+          JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
+          WHERE m.id = ?
+          AND m.payment_status = 'paid'
+          AND (
+            mtc.category = 'retail'
+            OR mtc.category = 'manufacturer'
+            OR mtc.category = 'team'
+            OR mtc.includes_team = true
+            OR mtc.name LIKE '%Team%'
+            OR m.has_team_addon = true
+          )
+        `, [teamId]);
 
-      if (!membershipResult || membershipResult.length === 0) {
-        throw new NotFoundException(`Team with ID ${teamId} not found`);
+        if (membershipResult && membershipResult.length > 0) {
+          memberUserIds = [membershipResult[0].user_id];
+        }
+      } catch (sqlError: any) {
+        this.logger.warn(`Failed membership-based team lookup for ${teamId}: ${sqlError.message}`);
+        // Try simpler query as fallback
+        try {
+          const simpleResult = await em.getConnection().execute(
+            `SELECT user_id FROM memberships WHERE id = ? AND payment_status = 'paid'`,
+            [teamId]
+          );
+          if (simpleResult && simpleResult.length > 0) {
+            memberUserIds = [simpleResult[0].user_id];
+          }
+        } catch (fallbackError: any) {
+          this.logger.warn(`Fallback membership lookup also failed: ${fallbackError.message}`);
+        }
       }
 
-      memberUserIds = [membershipResult[0].user_id];
+      if (memberUserIds.length === 0) {
+        throw new NotFoundException(`Team with ID ${teamId} not found`);
+      }
     }
 
     if (memberUserIds.length === 0) {
@@ -1344,88 +1362,96 @@ export class TeamsService {
     }
 
     // Separate SPL and SQ results (SPL formats typically have higher scores > 100)
-    // SPL classes often include "SPL", "dB", "Bass" in the name
-    // SQ classes typically include "SQ", "Sound Quality", "Install" in the name
+    // Note: score is type 'decimal' which PostgreSQL returns as strings, so use Number() conversion
     const splResults = allResults.filter(r => {
       const className = r.competitionClass?.toLowerCase() || '';
       const format = r.format?.toLowerCase() || '';
+      const numScore = Number(r.score) || 0;
       return className.includes('spl') || className.includes('db') || className.includes('bass') ||
              format.includes('spl') || format.includes('bass') ||
-             (r.score > 100); // SPL scores are typically in dB (100+)
+             (numScore > 100); // SPL scores are typically in dB (100+)
     });
 
     const sqResults = allResults.filter(r => {
       const className = r.competitionClass?.toLowerCase() || '';
       const format = r.format?.toLowerCase() || '';
+      const numScore = Number(r.score) || 0;
       return className.includes('sq') || className.includes('sound quality') || className.includes('install') ||
              format.includes('sq') || format.includes('sound quality') ||
-             (r.score <= 100 && !splResults.includes(r)); // SQ scores are typically 0-100
+             (numScore <= 100 && !splResults.includes(r)); // SQ scores are typically 0-100
     });
 
     // Get top 3 SPL scores
     const topSplScores = splResults.slice(0, 3).map(r => ({
       competitorName: r.competitorName,
-      score: Number(r.score),
+      score: Number(r.score) || 0,
       eventName: r.event?.title,
-      date: r.event?.eventDate?.toISOString().split('T')[0],
+      date: r.event?.eventDate ? new Date(r.event.eventDate).toISOString().split('T')[0] : undefined,
       placement: r.placement,
     }));
 
     // Get top 3 SQ scores
     const topSqScores = sqResults.slice(0, 3).map(r => ({
       competitorName: r.competitorName,
-      score: Number(r.score),
+      score: Number(r.score) || 0,
       eventName: r.event?.title,
-      date: r.event?.eventDate?.toISOString().split('T')[0],
+      date: r.event?.eventDate ? new Date(r.event.eventDate).toISOString().split('T')[0] : undefined,
       placement: r.placement,
     }));
 
     // Get event registrations for team members (paid/confirmed only)
-    let registrations = await em.find(EventRegistration, {
-      user: { $in: memberUserIds },
-      paymentStatus: PaymentStatus.PAID,
-    }, {
-      populate: ['event', 'event.season'],
-    });
+    let registrations: EventRegistration[] = [];
+    let totalEventsAttended = 0;
+    let recentEvents: Array<{ id: string; name: string; date: string; location?: string; membersAttended: number }> = [];
 
-    // Filter registrations by season if specified
-    if (seasonId) {
-      registrations = registrations.filter(r => {
-        // Handle both Reference and loaded entity cases
-        const eventSeasonId = r.event?.season?.id || (r.event as any)?.season_id;
-        return eventSeasonId === seasonId;
+    try {
+      registrations = await em.find(EventRegistration, {
+        user: { $in: memberUserIds },
+        paymentStatus: PaymentStatus.PAID,
+      }, {
+        populate: ['event', 'event.season'],
       });
-    }
 
-    // Count unique events attended
-    const uniqueEventIds = new Set(registrations.map(r => r.event?.id).filter(Boolean));
-    const totalEventsAttended = uniqueEventIds.size;
+      // Filter registrations by season if specified
+      if (seasonId) {
+        registrations = registrations.filter(r => {
+          const eventSeasonId = r.event?.season?.id || (r.event as any)?.season_id;
+          return eventSeasonId === seasonId;
+        });
+      }
 
-    // Get last 5 events with member counts
-    const eventMemberCounts = new Map<string, { event: Event; count: number }>();
-    for (const reg of registrations) {
-      if (reg.event) {
-        const existing = eventMemberCounts.get(reg.event.id);
-        if (existing) {
-          existing.count++;
-        } else {
-          eventMemberCounts.set(reg.event.id, { event: reg.event, count: 1 });
+      // Count unique events attended
+      const uniqueEventIds = new Set(registrations.map(r => r.event?.id).filter(Boolean));
+      totalEventsAttended = uniqueEventIds.size;
+
+      // Get last 5 events with member counts
+      const eventMemberCounts = new Map<string, { event: Event; count: number }>();
+      for (const reg of registrations) {
+        if (reg.event) {
+          const existing = eventMemberCounts.get(reg.event.id);
+          if (existing) {
+            existing.count++;
+          } else {
+            eventMemberCounts.set(reg.event.id, { event: reg.event, count: 1 });
+          }
         }
       }
-    }
 
-    // Sort by event date descending and take last 5
-    const recentEvents = Array.from(eventMemberCounts.values())
-      .filter(e => e.event.eventDate)
-      .sort((a, b) => new Date(b.event.eventDate!).getTime() - new Date(a.event.eventDate!).getTime())
-      .slice(0, 5)
-      .map(e => ({
-        id: e.event.id,
-        name: e.event.title,
-        date: e.event.eventDate!.toISOString().split('T')[0],
-        location: e.event.venueCity && e.event.venueState ? `${e.event.venueCity}, ${e.event.venueState}` : undefined,
-        membersAttended: e.count,
-      }));
+      // Sort by event date descending and take last 5
+      recentEvents = Array.from(eventMemberCounts.values())
+        .filter(e => e.event.eventDate)
+        .sort((a, b) => new Date(b.event.eventDate!).getTime() - new Date(a.event.eventDate!).getTime())
+        .slice(0, 5)
+        .map(e => ({
+          id: e.event.id,
+          name: e.event.title,
+          date: new Date(e.event.eventDate!).toISOString().split('T')[0],
+          location: e.event.venueCity && e.event.venueState ? `${e.event.venueCity}, ${e.event.venueState}` : undefined,
+          membersAttended: e.count,
+        }));
+    } catch (regError: any) {
+      this.logger.warn(`Failed to fetch event registrations for team ${teamId}: ${regError.message}`);
+    }
 
     // Count placements
     const totalFirstPlace = allResults.filter(r => r.placement === 1).length;
@@ -1433,8 +1459,9 @@ export class TeamsService {
     const totalThirdPlace = allResults.filter(r => r.placement === 3).length;
 
     // Total competitions and points
+    // Note: pointsEarned may come as string from decimal column
     const totalCompetitions = allResults.length;
-    const totalPoints = allResults.reduce((sum, r) => sum + (r.pointsEarned || 0), 0);
+    const totalPoints = allResults.reduce((sum, r) => sum + (Number(r.pointsEarned) || 0), 0);
 
     return {
       topSplScores,

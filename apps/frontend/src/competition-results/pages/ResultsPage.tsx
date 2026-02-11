@@ -148,41 +148,35 @@ export default function ResultsPage() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      // Fetch events with a reasonable limit for better performance
-      const [data, resultCounts] = await Promise.all([
-        eventsApi.getAll(1, 200),
-        competitionResultsApi.getResultCountsByEvent().catch(() => ({} as Record<string, number>))
-      ]);
-
-      setEventResultCounts(resultCounts);
-
-      // Filter for completed events only (events that have already happened)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      let filtered = data.filter(e => {
-        // Must be completed status
-        if (e.status !== 'completed') return false;
-        // Event date must be today or earlier
-        const eventDate = new Date(e.event_date);
-        eventDate.setHours(0, 0, 0, 0);
-        return eventDate <= today;
+      // Use the optimized completed-with-results endpoint which handles
+      // server-side filtering for completed events and includes result counts
+      const response = await eventsApi.getCompletedEventsWithResults({
+        page: 1,
+        limit: 500,
+        seasonId: selectedSeasonId || undefined,
       });
 
-      if (selectedSeasonId) {
-        filtered = filtered.filter(e => e.season_id === selectedSeasonId);
-      }
+      const completedEvents = response.events as Event[];
+
+      // Build result counts from the response data
+      const resultCounts: Record<string, number> = {};
+      completedEvents.forEach(e => {
+        if (e.result_count !== undefined) {
+          resultCounts[e.id] = Number(e.result_count) || 0;
+        }
+      });
+      setEventResultCounts(resultCounts);
 
       // Sort by event_date descending
-      filtered.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+      completedEvents.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
 
-      setEvents(filtered);
+      setEvents(completedEvents);
 
       // Only auto-select if we came from URL with a specific event
-      if (eventIdFromUrl && filtered.some(e => e.id === eventIdFromUrl)) {
+      if (eventIdFromUrl && completedEvents.some(e => e.id === eventIdFromUrl)) {
         // Event from URL exists in the filtered list, keep it selected
         setSelectedEventId(eventIdFromUrl);
-      } else if (filtered.length === 0) {
+      } else if (completedEvents.length === 0) {
         setSelectedEventId('');
         setResults([]);
       } else if (!eventIdFromUrl) {

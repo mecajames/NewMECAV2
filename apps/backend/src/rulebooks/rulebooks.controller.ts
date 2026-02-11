@@ -37,6 +37,13 @@ export class RulebooksController {
     return this.rulebooksService.create(data);
   }
 
+  @Put('reorder')
+  async reorderRulebooks(
+    @Body() items: { id: string; displayOrder: number }[],
+  ): Promise<void> {
+    return this.rulebooksService.reorder(items);
+  }
+
   @Put(':id')
   async updateRulebook(
     @Param('id') id: string,

@@ -13,33 +13,21 @@ import PrivacyPolicyPage from '@/pages/PrivacyPolicyPage';
 import TermsAndConditionsPage from '@/pages/TermsAndConditionsPage';
 import CompetitionGuidesPage from '@/pages/CompetitionGuidesPage';
 import MECAQuickStartGuidePage from '@/pages/MECAQuickStartGuidePage';
-// Feature pages
+// Feature pages - Static imports (public pages most users visit)
 import { LoginPage, ChangePasswordPage, AuthCallbackPage } from '@/auth';
 import { EventsPage, EventDetailPage } from '@/events';
 import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage, TeamStandingsPage, TeamLeaderboardPage } from '@/competition-results';
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
-import { DashboardPage, MyMecaDashboardPage, AdminDashboardPage, BusinessListingDashboardPage, MembershipDashboardPage } from '@/dashboard';
 import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage } from '@/profiles';
 import { TeamDirectoryPage, TeamPublicProfilePage } from '@/teams';
 import { RetailerDirectoryPage, RetailerProfilePage, ManufacturerDirectoryPage, ManufacturerProfilePage, ManufacturerPartnerInfoPage } from '@/business-listings';
 import { MembershipPage } from '@/memberships';
 import { HostEventPage } from '@/event-hosting-requests';
-import { ClassCalculatorPage, ClassesManagementPage } from '@/competition-classes';
+import { ClassCalculatorPage } from '@/competition-classes';
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
-import { BillingPage, InvoicePaymentPage } from '@/billing';
-import { JudgeApplicationPage, JudgesDirectoryPage, JudgeProfilePage, JudgeAssignmentsPage } from '@/judges';
-import { EventDirectorApplicationPage, EventDirectorsDirectoryPage, EventDirectorProfilePage, EventDirectorAssignmentsPage, EDHostingRequestsPage, EDSubmitEventPage, EDEventManagementPage } from '@/event-directors';
-import { MembersPage, MemberDetailPage, AdminTicketsPage, EventRegistrationsPage, EventRegistrationDetailPage, BusinessListingsAdminPage, JudgeApplicationsAdminPage, JudgeApplicationDetailPage, EventDirectorApplicationsAdminPage, EventDirectorApplicationDetailPage, JudgesAdminPage, AdminJudgeDetailPage, EventDirectorsAdminPage, AdminEventDirectorDetailPage, RatingsAdminPage, NotificationsAdminPage, WorldFinalsAdminPage } from '@/admin';
-import { AchievementsAdminPage } from '@/achievements';
-import { BillingDashboardPage, OrdersPage as AdminOrdersPage, InvoicesPage as AdminInvoicesPage, RevenueReportsPage, OrderDetailPage, InvoiceDetailPage } from '@/admin/billing';
-import { SeasonManagementPage } from '@/seasons';
-import {
-  MyRegistrationsPage,
-  EventCheckInPage,
-  CheckInHubPage,
-} from '@/event-registrations';
-import { FormatManagementPage } from '@/competition-formats';
-import { MembershipTypeManagementPage } from '@/membership-type-configs';
+import { JudgesDirectoryPage, JudgeProfilePage } from '@/judges';
+import { EventDirectorsDirectoryPage, EventDirectorProfilePage } from '@/event-directors';
+import { MyRegistrationsPage } from '@/event-registrations';
 // Ticket pages
 import {
   TicketsPage,
@@ -49,31 +37,90 @@ import {
   GuestTicketViewPage,
   GuestTicketAccessPage,
 } from '@/tickets';
-// Shop
+// Shop (cart context must be static)
 import { CartProvider } from '@/shop/context/CartContext';
 import { ShopPage } from '@/shop/pages/ShopPage';
 import { ProductDetailPage } from '@/shop/pages/ProductDetailPage';
 import { CartPage } from '@/shop/pages/CartPage';
-import { CheckoutPage } from '@/shop/pages/CheckoutPage';
-import { OrderConfirmationPage } from '@/shop/pages/OrderConfirmationPage';
-import { OrderHistoryPage } from '@/shop/pages/OrderHistoryPage';
-import { OrderDetailPage as ShopOrderDetailPage } from '@/shop/pages/OrderDetailPage';
-import { AdminShopProductsPage } from '@/admin/pages/AdminShopProductsPage';
-import { AdminShopOrdersPage } from '@/admin/pages/AdminShopOrdersPage';
-import AdvertisersAdminPage from '@/admin/pages/AdvertisersAdminPage';
-import BannersAdminPage from '@/admin/pages/BannersAdminPage';
-import BannerAnalyticsPage from '@/admin/pages/BannerAnalyticsPage';
-import PointsConfigurationPage from '@/admin/pages/PointsConfigurationPage';
 
-// Lazy load checkout pages to avoid loading Stripe until needed
+// Lazy-loaded pages - Dashboard & user pages (loaded after login)
+const DashboardPage = lazy(() => import('@/dashboard/pages/DashboardPage'));
+const MyMecaDashboardPage = lazy(() => import('@/dashboard/pages/MyMecaDashboardPage'));
+const AdminDashboardPage = lazy(() => import('@/dashboard/pages/AdminDashboardPage'));
+const BusinessListingDashboardPage = lazy(() => import('@/dashboard/pages/BusinessListingDashboardPage'));
+const MembershipDashboardPage = lazy(() => import('@/dashboard/pages/MembershipDashboardPage'));
+const BillingPage = lazy(() => import('@/billing/pages/BillingPage'));
+const InvoicePaymentPage = lazy(() => import('@/billing/pages/InvoicePaymentPage'));
+
+// Lazy-loaded pages - Checkout pages (Stripe loaded on demand)
 const EventRegistrationCheckoutPage = lazy(() => import('@/event-registrations/pages/EventRegistrationCheckoutPage'));
 const MembershipCheckoutPage = lazy(() => import('@/memberships/pages/MembershipCheckoutPage'));
+const CheckoutPage = lazy(() => import('@/shop/pages/CheckoutPage'));
+const OrderConfirmationPage = lazy(() => import('@/shop/pages/OrderConfirmationPage'));
+const OrderHistoryPage = lazy(() => import('@/shop/pages/OrderHistoryPage'));
+const ShopOrderDetailPage = lazy(() => import('@/shop/pages/OrderDetailPage'));
+
+// Lazy-loaded pages - Judge & Event Director applications
+const JudgeApplicationPage = lazy(() => import('@/judges/pages/JudgeApplicationPage'));
+const JudgeAssignmentsPage = lazy(() => import('@/judges/pages/JudgeAssignmentsPage'));
+const EventDirectorApplicationPage = lazy(() => import('@/event-directors/pages/EventDirectorApplicationPage'));
+const EventDirectorAssignmentsPage = lazy(() => import('@/event-directors/pages/EventDirectorAssignmentsPage'));
+const EDHostingRequestsPage = lazy(() => import('@/event-directors/pages/EDHostingRequestsPage'));
+const EDSubmitEventPage = lazy(() => import('@/event-directors/pages/EDSubmitEventPage'));
+const EDEventManagementPage = lazy(() => import('@/event-directors/pages/EDEventManagementPage'));
+
+// Lazy-loaded pages - Event registrations & check-in
+const EventCheckInPage = lazy(() => import('@/event-registrations/pages/EventCheckInPage'));
+const CheckInHubPage = lazy(() => import('@/event-registrations/pages/CheckInHubPage'));
+
+// Lazy-loaded pages - Admin (only admins access these)
+const MembersPage = lazy(() => import('@/admin/pages/MembersPage'));
+const MemberDetailPage = lazy(() => import('@/admin/pages/MemberDetailPage'));
+const AdminTicketsPage = lazy(() => import('@/admin/pages/AdminTicketsPage'));
+const EventRegistrationsPage = lazy(() => import('@/admin/pages/EventRegistrationsPage'));
+const EventRegistrationDetailPage = lazy(() => import('@/admin/pages/EventRegistrationDetailPage'));
+const BusinessListingsAdminPage = lazy(() => import('@/admin/pages/BusinessListingsAdminPage'));
+const JudgeApplicationsAdminPage = lazy(() => import('@/admin/pages/JudgeApplicationsAdminPage'));
+const JudgeApplicationDetailPage = lazy(() => import('@/admin/pages/JudgeApplicationDetailPage'));
+const EventDirectorApplicationsAdminPage = lazy(() => import('@/admin/pages/EventDirectorApplicationsAdminPage'));
+const EventDirectorApplicationDetailPage = lazy(() => import('@/admin/pages/EventDirectorApplicationDetailPage'));
+const JudgesAdminPage = lazy(() => import('@/admin/pages/JudgesAdminPage'));
+const AdminJudgeDetailPage = lazy(() => import('@/admin/pages/JudgeDetailPage'));
+const EventDirectorsAdminPage = lazy(() => import('@/admin/pages/EventDirectorsAdminPage'));
+const AdminEventDirectorDetailPage = lazy(() => import('@/admin/pages/EventDirectorDetailPage'));
+const RatingsAdminPage = lazy(() => import('@/admin/pages/RatingsAdminPage'));
+const NotificationsAdminPage = lazy(() => import('@/admin/pages/NotificationsAdminPage'));
+const WorldFinalsAdminPage = lazy(() => import('@/admin/pages/WorldFinalsAdminPage'));
+const AchievementsAdminPage = lazy(() => import('@/achievements/pages/AchievementsAdminPage'));
+const SeasonManagementPage = lazy(() => import('@/seasons/pages/SeasonManagementPage'));
+const ClassesManagementPage = lazy(() => import('@/competition-classes/pages/ClassesManagementPage'));
+const FormatManagementPage = lazy(() => import('@/competition-formats/pages/FormatManagementPage'));
+const MembershipTypeManagementPage = lazy(() => import('@/membership-type-configs/pages/MembershipTypeManagementPage'));
+const PointsConfigurationPage = lazy(() => import('@/admin/pages/PointsConfigurationPage'));
+const AdvertisersAdminPage = lazy(() => import('@/admin/pages/AdvertisersAdminPage'));
+const BannersAdminPage = lazy(() => import('@/admin/pages/BannersAdminPage'));
+const BannerAnalyticsPage = lazy(() => import('@/admin/pages/BannerAnalyticsPage'));
+const AdminShopProductsPage = lazy(() => import('@/admin/pages/AdminShopProductsPage'));
+const AdminShopOrdersPage = lazy(() => import('@/admin/pages/AdminShopOrdersPage'));
+
+// Lazy-loaded pages - Admin billing
+const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDashboardPage'));
+const AdminOrdersPage = lazy(() => import('@/admin/billing/pages/OrdersPage'));
+const AdminInvoicesPage = lazy(() => import('@/admin/billing/pages/InvoicesPage'));
+const RevenueReportsPage = lazy(() => import('@/admin/billing/pages/RevenueReportsPage'));
+const OrderDetailPage = lazy(() => import('@/admin/billing/pages/OrderDetailPage'));
+const InvoiceDetailPage = lazy(() => import('@/admin/billing/pages/InvoiceDetailPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
   <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
     <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
   </div>
+);
+
+// Helper to wrap lazy components in Suspense
+const L = ({ children }: { children: React.ReactNode }) => (
+  <Suspense fallback={<PageLoader />}>{children}</Suspense>
 );
 
 function App() {
@@ -101,8 +148,8 @@ function App() {
               <Route path="/change-password" element={<ChangePasswordPage />} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:eventId" element={<EventDetailPage />} />
-              <Route path="/events/:eventId/register" element={<Suspense fallback={<PageLoader />}><EventRegistrationCheckoutPage /></Suspense>} />
-              <Route path="/events/:eventId/check-in" element={<EventCheckInPage />} />
+              <Route path="/events/:eventId/register" element={<L><EventRegistrationCheckoutPage /></L>} />
+              <Route path="/events/:eventId/check-in" element={<L><EventCheckInPage /></L>} />
               <Route path="/results" element={<ResultsPage />} />
               <Route path="/results/member/:mecaId" element={<MemberResultsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
@@ -126,7 +173,7 @@ function App() {
               <Route path="/competition-guides/quick-start" element={<MECAQuickStartGuidePage />} />
 
               {/* Public Invoice Payment Route */}
-              <Route path="/pay/invoice/:invoiceId" element={<InvoicePaymentPage />} />
+              <Route path="/pay/invoice/:invoiceId" element={<L><InvoicePaymentPage /></L>} />
 
               {/* Public Member Directory Routes */}
               <Route path="/members" element={<MemberDirectoryPage />} />
@@ -145,32 +192,32 @@ function App() {
 
               {/* Public Judges Directory Routes */}
               <Route path="/judges" element={<JudgesDirectoryPage />} />
-              <Route path="/judges/apply" element={<JudgeApplicationPage />} />
-              <Route path="/judges/assignments" element={<JudgeAssignmentsPage />} />
+              <Route path="/judges/apply" element={<L><JudgeApplicationPage /></L>} />
+              <Route path="/judges/assignments" element={<L><JudgeAssignmentsPage /></L>} />
               <Route path="/judges/:id" element={<JudgeProfilePage />} />
 
               {/* Public Event Directors Directory Routes */}
               <Route path="/event-directors" element={<EventDirectorsDirectoryPage />} />
-              <Route path="/event-directors/apply" element={<EventDirectorApplicationPage />} />
-              <Route path="/event-directors/assignments" element={<EventDirectorAssignmentsPage />} />
-              <Route path="/event-directors/hosting-requests" element={<EDHostingRequestsPage />} />
-              <Route path="/event-directors/submit-event" element={<EDSubmitEventPage />} />
-              <Route path="/event-directors/event/:eventId" element={<EDEventManagementPage />} />
+              <Route path="/event-directors/apply" element={<L><EventDirectorApplicationPage /></L>} />
+              <Route path="/event-directors/assignments" element={<L><EventDirectorAssignmentsPage /></L>} />
+              <Route path="/event-directors/hosting-requests" element={<L><EDHostingRequestsPage /></L>} />
+              <Route path="/event-directors/submit-event" element={<L><EDSubmitEventPage /></L>} />
+              <Route path="/event-directors/event/:eventId" element={<L><EDEventManagementPage /></L>} />
               <Route path="/event-directors/:id" element={<EventDirectorProfilePage />} />
 
               {/* User Routes */}
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/dashboard/mymeca" element={<MyMecaDashboardPage />} />
-              <Route path="/dashboard/business-listing" element={<BusinessListingDashboardPage />} />
-              <Route path="/dashboard/membership" element={<MembershipDashboardPage />} />
-              <Route path="/dashboard/admin" element={<AdminDashboardPage />} />
+              <Route path="/dashboard" element={<L><DashboardPage /></L>} />
+              <Route path="/dashboard/mymeca" element={<L><MyMecaDashboardPage /></L>} />
+              <Route path="/dashboard/business-listing" element={<L><BusinessListingDashboardPage /></L>} />
+              <Route path="/dashboard/membership" element={<L><MembershipDashboardPage /></L>} />
+              <Route path="/dashboard/admin" element={<L><AdminDashboardPage /></L>} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/public-profile" element={<PublicProfilePage />} />
-              <Route path="/billing" element={<BillingPage />} />
+              <Route path="/billing" element={<L><BillingPage /></L>} />
               <Route path="/membership" element={<MembershipPage />} />
-              <Route path="/membership/checkout/:membershipId" element={<Suspense fallback={<PageLoader />}><MembershipCheckoutPage /></Suspense>} />
-              <Route path="/apply/judge" element={<JudgeApplicationPage />} />
-              <Route path="/apply/event-director" element={<EventDirectorApplicationPage />} />
+              <Route path="/membership/checkout/:membershipId" element={<L><MembershipCheckoutPage /></L>} />
+              <Route path="/apply/judge" element={<L><JudgeApplicationPage /></L>} />
+              <Route path="/apply/event-director" element={<L><EventDirectorApplicationPage /></L>} />
               <Route path="/my-registrations" element={<MyRegistrationsPage />} />
 
               {/* Support Ticket Routes (Authenticated) */}
@@ -184,59 +231,59 @@ function App() {
               <Route path="/support/guest/access/:token" element={<GuestTicketAccessPage />} />
 
               {/* Admin Routes */}
-              <Route path="/admin/members" element={<MembersPage />} />
-              <Route path="/admin/members/:memberId" element={<MemberDetailPage />} />
-              <Route path="/admin/seasons" element={<SeasonManagementPage />} />
-              <Route path="/admin/classes" element={<ClassesManagementPage />} />
-              <Route path="/admin/formats" element={<FormatManagementPage />} />
-              <Route path="/admin/membership-types" element={<MembershipTypeManagementPage />} />
-              <Route path="/admin/tickets" element={<AdminTicketsPage />} />
-              <Route path="/admin/tickets/:id" element={<AdminTicketsPage />} />
-              <Route path="/admin/event-registrations" element={<EventRegistrationsPage />} />
-              <Route path="/admin/event-registrations/:id" element={<EventRegistrationDetailPage />} />
-              <Route path="/admin/check-in" element={<CheckInHubPage />} />
-              <Route path="/admin/business-listings" element={<BusinessListingsAdminPage />} />
-              <Route path="/admin/judge-applications" element={<JudgeApplicationsAdminPage />} />
-              <Route path="/admin/judge-applications/:id" element={<JudgeApplicationDetailPage />} />
-              <Route path="/admin/event-director-applications" element={<EventDirectorApplicationsAdminPage />} />
-              <Route path="/admin/event-director-applications/:id" element={<EventDirectorApplicationDetailPage />} />
-              <Route path="/admin/judges" element={<JudgesAdminPage />} />
-              <Route path="/admin/judges/:id" element={<AdminJudgeDetailPage />} />
-              <Route path="/admin/event-directors" element={<EventDirectorsAdminPage />} />
-              <Route path="/admin/event-directors/:id" element={<AdminEventDirectorDetailPage />} />
-              <Route path="/admin/ratings" element={<RatingsAdminPage />} />
-              <Route path="/admin/notifications" element={<NotificationsAdminPage />} />
-              <Route path="/admin/world-finals" element={<WorldFinalsAdminPage />} />
-              <Route path="/admin/achievements" element={<AchievementsAdminPage />} />
+              <Route path="/admin/members" element={<L><MembersPage /></L>} />
+              <Route path="/admin/members/:memberId" element={<L><MemberDetailPage /></L>} />
+              <Route path="/admin/seasons" element={<L><SeasonManagementPage /></L>} />
+              <Route path="/admin/classes" element={<L><ClassesManagementPage /></L>} />
+              <Route path="/admin/formats" element={<L><FormatManagementPage /></L>} />
+              <Route path="/admin/membership-types" element={<L><MembershipTypeManagementPage /></L>} />
+              <Route path="/admin/tickets" element={<L><AdminTicketsPage /></L>} />
+              <Route path="/admin/tickets/:id" element={<L><AdminTicketsPage /></L>} />
+              <Route path="/admin/event-registrations" element={<L><EventRegistrationsPage /></L>} />
+              <Route path="/admin/event-registrations/:id" element={<L><EventRegistrationDetailPage /></L>} />
+              <Route path="/admin/check-in" element={<L><CheckInHubPage /></L>} />
+              <Route path="/admin/business-listings" element={<L><BusinessListingsAdminPage /></L>} />
+              <Route path="/admin/judge-applications" element={<L><JudgeApplicationsAdminPage /></L>} />
+              <Route path="/admin/judge-applications/:id" element={<L><JudgeApplicationDetailPage /></L>} />
+              <Route path="/admin/event-director-applications" element={<L><EventDirectorApplicationsAdminPage /></L>} />
+              <Route path="/admin/event-director-applications/:id" element={<L><EventDirectorApplicationDetailPage /></L>} />
+              <Route path="/admin/judges" element={<L><JudgesAdminPage /></L>} />
+              <Route path="/admin/judges/:id" element={<L><AdminJudgeDetailPage /></L>} />
+              <Route path="/admin/event-directors" element={<L><EventDirectorsAdminPage /></L>} />
+              <Route path="/admin/event-directors/:id" element={<L><AdminEventDirectorDetailPage /></L>} />
+              <Route path="/admin/ratings" element={<L><RatingsAdminPage /></L>} />
+              <Route path="/admin/notifications" element={<L><NotificationsAdminPage /></L>} />
+              <Route path="/admin/world-finals" element={<L><WorldFinalsAdminPage /></L>} />
+              <Route path="/admin/achievements" element={<L><AchievementsAdminPage /></L>} />
 
               {/* Admin Billing Routes */}
-              <Route path="/admin/billing" element={<BillingDashboardPage />} />
-              <Route path="/admin/billing/orders" element={<AdminOrdersPage />} />
-              <Route path="/admin/billing/orders/:id" element={<OrderDetailPage />} />
-              <Route path="/admin/billing/invoices" element={<AdminInvoicesPage />} />
-              <Route path="/admin/billing/invoices/:id" element={<InvoiceDetailPage />} />
-              <Route path="/admin/billing/revenue" element={<RevenueReportsPage />} />
+              <Route path="/admin/billing" element={<L><BillingDashboardPage /></L>} />
+              <Route path="/admin/billing/orders" element={<L><AdminOrdersPage /></L>} />
+              <Route path="/admin/billing/orders/:id" element={<L><OrderDetailPage /></L>} />
+              <Route path="/admin/billing/invoices" element={<L><AdminInvoicesPage /></L>} />
+              <Route path="/admin/billing/invoices/:id" element={<L><InvoiceDetailPage /></L>} />
+              <Route path="/admin/billing/revenue" element={<L><RevenueReportsPage /></L>} />
 
               {/* Shop Routes */}
               <Route path="/shop" element={<ShopPage />} />
               <Route path="/shop/products/:id" element={<ProductDetailPage />} />
               <Route path="/shop/cart" element={<CartPage />} />
-              <Route path="/shop/checkout" element={<CheckoutPage />} />
-              <Route path="/shop/orders" element={<OrderHistoryPage />} />
-              <Route path="/shop/orders/:id" element={<ShopOrderDetailPage />} />
-              <Route path="/shop/orders/:id/confirmation" element={<OrderConfirmationPage />} />
+              <Route path="/shop/checkout" element={<L><CheckoutPage /></L>} />
+              <Route path="/shop/orders" element={<L><OrderHistoryPage /></L>} />
+              <Route path="/shop/orders/:id" element={<L><ShopOrderDetailPage /></L>} />
+              <Route path="/shop/orders/:id/confirmation" element={<L><OrderConfirmationPage /></L>} />
 
               {/* Admin Shop Routes */}
-              <Route path="/admin/shop/products" element={<AdminShopProductsPage />} />
-              <Route path="/admin/shop/orders" element={<AdminShopOrdersPage />} />
+              <Route path="/admin/shop/products" element={<L><AdminShopProductsPage /></L>} />
+              <Route path="/admin/shop/orders" element={<L><AdminShopOrdersPage /></L>} />
 
               {/* Admin Banner Routes */}
-              <Route path="/admin/advertisers" element={<AdvertisersAdminPage />} />
-              <Route path="/admin/banners" element={<BannersAdminPage />} />
-              <Route path="/admin/banners/analytics" element={<BannerAnalyticsPage />} />
+              <Route path="/admin/advertisers" element={<L><AdvertisersAdminPage /></L>} />
+              <Route path="/admin/banners" element={<L><BannersAdminPage /></L>} />
+              <Route path="/admin/banners/analytics" element={<L><BannerAnalyticsPage /></L>} />
 
               {/* Admin Points Configuration */}
-              <Route path="/admin/points-configuration" element={<PointsConfigurationPage />} />
+              <Route path="/admin/points-configuration" element={<L><PointsConfigurationPage /></L>} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />

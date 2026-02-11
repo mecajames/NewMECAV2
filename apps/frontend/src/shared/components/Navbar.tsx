@@ -1,4 +1,4 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, ChevronRight, Bell, Users, ClipboardList, Shield, ShoppingBag } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, ChevronRight, Bell, Users, ClipboardList, Shield, ShoppingBag, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth';
@@ -89,13 +89,16 @@ export default function Navbar() {
     { id: 'shop', label: 'MECA Shop', icon: ShoppingBag, path: '/shop' },
   ];
 
-  const groupedRulebooks = activeRulebooks.reduce((acc, rulebook) => {
-    if (!acc[rulebook.category]) {
-      acc[rulebook.category] = [];
+  // Group rulebooks by year (descending) for the nav dropdown
+  const rulebooksByYear = activeRulebooks.reduce((acc, rulebook) => {
+    const year = String(rulebook.season);
+    if (!acc[year]) {
+      acc[year] = [];
     }
-    acc[rulebook.category].push(rulebook);
+    acc[year].push(rulebook);
     return acc;
   }, {} as Record<string, Rulebook[]>);
+  const sortedYears = Object.keys(rulebooksByYear).sort((a, b) => Number(b) - Number(a));
 
   return (
     <nav className="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
@@ -318,21 +321,21 @@ export default function Navbar() {
                     Archive
                   </button>
 
-                  {Object.entries(groupedRulebooks).map(([category, rulebooks]) => (
-                    <div key={category} className="px-2">
+                  {sortedYears.map((year) => (
+                    <div key={year} className="px-2">
                       <div className="text-xs font-semibold text-orange-500 px-2 py-1 uppercase tracking-wide">
-                        {category}
+                        {year}
                       </div>
-                      {rulebooks.map((rulebook) => (
+                      {rulebooksByYear[year].map((rulebook) => (
                         <button
                           key={rulebook.id}
                           onClick={() => {
                             navigate(`/rulebooks/${rulebook.id}`);
                             setRulebooksMenuOpen(false);
                           }}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+                          className="block w-full text-left px-4 py-1.5 text-sm text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
                         >
-                          {rulebook.season}
+                          {rulebook.title}
                         </button>
                       ))}
                     </div>
@@ -673,7 +676,12 @@ export default function Navbar() {
               Team Top 10
             </button>
 
-            {/* Members Directory */}
+            {/* Members Section */}
+            <div className="border-t border-slate-700 mt-2 pt-2">
+              <div className="px-3 py-1 text-xs font-semibold text-orange-500 uppercase tracking-wide">
+                Members
+              </div>
+            </div>
             <button
               onClick={() => {
                 navigate('/members');
@@ -688,8 +696,6 @@ export default function Navbar() {
               <Users className="h-5 w-5" />
               Members Directory
             </button>
-
-            {/* Teams Directory */}
             <button
               onClick={() => {
                 navigate('/teams');
@@ -704,6 +710,57 @@ export default function Navbar() {
               <Shield className="h-5 w-5" />
               Teams Directory
             </button>
+
+            {/* Rulebooks Section */}
+            <div className="border-t border-slate-700 mt-2 pt-2">
+              <div className="px-3 py-1 text-xs font-semibold text-orange-500 uppercase tracking-wide">
+                Rulebooks
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                navigate('/rulebooks');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'rulebooks'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <BookOpen className="h-5 w-5" />
+              All Rulebooks
+            </button>
+            <button
+              onClick={() => {
+                navigate('/rulebooks/archive');
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+            >
+              <BookOpen className="h-5 w-5" />
+              Archive
+            </button>
+            {sortedYears.map((year) => (
+              <div key={year}>
+                <div className="px-3 py-1 mt-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  {year}
+                </div>
+                {rulebooksByYear[year].map((rulebook) => (
+                  <button
+                    key={rulebook.id}
+                    onClick={() => {
+                      navigate(`/rulebooks/${rulebook.id}`);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="flex items-center gap-2 w-full pl-6 pr-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+                  >
+                    <FileText className="h-4 w-4" />
+                    {rulebook.title}
+                  </button>
+                ))}
+              </div>
+            ))}
 
             {user ? (
               <>
@@ -730,6 +787,16 @@ export default function Navbar() {
                 >
                   <ClipboardList className="h-5 w-5" />
                   My Registrations
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/public-profile');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-slate-700 hover:text-white"
+                >
+                  <User className="h-5 w-5" />
+                  Public Profile
                 </button>
                 {profile?.role === 'admin' && (
                   <button
