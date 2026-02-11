@@ -116,25 +116,18 @@ export default function LeaderboardPage() {
         setHighestSPLScores([]);
       }
 
-      // Fetch available classes for the dropdown (lightweight call)
-      // Only fetch if we don't have classes yet or format changed
-      if (classes.length === 0 || selectedFormat !== 'all') {
-        try {
-          const classesData = await competitionResultsApi.getLeaderboard({
-            seasonId: selectedSeasonId || undefined,
-            format: selectedFormat !== 'all' ? selectedFormat : undefined,
-            limit: 100,
-          });
-          const classSet = new Set<string>();
-          classesData.forEach((r: any) => {
-            if (r.competition_class && r.competition_class !== 'Overall') {
-              classSet.add(r.competition_class);
-            }
-          });
-          setClasses(Array.from(classSet).sort());
-        } catch {
-          // Ignore error for classes fetch
-        }
+      // Fetch available classes for the dropdown using dedicated endpoint
+      try {
+        const classesData = await competitionResultsApi.getClassesWithResults(
+          selectedFormat !== 'all' ? selectedFormat : undefined,
+          selectedSeasonId || undefined
+        );
+        const classNames = classesData
+          .map((c) => c.className)
+          .filter(Boolean);
+        setClasses(Array.from(new Set(classNames)).sort());
+      } catch {
+        // Ignore error for classes fetch
       }
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
