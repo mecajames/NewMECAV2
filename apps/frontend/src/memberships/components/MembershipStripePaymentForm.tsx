@@ -11,7 +11,8 @@ import { MembershipTypeConfig } from '@/membership-type-configs';
 
 // Initialize Stripe
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const stripePromise = loadStripe(stripePublishableKey);
+const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
+const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
 
 interface FormData {
   email: string;

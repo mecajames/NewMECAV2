@@ -9,8 +9,9 @@ import {
 import { CreditCard, Lock, Loader2 } from 'lucide-react';
 
 // Initialize Stripe (conditionally to handle missing config)
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
+const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
 
 interface FormData {
   email: string;

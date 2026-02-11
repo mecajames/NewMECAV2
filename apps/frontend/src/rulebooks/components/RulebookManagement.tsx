@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Upload, Trash2, Edit2, FileText, Archive, Eye, EyeOff, FolderOpen, X, ExternalLink, Calendar } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Upload, Trash2, Edit2, FileText, Archive, Eye, EyeOff, FolderOpen, X, ExternalLink, Calendar, GripVertical } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getStorageUrl } from '@/lib/storage';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
@@ -239,6 +239,45 @@ export default function RulebookManagement() {
     }
   };
 
+  // Drag and drop reordering
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (index: number) => {
+    dragItem.current = index;
+    setDragIndex(index);
+  };
+
+  const handleDragEnter = (index: number) => {
+    dragOverItem.current = index;
+    setDragOverIndex(index);
+  };
+
+  const handleDragEnd = async () => {
+    if (dragItem.current === null || dragOverItem.current === null || dragItem.current === dragOverItem.current) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const newList = [...rulebooks];
+    const [draggedItem] = newList.splice(dragItem.current, 1);
+    newList.splice(dragOverItem.current, 0, draggedItem);
+    const reorderItems = newList.map((r, i) => ({ id: r.id, displayOrder: i }));
+    setRulebooks(newList);
+    setDragIndex(null);
+    setDragOverIndex(null);
+    dragItem.current = null;
+    dragOverItem.current = null;
+    try {
+      await rulebooksApi.reorderRulebooks(reorderItems);
+    } catch (error: any) {
+      alert('Error reordering: ' + error.message);
+      fetchRulebooks();
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -469,6 +508,7 @@ export default function RulebookManagement() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-700">
+                <th className="w-10 py-3 px-2 text-gray-300 font-semibold"></th>
                 <th className="text-left py-3 px-4 text-gray-300 font-semibold">Title</th>
                 <th className="text-left py-3 px-4 text-gray-300 font-semibold">Category</th>
                 <th className="text-left py-3 px-4 text-gray-300 font-semibold">Season</th>
@@ -477,8 +517,25 @@ export default function RulebookManagement() {
               </tr>
             </thead>
             <tbody>
-              {rulebooks.map((rulebook) => (
-                <tr key={rulebook.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+              {rulebooks.map((rulebook, index) => (
+                <tr
+                  key={rulebook.id}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragEnter={() => handleDragEnter(index)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDragEnd={handleDragEnd}
+                  className={`border-b border-slate-700 transition-colors ${
+                    dragIndex === index
+                      ? 'opacity-40 bg-slate-700/30'
+                      : dragOverIndex === index
+                        ? 'border-t-2 border-t-orange-500'
+                        : 'hover:bg-slate-700/50'
+                  }`}
+                >
+                  <td className="py-3 px-2 cursor-grab active:cursor-grabbing">
+                    <GripVertical className="h-5 w-5 text-gray-500 hover:text-gray-300" />
+                  </td>
                   <td className="py-3 px-4 text-white">{rulebook.title}</td>
                   <td className="py-3 px-4 text-gray-300">{rulebook.category}</td>
                   <td className="py-3 px-4 text-gray-300">{rulebook.season}</td>

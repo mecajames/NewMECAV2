@@ -13,14 +13,14 @@ export class RulebooksService {
   async findAll(): Promise<Rulebook[]> {
     const em = this.em.fork();
     return em.find(Rulebook, { status: RulebookStatus.ACTIVE }, {
-      orderBy: { category: 'ASC', season: 'DESC' }
+      orderBy: { displayOrder: 'ASC', category: 'ASC', season: 'DESC' }
     });
   }
 
   async findAllIncludingInactive(): Promise<Rulebook[]> {
     const em = this.em.fork();
     return em.find(Rulebook, {}, {
-      orderBy: { category: 'ASC', season: 'DESC' }
+      orderBy: { displayOrder: 'ASC', category: 'ASC', season: 'DESC' }
     });
   }
 
@@ -114,6 +114,17 @@ export class RulebooksService {
       console.error('❌ UPDATE RULEBOOK - Error:', error);
       throw error;
     }
+  }
+
+  async reorder(items: { id: string; displayOrder: number }[]): Promise<void> {
+    const em = this.em.fork();
+    for (const item of items) {
+      const rulebook = await em.findOne(Rulebook, { id: item.id });
+      if (rulebook) {
+        rulebook.displayOrder = item.displayOrder;
+      }
+    }
+    await em.flush();
   }
 
   async delete(id: string): Promise<void> {

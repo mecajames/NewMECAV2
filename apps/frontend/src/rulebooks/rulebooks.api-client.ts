@@ -1,3 +1,5 @@
+import axios from '@/lib/axios';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface Rulebook {
@@ -17,55 +19,38 @@ export const rulebooksApi = {
    * Get all active rulebooks (already filtered by backend)
    */
   getActiveRulebooks: async (): Promise<Rulebook[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/rulebooks`);
-    if (!response.ok) throw new Error('Failed to fetch rulebooks');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/rulebooks`);
+    return response.data;
   },
 
   /**
    * Get all rulebooks (for admin panel)
    */
   getAllRulebooks: async (): Promise<Rulebook[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/rulebooks/admin/all`);
-    if (!response.ok) throw new Error('Failed to fetch all rulebooks');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/rulebooks/admin/all`);
+    return response.data;
   },
 
   getRulebook: async (id: string): Promise<Rulebook> => {
-    const response = await fetch(`${API_BASE_URL}/api/rulebooks/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch rulebook');
-    return response.json();
+    const response = await axios.get(`${API_BASE_URL}/api/rulebooks/${id}`);
+    return response.data;
   },
 
   createRulebook: async (data: Partial<Rulebook>): Promise<Rulebook> => {
-    const response = await fetch(`${API_BASE_URL}/api/rulebooks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create rulebook');
-    return response.json();
+    const response = await axios.post(`${API_BASE_URL}/api/rulebooks`, data);
+    return response.data;
   },
 
   updateRulebook: async (id: string, data: Partial<Rulebook>): Promise<Rulebook> => {
-    console.log('📤 Updating rulebook:', id, data);
-    const response = await fetch(`${API_BASE_URL}/api/rulebooks/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Rulebook update failed:', response.status, errorText);
-      throw new Error(`Failed to update rulebook: ${errorText}`);
-    }
-    return response.json();
+    const response = await axios.put(`${API_BASE_URL}/api/rulebooks/${id}`, data);
+    return response.data;
+  },
+
+  reorderRulebooks: async (items: { id: string; displayOrder: number }[]): Promise<void> => {
+    await axios.put(`${API_BASE_URL}/api/rulebooks/reorder`, items);
   },
 
   deleteRulebook: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/rulebooks/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete rulebook');
+    await axios.delete(`${API_BASE_URL}/api/rulebooks/${id}`);
   },
 };

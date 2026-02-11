@@ -365,13 +365,14 @@ export default function TeamPublicProfilePage() {
 
         {/* Page Header with Back Button */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-white">Team Profile</h1>
+          <h1 className="text-lg sm:text-2xl font-bold text-white">Team Profile</h1>
           <button
             onClick={() => navigate('/teams')}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Team Directory
+            <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Back to Team Directory</span>
+            <span className="sm:hidden">Back</span>
           </button>
         </div>
 
@@ -476,14 +477,14 @@ export default function TeamPublicProfilePage() {
             )}
           </div>
 
-          <div className="p-8">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-white mb-2">
+          <div className="p-4 sm:p-6 md:p-8 overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 min-w-0">
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-white mb-2 break-words line-clamp-2">
                   Team {team.name}
                 </h1>
 
-                <div className="flex flex-wrap items-center gap-4 text-gray-400">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400">
                   {team.location && (
                     <span className="flex items-center gap-1">
                       <MapPin className="h-4 w-4" />
@@ -511,7 +512,7 @@ export default function TeamPublicProfilePage() {
               </div>
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className={`px-4 py-2 rounded-full border font-medium ${TEAM_TYPE_COLORS[team.teamType] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
+                <div className={`px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full border text-xs sm:text-sm font-medium ${TEAM_TYPE_COLORS[team.teamType] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
                   {TEAM_TYPE_LABELS[team.teamType] || team.teamType}
                 </div>
 
@@ -582,7 +583,7 @@ export default function TeamPublicProfilePage() {
                 <select
                   value={selectedSeason}
                   onChange={(e) => setSelectedSeason(e.target.value)}
-                  className="px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none min-w-[180px]"
+                  className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none max-w-[180px] sm:max-w-[220px] truncate"
                 >
                   <option value="all">All Seasons</option>
                   {seasons.map((season) => (

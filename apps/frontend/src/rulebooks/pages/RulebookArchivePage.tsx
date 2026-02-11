@@ -156,33 +156,32 @@ export default function RulebookArchivePage() {
           </div>
         </div>
 
-        {Object.keys(groupedByCategory).length > 0 ? (
-          <div className="space-y-8">
-            {Object.entries(groupedByCategory).map(([category, categoryRulebooks]) => (
-              <div key={category} className="bg-slate-800 rounded-xl p-6">
-                <h2 className="text-2xl font-bold text-white mb-4">{category}</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {categoryRulebooks.map((rulebook) => (
-                    <button
-                      key={rulebook.id}
-                      onClick={() => navigate(`/rulebooks/${rulebook.id}`)}
-                      className="bg-slate-700 hover:bg-slate-600 rounded-lg p-6 text-left transition-all transform hover:-translate-y-1"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                          <FileText className="h-6 w-6 text-orange-500" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-white mb-1">
-                            {rulebook.title}
-                          </h3>
-                          <p className="text-sm text-gray-400">Season {rulebook.season}</p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+        {filteredRulebooks.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            {filteredRulebooks.map((rulebook) => (
+              <button
+                key={rulebook.id}
+                onClick={() => navigate(`/rulebooks/${rulebook.id}`)}
+                className="bg-slate-800 hover:bg-slate-700 rounded-xl p-5 sm:p-6 text-left transition-all transform hover:-translate-y-1 hover:shadow-xl border border-slate-700 hover:border-orange-500/50"
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                    <FileText className="h-6 w-6 text-orange-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base sm:text-lg font-semibold text-white mb-1 leading-tight">
+                      {rulebook.title}
+                    </h3>
+                    <p className="text-xs text-gray-400">Season {rulebook.season}</p>
+                  </div>
                 </div>
-              </div>
+                <div className="flex items-center justify-between pt-3 border-t border-slate-700">
+                  <span className="text-xs text-gray-500 truncate">{rulebook.category}</span>
+                  <span className="text-orange-500 text-sm font-medium whitespace-nowrap">
+                    View →
+                  </span>
+                </div>
+              </button>
             ))}
           </div>
         ) : (

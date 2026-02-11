@@ -44,6 +44,7 @@ export interface Event {
   updated_at: string;
   event_director?: any;
   season?: any;
+  result_count?: number;
 }
 
 export const eventsApi = {

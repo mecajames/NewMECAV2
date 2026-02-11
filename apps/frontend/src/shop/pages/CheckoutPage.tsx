@@ -23,7 +23,8 @@ import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const stripePromise = loadStripe(stripePublishableKey);
+const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
+const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
 
 interface CheckoutFormData {
   email: string;

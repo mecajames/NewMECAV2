@@ -21,10 +21,23 @@ export default defineConfig({
       include: [/node_modules/, /@newmeca\/shared/],
       transformMixedEsModules: true,
     },
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core React framework - cached long-term
+          'react-vendor': ['react', 'react-dom', 'react-router-dom', 'react-helmet-async'],
+          // Supabase client
+          'supabase-vendor': ['@supabase/supabase-js'],
+          // Stripe (loaded on-demand via lazy routes, but cached separately)
+          'stripe-vendor': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+          // Charts library (only used on dashboard)
+          'charts-vendor': ['recharts'],
+          // HTTP client
+          'data-vendor': ['axios'],
+          // UI icons
+          'icons-vendor': ['lucide-react'],
+        },
+      },
     },
   },
   resolve: {

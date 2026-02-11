@@ -139,10 +139,9 @@ export class EventsService {
     // Build WHERE conditions for count query
     const conditions: string[] = [`e.status = 'completed'`];
     const countParams: any[] = [];
-    let paramIndex = 1;
 
     if (seasonId) {
-      conditions.push(`e.season_id = $${paramIndex++}`);
+      conditions.push(`e.season_id = ?`);
       countParams.push(seasonId);
     }
 
@@ -154,10 +153,7 @@ export class EventsService {
     const total = Number(countResult[0]?.total || 0);
 
     // Build params for main query (separate array to avoid mutation issues)
-    const mainParams: any[] = [...countParams];
-    const limitParamIndex = paramIndex++;
-    const offsetParamIndex = paramIndex;
-    mainParams.push(limit, offset);
+    const mainParams: any[] = [...countParams, limit, offset];
 
     // Get events with result counts using a single efficient query
     const sql = `
@@ -172,7 +168,7 @@ export class EventsService {
       ) rc ON rc.event_id = e.id
       WHERE ${whereClause}
       ORDER BY e.event_date DESC
-      LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
+      LIMIT ? OFFSET ?
     `;
 
     const events = await em.getConnection().execute(sql, mainParams);

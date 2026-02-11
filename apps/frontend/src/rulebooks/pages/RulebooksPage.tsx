@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { BookOpen, FileText, Archive as ArchiveIcon, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, FileText, Archive as ArchiveIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { SEOHead, useRulebooksSEO } from '@/shared/seo';
@@ -8,7 +8,6 @@ export default function RulebooksPage() {
   const navigate = useNavigate();
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedYear, setSelectedYear] = useState<string>('');
   const seoProps = useRulebooksSEO();
 
   useEffect(() => {
@@ -34,18 +33,7 @@ export default function RulebooksPage() {
     setLoading(false);
   };
 
-  // Get unique years from rulebooks (sorted descending)
-  const availableYears = useMemo(() => {
-    const years = [...new Set(rulebooks.map((r) => String(r.season)))];
-    return years.sort((a, b) => Number(b) - Number(a));
-  }, [rulebooks]);
-
-  // Filter rulebooks by selected year
-  const filteredRulebooks = selectedYear
-    ? rulebooks.filter((rulebook) => String(rulebook.season) === selectedYear)
-    : rulebooks;
-
-  const groupedRulebooks = filteredRulebooks.reduce((acc, rulebook) => {
+  const groupedRulebooks = rulebooks.reduce((acc, rulebook) => {
     if (!acc[rulebook.category]) {
       acc[rulebook.category] = [];
     }
@@ -90,60 +78,35 @@ export default function RulebooksPage() {
           </button>
         </div>
 
-        <div className="mb-6 max-w-xs">
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
-            <Calendar className="h-4 w-4 text-orange-500" />
-            Filter by Year
-          </label>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
-            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-          >
-            <option value="">All Years</option>
-            {availableYears.map((year) => (
-              <option key={year} value={year}>
-                {year}{year === String(new Date().getFullYear()) ? ' (Current)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {Object.keys(groupedRulebooks).length > 0 ? (
-          <div className="space-y-8">
-            {Object.entries(groupedRulebooks).map(([category, categoryRulebooks]) => (
-              <div key={category} className="bg-slate-800 rounded-xl p-8 shadow-xl">
-                <h2 className="text-2xl font-bold text-white mb-6 border-b border-slate-700 pb-3">
-                  {category}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {categoryRulebooks.map((rulebook) => (
-                    <button
-                      key={rulebook.id}
-                      onClick={() => navigate(`/rulebooks/${rulebook.id}`)}
-                      className="bg-slate-700 hover:bg-slate-600 rounded-xl p-6 text-left transition-all transform hover:-translate-y-2 hover:shadow-xl"
-                    >
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="w-14 h-14 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                          <FileText className="h-7 w-7 text-orange-500" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="text-xl font-semibold text-white mb-2">
-                            {rulebook.title}
-                          </h3>
-                          <p className="text-sm text-gray-400 mb-3">Season {rulebook.season}</p>
-                        </div>
-                      </div>
-                      <div className="pt-4 border-t border-slate-600">
-                        <span className="text-orange-500 text-sm font-medium">
-                          View Rulebook →
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            {Object.entries(groupedRulebooks).map(([category, categoryRulebooks]) =>
+              categoryRulebooks.map((rulebook) => (
+                <button
+                  key={rulebook.id}
+                  onClick={() => navigate(`/rulebooks/${rulebook.id}`)}
+                  className="bg-slate-800 hover:bg-slate-700 rounded-xl p-5 sm:p-6 text-left transition-all transform hover:-translate-y-1 hover:shadow-xl border border-slate-700 hover:border-orange-500/50"
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                      <FileText className="h-6 w-6 text-orange-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base sm:text-lg font-semibold text-white mb-1 leading-tight">
+                        {rulebook.title}
+                      </h3>
+                      <p className="text-xs text-gray-400">Season {rulebook.season}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-700">
+                    <span className="text-xs text-gray-500 truncate">{category}</span>
+                    <span className="text-orange-500 text-sm font-medium whitespace-nowrap">
+                      View →
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         ) : (
           <div className="bg-slate-800 rounded-xl p-12 text-center">
