@@ -585,9 +585,10 @@ export class CompetitionResultsService {
       }
 
       // Build filter for MikroORM query
+      // Use direct season relationship on CompetitionResult instead of going through event.season
       const filter: any = {};
       if (effectiveSeasonId) {
-        filter.event = { season: effectiveSeasonId };
+        filter.season = effectiveSeasonId;
       }
       if (format) {
         filter.format = format;
@@ -598,7 +599,7 @@ export class CompetitionResultsService {
 
       // Fetch results using MikroORM
       const results = await em.find(CompetitionResult, filter, {
-        populate: ['competitor', 'event', 'event.season'],
+        populate: ['competitor'],
       });
 
       // Aggregate results in memory
@@ -643,7 +644,7 @@ export class CompetitionResultsService {
 
         // Aggregate data
         entry.total_points += result.pointsEarned || 0;
-        const eventId = result.event?.id || (result as any).eventId;
+        const eventId = result.eventId;
         if (eventId) {
           entry.events_participated.add(eventId);
         }
