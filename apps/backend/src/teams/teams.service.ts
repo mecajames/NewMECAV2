@@ -1346,19 +1346,20 @@ export class TeamsService {
       competitorId: { $in: memberUserIds },
     };
 
-    // Get all competition results for team members
-    let allResults = await em.find(CompetitionResult, resultsQuery, {
-      populate: ['event', 'event.season'],
-      orderBy: { score: 'DESC' },
-    });
-
-    // Filter by season if specified
+    // If seasonId is provided, filter at the query level for efficiency
     if (seasonId) {
-      allResults = allResults.filter(r => {
-        // Handle both Reference and loaded entity cases
-        const eventSeasonId = r.event?.season?.id || (r.event as any)?.season_id;
-        return eventSeasonId === seasonId;
+      resultsQuery.event = { season: { id: seasonId } };
+    }
+
+    // Get all competition results for team members
+    let allResults: CompetitionResult[] = [];
+    try {
+      allResults = await em.find(CompetitionResult, resultsQuery, {
+        populate: ['event', 'event.season'],
+        orderBy: { score: 'DESC' },
       });
+    } catch (queryErr: any) {
+      this.logger.warn(`Failed to query competition results for team ${teamId}: ${queryErr.message}`);
     }
 
     // Separate SPL and SQ results (SPL formats typically have higher scores > 100)

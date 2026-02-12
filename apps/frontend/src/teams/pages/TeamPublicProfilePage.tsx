@@ -145,12 +145,16 @@ export default function TeamPublicProfilePage() {
       const defaultSeasonId = currentSeason?.id || 'all';
       setSelectedSeason(defaultSeasonId);
 
-      // Fetch stats with the current season filter
-      const statsData = await teamsApi.getTeamPublicStats(
-        id!,
-        defaultSeasonId === 'all' ? undefined : defaultSeasonId
-      );
-      setStats(statsData);
+      // Fetch stats separately so a stats error doesn't hide the team profile
+      try {
+        const statsData = await teamsApi.getTeamPublicStats(
+          id!,
+          defaultSeasonId === 'all' ? undefined : defaultSeasonId
+        );
+        setStats(statsData);
+      } catch (statsErr) {
+        console.error('Error fetching team stats:', statsErr);
+      }
 
       setInitialLoadComplete(true);
     } catch (err: any) {

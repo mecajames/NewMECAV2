@@ -9,7 +9,11 @@ import { CartIcon } from '@/shop/components/CartIcon';
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpenState] = useState(false);
+  const setMobileMenuOpen = (open: boolean) => {
+    setMobileMenuOpenState(open);
+    document.body.style.overflow = open ? 'hidden' : '';
+  };
   const [rulebooksMenuOpen, setRulebooksMenuOpen] = useState(false);
   const [membersMenuOpen, setMembersMenuOpen] = useState(false);
   const [resultsMenuOpen, setResultsMenuOpen] = useState(false);
@@ -577,8 +581,8 @@ export default function Navbar() {
       </div>
 
       {mobileMenuOpen && (
-        <div className="md:hidden bg-slate-800">
-          <div className="px-2 pt-2 pb-3 space-y-1">
+        <div className="md:hidden fixed inset-0 top-16 z-50 bg-slate-800 overflow-y-auto overscroll-contain">
+          <div className="px-2 pt-2 pb-6 space-y-1">
             {navItems.map((item) => (
               <button
                 key={item.id}
