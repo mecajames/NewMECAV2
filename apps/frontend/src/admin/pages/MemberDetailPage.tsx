@@ -5898,7 +5898,7 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
         const eventIds = [...new Set(data.map(r => r.eventId || r.event_id).filter(Boolean))];
         if (eventIds.length > 0) {
           try {
-            const eventsResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/events`);
+            const eventsResponse = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3001'}/api/events`);
             if (eventsResponse.ok) {
               const events = await eventsResponse.json();
               const nameMap: Record<string, string> = {};

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link2, Link2Off, RefreshCw, Building2, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 interface QuickBooksCompanyInfo {
   companyName: string;
