@@ -1,7 +1,5 @@
 import axios from '@/lib/axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 export type MediaType = 'image' | 'video' | 'pdf' | 'document' | 'other';
 
 export interface MediaFile {
@@ -23,8 +21,8 @@ export interface MediaFile {
 export const mediaFilesApi = {
   getAllMediaFiles: async (fileType?: MediaType): Promise<MediaFile[]> => {
     const url = fileType
-      ? `${API_BASE_URL}/api/media-files?fileType=${fileType}`
-      : `${API_BASE_URL}/api/media-files`;
+      ? `/api/media-files?fileType=${fileType}`
+      : '/api/media-files';
     const response = await axios.get(url);
     return response.data;
   },
@@ -37,26 +35,26 @@ export const mediaFilesApi = {
   searchMediaFiles: async (searchTerm: string, fileType?: MediaType): Promise<MediaFile[]> => {
     const params = new URLSearchParams({ q: searchTerm });
     if (fileType) params.append('fileType', fileType);
-    const response = await axios.get(`${API_BASE_URL}/api/media-files/search?${params}`);
+    const response = await axios.get(`/api/media-files/search?${params}`);
     return response.data;
   },
 
   getMediaFile: async (id: string): Promise<MediaFile> => {
-    const response = await axios.get(`${API_BASE_URL}/api/media-files/${id}`);
+    const response = await axios.get(`/api/media-files/${id}`);
     return response.data;
   },
 
   createMediaFile: async (data: Partial<MediaFile>): Promise<MediaFile> => {
-    const response = await axios.post(`${API_BASE_URL}/api/media-files`, data);
+    const response = await axios.post('/api/media-files', data);
     return response.data;
   },
 
   updateMediaFile: async (id: string, data: Partial<MediaFile>): Promise<MediaFile> => {
-    const response = await axios.put(`${API_BASE_URL}/api/media-files/${id}`, data);
+    const response = await axios.put(`/api/media-files/${id}`, data);
     return response.data;
   },
 
   deleteMediaFile: async (id: string): Promise<void> => {
-    await axios.delete(`${API_BASE_URL}/api/media-files/${id}`);
+    await axios.delete(`/api/media-files/${id}`);
   },
 };
