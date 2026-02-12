@@ -78,7 +78,7 @@ COPY --from=builder /app/apps/backend/package.json ./
 
 # Copy entrypoint script that runs migrations before starting
 COPY deploy/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=512
