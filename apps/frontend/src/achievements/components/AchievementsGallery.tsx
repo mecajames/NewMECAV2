@@ -104,8 +104,8 @@ export function AchievementsGallery({
                 </div>
               </div>
             </div>
-            <p className="mt-2 text-sm text-gray-300 font-medium truncate text-center">
-              {achievement.competition_type.split(' ').slice(0, 2).join(' ')}
+            <p className="mt-2 text-xs sm:text-sm text-gray-300 font-medium text-center leading-tight">
+              {achievement.competition_type}
             </p>
           </div>
         ))}
