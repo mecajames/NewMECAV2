@@ -396,13 +396,13 @@ export class MasterSecondaryService {
         competitorName: secondary.competitorName || secondary.getCompetitorDisplayName(),
         relationshipToMaster: secondary.relationshipToMaster,
         hasOwnLogin: secondary.hasOwnLogin || false,
-        profileId: secondary.hasOwnLogin ? secondary.user.id : null,
-        membershipType: {
+        profileId: secondary.hasOwnLogin && secondary.user ? secondary.user.id : null,
+        membershipType: secondary.membershipTypeConfig ? {
           id: secondary.membershipTypeConfig.id,
           name: secondary.membershipTypeConfig.name,
           category: secondary.membershipTypeConfig.category,
           price: Number(secondary.membershipTypeConfig.price),
-        },
+        } : { id: '', name: 'Unknown', category: MembershipCategory.COMPETITOR, price: 0 },
         // Vehicle info
         vehicleMake: secondary.vehicleMake,
         vehicleModel: secondary.vehicleModel,

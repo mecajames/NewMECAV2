@@ -39,7 +39,7 @@ export default function TeamDirectoryPage() {
   const seoProps = useTeamDirectorySEO();
 
   // Join request state
-  const [myTeam, setMyTeam] = useState<Team | null>(null);
+  const [myTeamIds, setMyTeamIds] = useState<Set<string>>(new Set());
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -71,11 +71,15 @@ export default function TeamDirectoryPage() {
   const fetchUserTeamData = async () => {
     if (!profile) return;
     try {
-      const [userTeam, userPendingRequests] = await Promise.all([
-        teamsApi.getTeamByUserId(profile.id),
+      const [myTeams, userPendingRequests] = await Promise.all([
+        teamsApi.getMyTeams(),
         teamsApi.getMyPendingRequests(),
       ]);
-      setMyTeam(userTeam);
+      const allTeamIds = new Set<string>([
+        ...myTeams.ownedTeams.map(t => t.id),
+        ...myTeams.memberTeams.map(t => t.id),
+      ]);
+      setMyTeamIds(allTeamIds);
       setPendingRequests(userPendingRequests);
     } catch (err) {
       console.error('Error fetching user team data:', err);
@@ -105,10 +109,9 @@ export default function TeamDirectoryPage() {
     return team.memberCount ?? team.members?.length ?? 1;
   };
 
-  // Check if user is already a member of a team
+  // Check if user is already a member of this specific team
   const isUserOnTeam = (teamId: string): boolean => {
-    if (!profile || !myTeam) return false;
-    return myTeam.id === teamId;
+    return myTeamIds.has(teamId);
   };
 
   // Check if user already has a pending request for this team
@@ -273,7 +276,7 @@ export default function TeamDirectoryPage() {
                   {/* Team Info */}
                   <div className="p-6">
                     <h3 className="text-xl font-bold text-white mb-1">
-                      Team {team.name}
+                      {team.name}
                     </h3>
 
                     {team.location && (
@@ -334,11 +337,6 @@ export default function TeamDirectoryPage() {
                             <CheckCircle className="h-4 w-4" />
                             You're a member
                           </div>
-                        ) : myTeam ? (
-                          <div className="flex items-center gap-2 text-gray-500 text-sm">
-                            <Users className="h-4 w-4" />
-                            Already on a team
-                          </div>
                         ) : hasPending ? (
                           <div className="flex items-center gap-2 text-yellow-400 text-sm">
                             <Clock className="h-4 w-4" />
@@ -393,7 +391,7 @@ export default function TeamDirectoryPage() {
                 <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
                 <h4 className="text-lg font-semibold text-white mb-2">Request Sent!</h4>
                 <p className="text-gray-400">
-                  Your request to join Team {selectedTeam.name} has been sent.
+                  Your request to join {selectedTeam.name} has been sent.
                   The team owner will review your request.
                 </p>
               </div>
@@ -413,7 +411,7 @@ export default function TeamDirectoryPage() {
                       )}
                     </div>
                     <div>
-                      <h4 className="text-white font-semibold">Team {selectedTeam.name}</h4>
+                      <h4 className="text-white font-semibold">{selectedTeam.name}</h4>
                       {selectedTeam.location && (
                         <p className="text-gray-400 text-sm flex items-center gap-1">
                           <MapPin className="h-3 w-3" />

@@ -6,6 +6,7 @@ import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
 import AdminUserWizard from '../components/AdminUserWizard';
 import { Pagination } from '@/shared/components';
+import { membershipsApi } from '@/memberships/memberships.api-client';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -132,39 +133,36 @@ export default function MembersPage() {
 
       if (profilesError) throw profilesError;
 
-      // Fetch ALL memberships with their type configs
+      // Fetch ALL memberships via backend API (includes type configs via MikroORM populate)
       // This includes master, independent, AND secondary memberships
-      const { data: membershipsData, error: membershipsError } = await supabase
-        .from('memberships')
-        .select(`
-          id,
-          user_id,
-          meca_id,
-          competitor_name,
-          has_team_addon,
-          payment_status,
-          end_date,
-          account_type,
-          master_membership_id,
-          has_own_login,
-          created_at,
-          vehicle_license_plate,
-          vehicle_color,
-          vehicle_make,
-          vehicle_model,
-          stripe_subscription_id,
-          had_legacy_subscription,
-          membership_type_configs (
-            category,
-            is_upgrade_only,
-            name
-          )
-        `)
-        .in('payment_status', ['paid', 'pending'])
-        .order('created_at', { ascending: false })
-        .limit(10000);
-
-      if (membershipsError) throw membershipsError;
+      const backendMemberships = await membershipsApi.getAll();
+      // Map backend camelCase response to snake_case shape for compatibility with processing below
+      const membershipsData = backendMemberships
+        .filter((m: any) => m.paymentStatus === 'paid' || m.paymentStatus === 'pending')
+        .map((m: any) => ({
+          id: m.id,
+          user_id: typeof m.user === 'string' ? m.user : m.user?.id,
+          meca_id: m.mecaId,
+          competitor_name: m.competitorName,
+          has_team_addon: m.hasTeamAddon,
+          payment_status: m.paymentStatus,
+          end_date: m.endDate,
+          account_type: m.accountType,
+          master_membership_id: typeof m.masterMembership === 'string' ? m.masterMembership : m.masterMembership?.id,
+          has_own_login: m.hasOwnLogin,
+          created_at: m.createdAt,
+          vehicle_license_plate: m.vehicleLicensePlate,
+          vehicle_color: m.vehicleColor,
+          vehicle_make: m.vehicleMake,
+          vehicle_model: m.vehicleModel,
+          stripe_subscription_id: m.stripeSubscriptionId,
+          had_legacy_subscription: m.hadLegacySubscription,
+          membership_type_configs: m.membershipTypeConfig ? {
+            category: m.membershipTypeConfig.category,
+            is_upgrade_only: m.membershipTypeConfig.isUpgradeOnly,
+            name: m.membershipTypeConfig.name,
+          } : null,
+        }));
 
       // Build a map of user_id -> best membership info
       // Each profile gets their own membership info (including secondaries)

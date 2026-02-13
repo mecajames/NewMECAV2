@@ -485,7 +485,7 @@ export default function TeamPublicProfilePage() {
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 min-w-0">
               <div className="min-w-0">
                 <h1 className="text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-white mb-2 break-words line-clamp-2">
-                  Team {team.name}
+                  {team.name}
                 </h1>
 
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400">
@@ -882,7 +882,7 @@ export default function TeamPublicProfilePage() {
               <div className="flex items-center gap-3 mb-4 p-3 bg-slate-700/50 rounded-lg">
                 <Shield className="h-8 w-8 text-orange-500" />
                 <div>
-                  <p className="text-white font-semibold">Team {team?.name}</p>
+                  <p className="text-white font-semibold">{team?.name}</p>
                   <p className="text-sm text-gray-400">{team?.members?.length || 0} members</p>
                 </div>
               </div>
