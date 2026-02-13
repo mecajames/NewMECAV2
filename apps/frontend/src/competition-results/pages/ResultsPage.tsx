@@ -6,6 +6,7 @@ import { competitionResultsApi, CompetitionResult } from '@/competition-results'
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useResultsSEO } from '@/shared/seo';
+import { useAuth } from '@/auth';
 
 interface GroupedResults {
   [format: string]: {
@@ -20,6 +21,8 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const seoProps = useResultsSEO();
+  const { profile } = useAuth();
+  const isAuthenticated = !!profile;
 
   // Get event ID from URL query params
   const eventIdFromUrl = searchParams.get('eventId');
@@ -830,7 +833,7 @@ export default function ResultsPage() {
                                       </div>
                                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-400">
                                         <span>{state}</span>
-                                        {mecaId && mecaId !== '999999' ? (
+                                        {mecaId && mecaId !== '999999' && isAuthenticated ? (
                                           <Link
                                             to={`/results/member/${mecaId}`}
                                             className={`font-semibold ${mecaDisplay.color} hover:underline hover:text-orange-400 transition-colors`}
@@ -839,7 +842,7 @@ export default function ResultsPage() {
                                           </Link>
                                         ) : (
                                           <span className={`font-semibold ${mecaDisplay.color}`}>
-                                            {mecaDisplay.text}
+                                            {mecaId && mecaId !== '999999' ? `ID: ${mecaDisplay.text}` : mecaDisplay.text}
                                           </span>
                                         )}
                                         {format === 'SPL' && result.wattage && (
@@ -957,7 +960,7 @@ export default function ResultsPage() {
                                           </div>
                                         </td>
                                         <td className="px-4 py-3">
-                                          {mecaId && mecaId !== '999999' ? (
+                                          {mecaId && mecaId !== '999999' && isAuthenticated ? (
                                             <Link
                                               to={`/results/member/${mecaId}`}
                                               className={`font-semibold ${mecaDisplay.color} hover:underline hover:text-orange-400 transition-colors`}
