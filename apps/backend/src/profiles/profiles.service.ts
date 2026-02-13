@@ -6,6 +6,10 @@ import { EmailService } from '../email/email.service';
 import { generateSecurePassword, validatePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { AccountType } from '@newmeca/shared';
 
+export interface EnsureProfileDto {
+  userId: string;
+}
+
 export interface CreateUserWithPasswordDto {
   email: string;
   password: string;
@@ -96,6 +100,78 @@ export class ProfilesService {
     return profile;
   }
 
+  /**
+   * Ensures a profile exists for the given user ID.
+   * If the profile already exists, returns it.
+   * If not, fetches user info from Supabase Auth and creates a new profile.
+   * This replaces the frontend's direct profile creation during signup/OAuth.
+   */
+  async ensureProfile(userId: string): Promise<Profile> {
+    const em = this.em.fork();
+
+    // Check if profile already exists
+    const existing = await em.findOne(Profile, { id: userId });
+    if (existing) {
+      return existing;
+    }
+
+    // Profile doesn't exist - get user info from Supabase Auth
+    const { data: authData, error: authError } = await this.supabaseAdmin
+      .getClient()
+      .auth.admin.getUserById(userId);
+
+    if (authError || !authData?.user) {
+      this.logger.error(`Failed to fetch auth user ${userId}: ${authError?.message}`);
+      throw new BadRequestException('Could not retrieve user information from auth system');
+    }
+
+    const authUser = authData.user;
+    const email = authUser.email || '';
+
+    // Extract name from auth metadata (supports both email signup and OAuth)
+    const metadata = authUser.user_metadata || {};
+    let firstName = metadata.first_name || '';
+    let lastName = metadata.last_name || '';
+
+    // If no first/last name, try full_name or name from OAuth metadata
+    if (!firstName && !lastName) {
+      const fullName = metadata.full_name || metadata.name || '';
+      if (fullName) {
+        const nameParts = fullName.split(' ');
+        firstName = nameParts[0] || '';
+        lastName = nameParts.slice(1).join(' ') || '';
+      }
+    }
+
+    // Generate MECA ID
+    const mecaId = await this.generateNextMecaId();
+
+    const now = new Date();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || email;
+
+    const profile = em.create(Profile, {
+      id: userId,
+      email,
+      first_name: firstName || undefined,
+      last_name: lastName || undefined,
+      full_name: fullName,
+      role: 'user',
+      membership_status: 'none',
+      meca_id: mecaId,
+      account_type: AccountType.MEMBER,
+      force_password_change: false,
+      canApplyJudge: false,
+      canApplyEventDirector: false,
+      created_at: now,
+      updated_at: now,
+    });
+
+    await em.persistAndFlush(profile);
+
+    this.logger.log(`Created profile for user ${userId} (${email}) with MECA ID ${mecaId}`);
+    return profile;
+  }
+
   async update(id: string, data: Partial<Profile>): Promise<Profile> {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id });
@@ -128,11 +204,40 @@ export class ProfilesService {
     return { totalUsers, totalMembers };
   }
 
-  async findPublicProfiles(): Promise<Profile[]> {
+  async findPublicProfiles(options?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ profiles: Partial<Profile>[]; total: number; page: number; limit: number }> {
     const em = this.em.fork();
-    return em.find(Profile, { is_public: true }, {
-      orderBy: { updated_at: 'DESC' }
+    const page = options?.page || 1;
+    const limit = options?.limit || 50;
+
+    const where: any = { is_public: true, membership_status: 'active' };
+
+    if (options?.search?.trim()) {
+      const term = `%${options.search.trim()}%`;
+      where.$or = [
+        { first_name: { $ilike: term } },
+        { last_name: { $ilike: term } },
+        { meca_id: { $ilike: term } },
+        { vehicle_info: { $ilike: term } },
+      ];
+    }
+
+    const [profiles, total] = await em.findAndCount(Profile, where, {
+      fields: [
+        'id', 'first_name', 'last_name', 'meca_id',
+        'city', 'state', 'membership_status',
+        'profile_picture_url', 'profile_images', 'cover_image_position',
+        'vehicle_info', 'car_audio_system',
+      ],
+      orderBy: { updated_at: 'DESC' },
+      limit,
+      offset: (page - 1) * limit,
     });
+
+    return { profiles, total, page, limit };
   }
 
   async findPublicById(id: string): Promise<Profile> {
@@ -171,6 +276,28 @@ export class ProfilesService {
 
     // Return raw results - they have all the profile fields
     return results as Profile[];
+  }
+
+  /**
+   * Returns all non-secondary profiles with master profile info populated.
+   * Used by the admin Members page to display the full member list.
+   */
+  async findAdminMembers(): Promise<Profile[]> {
+    const em = this.em.fork();
+    return em.find(
+      Profile,
+      {
+        $or: [
+          { isSecondaryAccount: null },
+          { isSecondaryAccount: false },
+        ],
+      },
+      {
+        populate: ['masterProfile'],
+        orderBy: { created_at: 'DESC' },
+        limit: 10000,
+      },
+    );
   }
 
   /**

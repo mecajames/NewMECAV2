@@ -247,12 +247,27 @@ export class AchievementsService {
 
     this.logger.log(`Recipients filter: ${JSON.stringify(where)}`);
 
-    const [items, total] = await em.findAndCount(AchievementRecipient, where, {
-      populate: ['achievement', 'profile', 'event', 'season'],
-      orderBy: { achievedAt: 'DESC' },
-      limit,
-      offset: (page - 1) * limit,
-    });
+    let items: AchievementRecipient[] = [];
+    let total = 0;
+
+    try {
+      [items, total] = await em.findAndCount(AchievementRecipient, where, {
+        populate: ['achievement', 'profile', 'event', 'season'],
+        orderBy: { achievedAt: 'DESC' },
+        limit,
+        offset: (page - 1) * limit,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to query achievement recipients: ${err}`);
+      // Return empty results rather than crashing the endpoint
+      return {
+        items: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      };
+    }
 
     const serializedItems = [];
     for (const item of items) {
@@ -1024,6 +1039,28 @@ export class AchievementsService {
       }
     }
 
+    // Safely access optional relations that may not be populated
+    let competitionResult: any = null;
+    try {
+      competitionResult = recipient.competitionResult;
+    } catch {
+      // CompetitionResult relation not initialized
+    }
+
+    let event: any = null;
+    try {
+      event = recipient.event;
+    } catch {
+      // Event relation not initialized
+    }
+
+    let season: any = null;
+    try {
+      season = recipient.season;
+    } catch {
+      // Season relation not initialized
+    }
+
     return {
       id: recipient.id,
       achievement_id: achievement?.id ?? null,
@@ -1032,11 +1069,11 @@ export class AchievementsService {
       meca_id: recipient.mecaId ?? null,
       achieved_value: Number(recipient.achievedValue),
       achieved_at: recipient.achievedAt,
-      competition_result_id: recipient.competitionResult?.id ?? null,
-      event_id: recipient.event?.id ?? null,
-      event_name: recipient.event?.title ?? null,
-      season_id: recipient.season?.id ?? null,
-      season_name: recipient.season?.name ?? null,
+      competition_result_id: competitionResult?.id ?? null,
+      event_id: event?.id ?? null,
+      event_name: event?.title ?? null,
+      season_id: season?.id ?? null,
+      season_name: season?.name ?? null,
       image_url: recipient.imageUrl ?? null,
       image_generated_at: recipient.imageGeneratedAt ?? null,
       created_at: recipient.createdAt,

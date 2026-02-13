@@ -101,6 +101,11 @@ export class EventsController {
     });
   }
 
+  @Get('by-director/:directorId')
+  async getEventsByDirector(@Param('directorId') directorId: string): Promise<Event[]> {
+    return this.eventsService.findByDirector(directorId);
+  }
+
   @Get('multi-day-group/:groupId')
   async getEventsByMultiDayGroup(@Param('groupId') groupId: string): Promise<Event[]> {
     return this.eventsService.findByMultiDayGroup(groupId);
