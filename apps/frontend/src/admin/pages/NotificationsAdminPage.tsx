@@ -247,7 +247,11 @@ export default function NotificationsAdminPage() {
         title: sendForm.title,
         message: sendForm.message,
         type: sendForm.type,
-        link: sendForm.link || undefined,
+        link: sendForm.link
+          ? (sendForm.link.startsWith('/') || sendForm.link.startsWith('http'))
+            ? sendForm.link
+            : `https://${sendForm.link}`
+          : undefined,
       };
 
       if (recipientMode === 'allUsers') {

@@ -157,16 +157,17 @@ export class ProfilesService {
     }
 
     // Use raw query to handle meca_id as integer with CAST to text
-    // Search by MECA ID (starts with), email (contains), first_name or last_name (contains)
+    // Search by MECA ID (starts with), email (contains), first_name, last_name, or full name (contains)
     const results = await em.getConnection().execute(
       `SELECT * FROM profiles
        WHERE CAST(meca_id AS TEXT) LIKE ?
           OR email LIKE ?
           OR first_name ILIKE ?
           OR last_name ILIKE ?
+          OR CONCAT(first_name, ' ', last_name) ILIKE ?
        ORDER BY first_name ASC, last_name ASC
        LIMIT ?`,
-      [`${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, limit],
+      [`${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, limit],
     );
 
     // Return raw results - they have all the profile fields

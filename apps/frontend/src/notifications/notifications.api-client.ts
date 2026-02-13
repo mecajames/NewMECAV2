@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface Notification {
   id: string;
@@ -21,9 +21,8 @@ export interface Notification {
 export const notificationsApi = {
   getUserNotifications: async (userId: string, limit: number = 10): Promise<Notification[]> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/notifications?userId=${userId}&limit=${limit}`);
-      if (!response.ok) return []; // Fail gracefully
-      return response.json();
+      const response = await axios.get(`/api/notifications?userId=${userId}&limit=${limit}`);
+      return response.data;
     } catch {
       return []; // Fail gracefully on network errors
     }
@@ -31,54 +30,33 @@ export const notificationsApi = {
 
   getUnreadCount: async (userId: string): Promise<number> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/notifications/unread-count?userId=${userId}`);
-      if (!response.ok) return 0; // Fail gracefully
-      const data = await response.json();
-      return data.count;
+      const response = await axios.get(`/api/notifications/unread-count?userId=${userId}`);
+      return response.data.count;
     } catch {
       return 0; // Fail gracefully on network errors
     }
   },
 
   getNotification: async (id: string): Promise<Notification> => {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch notification');
-    return response.json();
+    const response = await axios.get(`/api/notifications/${id}`);
+    return response.data;
   },
 
   createNotification: async (data: Partial<Notification>): Promise<Notification> => {
-    const response = await fetch(`${API_BASE_URL}/api/notifications`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create notification');
-    return response.json();
+    const response = await axios.post('/api/notifications', data);
+    return response.data;
   },
 
   markAsRead: async (id: string, userId: string): Promise<Notification> => {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/${id}/read`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId }),
-    });
-    if (!response.ok) throw new Error('Failed to mark notification as read');
-    return response.json();
+    const response = await axios.put(`/api/notifications/${id}/read`, { userId });
+    return response.data;
   },
 
   markAllAsRead: async (userId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/mark-all-read`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId }),
-    });
-    if (!response.ok) throw new Error('Failed to mark all notifications as read');
+    await axios.put('/api/notifications/mark-all-read', { userId });
   },
 
   deleteNotification: async (id: string, userId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/${id}?userId=${userId}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete notification');
+    await axios.delete(`/api/notifications/${id}?userId=${userId}`);
   },
 };

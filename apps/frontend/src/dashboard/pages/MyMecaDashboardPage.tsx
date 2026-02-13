@@ -10,7 +10,7 @@ import { useAuth } from '@/auth';
 import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
 import axios from 'axios';
 import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
-import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store } from 'lucide-react';
+import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
 import type { Judge } from '@newmeca/shared';
@@ -1652,6 +1652,26 @@ export default function MyMecaDashboardPage() {
                     <p className={`text-sm ${notification.read ? 'text-gray-500' : 'text-gray-400'}`}>
                       {notification.message}
                     </p>
+                    {notification.link && (() => {
+                      const isInternal = notification.link!.startsWith('/');
+                      const href = isInternal
+                        ? notification.link!
+                        : notification.link!.startsWith('http')
+                          ? notification.link!
+                          : `https://${notification.link}`;
+                      return (
+                        <a
+                          href={href}
+                          target={isInternal ? '_self' : '_blank'}
+                          rel={isInternal ? undefined : 'noopener noreferrer'}
+                          className="inline-flex items-center gap-1 mt-1 text-sm text-orange-400 hover:text-orange-300 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {isInternal ? 'View Details' : href}
+                        </a>
+                      );
+                    })()}
                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                       {notification.fromUser && (
                         <span>
