@@ -190,32 +190,34 @@ export default function MemberDetailPage() {
   // This prioritizes master/independent memberships over secondary ones
   const fetchMembershipStatusForHeader = async () => {
     try {
-      const { data: membershipsData } = await supabase
-        .from('memberships')
-        .select(`
-          id,
-          user_id,
-          payment_status,
-          end_date,
-          account_type,
-          has_team_addon,
-          cancel_at_period_end,
-          business_name,
-          business_phone,
-          business_website,
-          business_street,
-          business_city,
-          business_state,
-          business_postal_code,
-          business_country,
-          business_description,
-          business_logo_url,
-          business_listing_status,
-          membership_type_configs (category)
-        `)
-        .eq('user_id', memberId)
-        .in('payment_status', ['paid', 'pending'])
-        .order('created_at', { ascending: false });
+      // Fetch via backend API instead of direct Supabase query
+      const backendMemberships = await membershipsApi.getAllByUserId(memberId!);
+      // Map backend camelCase response to snake_case shape for compatibility with processing below
+      const membershipsData = backendMemberships
+        .filter((m: any) => m.paymentStatus === 'paid' || m.paymentStatus === 'pending')
+        .map((m: any) => ({
+          id: m.id,
+          user_id: typeof m.user === 'string' ? m.user : m.user?.id,
+          payment_status: m.paymentStatus,
+          end_date: m.endDate,
+          account_type: m.accountType,
+          has_team_addon: m.hasTeamAddon,
+          cancel_at_period_end: m.cancelAtPeriodEnd,
+          business_name: m.businessName,
+          business_phone: m.businessPhone,
+          business_website: m.businessWebsite,
+          business_street: m.businessStreet,
+          business_city: m.businessCity,
+          business_state: m.businessState,
+          business_postal_code: m.businessPostalCode,
+          business_country: m.businessCountry,
+          business_description: m.businessDescription,
+          business_logo_url: m.businessLogoUrl,
+          business_listing_status: m.businessListingStatus,
+          membership_type_configs: m.membershipTypeConfig ? {
+            category: m.membershipTypeConfig.category,
+          } : null,
+        }));
 
       if (!membershipsData || membershipsData.length === 0) {
         setDerivedMembershipStatus('none');
