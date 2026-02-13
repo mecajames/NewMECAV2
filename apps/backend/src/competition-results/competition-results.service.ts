@@ -169,6 +169,35 @@ export class CompetitionResultsService {
     return em.find(CompetitionResult, { competitor: competitorId });
   }
 
+  async findByCompetitorWithEvent(competitorId: string): Promise<any[]> {
+    const em = this.em.fork();
+    const results = await em.find(CompetitionResult, { competitor: competitorId }, {
+      orderBy: { createdAt: 'DESC' },
+      populate: ['event'],
+    });
+
+    // Use wrap().toObject() for proper serialization, then add event data
+    // since event has hidden: true in the entity
+    return results.map(result => {
+      const serialized = wrap(result).toObject() as any;
+      // Manually add event since it's hidden in the entity
+      if (result.event) {
+        serialized.event = {
+          id: result.event.id,
+          title: result.event.title,
+          event_date: result.event.eventDate,
+          venue_name: result.event.venueName,
+          venue_address: result.event.venueAddress,
+          venue_city: result.event.venueCity,
+          venue_state: result.event.venueState,
+          venue_country: result.event.venueCountry,
+          season_id: result.event.season?.id,
+        };
+      }
+      return serialized;
+    });
+  }
+
   async findByMecaId(mecaId: string): Promise<any[]> {
     const em = this.em.fork();
     const results = await em.find(CompetitionResult, { mecaId }, {

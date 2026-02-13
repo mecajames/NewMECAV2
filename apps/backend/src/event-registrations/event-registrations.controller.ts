@@ -27,6 +27,11 @@ export class EventRegistrationsController {
     return this.eventRegistrationsService.getStats();
   }
 
+  @Get('count/:eventId')
+  async getRegistrationCount(@Param('eventId') eventId: string): Promise<{ count: number }> {
+    return this.eventRegistrationsService.getCountByEvent(eventId);
+  }
+
   @Get('pricing')
   async calculatePricing(
     @Query('eventId') eventId: string,

@@ -7,6 +7,7 @@ import { usePermissions } from '@/auth';
 import AdminUserWizard from '../components/AdminUserWizard';
 import { Pagination } from '@/shared/components';
 import { membershipsApi } from '@/memberships/memberships.api-client';
+import axios from 'axios';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -114,24 +115,28 @@ export default function MembersPage() {
 
   const fetchMembers = async () => {
     try {
-      // Fetch profiles EXCLUDING secondary profiles
+      // Fetch profiles EXCLUDING secondary profiles via backend API
       // Secondary profiles are shown nested under their masters in the hierarchical view
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          masterProfile:master_profile_id (
-            id,
-            first_name,
-            last_name,
-            email
-          )
-        `)
-        .or('is_secondary_account.is.null,is_secondary_account.eq.false')
-        .order('created_at', { ascending: false })
-        .limit(10000);
+      const { data: backendProfiles } = await axios.get('/api/profiles/admin/members');
 
-      if (profilesError) throw profilesError;
+      // Map backend camelCase response to snake_case shape for compatibility with existing processing code
+      const profilesData = backendProfiles.map((p: any) => ({
+        ...p,
+        is_secondary_account: p.isSecondaryAccount,
+        master_profile_id: typeof p.masterProfile === 'string' ? p.masterProfile : p.masterProfile?.id,
+        can_apply_judge: p.canApplyJudge,
+        can_apply_event_director: p.canApplyEventDirector,
+        can_login: p.canLogin,
+        force_password_change: p.force_password_change,
+        profile_picture_url: p.profile_picture_url,
+        // Map the masterProfile join data to the shape the UI expects
+        masterProfile: p.masterProfile && typeof p.masterProfile === 'object' ? {
+          id: p.masterProfile.id,
+          first_name: p.masterProfile.first_name,
+          last_name: p.masterProfile.last_name,
+          email: p.masterProfile.email,
+        } : null,
+      }));
 
       // Fetch ALL memberships via backend API (includes type configs via MikroORM populate)
       // This includes master, independent, AND secondary memberships

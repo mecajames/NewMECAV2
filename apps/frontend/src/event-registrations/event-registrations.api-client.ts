@@ -227,6 +227,12 @@ export const eventRegistrationsApi = {
     return response.json();
   },
 
+  getCountByEvent: async (eventId: string): Promise<{ count: number }> => {
+    const response = await fetch(`${API_BASE_URL}/api/event-registrations/count/${eventId}`);
+    if (!response.ok) throw new Error('Failed to fetch registration count');
+    return response.json();
+  },
+
   getByEmail: async (email: string): Promise<EventRegistration[]> => {
     const response = await fetch(`${API_BASE_URL}/api/event-registrations/by-email?email=${encodeURIComponent(email)}`);
     if (!response.ok) throw new Error('Failed to fetch registrations');

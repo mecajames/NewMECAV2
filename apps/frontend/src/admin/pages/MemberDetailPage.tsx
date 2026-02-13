@@ -45,6 +45,8 @@ import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-typ
 import AdminMembershipWizard from '../components/AdminMembershipWizard';
 import { UserPlus } from 'lucide-react';
 import { teamsApi, Team } from '@/teams';
+import { moderationApi } from '@/api-client/moderation.api-client';
+import { notificationsApi } from '@/notifications/notifications.api-client';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
 import {
@@ -165,18 +167,30 @@ export default function MemberDetailPage() {
 
   const fetchMember = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', memberId)
-        .single();
+      const backendData = await profilesApi.getById(memberId!);
 
-      if (error) throw error;
+      // Map backend camelCase response to snake_case shape for compatibility
+      const data: any = {
+        ...backendData,
+        is_secondary_account: (backendData as any).isSecondaryAccount,
+        can_login: (backendData as any).canLogin,
+        master_profile_id: typeof (backendData as any).masterProfile === 'string'
+          ? (backendData as any).masterProfile
+          : (backendData as any).masterProfile?.id,
+        can_apply_judge: (backendData as any).canApplyJudge ?? backendData.can_apply_judge,
+        can_apply_event_director: (backendData as any).canApplyEventDirector ?? backendData.can_apply_event_director,
+        judge_permission_granted_at: (backendData as any).judgePermissionGrantedAt ?? backendData.judge_permission_granted_at,
+        judge_permission_granted_by: (backendData as any).judgePermissionGrantedBy ?? backendData.judge_permission_granted_by,
+        ed_permission_granted_at: (backendData as any).edPermissionGrantedAt ?? backendData.ed_permission_granted_at,
+        ed_permission_granted_by: (backendData as any).edPermissionGrantedBy ?? backendData.ed_permission_granted_by,
+        judge_certification_expires: (backendData as any).judgeCertificationExpires ?? backendData.judge_certification_expires,
+        ed_certification_expires: (backendData as any).edCertificationExpires ?? backendData.ed_certification_expires,
+        force_password_change: (backendData as any).force_password_change,
+        account_type: (backendData as any).account_type,
+      };
 
       // Add computed full_name
-      if (data) {
-        data.full_name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
-      }
+      data.full_name = data.full_name || `${data.first_name || ''} ${data.last_name || ''}`.trim();
 
       setMember(data);
       setLoading(false);
@@ -476,20 +490,17 @@ export default function MemberDetailPage() {
 
     setSending(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
 
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: memberId,
-          from_user_id: user?.id,
-          title: messageTitle,
-          message: messageBody,
-          type: 'message',
-          link: 'dashboard', // Could link to messages page when implemented
-        });
-
-      if (error) throw error;
+      await notificationsApi.createNotification({
+        user: { id: memberId! },
+        fromUser: { id: session.user.id },
+        title: messageTitle,
+        message: messageBody,
+        type: 'message',
+        link: 'dashboard',
+      });
 
       setMessageTitle('');
       setMessageBody('');
@@ -2845,20 +2856,14 @@ function MediaGalleryTab({ member }: { member: Profile }) {
   };
 
   const fetchHiddenImages = async () => {
-    // Fetch hidden images from a table that tracks moderation status
     try {
-      const { data } = await supabase
-        .from('moderated_images')
-        .select('image_url')
-        .eq('user_id', member.id)
-        .eq('is_hidden', true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
 
-      if (data) {
-        setHiddenImages(new Set(data.map(d => d.image_url)));
-      }
+      const urls = await moderationApi.getHiddenImages(member.id, session.access_token);
+      setHiddenImages(new Set(urls));
     } catch (error) {
-      // Table might not exist yet, that's okay
-      console.log('Moderated images table not available');
+      console.log('Could not fetch moderated images');
     }
   };
 
@@ -2885,20 +2890,18 @@ function MediaGalleryTab({ member }: { member: Profile }) {
 
     setTogglingVisibility(image.url);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
       const newHiddenState = !image.isHidden;
 
-      // Upsert the moderation record
-      const { error } = await supabase
-        .from('moderated_images')
-        .upsert({
-          user_id: member.id,
-          image_url: image.url,
-          image_type: image.type,
-          is_hidden: newHiddenState,
-          moderated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,image_url' });
-
-      if (error) throw error;
+      await moderationApi.toggleImageVisibility({
+        userId: member.id,
+        imageUrl: image.url,
+        imageType: image.type,
+        hide: newHiddenState,
+        link: image.type === 'profile' ? '/public-profile' : `/teams/${image.teamId}`,
+      }, session.access_token);
 
       // Update local state
       setHiddenImages(prev => {
@@ -2910,19 +2913,6 @@ function MediaGalleryTab({ member }: { member: Profile }) {
         }
         return newSet;
       });
-
-      // Send notification to user if hiding
-      if (newHiddenState) {
-        const { data: { user } } = await supabase.auth.getUser();
-        await supabase.from('notifications').insert({
-          user_id: member.id,
-          from_user_id: user?.id,
-          title: 'Image Hidden from Public View',
-          message: `One of your ${image.type === 'profile' ? 'profile' : 'team gallery'} images has been hidden from public view by an administrator. Please review your images and ensure they comply with MECA guidelines.`,
-          type: 'alert',
-          link: image.type === 'profile' ? '/public-profile' : `/teams/${image.teamId}`,
-        });
-      }
     } catch (error) {
       console.error('Error toggling visibility:', error);
       alert('Failed to update image visibility');
@@ -2966,8 +2956,8 @@ function MediaGalleryTab({ member }: { member: Profile }) {
         ? IMAGE_VIOLATION_REASONS.find(r => r.value === deleteReason)?.label || deleteReason
         : null;
 
-      // Send notification to user
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
 
       // Build notification message based on what was provided
       const imageTypeLabel = selectedImage.type === 'profile'
@@ -2989,31 +2979,17 @@ function MediaGalleryTab({ member }: { member: Profile }) {
         notificationMessage = `Your ${imageTypeLabel} image has been removed by a MECA administrator.\n\nMessage: ${customMessage}`;
       }
 
-      await supabase.from('notifications').insert({
-        user_id: member.id,
-        from_user_id: user?.id,
+      // Send notification and log moderation action via backend API
+      await moderationApi.deleteImageNotify({
+        userId: member.id,
+        imageUrl: selectedImage.url,
+        imageType: selectedImage.type,
         title: notificationTitle,
         message: notificationMessage,
-        type: 'alert',
         link: selectedImage.type === 'profile' ? '/public-profile' : `/teams/${selectedImage.teamId}`,
-      });
-
-      // Log the moderation action (table might not exist)
-      try {
-        await supabase.from('moderation_log').insert({
-          user_id: member.id,
-          moderator_id: user?.id,
-          action: 'image_deleted',
-          reason: deleteReason,
-          details: {
-            image_url: selectedImage.url,
-            image_type: selectedImage.type,
-            custom_message: customMessage,
-          },
-        });
-      } catch {
-        // Log table might not exist
-      }
+        reason: deleteReason,
+        customMessage,
+      }, session.access_token);
 
       // Refresh data
       if (selectedImage.type === 'team') {

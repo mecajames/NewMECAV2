@@ -74,6 +74,12 @@ export const competitionResultsApi = {
     return response.json();
   },
 
+  getByCompetitor: async (competitorId: string): Promise<CompetitionResult[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/by-competitor/${competitorId}`);
+    if (!response.ok) throw new Error('Failed to fetch results for competitor');
+    return response.json();
+  },
+
   getByMecaId: async (mecaId: string): Promise<CompetitionResult[]> => {
     const response = await fetch(`${API_BASE_URL}/api/competition-results/by-meca-id/${mecaId}`);
     if (!response.ok) throw new Error('Failed to fetch results for MECA ID');

@@ -95,6 +95,11 @@ export const eventsApi = {
     return response.data;
   },
 
+  getByDirector: async (directorId: string): Promise<Event[]> => {
+    const response = await axios.get(`${API_BASE_URL}/api/events/by-director/${directorId}`);
+    return response.data;
+  },
+
   getById: async (id: string): Promise<Event> => {
     const response = await axios.get(`${API_BASE_URL}/api/events/${id}`);
     return response.data;

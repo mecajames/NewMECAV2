@@ -65,7 +65,9 @@ export class EventsService {
 
   async findByDirector(directorId: string): Promise<Event[]> {
     const em = this.em.fork();
-    return em.find(Event, { eventDirector: directorId });
+    return em.find(Event, { eventDirector: directorId }, {
+      orderBy: { eventDate: 'DESC' },
+    });
   }
 
   /**
