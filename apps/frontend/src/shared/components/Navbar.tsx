@@ -427,9 +427,20 @@ export default function Navbar() {
                               onClick={() => {
                                 handleMarkNotificationRead(notification.id);
                                 if (notification.link) {
-                                  // If link is "dashboard", navigate to mymeca dashboard overview tab instead of letting it redirect
-                                  const targetPath = notification.link === 'dashboard' ? '/dashboard/mymeca?tab=overview' : `/${notification.link}`;
-                                  navigate(targetPath);
+                                  const isInternal = notification.link.startsWith('/');
+                                  const isExternal = notification.link.startsWith('http');
+                                  if (isExternal) {
+                                    window.open(notification.link, '_blank', 'noopener,noreferrer');
+                                  } else if (isInternal) {
+                                    navigate(notification.link === '/dashboard' ? '/dashboard/mymeca?tab=overview' : notification.link);
+                                  } else if (notification.link.includes('.')) {
+                                    // Looks like a domain (e.g. google.com) — open as external with https
+                                    window.open(`https://${notification.link}`, '_blank', 'noopener,noreferrer');
+                                  } else {
+                                    // Internal path without leading slash
+                                    const targetPath = notification.link === 'dashboard' ? '/dashboard/mymeca?tab=overview' : `/${notification.link}`;
+                                    navigate(targetPath);
+                                  }
                                   setNotificationsOpen(false);
                                 }
                               }}

@@ -104,18 +104,17 @@ export class NotificationsService {
       const searchTerm = filters.search.trim().toLowerCase();
 
       // Find matching user IDs first
-      const matchingProfiles = await em.find(
-        Profile,
-        {
-          $or: [
-            { email: { $ilike: `%${searchTerm}%` } },
-            { first_name: { $ilike: `%${searchTerm}%` } },
-            { last_name: { $ilike: `%${searchTerm}%` } },
-            { meca_id: { $ilike: `%${searchTerm}%` } },
-          ],
-        },
-        { fields: ['id'] }
+      // Use raw query to support full name search (CONCAT first + last)
+      const matchingProfileRows = await em.getConnection().execute(
+        `SELECT id FROM profiles
+         WHERE email ILIKE ?
+            OR first_name ILIKE ?
+            OR last_name ILIKE ?
+            OR CAST(meca_id AS TEXT) LIKE ?
+            OR CONCAT(first_name, ' ', last_name) ILIKE ?`,
+        [`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `${searchTerm}%`, `%${searchTerm}%`],
       );
+      const matchingProfiles = matchingProfileRows as { id: string }[];
 
       const matchingUserIds = matchingProfiles.map(p => p.id);
 
