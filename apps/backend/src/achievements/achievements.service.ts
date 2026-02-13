@@ -247,15 +247,39 @@ export class AchievementsService {
 
     this.logger.log(`Recipients filter: ${JSON.stringify(where)}`);
 
-    const [items, total] = await em.findAndCount(AchievementRecipient, where, {
-      populate: ['achievement', 'profile', 'event', 'season'],
-      orderBy: { achievedAt: 'DESC' },
-      limit,
-      offset: (page - 1) * limit,
-    });
+    let items: AchievementRecipient[] = [];
+    let total = 0;
+
+    try {
+      [items, total] = await em.findAndCount(AchievementRecipient, where, {
+        populate: ['achievement', 'profile', 'event', 'season'],
+        orderBy: { achievedAt: 'DESC' },
+        limit,
+        offset: (page - 1) * limit,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to query achievement recipients: ${err}`);
+      // Return empty results rather than crashing the endpoint
+      return {
+        items: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      };
+    }
+
+    const serializedItems = [];
+    for (const item of items) {
+      try {
+        serializedItems.push(this.serializeRecipient(item));
+      } catch (err) {
+        this.logger.error(`Failed to serialize recipient ${item.id}: ${err}`);
+      }
+    }
 
     return {
-      items: items.map((item) => this.serializeRecipient(item)),
+      items: serializedItems,
       total,
       page,
       limit,
@@ -978,7 +1002,12 @@ export class AchievementsService {
   }
 
   private serializeRecipient(recipient: AchievementRecipient) {
-    const profile = recipient.profile;
+    let profile: any = null;
+    try {
+      profile = recipient.profile;
+    } catch {
+      // Profile relation not initialized
+    }
 
     // Build profile name - prioritize first_name + last_name, fall back to full_name
     let profileName: string | null = null;
@@ -994,23 +1023,61 @@ export class AchievementsService {
       }
     }
 
+    let achievement: any = null;
+    try {
+      achievement = recipient.achievement;
+    } catch {
+      // Achievement relation not initialized
+    }
+
+    let serializedAchievement: ReturnType<typeof this.serializeDefinition> | undefined;
+    if (achievement) {
+      try {
+        serializedAchievement = this.serializeDefinition(achievement);
+      } catch (err) {
+        this.logger.warn(`Failed to serialize achievement for recipient ${recipient.id}: ${err}`);
+      }
+    }
+
+    // Safely access optional relations that may not be populated
+    let competitionResult: any = null;
+    try {
+      competitionResult = recipient.competitionResult;
+    } catch {
+      // CompetitionResult relation not initialized
+    }
+
+    let event: any = null;
+    try {
+      event = recipient.event;
+    } catch {
+      // Event relation not initialized
+    }
+
+    let season: any = null;
+    try {
+      season = recipient.season;
+    } catch {
+      // Season relation not initialized
+    }
+
     return {
       id: recipient.id,
-      achievement_id: recipient.achievement?.id ?? null,
-      profile_id: recipient.profile?.id ?? null,
+      achievement_id: achievement?.id ?? null,
+      profile_id: profile?.id ?? null,
       profile_name: profileName,
       meca_id: recipient.mecaId ?? null,
       achieved_value: Number(recipient.achievedValue),
       achieved_at: recipient.achievedAt,
-      competition_result_id: recipient.competitionResult?.id ?? null,
-      event_id: recipient.event?.id ?? null,
-      event_name: recipient.event?.title ?? null,
-      season_id: recipient.season?.id ?? null,
-      season_name: recipient.season?.name ?? null,
+      competition_result_id: competitionResult?.id ?? null,
+      event_id: event?.id ?? null,
+      event_name: event?.title ?? null,
+      season_id: season?.id ?? null,
+      season_name: season?.name ?? null,
       image_url: recipient.imageUrl ?? null,
       image_generated_at: recipient.imageGeneratedAt ?? null,
       created_at: recipient.createdAt,
-      achievement: recipient.achievement ? this.serializeDefinition(recipient.achievement) : undefined,
+      achievement: serializedAchievement,
     };
   }
 

@@ -11,8 +11,10 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
 import { EventDirectorsService } from './event-directors.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
 import {
   CreateEventDirectorApplicationDto,
   AdminQuickCreateEventDirectorApplicationDto,
@@ -136,6 +138,7 @@ export class EventDirectorsController {
   constructor(
     private readonly eventDirectorsService: EventDirectorsService,
     private readonly supabaseAdminService: SupabaseAdminService,
+    private readonly em: EntityManager,
   ) {}
 
   private async getCurrentUser(authHeader?: string) {
@@ -163,13 +166,9 @@ export class EventDirectorsController {
     }
 
     // Check if user is admin
-    const profile = await this.supabaseAdminService.getClient()
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (profile.error || profile.data?.role !== UserRole.ADMIN) {
+    if (!profile || profile.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Admin access required');
     }
 
@@ -392,13 +391,9 @@ export class EventDirectorsController {
     const assignment = await this.eventDirectorsService.getAssignment(id);
 
     // Check if user is admin or the assigned ED
-    const profile = await this.supabaseAdminService.getClient()
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (profile.data?.role !== UserRole.ADMIN && assignment.eventDirector.user.id !== user.id) {
+    if (profile?.role !== UserRole.ADMIN && assignment.eventDirector.user.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
 

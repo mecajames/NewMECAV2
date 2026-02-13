@@ -6,6 +6,8 @@ import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
 import AdminUserWizard from '../components/AdminUserWizard';
 import { Pagination } from '@/shared/components';
+import { membershipsApi } from '@/memberships/memberships.api-client';
+import axios from 'axios';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -46,7 +48,7 @@ interface MemberWithMembership extends Profile {
   masterProfileName?: string; // For secondary profiles, the name of their master
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export default function MembersPage() {
   const navigate = useNavigate();
@@ -113,58 +115,59 @@ export default function MembersPage() {
 
   const fetchMembers = async () => {
     try {
-      // Fetch profiles EXCLUDING secondary profiles
+      // Fetch profiles EXCLUDING secondary profiles via backend API
       // Secondary profiles are shown nested under their masters in the hierarchical view
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          masterProfile:master_profile_id (
-            id,
-            first_name,
-            last_name,
-            email
-          )
-        `)
-        .or('is_secondary_account.is.null,is_secondary_account.eq.false')
-        .order('created_at', { ascending: false })
-        .limit(10000);
+      const { data: backendProfiles } = await axios.get('/api/profiles/admin/members');
 
-      if (profilesError) throw profilesError;
+      // Map backend camelCase response to snake_case shape for compatibility with existing processing code
+      const profilesData = backendProfiles.map((p: any) => ({
+        ...p,
+        is_secondary_account: p.isSecondaryAccount,
+        master_profile_id: typeof p.masterProfile === 'string' ? p.masterProfile : p.masterProfile?.id,
+        can_apply_judge: p.canApplyJudge,
+        can_apply_event_director: p.canApplyEventDirector,
+        can_login: p.canLogin,
+        force_password_change: p.force_password_change,
+        profile_picture_url: p.profile_picture_url,
+        // Map the masterProfile join data to the shape the UI expects
+        masterProfile: p.masterProfile && typeof p.masterProfile === 'object' ? {
+          id: p.masterProfile.id,
+          first_name: p.masterProfile.first_name,
+          last_name: p.masterProfile.last_name,
+          email: p.masterProfile.email,
+        } : null,
+      }));
 
-      // Fetch ALL memberships with their type configs
+      // Fetch ALL memberships via backend API (includes type configs via MikroORM populate)
       // This includes master, independent, AND secondary memberships
-      const { data: membershipsData, error: membershipsError } = await supabase
-        .from('memberships')
-        .select(`
-          id,
-          user_id,
-          meca_id,
-          competitor_name,
-          has_team_addon,
-          payment_status,
-          end_date,
-          account_type,
-          master_membership_id,
-          has_own_login,
-          created_at,
-          vehicle_license_plate,
-          vehicle_color,
-          vehicle_make,
-          vehicle_model,
-          stripe_subscription_id,
-          had_legacy_subscription,
-          membership_type_configs (
-            category,
-            is_upgrade_only,
-            name
-          )
-        `)
-        .in('payment_status', ['paid', 'pending'])
-        .order('created_at', { ascending: false })
-        .limit(10000);
-
-      if (membershipsError) throw membershipsError;
+      const backendMemberships = await membershipsApi.getAll();
+      // Map backend camelCase response to snake_case shape for compatibility with processing below
+      const membershipsData = backendMemberships
+        .filter((m: any) => m.paymentStatus === 'paid' || m.paymentStatus === 'pending')
+        .map((m: any) => ({
+          id: m.id,
+          user_id: typeof m.user === 'string' ? m.user : m.user?.id,
+          meca_id: m.mecaId,
+          competitor_name: m.competitorName,
+          has_team_addon: m.hasTeamAddon,
+          payment_status: m.paymentStatus,
+          end_date: m.endDate,
+          account_type: m.accountType,
+          master_membership_id: typeof m.masterMembership === 'string' ? m.masterMembership : m.masterMembership?.id,
+          has_own_login: m.hasOwnLogin,
+          created_at: m.createdAt,
+          vehicle_license_plate: m.vehicleLicensePlate,
+          vehicle_color: m.vehicleColor,
+          vehicle_make: m.vehicleMake,
+          vehicle_model: m.vehicleModel,
+          stripe_subscription_id: m.stripeSubscriptionId,
+          had_legacy_subscription: m.hadLegacySubscription,
+          membership_type_configs: m.membershipTypeConfig ? {
+            category: m.membershipTypeConfig.category,
+            is_upgrade_only: m.membershipTypeConfig.isUpgradeOnly,
+            name: m.membershipTypeConfig.name,
+          } : null,
+        }));
 
       // Build a map of user_id -> best membership info
       // Each profile gets their own membership info (including secondaries)
@@ -471,7 +474,10 @@ export default function MembersPage() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
+        // Search profile fields (including combined full name)
+        const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
         return (
+          fullName.includes(term) ||
           member.first_name?.toLowerCase().includes(term) ||
           member.last_name?.toLowerCase().includes(term)
         );

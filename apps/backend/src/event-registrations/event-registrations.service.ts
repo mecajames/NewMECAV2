@@ -681,6 +681,12 @@ export class EventRegistrationsService {
     return { totalRegistrations };
   }
 
+  async getCountByEvent(eventId: string): Promise<{ count: number }> {
+    const em = this.em.fork();
+    const count = await em.count(EventRegistration, { event: eventId });
+    return { count };
+  }
+
   // Legacy methods for backwards compatibility
   async create(data: Partial<EventRegistration>): Promise<EventRegistration> {
     const em = this.em.fork();

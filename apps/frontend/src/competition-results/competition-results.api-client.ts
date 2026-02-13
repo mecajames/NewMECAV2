@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export interface CompetitionResult {
   id: string;
@@ -71,6 +71,12 @@ export const competitionResultsApi = {
       body: JSON.stringify({ eventIds }),
     });
     if (!response.ok) throw new Error('Failed to fetch result counts');
+    return response.json();
+  },
+
+  getByCompetitor: async (competitorId: string): Promise<CompetitionResult[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/competition-results/by-competitor/${competitorId}`);
+    if (!response.ok) throw new Error('Failed to fetch results for competitor');
     return response.json();
   },
 

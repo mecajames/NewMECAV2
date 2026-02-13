@@ -169,6 +169,35 @@ export class CompetitionResultsService {
     return em.find(CompetitionResult, { competitor: competitorId });
   }
 
+  async findByCompetitorWithEvent(competitorId: string): Promise<any[]> {
+    const em = this.em.fork();
+    const results = await em.find(CompetitionResult, { competitor: competitorId }, {
+      orderBy: { createdAt: 'DESC' },
+      populate: ['event'],
+    });
+
+    // Use wrap().toObject() for proper serialization, then add event data
+    // since event has hidden: true in the entity
+    return results.map(result => {
+      const serialized = wrap(result).toObject() as any;
+      // Manually add event since it's hidden in the entity
+      if (result.event) {
+        serialized.event = {
+          id: result.event.id,
+          title: result.event.title,
+          event_date: result.event.eventDate,
+          venue_name: result.event.venueName,
+          venue_address: result.event.venueAddress,
+          venue_city: result.event.venueCity,
+          venue_state: result.event.venueState,
+          venue_country: result.event.venueCountry,
+          season_id: result.event.season?.id,
+        };
+      }
+      return serialized;
+    });
+  }
+
   async findByMecaId(mecaId: string): Promise<any[]> {
     const em = this.em.fork();
     const results = await em.find(CompetitionResult, { mecaId }, {
@@ -585,9 +614,10 @@ export class CompetitionResultsService {
       }
 
       // Build filter for MikroORM query
+      // Use direct season relationship on CompetitionResult instead of going through event.season
       const filter: any = {};
       if (effectiveSeasonId) {
-        filter.event = { season: effectiveSeasonId };
+        filter.season = effectiveSeasonId;
       }
       if (format) {
         filter.format = format;
@@ -598,7 +628,7 @@ export class CompetitionResultsService {
 
       // Fetch results using MikroORM
       const results = await em.find(CompetitionResult, filter, {
-        populate: ['competitor', 'event', 'event.season'],
+        populate: ['competitor'],
       });
 
       // Aggregate results in memory
@@ -643,7 +673,7 @@ export class CompetitionResultsService {
 
         // Aggregate data
         entry.total_points += result.pointsEarned || 0;
-        const eventId = result.event?.id || (result as any).eventId;
+        const eventId = result.eventId;
         if (eventId) {
           entry.events_participated.add(eventId);
         }

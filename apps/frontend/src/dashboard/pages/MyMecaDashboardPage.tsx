@@ -7,8 +7,10 @@ import {
 } from 'lucide-react';
 import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth';
-import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import axios from 'axios';
+import { eventRegistrationsApi } from '@/event-registrations';
+import { competitionResultsApi } from '@/competition-results';
 import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
 import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
@@ -43,8 +45,8 @@ export default function MyMecaDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profile, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
-  const [results, setResults] = useState<CompetitionResult[]>([]);
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [results, setResults] = useState<any[]>([]);
   const [hostingRequests, setHostingRequests] = useState<EventHostingRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<EventHostingRequest | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -1041,37 +1043,40 @@ export default function MyMecaDashboardPage() {
   };
 
   const fetchUserData = async () => {
-    const [regData, resultsData] = await Promise.all([
-      supabase
-        .from('event_registrations')
-        .select('*, event:events(*)')
-        .eq('user_id', profile!.id)
-        .order('registration_date', { ascending: false }),
-      supabase
-        .from('competition_results')
-        .select('*, event:events(*)')
-        .eq('competitor_id', profile!.id)
-        .order('created_at', { ascending: false }),
-    ]);
+    try {
+      const [regs, competitorResults] = await Promise.all([
+        eventRegistrationsApi.getMyRegistrations(profile!.id),
+        competitionResultsApi.getByCompetitor(profile!.id),
+      ]);
 
-    if (regData.data) setRegistrations(regData.data);
-    if (resultsData.data) {
-      setResults(resultsData.data);
+      // Map backend camelCase to match frontend expectations
+      const mappedRegs = regs.map((reg: any) => ({
+        ...reg,
+        status: reg.registrationStatus || reg.status,
+        registration_date: reg.registeredAt || reg.createdAt,
+      }));
+      setRegistrations(mappedRegs);
 
-      const totalPoints = resultsData.data.reduce(
-        (sum, r) => sum + r.points_earned,
-        0
-      );
-      const bestPlacement =
-        resultsData.data.length > 0
-          ? Math.min(...resultsData.data.map((r) => r.placement))
-          : null;
+      if (competitorResults) {
+        setResults(competitorResults);
 
-      setStats({
-        totalEvents: resultsData.data.length,
-        totalPoints,
-        bestPlacement,
-      });
+        const totalPoints = competitorResults.reduce(
+          (sum: number, r: any) => sum + (r.points_earned || 0),
+          0
+        );
+        const bestPlacement =
+          competitorResults.length > 0
+            ? Math.min(...competitorResults.map((r: any) => r.placement))
+            : null;
+
+        setStats({
+          totalEvents: competitorResults.length,
+          totalPoints,
+          bestPlacement,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
     }
 
     // Fetch event hosting requests
@@ -3702,7 +3707,7 @@ export default function MyMecaDashboardPage() {
     });
 
     // Helper to detect format from result - checks multiple fields
-    const getResultFormat = (r: CompetitionResult): string => {
+    const getResultFormat = (r: any): string => {
       // Check direct format field first (may exist on some results)
       if ((r as any).format) return (r as any).format;
 
@@ -3929,7 +3934,7 @@ export default function MyMecaDashboardPage() {
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h3 className="text-xl font-bold text-white mb-4">Points by Format</h3>
             <div className="space-y-4">
-              {Object.entries(formatStats).map(([format, data]) => (
+              {Object.entries(formatStats).map(([format, data]: [string, any]) => (
                 <div key={format} className="flex items-center justify-between">
                   <div>
                     <p className="text-white font-medium">{format}</p>
@@ -3955,7 +3960,7 @@ export default function MyMecaDashboardPage() {
               {formatsWithData.map((format) => {
                 const chartData = getFormatChartData(format);
                 const stats = formatStats[format];
-                const avgScore = stats.count > 0 ? (stats.scores.reduce((a, b) => a + b, 0) / stats.count).toFixed(1) : '0';
+                const avgScore = stats.count > 0 ? (stats.scores.reduce((a: number, b: number) => a + b, 0) / stats.count).toFixed(1) : '0';
                 const isSPL = format.toUpperCase().includes('SPL');
 
                 if (chartData.length === 0) return null;
@@ -4084,7 +4089,7 @@ export default function MyMecaDashboardPage() {
                 <tbody>
                   {formatsWithData.map((format) => {
                     const data = formatStats[format];
-                    const avgScore = data.count > 0 ? (data.scores.reduce((a, b) => a + b, 0) / data.count).toFixed(1) : '0';
+                    const avgScore = data.count > 0 ? (data.scores.reduce((a: number, b: number) => a + b, 0) / data.count).toFixed(1) : '0';
                     const trend = getTrend(data.scores);
                     const isSPL = format.toUpperCase().includes('SPL');
 
@@ -4107,7 +4112,7 @@ export default function MyMecaDashboardPage() {
                           <div className="flex items-center justify-center gap-2">
                             {/* Mini trend sparkline */}
                             <div className="w-16 h-4 flex items-end gap-0.5">
-                              {data.scores.slice(-6).map((score, idx) => {
+                              {data.scores.slice(-6).map((score: number, idx: number) => {
                                 const maxScore = Math.max(...data.scores.slice(-6));
                                 const height = maxScore > 0 ? (score / maxScore) * 100 : 0;
                                 return (

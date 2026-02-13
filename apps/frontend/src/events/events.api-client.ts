@@ -1,7 +1,7 @@
 import axios from '@/lib/axios';
 import { supabase } from '@/lib/supabase';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
 
 export type MultiDayResultsMode = 'separate' | 'combined_score' | 'combined_points';
@@ -92,6 +92,11 @@ export const eventsApi = {
     if (options?.seasonId) params.append('season_id', options.seasonId);
 
     const response = await axios.get(`${API_BASE_URL}/api/events/completed-with-results?${params.toString()}`);
+    return response.data;
+  },
+
+  getByDirector: async (directorId: string): Promise<Event[]> => {
+    const response = await axios.get(`${API_BASE_URL}/api/events/by-director/${directorId}`);
     return response.data;
   },
 
