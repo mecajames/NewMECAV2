@@ -807,11 +807,17 @@ export default function NotificationsAdminPage() {
                   type="text"
                   value={sendForm.link}
                   onChange={(e) => setSendForm(prev => ({ ...prev, link: e.target.value }))}
-                  placeholder="/path/to/page or https://..."
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val && !val.startsWith('/') && !val.startsWith('http')) {
+                      setSendForm(prev => ({ ...prev, link: `https://${val}` }));
+                    }
+                  }}
+                  placeholder="https://example.com or /path/to/page"
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500"
                 />
                 <p className="text-gray-500 text-xs mt-1">
-                  Add a link that users can click to navigate to relevant content
+                  External links will automatically be formatted with https://
                 </p>
               </div>
             </div>
