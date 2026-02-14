@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bell, ArrowLeft, Mail, AlertTriangle, Info, MessageSquare,
   Check, X, Trash2, User, Calendar, Eye, EyeOff, Filter,
-  Send, Search, Plus, Users, Loader2
+  Send, Search, Plus, Users, Loader2, ExternalLink
 } from 'lucide-react';
 import axios from '@/lib/axios';
 import { profilesApi } from '@/profiles';
@@ -14,6 +14,7 @@ interface NotificationItem {
   message: string;
   type: 'message' | 'system' | 'alert' | 'info';
   read: boolean;
+  link?: string | null;
   createdAt: string;
   readAt?: string;
   recipient: {
@@ -53,6 +54,7 @@ export default function NotificationsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [viewNotification, setViewNotification] = useState<NotificationItem | null>(null);
 
   // Filters
   const [filterType, setFilterType] = useState<string>('');
@@ -534,14 +536,23 @@ export default function NotificationsAdminPage() {
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      <button
-                        onClick={() => handleDelete(notification.id)}
-                        disabled={deleting === notification.id}
-                        className="text-red-500 hover:text-red-400 disabled:opacity-50"
-                        title="Delete notification"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setViewNotification(notification)}
+                          className="text-blue-400 hover:text-blue-300"
+                          title="View notification"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(notification.id)}
+                          disabled={deleting === notification.id}
+                          className="text-red-500 hover:text-red-400 disabled:opacity-50"
+                          title="Delete notification"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -552,6 +563,106 @@ export default function NotificationsAdminPage() {
       </div>
 
       {/* Send Notification Modal */}
+      {/* View Notification Modal */}
+      {viewNotification && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewNotification(null)}>
+          <div className="bg-slate-800 rounded-xl max-w-lg w-full overflow-hidden border border-slate-700" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-700">
+              <h3 className="text-lg font-bold text-white">Notification Details</h3>
+              <button onClick={() => setViewNotification(null)} className="text-gray-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-xs text-gray-500 uppercase mb-1">Title</p>
+                <p className="text-white font-medium">{viewNotification.title}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase mb-1">Type</p>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getTypeBadgeColor(viewNotification.type)}`}>
+                  {getTypeIcon(viewNotification.type)}
+                  {viewNotification.type}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase mb-1">Message</p>
+                <p className="text-gray-300 whitespace-pre-wrap">{viewNotification.message}</p>
+              </div>
+              {viewNotification.link && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase mb-1">Link</p>
+                  <a
+                    href={viewNotification.link.startsWith('http') ? viewNotification.link : viewNotification.link.startsWith('/') ? viewNotification.link : `https://${viewNotification.link}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    {viewNotification.link.startsWith('http') ? viewNotification.link : viewNotification.link.startsWith('/') ? viewNotification.link : `https://${viewNotification.link}`}
+                  </a>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase mb-1">Recipient</p>
+                  {viewNotification.recipient ? (
+                    <div>
+                      <p className="text-white text-sm">{viewNotification.recipient.firstName} {viewNotification.recipient.lastName}</p>
+                      <p className="text-gray-400 text-xs">{viewNotification.recipient.email}</p>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">Unknown</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase mb-1">Sender</p>
+                  {viewNotification.sender ? (
+                    <div>
+                      <p className="text-white text-sm">{viewNotification.sender.firstName} {viewNotification.sender.lastName}</p>
+                      <p className="text-gray-400 text-xs">{viewNotification.sender.email}</p>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">System</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase mb-1">Sent</p>
+                  <p className="text-gray-300 text-sm">{formatDate(viewNotification.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase mb-1">Status</p>
+                  {viewNotification.read ? (
+                    <div className="flex items-center gap-1">
+                      <Check className="h-4 w-4 text-green-500" />
+                      <span className="text-green-400 text-sm">Read</span>
+                      {viewNotification.readAt && (
+                        <span className="text-gray-500 text-xs ml-1">({formatDate(viewNotification.readAt)})</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <X className="h-4 w-4 text-red-500" />
+                      <span className="text-red-400 text-sm">Unread</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-700 flex justify-end">
+              <button
+                onClick={() => setViewNotification(null)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
           <div className="bg-slate-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">

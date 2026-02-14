@@ -4,7 +4,7 @@ import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
-  ShoppingCart, Package, Megaphone, Building2, BarChart3
+  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -325,6 +325,14 @@ export default function AdminDashboard() {
           action: 'notifications',
           color: 'amber',
           navigateTo: '/admin/notifications',
+        },
+        {
+          icon: FileText,
+          title: 'Audit Log',
+          description: 'View all results entry audit logs across all events',
+          action: 'audit-log',
+          color: 'indigo',
+          navigateTo: '/admin/audit-log',
         },
         {
           icon: ImageIcon,

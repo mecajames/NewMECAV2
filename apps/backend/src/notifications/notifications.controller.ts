@@ -124,6 +124,7 @@ export class NotificationsController {
         message: n.message,
         type: n.type,
         read: n.read,
+        link: n.link || null,
         createdAt: n.createdAt,
         readAt: n.readAt,
         recipient: n.user ? {
