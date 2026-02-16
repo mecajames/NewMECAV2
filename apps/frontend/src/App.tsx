@@ -92,6 +92,7 @@ const RatingsAdminPage = lazy(() => import('@/admin/pages/RatingsAdminPage'));
 const NotificationsAdminPage = lazy(() => import('@/admin/pages/NotificationsAdminPage'));
 const WorldFinalsAdminPage = lazy(() => import('@/admin/pages/WorldFinalsAdminPage'));
 const AchievementsAdminPage = lazy(() => import('@/achievements/pages/AchievementsAdminPage'));
+const AuditLogAdminPage = lazy(() => import('@/admin/pages/AuditLogAdminPage'));
 const SeasonManagementPage = lazy(() => import('@/seasons/pages/SeasonManagementPage'));
 const ClassesManagementPage = lazy(() => import('@/competition-classes/pages/ClassesManagementPage'));
 const FormatManagementPage = lazy(() => import('@/competition-formats/pages/FormatManagementPage'));
@@ -255,6 +256,7 @@ function App() {
               <Route path="/admin/notifications" element={<L><NotificationsAdminPage /></L>} />
               <Route path="/admin/world-finals" element={<L><WorldFinalsAdminPage /></L>} />
               <Route path="/admin/achievements" element={<L><AchievementsAdminPage /></L>} />
+              <Route path="/admin/audit-log" element={<L><AuditLogAdminPage /></L>} />
 
               {/* Admin Billing Routes */}
               <Route path="/admin/billing" element={<L><BillingDashboardPage /></L>} />

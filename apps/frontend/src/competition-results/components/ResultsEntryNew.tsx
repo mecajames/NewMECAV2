@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, User } from 'lucide-react';
+import axios from '@/lib/axios';
 import { eventsApi, Event } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { competitionResultsApi } from '@/competition-results';
@@ -148,6 +149,11 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   // Audit Log Modal
   const [showAuditModal, setShowAuditModal] = useState(false);
 
+  // Imported Files Tab
+  const [activeResultsTab, setActiveResultsTab] = useState<'results' | 'imported-files'>('results');
+  const [importedSessions, setImportedSessions] = useState<any[]>([]);
+  const [loadingImports, setLoadingImports] = useState(false);
+
   // UI State
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -204,6 +210,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   useEffect(() => {
     if (selectedEventId) {
       fetchExistingResults();
+      fetchImportedSessions();
     }
   }, [selectedEventId]);
 
@@ -385,6 +392,68 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       console.error('Error fetching existing results:', error);
       setExistingResults([]);
     }
+  };
+
+  const fetchImportedSessions = async () => {
+    if (!selectedEventId) return;
+    setLoadingImports(true);
+    try {
+      const response = await axios.get(`/api/audit/event/${selectedEventId}/sessions`);
+      setImportedSessions(response.data || []);
+    } catch (error) {
+      console.error('Error fetching imported sessions:', error);
+      setImportedSessions([]);
+    }
+    setLoadingImports(false);
+  };
+
+  const handleDownloadImportedFile = async (sessionId: string, filename: string) => {
+    try {
+      const response = await axios.get(`/api/audit/session/${sessionId}/download`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename || `session-${sessionId}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      alert('Failed to download file');
+    }
+  };
+
+  const getEntryMethodIcon = (method: string) => {
+    switch (method) {
+      case 'excel':
+        return <FileSpreadsheet className="h-4 w-4 sm:h-5 sm:w-5 text-green-400" />;
+      case 'termlab':
+        return <File className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />;
+      case 'manual':
+        return <User className="h-4 w-4 sm:h-5 sm:w-5 text-purple-400" />;
+      default:
+        return <File className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />;
+    }
+  };
+
+  const getEntryMethodLabel = (method: string) => {
+    switch (method) {
+      case 'excel': return 'Excel Import';
+      case 'termlab': return 'TermLab Import';
+      case 'manual': return 'Manual Entry';
+      default: return 'Unknown';
+    }
+  };
+
+  const formatSessionDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1014,10 +1083,10 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
           {showEntrySection && (
             <div className="mt-4">
               {/* Entry Method Tabs */}
-              <div className="flex gap-2 mb-4 border-b border-slate-600">
+              <div className="flex gap-1 overflow-x-auto mb-4 border-b border-slate-600">
                 <button
                   onClick={() => setEntryMethod('manual')}
-                  className={`px-4 py-2 font-semibold transition-colors ${
+                  className={`px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm font-semibold transition-colors flex-shrink-0 ${
                     entryMethod === 'manual'
                       ? 'text-orange-400 border-b-2 border-orange-400'
                       : 'text-gray-400 hover:text-white'
@@ -1027,24 +1096,24 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                 </button>
                 <button
                   onClick={() => setEntryMethod('excel')}
-                  className={`px-4 py-2 font-semibold transition-colors flex items-center gap-2 ${
+                  className={`px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm font-semibold transition-colors flex items-center gap-1 sm:gap-2 flex-shrink-0 ${
                     entryMethod === 'excel'
                       ? 'text-orange-400 border-b-2 border-orange-400'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  <FileSpreadsheet className="h-4 w-4" />
+                  <FileSpreadsheet className="h-3 w-3 sm:h-4 sm:w-4" />
                   Excel Import
                 </button>
                 <button
                   onClick={() => setEntryMethod('termlab')}
-                  className={`px-4 py-2 font-semibold transition-colors flex items-center gap-2 ${
+                  className={`px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm font-semibold transition-colors flex items-center gap-1 sm:gap-2 flex-shrink-0 ${
                     entryMethod === 'termlab'
                       ? 'text-orange-400 border-b-2 border-orange-400'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  <File className="h-4 w-4" />
+                  <File className="h-3 w-3 sm:h-4 sm:w-4" />
                   TermLab Import
                 </button>
               </div>
@@ -1244,8 +1313,42 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       )}
 
       {/* Results Display */}
-      {selectedEventId && existingResults.length > 0 && (
+      {selectedEventId && (existingResults.length > 0 || importedSessions.length > 0) && (
         <div className="bg-slate-700 rounded-lg p-4">
+          {/* Tab Bar */}
+          <div className="flex border-b border-slate-600 mb-4">
+            <button
+              onClick={() => setActiveResultsTab('results')}
+              className={`px-3 py-2 text-xs sm:px-4 sm:py-2 sm:text-sm font-semibold transition-colors ${
+                activeResultsTab === 'results'
+                  ? 'text-orange-400 border-b-2 border-orange-400'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Results
+              <span className="ml-1.5 px-1.5 py-0.5 bg-slate-600 text-xs rounded-full">
+                {existingResults.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveResultsTab('imported-files')}
+              className={`px-3 py-2 text-xs sm:px-4 sm:py-2 sm:text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+                activeResultsTab === 'imported-files'
+                  ? 'text-orange-400 border-b-2 border-orange-400'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Imported Files
+              <span className="px-1.5 py-0.5 bg-slate-600 text-xs rounded-full">
+                {importedSessions.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Results Tab */}
+          {activeResultsTab === 'results' && existingResults.length > 0 && (
+          <div>
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-xl font-semibold text-white">
@@ -1286,31 +1389,31 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                 return null;
               })()}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {selectedResultIds.size > 0 && (
                 <button
                   onClick={handleBulkDelete}
                   disabled={saving}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors text-sm disabled:opacity-50"
+                  className="flex items-center gap-1 sm:gap-2 px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
                 >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Selected ({selectedResultIds.size})
+                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                  Delete ({selectedResultIds.size})
                 </button>
               )}
               <button
                 onClick={() => setShowAuditModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm"
+                className="flex items-center gap-1 sm:gap-2 px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
               >
-                <File className="h-4 w-4" />
-                View Audit Log
+                <File className="h-3 w-3 sm:h-4 sm:w-4" />
+                Audit Log
               </button>
               <button
                 onClick={handleRecalculatePoints}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors text-sm disabled:opacity-50"
+                className="flex items-center gap-1 sm:gap-2 px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
               >
-                <Calculator className="h-4 w-4" />
-                {saving ? 'Recalculating...' : 'Recalculate All Points'}
+                <Calculator className="h-3 w-3 sm:h-4 sm:w-4" />
+                {saving ? 'Recalculating...' : 'Recalculate'}
               </button>
             </div>
           </div>
@@ -1367,7 +1470,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
 
           {/* Results Table */}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[800px]">
               <thead className="bg-slate-900 text-white">
                 <tr>
                   <th className="px-3 py-2 text-center w-12">
@@ -1523,13 +1626,97 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
               </tbody>
             </table>
           </div>
+          </div>
+          )}
+
+          {/* Imported Files Tab */}
+          {activeResultsTab === 'imported-files' && (
+            <div>
+              {loadingImports ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-400">Loading import history...</div>
+                </div>
+              ) : importedSessions.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-400">No imported files found for this event</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {importedSessions.map((session: any) => (
+                    <div
+                      key={session.id}
+                      className="bg-slate-800 rounded-lg p-3 sm:p-4 border border-slate-600 hover:border-orange-500 transition-colors"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className="mt-1">
+                            {getEntryMethodIcon(session.entryMethod)}
+                          </div>
+                          <div className="flex-1 space-y-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-white text-sm sm:text-base">
+                                {getEntryMethodLabel(session.entryMethod)}
+                              </span>
+                              {session.format && (
+                                <span className="px-2 py-0.5 bg-slate-600 text-xs rounded text-gray-300">
+                                  {session.format}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-sm">
+                              <div>
+                                <span className="text-gray-400">Entered by:</span>
+                                <span className="ml-1.5 text-gray-200">
+                                  {session.user?.email || session.user?.first_name || 'Unknown'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Date:</span>
+                                <span className="ml-1.5 text-gray-200">
+                                  {formatSessionDateTime(session.sessionStart)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Results:</span>
+                                <span className="ml-1.5 text-gray-200">{session.resultCount}</span>
+                              </div>
+                              {session.originalFilename && (
+                                <div className="sm:col-span-2">
+                                  <span className="text-gray-400">File:</span>
+                                  <span className="ml-1.5 text-gray-200 break-all">{session.originalFilename}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {session.filePath && (
+                          <button
+                            onClick={() =>
+                              handleDownloadImportedFile(
+                                session.id,
+                                session.originalFilename || 'download.xlsx'
+                              )
+                            }
+                            className="flex items-center gap-1.5 px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors flex-shrink-0"
+                          >
+                            <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                            Download
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* Edit Modal */}
       {showEditModal && editingResult && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto mx-2">
             <div className="p-4 border-b border-slate-700 sticky top-0 bg-slate-800">
               <div className="flex items-center justify-between">
                 <div className="flex-1 mr-4">

@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, FileText, FileSpreadsheet, User, Edit2, Trash2, Eye } from 'lucide-react';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 interface AuditSessionEntry {
   id: string;
@@ -79,14 +77,14 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
     setLoading(true);
     try {
       // Fetch sessions from the original working endpoint
-      const sessionsResponse = await axios.get(`${API_BASE_URL}/api/audit/event/${eventId}/sessions`);
+      const sessionsResponse = await axios.get(`/api/audit/event/${eventId}/sessions`);
       setSessions(sessionsResponse.data || []);
 
       // Try to fetch modifications and deletions from new endpoints (may not be deployed yet)
       try {
         const [modificationsResponse, deletionsResponse] = await Promise.all([
-          axios.get(`${API_BASE_URL}/api/audit/event/${eventId}/modifications`),
-          axios.get(`${API_BASE_URL}/api/audit/event/${eventId}/deletions`),
+          axios.get(`/api/audit/event/${eventId}/modifications`),
+          axios.get(`/api/audit/event/${eventId}/deletions`),
         ]);
         setModifications(modificationsResponse.data || []);
         setDeletions(deletionsResponse.data || []);
@@ -106,7 +104,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
   const handleDownloadFile = async (sessionId: string, filename: string) => {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/audit/session/${sessionId}/download`,
+        `/api/audit/session/${sessionId}/download`,
         { responseType: 'blob' }
       );
 
@@ -207,11 +205,11 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="bg-slate-800 w-full h-full sm:w-auto sm:max-w-5xl sm:max-h-[85vh] sm:rounded-xl shadow-2xl overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-slate-700">
-            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-              <FileText className="h-6 w-6 text-orange-500" />
+          <div className="flex items-center justify-between p-3 sm:p-6 border-b border-slate-700">
+            <h2 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2">
+              <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-orange-500" />
               Audit Log
             </h2>
             <button
@@ -223,53 +221,56 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-slate-700">
+          <div className="flex overflow-x-auto border-b border-slate-700">
             <button
               onClick={() => setActiveTab('imports')}
-              className={`flex-1 px-6 py-4 flex items-center justify-center gap-2 font-medium transition-colors ${
+              className={`flex-1 px-3 py-2 sm:px-6 sm:py-4 flex items-center justify-center gap-1.5 sm:gap-2 font-medium transition-colors text-xs sm:text-base flex-shrink-0 ${
                 activeTab === 'imports'
                   ? 'text-orange-500 border-b-2 border-orange-500 bg-slate-700/50'
                   : 'text-gray-400 hover:text-white hover:bg-slate-700/30'
               }`}
             >
-              <FileSpreadsheet className="h-5 w-5" />
-              Result Entries
-              <span className="ml-2 px-2 py-0.5 bg-slate-600 text-xs rounded-full">
+              <FileSpreadsheet className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Result Entries</span>
+              <span className="sm:hidden">Entries</span>
+              <span className="px-1.5 py-0.5 bg-slate-600 text-xs rounded-full">
                 {tabCounts.imports}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('modifications')}
-              className={`flex-1 px-6 py-4 flex items-center justify-center gap-2 font-medium transition-colors ${
+              className={`flex-1 px-3 py-2 sm:px-6 sm:py-4 flex items-center justify-center gap-1.5 sm:gap-2 font-medium transition-colors text-xs sm:text-base flex-shrink-0 ${
                 activeTab === 'modifications'
                   ? 'text-yellow-500 border-b-2 border-yellow-500 bg-slate-700/50'
                   : 'text-gray-400 hover:text-white hover:bg-slate-700/30'
               }`}
             >
-              <Edit2 className="h-5 w-5" />
-              Modifications
-              <span className="ml-2 px-2 py-0.5 bg-slate-600 text-xs rounded-full">
+              <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Modifications</span>
+              <span className="sm:hidden">Edits</span>
+              <span className="px-1.5 py-0.5 bg-slate-600 text-xs rounded-full">
                 {tabCounts.modifications}
               </span>
             </button>
             <button
               onClick={() => setActiveTab('deletions')}
-              className={`flex-1 px-6 py-4 flex items-center justify-center gap-2 font-medium transition-colors ${
+              className={`flex-1 px-3 py-2 sm:px-6 sm:py-4 flex items-center justify-center gap-1.5 sm:gap-2 font-medium transition-colors text-xs sm:text-base flex-shrink-0 ${
                 activeTab === 'deletions'
                   ? 'text-red-500 border-b-2 border-red-500 bg-slate-700/50'
                   : 'text-gray-400 hover:text-white hover:bg-slate-700/30'
               }`}
             >
-              <Trash2 className="h-5 w-5" />
-              Deletions
-              <span className="ml-2 px-2 py-0.5 bg-slate-600 text-xs rounded-full">
+              <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Deletions</span>
+              <span className="sm:hidden">Deletes</span>
+              <span className="px-1.5 py-0.5 bg-slate-600 text-xs rounded-full">
                 {tabCounts.deletions}
               </span>
             </button>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-gray-400">Loading audit data...</div>
@@ -305,7 +306,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                     </span>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
                                   <div>
                                     <span className="text-gray-400">Entered by:</span>
                                     <span className="ml-2 text-gray-200">
@@ -333,9 +334,9 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                     </span>
                                   </div>
                                   {session.originalFilename && (
-                                    <div className="col-span-2">
+                                    <div className="sm:col-span-2">
                                       <span className="text-gray-400">File:</span>
-                                      <span className="ml-2 text-gray-200">
+                                      <span className="ml-2 text-gray-200 break-all">
                                         {session.originalFilename}
                                       </span>
                                     </div>
@@ -350,7 +351,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                       {session.entries.map((entry, idx) => (
                                         <div
                                           key={entry.id || idx}
-                                          className="bg-slate-600/50 rounded p-2 text-sm grid grid-cols-2 md:grid-cols-4 gap-2"
+                                          className="bg-slate-600/50 rounded p-2 text-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2"
                                         >
                                           <div>
                                             <span className="text-gray-400 text-xs">Competitor:</span>
@@ -389,10 +390,10 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                     session.originalFilename || 'download.xlsx'
                                   )
                                 }
-                                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+                                className="flex items-center gap-1.5 px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors flex-shrink-0"
                               >
-                                <Download className="h-4 w-4" />
-                                Download file
+                                <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                                Download
                               </button>
                             )}
                           </div>
@@ -429,7 +430,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                     UPDATE
                                   </span>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
                                   <div>
                                     <span className="text-gray-400">Competitor:</span>
                                     <span className="ml-2 text-gray-200">
@@ -459,9 +460,9 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                             </div>
                             <button
                               onClick={() => viewLogDetails(log)}
-                              className="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-colors"
+                              className="flex items-center gap-1.5 px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-colors flex-shrink-0"
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                               View Changes
                             </button>
                           </div>
@@ -498,7 +499,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                                     DELETE
                                   </span>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
                                   <div>
                                     <span className="text-gray-400">Competitor:</span>
                                     <span className="ml-2 text-gray-200">
@@ -528,9 +529,9 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
                             </div>
                             <button
                               onClick={() => viewLogDetails(log)}
-                              className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                              className="flex items-center gap-1.5 px-2 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex-shrink-0"
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                               View Details
                             </button>
                           </div>
@@ -544,10 +545,10 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ isOpen, onClose, e
           </div>
 
           {/* Footer */}
-          <div className="p-6 border-t border-slate-700">
+          <div className="p-3 sm:p-6 border-t border-slate-700">
             <button
               onClick={onClose}
-              className="px-6 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+              className="px-4 py-2 sm:px-6 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors text-sm sm:text-base"
             >
               Close
             </button>
