@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 // =============================================================================
 // Types
@@ -224,6 +224,12 @@ export const eventRegistrationsApi = {
   getMyRegistrations: async (userId: string): Promise<EventRegistration[]> => {
     const response = await fetch(`${API_BASE_URL}/api/event-registrations/my?userId=${userId}`);
     if (!response.ok) throw new Error('Failed to fetch registrations');
+    return response.json();
+  },
+
+  getCountByEvent: async (eventId: string): Promise<{ count: number }> => {
+    const response = await fetch(`${API_BASE_URL}/api/event-registrations/count/${eventId}`);
+    if (!response.ok) throw new Error('Failed to fetch registration count');
     return response.json();
   },
 

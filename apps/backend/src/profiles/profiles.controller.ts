@@ -14,7 +14,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { ProfilesService, CreateUserWithPasswordDto, ResetPasswordDto } from './profiles.service';
+import { ProfilesService, CreateUserWithPasswordDto, ResetPasswordDto, EnsureProfileDto } from './profiles.service';
 import { MemberStatsService } from './member-stats.service';
 import { Profile } from './profiles.entity';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
@@ -51,6 +51,46 @@ export class ProfilesController {
     return { user, profile };
   }
 
+  // Helper to require any authenticated user (not necessarily admin)
+  private async requireAuthUser(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+
+    return user;
+  }
+
+  // ===== Ensure Profile Endpoint =====
+
+  /**
+   * Ensures a profile exists for the authenticated user.
+   * If the profile already exists, returns it. Otherwise creates a new one.
+   * Called during signup/OAuth flows. Validates that the userId in the body
+   * matches the authenticated user from the auth token.
+   */
+  @Post('ensure')
+  @HttpCode(HttpStatus.OK)
+  async ensureProfile(
+    @Headers('authorization') authHeader: string,
+    @Body() body: EnsureProfileDto,
+  ): Promise<Profile> {
+    const authUser = await this.requireAuthUser(authHeader);
+
+    // Validate that the userId in the body matches the authenticated user
+    if (body.userId !== authUser.id) {
+      throw new ForbiddenException('userId does not match authenticated user');
+    }
+
+    return this.profilesService.ensureProfile(body.userId);
+  }
+
   @Get()
   async listProfiles(
     @Query('page') page: number = 1,
@@ -73,13 +113,33 @@ export class ProfilesController {
   }
 
   @Get('public')
-  async getPublicProfiles(): Promise<Profile[]> {
-    return this.profilesService.findPublicProfiles();
+  async getPublicProfiles(
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.profilesService.findPublicProfiles({
+      search,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
   }
 
   @Get('public/:id')
   async getPublicProfile(@Param('id') id: string): Promise<Profile> {
     return this.profilesService.findPublicById(id);
+  }
+
+  /**
+   * Returns all non-secondary profiles with master profile info (admin only).
+   * Used by the admin Members page.
+   */
+  @Get('admin/members')
+  async getAdminMembers(
+    @Headers('authorization') authHeader: string,
+  ): Promise<Profile[]> {
+    await this.requireAdmin(authHeader);
+    return this.profilesService.findAdminMembers();
   }
 
   @Get(':id')

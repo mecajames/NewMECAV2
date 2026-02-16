@@ -50,6 +50,7 @@ import { ResultTeamsModule } from './result-teams/result-teams.module';
 import { MemberGalleryModule } from './member-gallery/member-gallery.module';
 import { StandingsModule } from './standings/standings.module';
 import { ConstantContactModule } from './constant-contact/constant-contact.module';
+import { ModerationModule } from './moderation/moderation.module';
 
 @Module({
   imports: [
@@ -114,6 +115,7 @@ import { ConstantContactModule } from './constant-contact/constant-contact.modul
     MemberGalleryModule,
     StandingsModule,
     ConstantContactModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

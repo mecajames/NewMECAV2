@@ -66,7 +66,8 @@
       "Bash(docker logs:*)",
       "Bash(head:*)",
       "Bash(tasklist:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(ssh:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

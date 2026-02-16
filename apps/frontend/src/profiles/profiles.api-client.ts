@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export interface Profile {
   id: string;
@@ -185,8 +185,18 @@ export const profilesApi = {
     return response.json();
   },
 
-  getPublicProfiles: async (): Promise<Profile[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/public`);
+  getPublicProfiles: async (options?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ profiles: Profile[]; total: number; page: number; limit: number }> => {
+    const params = new URLSearchParams();
+    if (options?.search) params.append('search', options.search);
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    const query = params.toString();
+    const url = query ? `${API_BASE_URL}/api/profiles/public?${query}` : `${API_BASE_URL}/api/profiles/public`;
+    const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch public profiles');
     return response.json();
   },

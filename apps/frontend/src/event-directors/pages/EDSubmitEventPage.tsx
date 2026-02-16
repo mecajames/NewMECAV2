@@ -158,7 +158,7 @@ export default function EDSubmitEventPage() {
   const fetchCompetitionFormats = async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/competition-formats/active`
+        `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001'}/api/competition-formats/active`
       );
       if (response.ok) {
         const formats = await response.json();

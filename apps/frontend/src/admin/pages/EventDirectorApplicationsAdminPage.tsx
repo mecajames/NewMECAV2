@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, X, Search, Loader2 } from 'lucide-react';
 import { getAllEventDirectorApplications, adminQuickCreateEventDirectorApplication, AdminQuickCreateEventDirectorApplicationDto } from '@/event-directors';
 import type { EventDirectorApplication } from '@/event-directors';
-import { supabase } from '@/lib/supabase';
+import { profilesApi } from '@/profiles';
 import CountrySelect from '@/shared/fields/CountrySelect';
 import StateProvinceSelect from '@/shared/fields/StateProvinceSelect';
 
@@ -50,7 +50,7 @@ export default function EventDirectorApplicationsAdminPage() {
     loadApplications();
   }, [statusFilter]);
 
-  // Search users by email or name
+  // Search users by email or name via backend API
   const searchUsers = async (query: string) => {
     if (query.length < 2) {
       setUserSearchResults([]);
@@ -59,14 +59,14 @@ export default function EventDirectorApplicationsAdminPage() {
 
     setSearchingUsers(true);
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, first_name, last_name')
-        .or(`email.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
-        .limit(10);
-
-      if (error) throw error;
-      setUserSearchResults(data || []);
+      const results = await profilesApi.searchProfiles(query);
+      // Map to expected shape (backend returns snake_case for these fields)
+      setUserSearchResults((results || []).slice(0, 10).map((p: any) => ({
+        id: p.id,
+        email: p.email,
+        first_name: p.first_name,
+        last_name: p.last_name,
+      })));
     } catch (err) {
       console.error('Error searching users:', err);
       setUserSearchResults([]);

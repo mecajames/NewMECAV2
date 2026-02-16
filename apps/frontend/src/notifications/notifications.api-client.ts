@@ -1,5 +1,6 @@
 import axios from '@/lib/axios';
 
+
 export interface Notification {
   id: string;
   user: { id: string };
