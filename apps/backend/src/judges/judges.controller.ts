@@ -11,7 +11,9 @@ import {
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
 import { JudgesService } from './judges.service';
+import { Profile } from '../profiles/profiles.entity';
 import {
   CreateJudgeApplicationDto,
   CreateJudgeApplicationSchema,
@@ -151,6 +153,7 @@ export class JudgesController {
   constructor(
     private readonly judgesService: JudgesService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
   ) {}
 
   // Helper to get current user from auth header
@@ -174,13 +177,9 @@ export class JudgesController {
     const user = await this.getCurrentUser(authHeader);
 
     // Get profile to check role
-    const profile = await this.supabaseAdmin.getClient()
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (profile.error || profile.data?.role !== UserRole.ADMIN) {
+    if (!profile || profile.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Admin access required');
     }
 
@@ -381,13 +380,9 @@ export class JudgesController {
     const judge = await this.judgesService.getJudge(id);
 
     // Check if user is admin or the judge
-    const profile = await this.supabaseAdmin.getClient()
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (profile.data?.role !== UserRole.ADMIN && judge.user.id !== user.id) {
+    if (profile?.role !== UserRole.ADMIN && judge.user.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
 
@@ -448,13 +443,9 @@ export class JudgesController {
     const assignment = await this.judgesService.getAssignment(id);
 
     // Check if user is admin or the assigned judge
-    const profile = await this.supabaseAdmin.getClient()
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (profile.data?.role !== UserRole.ADMIN && assignment.judge.user.id !== user.id) {
+    if (profile?.role !== UserRole.ADMIN && assignment.judge.user.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
 

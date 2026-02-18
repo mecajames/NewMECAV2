@@ -26,7 +26,7 @@ const abbreviateQuery = (message: string): string => {
 
 export default defineConfig({
   driver: PostgreSqlDriver,
-  clientUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
+  clientUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54622/postgres',
   entities: ['./dist/**/*.entity.js'],
   entitiesTs: ['./src/**/*.entity.ts'],
   debug: process.env.NODE_ENV === 'development' ? ['query'] as LoggerNamespace[] : false,

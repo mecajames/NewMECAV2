@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 // =============================================================================
 // Types
@@ -174,101 +174,68 @@ export const ticketsApi = {
     if (query.sort_by) params.append('sort_by', query.sort_by);
     if (query.sort_order) params.append('sort_order', query.sort_order);
 
-    const response = await fetch(`${API_BASE_URL}/api/tickets?${params.toString()}`);
-    if (!response.ok) throw new Error('Failed to fetch tickets');
-    return response.json();
+    const response = await axios.get(`/api/tickets?${params.toString()}`);
+    return response.data;
   },
 
   getById: async (id: string): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch ticket');
-    return response.json();
+    const response = await axios.get(`/api/tickets/${id}`);
+    return response.data;
   },
 
   getByTicketNumber: async (ticketNumber: string): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/by-number/${ticketNumber}`);
-    if (!response.ok) throw new Error('Failed to fetch ticket');
-    return response.json();
+    const response = await axios.get(`/api/tickets/by-number/${ticketNumber}`);
+    return response.data;
   },
 
   getMyTickets: async (userId: string): Promise<Ticket[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/my-tickets/${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch my tickets');
-    return response.json();
+    const response = await axios.get(`/api/tickets/my-tickets/${userId}`);
+    return response.data;
   },
 
   getAssignedTickets: async (userId: string): Promise<Ticket[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/assigned/${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch assigned tickets');
-    return response.json();
+    const response = await axios.get(`/api/tickets/assigned/${userId}`);
+    return response.data;
   },
 
   create: async (data: CreateTicketData): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create ticket');
-    return response.json();
+    const response = await axios.post('/api/tickets', data);
+    return response.data;
   },
 
   update: async (id: string, data: UpdateTicketData): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to update ticket');
-    return response.json();
+    const response = await axios.put(`/api/tickets/${id}`, data);
+    return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete ticket');
+    await axios.delete(`/api/tickets/${id}`);
   },
 
   // Ticket status actions
   assign: async (id: string, assignedToId: string): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${id}/assign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assigned_to_id: assignedToId }),
-    });
-    if (!response.ok) throw new Error('Failed to assign ticket');
-    return response.json();
+    const response = await axios.post(`/api/tickets/${id}/assign`, { assigned_to_id: assignedToId });
+    return response.data;
   },
 
   resolve: async (id: string): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${id}/resolve`, {
-      method: 'POST',
-    });
-    if (!response.ok) throw new Error('Failed to resolve ticket');
-    return response.json();
+    const response = await axios.post(`/api/tickets/${id}/resolve`);
+    return response.data;
   },
 
   close: async (id: string): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${id}/close`, {
-      method: 'POST',
-    });
-    if (!response.ok) throw new Error('Failed to close ticket');
-    return response.json();
+    const response = await axios.post(`/api/tickets/${id}/close`);
+    return response.data;
   },
 
   reopen: async (id: string): Promise<Ticket> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${id}/reopen`, {
-      method: 'POST',
-    });
-    if (!response.ok) throw new Error('Failed to reopen ticket');
-    return response.json();
+    const response = await axios.post(`/api/tickets/${id}/reopen`);
+    return response.data;
   },
 
   getStats: async (): Promise<TicketStats> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/stats`);
-    if (!response.ok) throw new Error('Failed to fetch ticket stats');
-    return response.json();
+    const response = await axios.get('/api/tickets/stats');
+    return response.data;
   },
 
   // -------------------------------------------------------------------------
@@ -277,36 +244,22 @@ export const ticketsApi = {
 
   getComments: async (ticketId: string, includeInternal: boolean = false): Promise<TicketComment[]> => {
     const params = includeInternal ? '?include_internal=true' : '';
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/comments${params}`);
-    if (!response.ok) throw new Error('Failed to fetch comments');
-    return response.json();
+    const response = await axios.get(`/api/tickets/${ticketId}/comments${params}`);
+    return response.data;
   },
 
   createComment: async (ticketId: string, data: CreateCommentData): Promise<TicketComment> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/comments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create comment');
-    return response.json();
+    const response = await axios.post(`/api/tickets/${ticketId}/comments`, data);
+    return response.data;
   },
 
   updateComment: async (commentId: string, data: { content?: string; is_internal?: boolean }): Promise<TicketComment> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/comments/${commentId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to update comment');
-    return response.json();
+    const response = await axios.put(`/api/tickets/comments/${commentId}`, data);
+    return response.data;
   },
 
   deleteComment: async (commentId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/comments/${commentId}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete comment');
+    await axios.delete(`/api/tickets/comments/${commentId}`);
   },
 
   // -------------------------------------------------------------------------
@@ -314,25 +267,16 @@ export const ticketsApi = {
   // -------------------------------------------------------------------------
 
   getAttachments: async (ticketId: string): Promise<TicketAttachment[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/attachments`);
-    if (!response.ok) throw new Error('Failed to fetch attachments');
-    return response.json();
+    const response = await axios.get(`/api/tickets/${ticketId}/attachments`);
+    return response.data;
   },
 
   createAttachment: async (ticketId: string, data: CreateAttachmentData): Promise<TicketAttachment> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/attachments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create attachment');
-    return response.json();
+    const response = await axios.post(`/api/tickets/${ticketId}/attachments`, data);
+    return response.data;
   },
 
   deleteAttachment: async (attachmentId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/tickets/attachments/${attachmentId}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete attachment');
+    await axios.delete(`/api/tickets/attachments/${attachmentId}`);
   },
 };

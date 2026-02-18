@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from '@/lib/axios';
 import {
   Calendar, MapPin, Send, AlertCircle, CheckCircle,
   Clock, FileText, DollarSign, Users, Zap, ArrowLeft
@@ -157,13 +158,8 @@ export default function EDSubmitEventPage() {
 
   const fetchCompetitionFormats = async () => {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/competition-formats/active`
-      );
-      if (response.ok) {
-        const formats = await response.json();
-        setCompetitionFormats(formats);
-      }
+      const response = await axios.get('/api/competition-formats/active');
+      setCompetitionFormats(response.data);
     } catch (error) {
       console.error('Error fetching competition formats:', error);
     }

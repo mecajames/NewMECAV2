@@ -46,6 +46,17 @@ supabase-export-complete/
 apps/backend/.env
 apps/frontend/.env
 
+# Deploy secrets (never commit real values)
+deploy/.env.staging
+deploy/.env.backend
+deploy/deployment.json
+
+# User data dumps
+auth_users_dump.csv
+db_emails.txt
+pmpro_emails.txt
+*_emails.txt
+
 # Docker
 docker/analysis-output/*
 !docker/analysis-output/.gitkeep
@@ -205,4 +216,7 @@ supabase-export/buckets/banner-images/newsletter-logo.png
 supabase-export/buckets/achievement-images/test-upload-1768611936.png
 supabase-storage-backup-2026-02-06-1730.zip
 /supabase-storage-backup-2026-02-06-1730
+/.cursor
+/_bmad-output
+/_bmad
 /docs

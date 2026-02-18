@@ -7,6 +7,10 @@ import { EmailService } from '../email/email.service';
 import { generateSecurePassword, validatePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { AccountType } from '@newmeca/shared';
 
+export interface EnsureProfileDto {
+  userId: string;
+}
+
 export interface CreateUserWithPasswordDto {
   email: string;
   password: string;
@@ -143,6 +147,78 @@ export class ProfilesService {
     const em = this.em.fork();
     const profile = em.create(Profile, data as any);
     await em.persistAndFlush(profile);
+    return profile;
+  }
+
+  /**
+   * Ensures a profile exists for the given user ID.
+   * If the profile already exists, returns it.
+   * If not, fetches user info from Supabase Auth and creates a new profile.
+   * This replaces the frontend's direct profile creation during signup/OAuth.
+   */
+  async ensureProfile(userId: string): Promise<Profile> {
+    const em = this.em.fork();
+
+    // Check if profile already exists
+    const existing = await em.findOne(Profile, { id: userId });
+    if (existing) {
+      return existing;
+    }
+
+    // Profile doesn't exist - get user info from Supabase Auth
+    const { data: authData, error: authError } = await this.supabaseAdmin
+      .getClient()
+      .auth.admin.getUserById(userId);
+
+    if (authError || !authData?.user) {
+      this.logger.error(`Failed to fetch auth user ${userId}: ${authError?.message}`);
+      throw new BadRequestException('Could not retrieve user information from auth system');
+    }
+
+    const authUser = authData.user;
+    const email = authUser.email || '';
+
+    // Extract name from auth metadata (supports both email signup and OAuth)
+    const metadata = authUser.user_metadata || {};
+    let firstName = metadata.first_name || '';
+    let lastName = metadata.last_name || '';
+
+    // If no first/last name, try full_name or name from OAuth metadata
+    if (!firstName && !lastName) {
+      const fullName = metadata.full_name || metadata.name || '';
+      if (fullName) {
+        const nameParts = fullName.split(' ');
+        firstName = nameParts[0] || '';
+        lastName = nameParts.slice(1).join(' ') || '';
+      }
+    }
+
+    // Generate MECA ID
+    const mecaId = await this.generateNextMecaId();
+
+    const now = new Date();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || email;
+
+    const profile = em.create(Profile, {
+      id: userId,
+      email,
+      first_name: firstName || undefined,
+      last_name: lastName || undefined,
+      full_name: fullName,
+      role: 'user',
+      membership_status: 'none',
+      meca_id: mecaId,
+      account_type: AccountType.MEMBER,
+      force_password_change: false,
+      canApplyJudge: false,
+      canApplyEventDirector: false,
+      created_at: now,
+      updated_at: now,
+    });
+
+    await em.persistAndFlush(profile);
+
+    this.logger.log(`Created profile for user ${userId} (${email}) with MECA ID ${mecaId}`);
     return profile;
   }
 

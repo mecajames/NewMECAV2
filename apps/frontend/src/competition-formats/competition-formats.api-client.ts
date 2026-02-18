@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface CompetitionFormat {
   id: string;
@@ -16,33 +16,24 @@ export const competitionFormatsApi = {
    * Get all competition formats
    */
   getAll: async (): Promise<CompetitionFormat[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-formats`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch competition formats');
-    }
-    return response.json();
+    const response = await axios.get('/api/competition-formats');
+    return response.data;
   },
 
   /**
    * Get active competition formats only
    */
   getActive: async (): Promise<CompetitionFormat[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-formats/active`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch active competition formats');
-    }
-    return response.json();
+    const response = await axios.get('/api/competition-formats/active');
+    return response.data;
   },
 
   /**
    * Get competition format by ID
    */
   getById: async (id: string): Promise<CompetitionFormat> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-formats/${id}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch competition format ${id}`);
-    }
-    return response.json();
+    const response = await axios.get(`/api/competition-formats/${id}`);
+    return response.data;
   },
 
   /**
@@ -54,18 +45,8 @@ export const competitionFormatsApi = {
     is_active?: boolean;
     display_order?: number;
   }): Promise<CompetitionFormat> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-formats`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create competition format');
-    }
-    return response.json();
+    const response = await axios.post('/api/competition-formats', data);
+    return response.data;
   },
 
   /**
@@ -80,29 +61,14 @@ export const competitionFormatsApi = {
       display_order?: number;
     }
   ): Promise<CompetitionFormat> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-formats/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || `Failed to update competition format ${id}`);
-    }
-    return response.json();
+    const response = await axios.put(`/api/competition-formats/${id}`, data);
+    return response.data;
   },
 
   /**
    * Delete a competition format
    */
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-formats/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to delete competition format ${id}`);
-    }
+    await axios.delete(`/api/competition-formats/${id}`);
   },
 };

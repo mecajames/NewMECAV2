@@ -1039,6 +1039,44 @@ export class AchievementsService {
       }
     }
 
+    let achievement: any = null;
+    try {
+      achievement = recipient.achievement;
+    } catch {
+      // Achievement relation not initialized
+    }
+
+    let serializedAchievement: ReturnType<typeof this.serializeDefinition> | undefined;
+    if (achievement) {
+      try {
+        serializedAchievement = this.serializeDefinition(achievement);
+      } catch (err) {
+        this.logger.warn(`Failed to serialize achievement for recipient ${recipient.id}: ${err}`);
+      }
+    }
+
+    // Safely access optional relations that may not be populated
+    let competitionResult: any = null;
+    try {
+      competitionResult = recipient.competitionResult;
+    } catch {
+      // CompetitionResult relation not initialized
+    }
+
+    let event: any = null;
+    try {
+      event = recipient.event;
+    } catch {
+      // Event relation not initialized
+    }
+
+    let season: any = null;
+    try {
+      season = recipient.season;
+    } catch {
+      // Season relation not initialized
+    }
+
     return {
       id: recipient.id,
       achievement_id: recipient.achievement?.id ?? null,
@@ -1047,15 +1085,15 @@ export class AchievementsService {
       meca_id: recipient.mecaId ?? null,
       achieved_value: Number(recipient.achievedValue),
       achieved_at: recipient.achievedAt,
-      competition_result_id: recipient.competitionResult?.id ?? null,
-      event_id: recipient.event?.id ?? null,
-      event_name: recipient.event?.title ?? null,
-      season_id: recipient.season?.id ?? null,
-      season_name: recipient.season?.name ?? null,
+      competition_result_id: competitionResult?.id ?? null,
+      event_id: event?.id ?? null,
+      event_name: event?.title ?? null,
+      season_id: season?.id ?? null,
+      season_name: season?.name ?? null,
       image_url: recipient.imageUrl ?? null,
       image_generated_at: recipient.imageGeneratedAt ?? null,
       created_at: recipient.createdAt,
-      achievement: recipient.achievement ? this.serializeDefinition(recipient.achievement) : undefined,
+      achievement: serializedAchievement,
     };
   }
 

@@ -1,21 +1,23 @@
-# Dependencies
+# Dependencies (installed inside Docker via rush install)
+# Use ** patterns to ensure all nested symlinks are excluded on Windows
 node_modules
+**/node_modules
+common/temp
+common/temp/**
+.rush
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build output
-dist
-build
-.next
-out
+# Build output (built inside Docker)
+apps/backend/dist
+apps/frontend/dist
+packages/shared/dist
 
-# Environment files
+# Environment files (secrets - NEVER copy into images)
 .env
-.env.local
-.env.development
-.env.production
-.env.*.local
+.env.*
+deploy/.env.staging
 
 # IDE
 .vscode
@@ -32,25 +34,34 @@ Thumbs.db
 .git
 .gitignore
 
-# Docker
-docker-compose*.yml
-!docker/scripts
-
 # Documentation
+docs
 *.md
-!README.md
 
 # Tests
 coverage
 .nyc_output
-*.test.ts
-*.test.js
-*.spec.ts
-*.spec.js
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+**/__tests__
+
+# Backups and dumps
+backups
+*_dump.csv
+*.sql
+
+# Supabase local config
+supabase
+
+# Claude
+.claude
+
+# Utility scripts not needed in Docker
+apps/backend/scripts
 
 # Misc
 .cache
-tmp
-temp
 logs
 *.log

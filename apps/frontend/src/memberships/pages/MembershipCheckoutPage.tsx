@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import axios from '@/lib/axios';
 import {
   ArrowLeft,
   Check,
@@ -124,7 +125,6 @@ interface OrderData {
 
 type CheckoutStep = 'info' | 'payment' | 'confirmation';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
@@ -299,12 +299,7 @@ export default function MembershipCheckoutPage() {
         const successUrl = `${window.location.origin}/membership/checkout/${membership.id}/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = window.location.href;
 
-        const response = await fetch(`${API_URL}/api/stripe/create-subscription-checkout`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        const response = await axios.post('/api/stripe/create-subscription-checkout', {
             membershipTypeConfigId: membership.id,
             email,
             userId: user?.id,
@@ -312,27 +307,16 @@ export default function MembershipCheckoutPage() {
             cancelUrl,
             billingFirstName: formData.firstName,
             billingLastName: formData.lastName,
-          }),
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to initialize subscription checkout');
-        }
-
-        const { checkoutUrl } = await response.json();
+        const { checkoutUrl } = response.data;
         // Redirect to Stripe Checkout
         window.location.href = checkoutUrl;
         return;
       }
 
       // Create Payment Intent via backend (one-time payment)
-      const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const response = await axios.post('/api/stripe/create-payment-intent', {
           membershipTypeConfigId: membership.id,
           email,
           userId: user?.id,
@@ -348,15 +332,9 @@ export default function MembershipCheckoutPage() {
           teamDescription: formData.teamDescription || undefined,
           businessName: formData.businessName || undefined,
           businessWebsite: formData.businessWebsite || undefined,
-        }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to initialize payment');
-      }
-
-      const { clientSecret: secret } = await response.json();
+      const { clientSecret: secret } = response.data;
       setClientSecret(secret);
       setStep('payment');
     } catch (err) {

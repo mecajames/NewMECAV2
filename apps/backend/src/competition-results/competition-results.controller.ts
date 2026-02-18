@@ -71,6 +71,11 @@ export class CompetitionResultsController {
     return this.competitionResultsService.getResultCountsByEventIds(body.eventIds || []);
   }
 
+  @Get('by-competitor/:competitorId')
+  async getResultsByCompetitor(@Param('competitorId') competitorId: string): Promise<any[]> {
+    return this.competitionResultsService.findByCompetitorWithEvent(competitorId);
+  }
+
   @Get('by-meca-id/:mecaId')
   async getResultsByMecaId(@Param('mecaId') mecaId: string): Promise<CompetitionResult[]> {
     return this.competitionResultsService.findByMecaId(mecaId);

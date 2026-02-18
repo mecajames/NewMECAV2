@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+import axios from '@/lib/axios';
 
 export interface GuestTicketComment {
   id: string;
@@ -50,64 +50,32 @@ export interface CreateGuestTicketData {
  * Request a magic link to create a new support ticket.
  */
 export async function requestAccess(email: string): Promise<RequestAccessResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/tickets/guest/request-access`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || 'Failed to request access');
-  }
-
-  return response.json();
+  const response = await axios.post('/api/tickets/guest/request-access', { email });
+  return response.data;
 }
 
 /**
  * Verify a token and get the associated email.
  */
 export async function verifyToken(token: string): Promise<VerifyTokenResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/tickets/guest/verify/${token}`);
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Invalid token' }));
-    throw new Error(error.message || 'Token verification failed');
-  }
-
-  return response.json();
+  const response = await axios.get(`/api/tickets/guest/verify/${token}`);
+  return response.data;
 }
 
 /**
  * Create a new guest ticket.
  */
 export async function createGuestTicket(data: CreateGuestTicketData): Promise<GuestTicket> {
-  const response = await fetch(`${API_BASE_URL}/api/tickets/guest/create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Creation failed' }));
-    throw new Error(error.message || 'Failed to create ticket');
-  }
-
-  return response.json();
+  const response = await axios.post('/api/tickets/guest/create', data);
+  return response.data;
 }
 
 /**
  * View a guest ticket by access token.
  */
 export async function viewGuestTicket(accessToken: string): Promise<GuestTicket> {
-  const response = await fetch(`${API_BASE_URL}/api/tickets/guest/view/${accessToken}`);
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Ticket not found' }));
-    throw new Error(error.message || 'Failed to fetch ticket');
-  }
-
-  return response.json();
+  const response = await axios.get(`/api/tickets/guest/view/${accessToken}`);
+  return response.data;
 }
 
 /**
@@ -117,18 +85,8 @@ export async function addGuestComment(
   accessToken: string,
   content: string,
 ): Promise<{ id: string; content: string; created_at: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/tickets/guest/view/${accessToken}/comment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to add comment' }));
-    throw new Error(error.message || 'Failed to add comment');
-  }
-
-  return response.json();
+  const response = await axios.post(`/api/tickets/guest/view/${accessToken}/comment`, { content });
+  return response.data;
 }
 
 /**
@@ -138,30 +96,14 @@ export async function requestTicketAccess(
   email: string,
   ticketNumber: string,
 ): Promise<RequestAccessResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/tickets/guest/request-ticket-access`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, ticket_number: ticketNumber }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || 'Failed to request ticket access');
-  }
-
-  return response.json();
+  const response = await axios.post('/api/tickets/guest/request-ticket-access', { email, ticket_number: ticketNumber });
+  return response.data;
 }
 
 /**
  * Get ticket access token from a view token.
  */
 export async function getAccessFromToken(token: string): Promise<{ access_token: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/tickets/guest/access/${token}`);
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Invalid token' }));
-    throw new Error(error.message || 'Failed to get access');
-  }
-
-  return response.json();
+  const response = await axios.get(`/api/tickets/guest/access/${token}`);
+  return response.data;
 }

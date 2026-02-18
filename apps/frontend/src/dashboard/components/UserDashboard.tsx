@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle, Eye, MessageSquare, Settings, Users, FileText } from 'lucide-react';
 import { useAuth } from '@/auth';
-import { supabase, EventRegistration, CompetitionResult } from '@/lib/supabase';
-import axios from 'axios';
+import { eventRegistrationsApi } from '@/event-registrations';
+import { competitionResultsApi } from '@/competition-results';
+import axios from '@/lib/axios';
 
 interface EventHostingRequest {
   id: string;
@@ -21,8 +22,8 @@ interface EventHostingRequest {
 export default function UserDashboard() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
-  const [results, setResults] = useState<CompetitionResult[]>([]);
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [results, setResults] = useState<any[]>([]);
   const [hostingRequests, setHostingRequests] = useState<EventHostingRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<EventHostingRequest | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -40,37 +41,40 @@ export default function UserDashboard() {
   }, [profile]);
 
   const fetchUserData = async () => {
-    const [regData, resultsData] = await Promise.all([
-      supabase
-        .from('event_registrations')
-        .select('*, event:events(*)')
-        .eq('user_id', profile!.id)
-        .order('registration_date', { ascending: false }),
-      supabase
-        .from('competition_results')
-        .select('*, event:events(*)')
-        .eq('competitor_id', profile!.id)
-        .order('created_at', { ascending: false }),
-    ]);
+    try {
+      const [regs, competitorResults] = await Promise.all([
+        eventRegistrationsApi.getMyRegistrations(profile!.id),
+        competitionResultsApi.getByCompetitor(profile!.id),
+      ]);
 
-    if (regData.data) setRegistrations(regData.data);
-    if (resultsData.data) {
-      setResults(resultsData.data);
+      // Map backend camelCase to match frontend expectations
+      const mappedRegs = regs.map((reg: any) => ({
+        ...reg,
+        status: reg.registrationStatus || reg.status,
+        registration_date: reg.registeredAt || reg.createdAt,
+      }));
+      setRegistrations(mappedRegs);
 
-      const totalPoints = resultsData.data.reduce(
-        (sum, r) => sum + r.points_earned,
-        0
-      );
-      const bestPlacement =
-        resultsData.data.length > 0
-          ? Math.min(...resultsData.data.map((r) => r.placement))
-          : null;
+      if (competitorResults) {
+        setResults(competitorResults);
 
-      setStats({
-        totalEvents: resultsData.data.length,
-        totalPoints,
-        bestPlacement,
-      });
+        const totalPoints = competitorResults.reduce(
+          (sum: number, r: any) => sum + (r.points_earned || 0),
+          0
+        );
+        const bestPlacement =
+          competitorResults.length > 0
+            ? Math.min(...competitorResults.map((r: any) => r.placement))
+            : null;
+
+        setStats({
+          totalEvents: competitorResults.length,
+          totalPoints,
+          bestPlacement,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
     }
 
     // Fetch event hosting requests

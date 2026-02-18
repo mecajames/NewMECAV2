@@ -1,3 +1,5 @@
+import axios from '@/lib/axios';
+
 export interface GalleryImage {
   id: string;
   memberId: string;
@@ -36,12 +38,12 @@ export const memberGalleryApi = {
    * Get public gallery for a member
    */
   getPublicGallery: async (memberId: string): Promise<GalleryImage[]> => {
-    const response = await fetch(`/api/member-gallery/${memberId}`);
-    if (!response.ok) {
-      if (response.status === 404) return [];
-      throw new Error('Failed to fetch gallery');
-    }
-    return response.json();
+    const response = await axios.get(`/api/member-gallery/${memberId}`, {
+      validateStatus: (status) => status < 500,
+    });
+    if (response.status === 404) return [];
+    if (response.status >= 400) throw new Error('Failed to fetch gallery');
+    return response.data;
   },
 
   // ============================================
@@ -52,29 +54,20 @@ export const memberGalleryApi = {
    * Get current user's gallery (including private images)
    */
   getMyGallery: async (authToken: string): Promise<GalleryImage[]> => {
-    const response = await fetch(`/api/member-gallery/me`, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+    const response = await axios.get(`/api/member-gallery/me`, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to fetch your gallery');
-    return response.json();
+    return response.data;
   },
 
   /**
    * Add an image to current user's gallery
    */
   addImage: async (data: CreateGalleryImageDto, authToken: string): Promise<GalleryImage> => {
-    const response = await fetch(`/api/member-gallery/me`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify(data),
+    const response = await axios.post(`/api/member-gallery/me`, data, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to add image');
-    return response.json();
+    return response.data;
   },
 
   /**
@@ -85,45 +78,29 @@ export const memberGalleryApi = {
     data: UpdateGalleryImageDto,
     authToken: string
   ): Promise<GalleryImage> => {
-    const response = await fetch(`/api/member-gallery/me/${imageId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify(data),
+    const response = await axios.put(`/api/member-gallery/me/${imageId}`, data, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to update image');
-    return response.json();
+    return response.data;
   },
 
   /**
    * Delete an image from current user's gallery
    */
   deleteImage: async (imageId: string, authToken: string): Promise<void> => {
-    const response = await fetch(`/api/member-gallery/me/${imageId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+    await axios.delete(`/api/member-gallery/me/${imageId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to delete image');
   },
 
   /**
    * Reorder images in current user's gallery
    */
   reorderImages: async (imageIds: string[], authToken: string): Promise<GalleryImage[]> => {
-    const response = await fetch(`/api/member-gallery/me/reorder`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({ imageIds }),
+    const response = await axios.put(`/api/member-gallery/me/reorder`, { imageIds }, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to reorder images');
-    return response.json();
+    return response.data;
   },
 
   // ============================================
@@ -134,25 +111,18 @@ export const memberGalleryApi = {
    * Get all images for a member (including private) - admin only
    */
   getAllGalleryImages: async (memberId: string, authToken: string): Promise<GalleryImage[]> => {
-    const response = await fetch(`/api/member-gallery/${memberId}/all`, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+    const response = await axios.get(`/api/member-gallery/${memberId}/all`, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to fetch member gallery');
-    return response.json();
+    return response.data;
   },
 
   /**
    * Delete any image - admin only
    */
   adminDeleteImage: async (memberId: string, imageId: string, authToken: string): Promise<void> => {
-    const response = await fetch(`/api/member-gallery/${memberId}/${imageId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+    await axios.delete(`/api/member-gallery/${memberId}/${imageId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to delete image');
   },
 };

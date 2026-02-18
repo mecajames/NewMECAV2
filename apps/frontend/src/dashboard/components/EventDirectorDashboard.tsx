@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Users, Trophy, Plus, QrCode } from 'lucide-react';
 import { useAuth } from '@/auth';
-import { supabase, Event } from '@/lib/supabase';
+import { eventsApi, Event } from '@/events';
+import { eventRegistrationsApi } from '@/event-registrations';
 
 interface EventDirectorDashboardProps {
   onNavigate: (page: string, data?: any) => void;
@@ -26,31 +27,28 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
   }, [profile]);
 
   const fetchEventDirectorData = async () => {
-    const { data: events } = await supabase
-      .from('events')
-      .select('*')
-      .eq('event_director_id', profile!.id)
-      .order('event_date', { ascending: false });
+    try {
+      const events = await eventsApi.getByDirector(profile!.id);
 
-    if (events) {
-      setMyEvents(events);
+      if (events) {
+        setMyEvents(events);
 
-      const upcoming = events.filter((e) => e.status === 'upcoming').length;
+        const upcoming = events.filter((e) => e.status === 'upcoming').length;
 
-      let totalRegs = 0;
-      for (const event of events) {
-        const { count } = await supabase
-          .from('event_registrations')
-          .select('id', { count: 'exact', head: true })
-          .eq('event_id', event.id);
-        totalRegs += count || 0;
+        // Fetch registration counts for all events in parallel
+        const countResults = await Promise.all(
+          events.map((event) => eventRegistrationsApi.getCountByEvent(event.id))
+        );
+        const totalRegs = countResults.reduce((sum, r) => sum + r.count, 0);
+
+        setStats({
+          totalEvents: events.length,
+          upcomingEvents: upcoming,
+          totalRegistrations: totalRegs,
+        });
       }
-
-      setStats({
-        totalEvents: events.length,
-        upcomingEvents: upcoming,
-        totalRegistrations: totalRegs,
-      });
+    } catch (error) {
+      console.error('Error fetching event director data:', error);
     }
 
     setLoading(false);

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 // Helper to transform API response to ensure camelCase (handles MikroORM serialization)
 function transformListing<T>(data: any): T {
@@ -140,37 +140,28 @@ export interface CreateManufacturerDto {
 // ============================================
 
 export async function getAllRetailers(): Promise<RetailerListing[]> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/retailers`);
-  if (!response.ok) throw new Error('Failed to fetch retailers');
-  const data = await response.json();
-  return data.map((item: any) => transformListing<RetailerListing>(item));
+  const response = await axios.get(`/api/business-listings/retailers`);
+  return response.data.map((item: any) => transformListing<RetailerListing>(item));
 }
 
 export async function getRetailerById(id: string): Promise<RetailerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/retailers/${id}`);
-  if (!response.ok) throw new Error('Failed to fetch retailer');
-  const data = await response.json();
-  return transformListing<RetailerListing>(data);
+  const response = await axios.get(`/api/business-listings/retailers/${id}`);
+  return transformListing<RetailerListing>(response.data);
 }
 
 export async function getAllManufacturers(): Promise<ManufacturerListing[]> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/manufacturers`);
-  if (!response.ok) throw new Error('Failed to fetch manufacturers');
-  const data = await response.json();
-  return data.map((item: any) => transformListing<ManufacturerListing>(item));
+  const response = await axios.get(`/api/business-listings/manufacturers`);
+  return response.data.map((item: any) => transformListing<ManufacturerListing>(item));
 }
 
 export async function getManufacturerById(id: string): Promise<ManufacturerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/manufacturers/${id}`);
-  if (!response.ok) throw new Error('Failed to fetch manufacturer');
-  const data = await response.json();
-  return transformListing<ManufacturerListing>(data);
+  const response = await axios.get(`/api/business-listings/manufacturers/${id}`);
+  return transformListing<ManufacturerListing>(response.data);
 }
 
 export async function getAllSponsors(): Promise<{ retailers: RetailerListing[]; manufacturers: ManufacturerListing[] }> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/sponsors`);
-  if (!response.ok) throw new Error('Failed to fetch sponsors');
-  const data = await response.json();
+  const response = await axios.get(`/api/business-listings/sponsors`);
+  const data = response.data;
   return {
     retailers: data.retailers.map((item: any) => transformListing<RetailerListing>(item)),
     manufacturers: data.manufacturers.map((item: any) => transformListing<ManufacturerListing>(item)),
@@ -182,71 +173,55 @@ export async function getAllSponsors(): Promise<{ retailers: RetailerListing[]; 
 // ============================================
 
 export async function getMyRetailerListing(userId: string): Promise<RetailerListing | null> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/my/retailer`, {
+  const response = await axios.get(`/api/business-listings/my/retailer`, {
     headers: { 'x-user-id': userId },
+    validateStatus: (status) => status < 500,
   });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error('Failed to fetch your retailer listing');
-  const text = await response.text();
-  if (!text || text === 'null') return null;
-  const data = JSON.parse(text);
+  if (response.status >= 400) throw new Error('Failed to fetch your retailer listing');
+  const data = response.data;
+  if (!data || data === 'null') return null;
   return data ? transformListing<RetailerListing>(data) : null;
 }
 
 export async function createMyRetailerListing(userId: string, data: CreateRetailerDto): Promise<RetailerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/my/retailer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.post(`/api/business-listings/my/retailer`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to create retailer listing');
-  const result = await response.json();
-  return transformListing<RetailerListing>(result);
+  return transformListing<RetailerListing>(response.data);
 }
 
 export async function updateMyRetailerListing(userId: string, data: Partial<CreateRetailerDto> & { cover_image_position?: { x: number; y: number } }): Promise<RetailerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/my/retailer`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.put(`/api/business-listings/my/retailer`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to update retailer listing');
-  const result = await response.json();
-  return transformListing<RetailerListing>(result);
+  return transformListing<RetailerListing>(response.data);
 }
 
 export async function getMyManufacturerListing(userId: string): Promise<ManufacturerListing | null> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/my/manufacturer`, {
+  const response = await axios.get(`/api/business-listings/my/manufacturer`, {
     headers: { 'x-user-id': userId },
+    validateStatus: (status) => status < 500,
   });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error('Failed to fetch your manufacturer listing');
-  const text = await response.text();
-  if (!text || text === 'null') return null;
-  const data = JSON.parse(text);
+  if (response.status >= 400) throw new Error('Failed to fetch your manufacturer listing');
+  const data = response.data;
+  if (!data || data === 'null') return null;
   return data ? transformListing<ManufacturerListing>(data) : null;
 }
 
 export async function createMyManufacturerListing(userId: string, data: CreateManufacturerDto): Promise<ManufacturerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/my/manufacturer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.post(`/api/business-listings/my/manufacturer`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to create manufacturer listing');
-  const result = await response.json();
-  return transformListing<ManufacturerListing>(result);
+  return transformListing<ManufacturerListing>(response.data);
 }
 
 export async function updateMyManufacturerListing(userId: string, data: Partial<CreateManufacturerDto> & { cover_image_position?: { x: number; y: number } }): Promise<ManufacturerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/my/manufacturer`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.put(`/api/business-listings/my/manufacturer`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to update manufacturer listing');
-  const result = await response.json();
-  return transformListing<ManufacturerListing>(result);
+  return transformListing<ManufacturerListing>(response.data);
 }
 
 // ============================================
@@ -254,48 +229,43 @@ export async function updateMyManufacturerListing(userId: string, data: Partial<
 // ============================================
 
 export async function adminGetAllRetailers(userId: string, includeInactive = true): Promise<RetailerListing[]> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/retailers?includeInactive=${includeInactive}`, {
+  const response = await axios.get(`/api/business-listings/admin/retailers`, {
+    params: { includeInactive },
     headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to fetch retailers');
-  const data = await response.json();
-  return data.map((item: any) => transformListing<RetailerListing>(item));
+  return response.data.map((item: any) => transformListing<RetailerListing>(item));
 }
 
 export async function adminCreateRetailer(userId: string, data: CreateRetailerDto & { user_id: string; is_approved?: boolean }): Promise<RetailerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/retailers`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.post(`/api/business-listings/admin/retailers`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to create retailer');
-  const result = await response.json();
-  return transformListing<RetailerListing>(result);
+  return transformListing<RetailerListing>(response.data);
 }
 
 // Get a specific user's retailer listing (admin only)
 export async function adminGetRetailerByUserId(adminUserId: string, targetUserId: string): Promise<RetailerListing | null> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/retailers/user/${targetUserId}`, {
+  const response = await axios.get(`/api/business-listings/admin/retailers/user/${targetUserId}`, {
     headers: { 'x-user-id': adminUserId },
+    validateStatus: (status) => status < 500,
   });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error('Failed to fetch retailer listing');
-  const text = await response.text();
-  if (!text || text === 'null') return null;
-  const data = JSON.parse(text);
+  if (response.status >= 400) throw new Error('Failed to fetch retailer listing');
+  const data = response.data;
+  if (!data || data === 'null') return null;
   return data ? transformListing<RetailerListing>(data) : null;
 }
 
 // Get a specific user's manufacturer listing (admin only)
 export async function adminGetManufacturerByUserId(adminUserId: string, targetUserId: string): Promise<ManufacturerListing | null> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/manufacturers/user/${targetUserId}`, {
+  const response = await axios.get(`/api/business-listings/admin/manufacturers/user/${targetUserId}`, {
     headers: { 'x-user-id': adminUserId },
+    validateStatus: (status) => status < 500,
   });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error('Failed to fetch manufacturer listing');
-  const text = await response.text();
-  if (!text || text === 'null') return null;
-  const data = JSON.parse(text);
+  if (response.status >= 400) throw new Error('Failed to fetch manufacturer listing');
+  const data = response.data;
+  if (!data || data === 'null') return null;
   return data ? transformListing<ManufacturerListing>(data) : null;
 }
 
@@ -309,52 +279,38 @@ export async function adminUpdateRetailer(userId: string, id: string, data: Part
   start_date?: string;
   end_date?: string;
 }): Promise<RetailerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/retailers/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.put(`/api/business-listings/admin/retailers/${id}`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to update retailer');
-  const result = await response.json();
-  return transformListing<RetailerListing>(result);
+  return transformListing<RetailerListing>(response.data);
 }
 
 export async function adminApproveRetailer(userId: string, id: string): Promise<RetailerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/retailers/${id}/approve`, {
-    method: 'PUT',
+  const response = await axios.put(`/api/business-listings/admin/retailers/${id}/approve`, null, {
     headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to approve retailer');
-  const result = await response.json();
-  return transformListing<RetailerListing>(result);
+  return transformListing<RetailerListing>(response.data);
 }
 
 export async function adminDeleteRetailer(userId: string, id: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/retailers/${id}`, {
-    method: 'DELETE',
+  await axios.delete(`/api/business-listings/admin/retailers/${id}`, {
     headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to delete retailer');
 }
 
 export async function adminGetAllManufacturers(userId: string, includeInactive = true): Promise<ManufacturerListing[]> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/manufacturers?includeInactive=${includeInactive}`, {
+  const response = await axios.get(`/api/business-listings/admin/manufacturers`, {
+    params: { includeInactive },
     headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to fetch manufacturers');
-  const data = await response.json();
-  return data.map((item: any) => transformListing<ManufacturerListing>(item));
+  return response.data.map((item: any) => transformListing<ManufacturerListing>(item));
 }
 
 export async function adminCreateManufacturer(userId: string, data: CreateManufacturerDto & { user_id: string; is_approved?: boolean }): Promise<ManufacturerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/manufacturers`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.post(`/api/business-listings/admin/manufacturers`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to create manufacturer');
-  const result = await response.json();
-  return transformListing<ManufacturerListing>(result);
+  return transformListing<ManufacturerListing>(response.data);
 }
 
 export async function adminUpdateManufacturer(userId: string, id: string, data: Partial<CreateManufacturerDto> & {
@@ -367,30 +323,21 @@ export async function adminUpdateManufacturer(userId: string, id: string, data: 
   start_date?: string;
   end_date?: string;
 }): Promise<ManufacturerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/manufacturers/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify(data),
+  const response = await axios.put(`/api/business-listings/admin/manufacturers/${id}`, data, {
+    headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to update manufacturer');
-  const result = await response.json();
-  return transformListing<ManufacturerListing>(result);
+  return transformListing<ManufacturerListing>(response.data);
 }
 
 export async function adminApproveManufacturer(userId: string, id: string): Promise<ManufacturerListing> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/manufacturers/${id}/approve`, {
-    method: 'PUT',
+  const response = await axios.put(`/api/business-listings/admin/manufacturers/${id}/approve`, null, {
     headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to approve manufacturer');
-  const result = await response.json();
-  return transformListing<ManufacturerListing>(result);
+  return transformListing<ManufacturerListing>(response.data);
 }
 
 export async function adminDeleteManufacturer(userId: string, id: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/business-listings/admin/manufacturers/${id}`, {
-    method: 'DELETE',
+  await axios.delete(`/api/business-listings/admin/manufacturers/${id}`, {
     headers: { 'x-user-id': userId },
   });
-  if (!response.ok) throw new Error('Failed to delete manufacturer');
 }

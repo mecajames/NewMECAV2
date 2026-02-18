@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 // =============================================================================
 // Types
@@ -144,48 +144,32 @@ export interface PaymentIntentResponse {
 export const eventRegistrationsApi = {
   // Legacy methods
   getAll: async (page: number = 1, limit: number = 100): Promise<EventRegistration[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations?page=${page}&limit=${limit}`);
-    if (!response.ok) throw new Error('Failed to fetch event registrations');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations?page=${page}&limit=${limit}`);
+    return response.data;
   },
 
   getById: async (id: string): Promise<EventRegistration> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch event registration');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/${id}`);
+    return response.data;
   },
 
   create: async (data: Partial<EventRegistration>): Promise<EventRegistration> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create event registration');
-    return response.json();
+    const response = await axios.post('/api/event-registrations', data);
+    return response.data;
   },
 
   update: async (id: string, data: Partial<EventRegistration>): Promise<EventRegistration> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to update event registration');
-    return response.json();
+    const response = await axios.put(`/api/event-registrations/${id}`, data);
+    return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete event registration');
+    await axios.delete(`/api/event-registrations/${id}`);
   },
 
   getStats: async (): Promise<{ totalRegistrations: number }> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/stats`);
-    if (!response.ok) throw new Error('Failed to fetch registration stats');
-    return response.json();
+    const response = await axios.get('/api/event-registrations/stats');
+    return response.data;
   },
 
   // New checkout methods
@@ -203,63 +187,44 @@ export const eventRegistrationsApi = {
       includeMembership: String(includeMembership),
       membershipPrice: String(membershipPrice),
     });
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/pricing?${params}`);
-    if (!response.ok) throw new Error('Failed to calculate pricing');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/pricing?${params}`);
+    return response.data;
   },
 
   createPaymentIntent: async (data: CreateCheckoutData): Promise<PaymentIntentResponse> => {
-    const response = await fetch(`${API_BASE_URL}/api/stripe/create-event-registration-payment-intent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to create payment intent' }));
-      throw new Error(error.message || 'Failed to create payment intent');
-    }
-    return response.json();
+    const response = await axios.post('/api/stripe/create-event-registration-payment-intent', data);
+    return response.data;
   },
 
   getMyRegistrations: async (userId: string): Promise<EventRegistration[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/my?userId=${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch registrations');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/my?userId=${userId}`);
+    return response.data;
+  },
+
+  getCountByEvent: async (eventId: string): Promise<{ count: number }> => {
+    const response = await axios.get(`/api/event-registrations/count/${eventId}`);
+    return response.data;
   },
 
   getByEmail: async (email: string): Promise<EventRegistration[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/by-email?email=${encodeURIComponent(email)}`);
-    if (!response.ok) throw new Error('Failed to fetch registrations');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/by-email?email=${encodeURIComponent(email)}`);
+    return response.data;
   },
 
   getQrCode: async (id: string): Promise<{ checkInCode: string; qrCodeData: string }> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/${id}/qr-code`);
-    if (!response.ok) throw new Error('Failed to fetch QR code');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/${id}/qr-code`);
+    return response.data;
   },
 
   // Check-in methods
   lookupByCheckInCode: async (code: string): Promise<CheckInResponse> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/check-in/${code}`);
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Registration not found' }));
-      throw new Error(error.message || 'Registration not found');
-    }
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/check-in/${code}`);
+    return response.data;
   },
 
   checkIn: async (code: string, checkedInById: string): Promise<CheckInResponse> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/check-in/${code}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ checkedInById }),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to check in' }));
-      throw new Error(error.message || 'Failed to check in');
-    }
-    return response.json();
+    const response = await axios.post(`/api/event-registrations/check-in/${code}`, { checkedInById });
+    return response.data;
   },
 
   // Admin methods
@@ -281,46 +246,32 @@ export const eventRegistrationsApi = {
     if (filters.page) params.append('page', String(filters.page));
     if (filters.limit) params.append('limit', String(filters.limit));
 
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/admin/list?${params}`);
-    if (!response.ok) throw new Error('Failed to fetch registrations');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/admin/list?${params}`);
+    return response.data;
   },
 
   adminCancel: async (id: string): Promise<EventRegistration> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/admin/${id}/cancel`, {
-      method: 'POST',
-    });
-    if (!response.ok) throw new Error('Failed to cancel registration');
-    return response.json();
+    const response = await axios.post(`/api/event-registrations/admin/${id}/cancel`);
+    return response.data;
   },
 
   adminRefund: async (id: string): Promise<EventRegistration> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/admin/${id}/refund`, {
-      method: 'POST',
-    });
-    if (!response.ok) throw new Error('Failed to process refund');
-    return response.json();
+    const response = await axios.post(`/api/event-registrations/admin/${id}/refund`);
+    return response.data;
   },
 
   getEventCheckInStats: async (eventId: string): Promise<{ total: number; checkedIn: number; pending: number }> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/admin/event/${eventId}/stats`);
-    if (!response.ok) throw new Error('Failed to fetch check-in stats');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/admin/event/${eventId}/stats`);
+    return response.data;
   },
 
   getEventRegistrations: async (eventId: string): Promise<EventRegistration[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/admin/event/${eventId}/registrations`);
-    if (!response.ok) throw new Error('Failed to fetch event registrations');
-    return response.json();
+    const response = await axios.get(`/api/event-registrations/admin/event/${eventId}/registrations`);
+    return response.data;
   },
 
   linkToUser: async (email: string, userId: string): Promise<{ linked: number }> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-registrations/link-to-user`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, userId }),
-    });
-    if (!response.ok) throw new Error('Failed to link registrations');
-    return response.json();
+    const response = await axios.post('/api/event-registrations/link-to-user', { email, userId });
+    return response.data;
   },
 };

@@ -403,7 +403,7 @@ export class MasterSecondaryService {
             name: secondary.membershipTypeConfig.name,
             category: secondary.membershipTypeConfig.category,
             price: Number(secondary.membershipTypeConfig.price),
-          } : { id: '', name: 'Unknown', category: 'individual' as any, price: 0 },
+          } : { id: '', name: 'Unknown', category: MembershipCategory.COMPETITOR, price: 0 },
           // Vehicle info
           vehicleMake: secondary.vehicleMake,
           vehicleModel: secondary.vehicleModel,

@@ -134,7 +134,7 @@ After restoration, verify these key items:
 
 After restoration, you can log in with:
 - **Email**: james@mecacaraudio.com
-- **Password**: Admin123!
+- **Password**: (set via Supabase dashboard or environment)
 - **Frontend URL**: http://localhost:5173
 
 ## Best Practices

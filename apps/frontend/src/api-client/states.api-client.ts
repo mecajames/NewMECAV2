@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface State {
   id: string;
@@ -52,12 +52,10 @@ export const statesApi = {
    * Get all states
    */
   getAllStates: async (type?: 'domestic' | 'international'): Promise<State[]> => {
-    const url = type
-      ? `${API_BASE_URL}/api/states?type=${type}`
-      : `${API_BASE_URL}/api/states`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch states');
-    return response.json();
+    const response = await axios.get(`/api/states`, {
+      params: type ? { type } : undefined,
+    });
+    return response.data;
   },
 
   /**
@@ -78,21 +76,22 @@ export const statesApi = {
    * Search states by name or abbreviation
    */
   searchStates: async (query: string): Promise<State[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/states/search?q=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error('Failed to search states');
-    return response.json();
+    const response = await axios.get(`/api/states/search`, {
+      params: { q: query },
+    });
+    return response.data;
   },
 
   /**
    * Get a state by its abbreviation
    */
   getStateByAbbreviation: async (abbreviation: string): Promise<State | null> => {
-    const response = await fetch(`${API_BASE_URL}/api/states/${encodeURIComponent(abbreviation)}`);
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error('Failed to fetch state');
-    }
-    return response.json();
+    const response = await axios.get(`/api/states/${encodeURIComponent(abbreviation)}`, {
+      validateStatus: (status) => status < 500,
+    });
+    if (response.status === 404) return null;
+    if (response.status >= 400) throw new Error('Failed to fetch state');
+    return response.data;
   },
 
   // ============================================
@@ -103,21 +102,20 @@ export const statesApi = {
    * Get state finals dates for a season
    */
   getStateFinalsDatesBySeason: async (seasonId: string): Promise<StateFinalsDate[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/states/finals-dates/season/${seasonId}`);
-    if (!response.ok) throw new Error('Failed to fetch state finals dates');
-    return response.json();
+    const response = await axios.get(`/api/states/finals-dates/season/${seasonId}`);
+    return response.data;
   },
 
   /**
    * Get state finals date for a specific state and season
    */
   getStateFinalsDate: async (stateCode: string, seasonId: string): Promise<StateFinalsDate | null> => {
-    const response = await fetch(`${API_BASE_URL}/api/states/finals-dates/${encodeURIComponent(stateCode)}/${seasonId}`);
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error('Failed to fetch state finals date');
-    }
-    return response.json();
+    const response = await axios.get(`/api/states/finals-dates/${encodeURIComponent(stateCode)}/${seasonId}`, {
+      validateStatus: (status) => status < 500,
+    });
+    if (response.status === 404) return null;
+    if (response.status >= 400) throw new Error('Failed to fetch state finals date');
+    return response.data;
   },
 
   // ============================================
@@ -131,16 +129,10 @@ export const statesApi = {
     data: CreateStateFinalsDateDto,
     authToken: string
   ): Promise<StateFinalsDate> => {
-    const response = await fetch(`${API_BASE_URL}/api/states/finals-dates`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify(data),
+    const response = await axios.post(`/api/states/finals-dates`, data, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to create state finals date');
-    return response.json();
+    return response.data;
   },
 
   /**
@@ -151,28 +143,18 @@ export const statesApi = {
     data: UpdateStateFinalsDateDto,
     authToken: string
   ): Promise<StateFinalsDate> => {
-    const response = await fetch(`${API_BASE_URL}/api/states/finals-dates/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify(data),
+    const response = await axios.put(`/api/states/finals-dates/${id}`, data, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to update state finals date');
-    return response.json();
+    return response.data;
   },
 
   /**
    * Delete a state finals date (admin only)
    */
   deleteStateFinalsDate: async (id: string, authToken: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/states/finals-dates/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+    await axios.delete(`/api/states/finals-dates/${id}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
-    if (!response.ok) throw new Error('Failed to delete state finals date');
   },
 };
