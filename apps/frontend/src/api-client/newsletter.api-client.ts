@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface NewsletterSignupDto {
   email: string;
@@ -18,7 +16,7 @@ export const newsletterApi = {
    * Subscribe to the newsletter
    */
   signup: async (data: NewsletterSignupDto): Promise<NewsletterSignupResponse> => {
-    const response = await axios.post(`${API_URL}/api/newsletter/signup`, data);
+    const response = await axios.post(`/api/newsletter/signup`, data);
     return response.data;
   },
 };

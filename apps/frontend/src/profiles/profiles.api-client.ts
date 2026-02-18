@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface Profile {
   id: string;
@@ -141,48 +139,32 @@ export interface PasswordStrength {
 
 export const profilesApi = {
   getAll: async (page: number = 1, limit: number = 10): Promise<Profile[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles?page=${page}&limit=${limit}`);
-    if (!response.ok) throw new Error('Failed to fetch profiles');
-    return response.json();
+    const response = await axios.get(`/api/profiles?page=${page}&limit=${limit}`);
+    return response.data;
   },
 
   getById: async (id: string): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch profile');
-    return response.json();
+    const response = await axios.get(`/api/profiles/${id}`);
+    return response.data;
   },
 
   create: async (data: Partial<Profile>): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create profile');
-    return response.json();
+    const response = await axios.post('/api/profiles', data);
+    return response.data;
   },
 
   update: async (id: string, data: Partial<Profile>): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to update profile');
-    return response.json();
+    const response = await axios.put(`/api/profiles/${id}`, data);
+    return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete profile');
+    await axios.delete(`/api/profiles/${id}`);
   },
 
   getStats: async (): Promise<{ totalUsers: number; totalMembers: number }> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/stats`);
-    if (!response.ok) throw new Error('Failed to fetch profile stats');
-    return response.json();
+    const response = await axios.get('/api/profiles/stats');
+    return response.data;
   },
 
   getPublicProfiles: async (options?: {
@@ -195,40 +177,31 @@ export const profilesApi = {
     if (options?.page) params.append('page', options.page.toString());
     if (options?.limit) params.append('limit', options.limit.toString());
     const query = params.toString();
-    const url = query ? `${API_BASE_URL}/api/profiles/public?${query}` : `${API_BASE_URL}/api/profiles/public`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch public profiles');
-    return response.json();
+    const url = query ? `/api/profiles/public?${query}` : '/api/profiles/public';
+    const response = await axios.get(url);
+    return response.data;
   },
 
   searchProfiles: async (query: string): Promise<Profile[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/search?q=${encodeURIComponent(query)}`);
-    if (!response.ok) throw new Error('Failed to search profiles');
-    return response.json();
+    const response = await axios.get(`/api/profiles/search?q=${encodeURIComponent(query)}`);
+    return response.data;
   },
 
   searchByMecaId: async (mecaId: string): Promise<Profile[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/search?q=${encodeURIComponent(mecaId)}`);
-    if (!response.ok) throw new Error('Failed to search profiles by MECA ID');
-    const profiles = await response.json() as Profile[];
+    const response = await axios.get(`/api/profiles/search?q=${encodeURIComponent(mecaId)}`);
+    const profiles = response.data as Profile[];
     // Filter to exact MECA ID match
     return profiles.filter(p => p.meca_id === mecaId);
   },
 
   getPublicProfileById: async (id: string): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/public/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch public profile');
-    return response.json();
+    const response = await axios.get(`/api/profiles/public/${id}`);
+    return response.data;
   },
 
   updateCoverImagePosition: async (id: string, position: { x: number; y: number }): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cover_image_position: position }),
-    });
-    if (!response.ok) throw new Error('Failed to update cover image position');
-    return response.json();
+    const response = await axios.put(`/api/profiles/${id}`, { cover_image_position: position });
+    return response.data;
   },
 
   // ===== Admin Password Management =====
@@ -237,25 +210,16 @@ export const profilesApi = {
    * Creates a new user with password (admin only)
    */
   createWithPassword: async (dto: CreateUserWithPasswordDto): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/create-with-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(dto),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to create user' }));
-      throw new Error(error.message || 'Failed to create user');
-    }
-    return response.json();
+    const response = await axios.post('/api/profiles/admin/create-with-password', dto);
+    return response.data;
   },
 
   /**
    * Generates a secure password
    */
   generatePassword: async (): Promise<{ password: string; strength: PasswordStrength }> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/generate-password`);
-    if (!response.ok) throw new Error('Failed to generate password');
-    return response.json();
+    const response = await axios.get('/api/profiles/admin/generate-password');
+    return response.data;
   },
 
   /**
@@ -266,13 +230,8 @@ export const profilesApi = {
     meetsMinimum: boolean;
     minimumRequired: number;
   }> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/admin/check-password-strength`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    if (!response.ok) throw new Error('Failed to check password strength');
-    return response.json();
+    const response = await axios.post('/api/profiles/admin/check-password-strength', { password });
+    return response.data;
   },
 
   /**
@@ -287,19 +246,12 @@ export const profilesApi = {
    * Resets a user's password (admin only)
    */
   resetPassword: async (userId: string, dto: ResetPasswordDto, authToken: string): Promise<{ success: boolean; emailSent: boolean }> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/reset-password`, {
-      method: 'POST',
+    const response = await axios.post(`/api/profiles/${userId}/reset-password`, dto, {
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`,
       },
-      body: JSON.stringify(dto),
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to reset password' }));
-      throw new Error(error.message || 'Failed to reset password');
-    }
-    return response.json();
+    return response.data;
   },
 
   /**
@@ -314,16 +266,12 @@ export const profilesApi = {
    * Gets member statistics including orders, events, trophies, and activity (admin only)
    */
   getMemberStats: async (userId: string, authToken: string): Promise<MemberStats> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/stats`, {
+    const response = await axios.get(`/api/profiles/${userId}/stats`, {
       headers: {
         'Authorization': `Bearer ${authToken}`,
       },
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to fetch member stats' }));
-      throw new Error(error.message || 'Failed to fetch member stats');
-    }
-    return response.json();
+    return response.data;
   },
 
   // ===== Judge and Event Director Permission Management =====
@@ -332,16 +280,12 @@ export const profilesApi = {
    * Gets Judge and Event Director status for a profile (admin only)
    */
   getJudgeEdStatus: async (userId: string, authToken: string): Promise<JudgeEdStatus> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/judge-ed-status`, {
+    const response = await axios.get(`/api/profiles/${userId}/judge-ed-status`, {
       headers: {
         'Authorization': `Bearer ${authToken}`,
       },
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to fetch Judge/ED status' }));
-      throw new Error(error.message || 'Failed to fetch Judge/ED status');
-    }
-    return response.json();
+    return response.data;
   },
 
   /**
@@ -352,19 +296,12 @@ export const profilesApi = {
     dto: UpdateJudgePermissionDto,
     authToken: string,
   ): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/judge-permission`, {
-      method: 'PUT',
+    const response = await axios.put(`/api/profiles/${userId}/judge-permission`, dto, {
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`,
       },
-      body: JSON.stringify(dto),
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to update judge permission' }));
-      throw new Error(error.message || 'Failed to update judge permission');
-    }
-    return response.json();
+    return response.data;
   },
 
   /**
@@ -375,18 +312,11 @@ export const profilesApi = {
     dto: UpdateEdPermissionDto,
     authToken: string,
   ): Promise<Profile> => {
-    const response = await fetch(`${API_BASE_URL}/api/profiles/${userId}/ed-permission`, {
-      method: 'PUT',
+    const response = await axios.put(`/api/profiles/${userId}/ed-permission`, dto, {
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`,
       },
-      body: JSON.stringify(dto),
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to update event director permission' }));
-      throw new Error(error.message || 'Failed to update event director permission');
-    }
-    return response.json();
+    return response.data;
   },
 };

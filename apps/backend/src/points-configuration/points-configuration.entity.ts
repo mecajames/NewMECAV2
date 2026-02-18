@@ -80,9 +80,17 @@ export class PointsConfiguration {
    * Convert to API response format with snake_case keys
    */
   toJSON() {
+    // Safely extract season_id - handle both populated entity and raw reference
+    let seasonId: string | undefined;
+    try {
+      seasonId = typeof this.season === 'string' ? this.season : this.season?.id;
+    } catch {
+      seasonId = (this as any).season_id;
+    }
+
     return {
       id: this.id,
-      season_id: this.season?.id,
+      season_id: seasonId,
       standard_1st_place: this.standard1stPlace,
       standard_2nd_place: this.standard2ndPlace,
       standard_3rd_place: this.standard3rdPlace,

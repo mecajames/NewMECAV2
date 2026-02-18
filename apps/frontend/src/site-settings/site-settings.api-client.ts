@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface SiteSetting {
   id: string;
@@ -12,15 +12,13 @@ export interface SiteSetting {
 
 export const siteSettingsApi = {
   getAll: async (): Promise<SiteSetting[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/site-settings`);
-    if (!response.ok) throw new Error('Failed to fetch site settings');
-    return response.json();
+    const response = await axios.get('/api/site-settings');
+    return response.data;
   },
 
   getByKey: async (key: string): Promise<SiteSetting> => {
-    const response = await fetch(`${API_BASE_URL}/api/site-settings/${key}`);
-    if (!response.ok) throw new Error('Failed to fetch setting');
-    return response.json();
+    const response = await axios.get(`/api/site-settings/${key}`);
+    return response.data;
   },
 
   upsert: async (
@@ -30,19 +28,11 @@ export const siteSettingsApi = {
     description: string | undefined,
     updatedBy: string
   ): Promise<SiteSetting> => {
-    const response = await fetch(`${API_BASE_URL}/api/site-settings/upsert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, value, type, description, updatedBy }),
-    });
-    if (!response.ok) throw new Error('Failed to upsert setting');
-    return response.json();
+    const response = await axios.post('/api/site-settings/upsert', { key, value, type, description, updatedBy });
+    return response.data;
   },
 
   delete: async (key: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/site-settings/${key}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete setting');
+    await axios.delete(`/api/site-settings/${key}`);
   },
 };

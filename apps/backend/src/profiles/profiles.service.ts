@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { EmailService } from '../email/email.service';
@@ -32,12 +33,61 @@ export interface ResetPasswordDto {
 export class ProfilesService {
   private readonly logger = new Logger(ProfilesService.name);
 
+  // Cache for profiles endpoints to avoid repeated DB queries (mirrors StandingsService pattern)
+  private publicProfilesCache = new Map<string, { data: any; timestamp: number }>();
+  private adminMembersCache: { data: any; timestamp: number } | null = null;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly emailService: EmailService,
   ) {}
+
+  // ============================================
+  // CACHE HELPERS
+  // ============================================
+
+  private getCached<T>(key: string): T | null {
+    const cached = this.publicProfilesCache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+      return cached.data as T;
+    }
+    return null;
+  }
+
+  private setCache(key: string, data: any): void {
+    this.publicProfilesCache.set(key, { data, timestamp: Date.now() });
+  }
+
+  clearPublicProfilesCache(): void {
+    this.publicProfilesCache.clear();
+    this.logger.log('Public profiles cache cleared');
+  }
+
+  clearAdminMembersCache(): void {
+    this.adminMembersCache = null;
+    this.logger.log('Admin members cache cleared');
+  }
+
+  clearAllProfileCaches(): void {
+    this.publicProfilesCache.clear();
+    this.adminMembersCache = null;
+    this.logger.log('All profile caches cleared');
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async warmProfileCaches(): Promise<void> {
+    this.logger.log('Warming profile caches...');
+    try {
+      await this.findPublicProfiles({ page: 1, limit: 50 });
+      await this.findAdminMembers();
+      this.logger.log('Profile caches warmed successfully');
+    } catch (error) {
+      this.logger.error('Failed to warm profile caches:', error);
+    }
+  }
 
   async findAll(page: number = 1, limit: number = 10): Promise<Profile[]> {
     const em = this.em.fork();
@@ -178,9 +228,53 @@ export class ProfilesService {
     if (!profile) {
       throw new NotFoundException(`Profile with ID ${id} not found`);
     }
-    em.assign(profile, data);
-    await em.flush();
-    return profile;
+
+    // Ensure meca_id is always a string (frontend may send it as a number)
+    if ('meca_id' in data) {
+      if (data.meca_id === '' || data.meca_id === undefined || data.meca_id === null) {
+        data.meca_id = profile.meca_id ?? undefined; // Keep existing value if blank sent
+      } else {
+        data.meca_id = String(data.meca_id);
+      }
+    }
+
+    // Sync full_name when first_name or last_name changes
+    const firstName = (data.first_name ?? profile.first_name ?? '').trim();
+    const lastName = (data.last_name ?? profile.last_name ?? '').trim();
+    if ('first_name' in data || 'last_name' in data) {
+      data.full_name = [firstName, lastName].filter(Boolean).join(' ') || profile.full_name;
+    }
+
+    try {
+      em.assign(profile, data);
+      await em.flush();
+
+      // Invalidate caches when profile data changes
+      this.clearAdminMembersCache();
+      if (
+        data.is_public !== undefined ||
+        data.membership_status !== undefined ||
+        data.first_name !== undefined ||
+        data.last_name !== undefined ||
+        data.profile_picture_url !== undefined ||
+        data.profile_images !== undefined ||
+        data.vehicle_info !== undefined ||
+        data.car_audio_system !== undefined ||
+        data.city !== undefined ||
+        data.state !== undefined
+      ) {
+        this.clearPublicProfilesCache();
+      }
+
+      return profile;
+    } catch (error: any) {
+      this.logger.error(`Failed to update profile ${id}: ${error.message}`, error.stack);
+      throw new BadRequestException(
+        error.message?.includes('unique') || error.message?.includes('duplicate')
+          ? 'A profile with this MECA ID already exists'
+          : `Failed to update profile: ${error.message}`,
+      );
+    }
   }
 
   async delete(id: string): Promise<void> {
@@ -209,14 +303,22 @@ export class ProfilesService {
     page?: number;
     limit?: number;
   }): Promise<{ profiles: Partial<Profile>[]; total: number; page: number; limit: number }> {
-    const em = this.em.fork();
     const page = options?.page || 1;
     const limit = options?.limit || 50;
+    const search = options?.search?.trim() || '';
 
+    // Cache non-search browsing requests (high cardinality search queries skip cache)
+    const cacheKey = search ? null : `public_profiles_${page}_${limit}`;
+    if (cacheKey) {
+      const cached = this.getCached<{ profiles: Partial<Profile>[]; total: number; page: number; limit: number }>(cacheKey);
+      if (cached !== null) return cached;
+    }
+
+    const em = this.em.fork();
     const where: any = { is_public: true, membership_status: 'active' };
 
-    if (options?.search?.trim()) {
-      const term = `%${options.search.trim()}%`;
+    if (search) {
+      const term = `%${search}%`;
       where.$or = [
         { first_name: { $ilike: term } },
         { last_name: { $ilike: term } },
@@ -232,12 +334,16 @@ export class ProfilesService {
         'profile_picture_url', 'profile_images', 'cover_image_position',
         'vehicle_info', 'car_audio_system',
       ],
-      orderBy: { updated_at: 'DESC' },
+      orderBy: { last_name: 'ASC', first_name: 'ASC' },
       limit,
       offset: (page - 1) * limit,
     });
 
-    return { profiles, total, page, limit };
+    const result = { profiles, total, page, limit };
+    if (cacheKey) {
+      this.setCache(cacheKey, result);
+    }
+    return result;
   }
 
   async findPublicById(id: string): Promise<Profile> {
@@ -282,10 +388,16 @@ export class ProfilesService {
   /**
    * Returns all non-secondary profiles with master profile info populated.
    * Used by the admin Members page to display the full member list.
+   * Results are cached for 5 minutes to avoid repeated expensive queries.
    */
   async findAdminMembers(): Promise<Profile[]> {
+    // Check cache first
+    if (this.adminMembersCache && Date.now() - this.adminMembersCache.timestamp < this.CACHE_TTL_MS) {
+      return this.adminMembersCache.data;
+    }
+
     const em = this.em.fork();
-    return em.find(
+    const results = await em.find(
       Profile,
       {
         $or: [
@@ -299,6 +411,9 @@ export class ProfilesService {
         limit: 10000,
       },
     );
+
+    this.adminMembersCache = { data: results, timestamp: Date.now() };
+    return results;
   }
 
   /**
@@ -422,7 +537,12 @@ export class ProfilesService {
     });
 
     if (!result.success) {
-      throw new BadRequestException(result.error || 'Failed to reset password');
+      const errorMsg = result.error || 'Failed to reset password';
+      // Provide more context if user doesn't exist in auth system
+      if (errorMsg.toLowerCase().includes('not found') || errorMsg.toLowerCase().includes('user_not_found')) {
+        throw new BadRequestException(`User does not exist in the authentication system. The profile may need to be re-created with a login. (${errorMsg})`);
+      }
+      throw new BadRequestException(errorMsg);
     }
 
     // Update force_password_change flag in profile

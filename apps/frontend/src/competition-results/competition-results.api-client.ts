@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface CompetitionResult {
   id: string;
@@ -47,43 +47,33 @@ export interface CompetitionResult {
 
 export const competitionResultsApi = {
   getAll: async (page: number = 1, limit: number = 100): Promise<CompetitionResult[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results?page=${page}&limit=${limit}`);
-    if (!response.ok) throw new Error('Failed to fetch competition results');
-    return response.json();
+    const response = await axios.get(`/api/competition-results?page=${page}&limit=${limit}`);
+    return response.data;
   },
 
   getById: async (id: string): Promise<CompetitionResult> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch competition result');
-    return response.json();
+    const response = await axios.get(`/api/competition-results/${id}`);
+    return response.data;
   },
 
   getByEvent: async (eventId: string): Promise<CompetitionResult[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/by-event/${eventId}`);
-    if (!response.ok) throw new Error('Failed to fetch results for event');
-    return response.json();
+    const response = await axios.get(`/api/competition-results/by-event/${eventId}`);
+    return response.data;
   },
 
   getResultCountsByEventIds: async (eventIds: string[]): Promise<Record<string, number>> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/counts-by-events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventIds }),
-    });
-    if (!response.ok) throw new Error('Failed to fetch result counts');
-    return response.json();
+    const response = await axios.post('/api/competition-results/counts-by-events', { eventIds });
+    return response.data;
   },
 
   getByCompetitor: async (competitorId: string): Promise<CompetitionResult[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/by-competitor/${competitorId}`);
-    if (!response.ok) throw new Error('Failed to fetch results for competitor');
-    return response.json();
+    const response = await axios.get(`/api/competition-results/by-competitor/${competitorId}`);
+    return response.data;
   },
 
   getByMecaId: async (mecaId: string): Promise<CompetitionResult[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/by-meca-id/${mecaId}`);
-    if (!response.ok) throw new Error('Failed to fetch results for MECA ID');
-    return response.json();
+    const response = await axios.get(`/api/competition-results/by-meca-id/${mecaId}`);
+    return response.data;
   },
 
   getLeaderboard: async (options?: {
@@ -102,56 +92,37 @@ export const competitionResultsApi = {
 
     const queryString = params.toString();
     const url = queryString
-      ? `${API_BASE_URL}/api/competition-results/leaderboard?${queryString}`
-      : `${API_BASE_URL}/api/competition-results/leaderboard`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch leaderboard');
-    return response.json();
+      ? `/api/competition-results/leaderboard?${queryString}`
+      : '/api/competition-results/leaderboard';
+    const response = await axios.get(url);
+    return response.data;
   },
 
   // Get result counts for all events in a single call (efficient bulk endpoint)
   getResultCountsByEvent: async (): Promise<Record<string, number>> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/counts-by-event`);
-    if (!response.ok) throw new Error('Failed to fetch result counts');
-    return response.json();
+    const response = await axios.get('/api/competition-results/counts-by-event');
+    return response.data;
   },
 
   create: async (data: Partial<CompetitionResult>): Promise<CompetitionResult> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create competition result');
-    return response.json();
+    const response = await axios.post('/api/competition-results', data);
+    return response.data;
   },
 
   update: async (id: string, data: Partial<CompetitionResult>, userId?: string): Promise<CompetitionResult> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, userId }),
-    });
-    if (!response.ok) throw new Error('Failed to update competition result');
-    return response.json();
+    const response = await axios.put(`/api/competition-results/${id}`, { ...data, userId });
+    return response.data;
   },
 
   delete: async (id: string, userId?: string, reason?: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/${id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, reason }),
+    await axios.delete(`/api/competition-results/${id}`, {
+      data: { userId, reason },
     });
-    if (!response.ok) throw new Error('Failed to delete competition result');
   },
 
   recalculatePoints: async (eventId: string): Promise<{ message: string }> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/recalculate-points/${eventId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) throw new Error('Failed to recalculate points');
-    return response.json();
+    const response = await axios.post(`/api/competition-results/recalculate-points/${eventId}`);
+    return response.data;
   },
 
   importResults: async (
@@ -163,17 +134,8 @@ export const competitionResultsApi = {
     formData.append('file', file);
     formData.append('createdBy', createdBy);
 
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/import/${eventId}`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to import results');
-    }
-
-    return response.json();
+    const response = await axios.post(`/api/competition-results/import/${eventId}`, formData);
+    return response.data;
   },
 
   checkDuplicates: async (
@@ -192,17 +154,8 @@ export const competitionResultsApi = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/check-duplicates/${eventId}`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to check for duplicates');
-    }
-
-    return response.json();
+    const response = await axios.post(`/api/competition-results/check-duplicates/${eventId}`, formData);
+    return response.data;
   },
 
   parseAndValidate: async (
@@ -230,17 +183,8 @@ export const competitionResultsApi = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/parse-and-validate/${eventId}`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to parse and validate file');
-    }
-
-    return response.json();
+    const response = await axios.post(`/api/competition-results/parse-and-validate/${eventId}`, formData);
+    return response.data;
   },
 
   importWithResolution: async (
@@ -250,23 +194,13 @@ export const competitionResultsApi = {
     createdBy: string,
     fileExtension: string
   ): Promise<{ message: string; imported: number; updated: number; skipped: number; errors: string[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/competition-results/import-with-resolution/${eventId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        parsedResults,
-        resolutions,
-        createdBy,
-        fileExtension,
-      }),
+    const response = await axios.post(`/api/competition-results/import-with-resolution/${eventId}`, {
+      parsedResults,
+      resolutions,
+      createdBy,
+      fileExtension,
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to import results with resolution');
-    }
-
-    return response.json();
+    return response.data;
   },
 
   // ==========================================
@@ -290,12 +224,11 @@ export const competitionResultsApi = {
     if (params.offset) queryParams.set('offset', params.offset.toString());
 
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/api/standings/leaderboard?${queryParams}`
-      : `${API_BASE_URL}/api/standings/leaderboard`;
+      ? `/api/standings/leaderboard?${queryParams}`
+      : '/api/standings/leaderboard';
 
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch standings leaderboard');
-    return response.json();
+    const response = await axios.get(url);
+    return response.data;
   },
 
   /**
@@ -310,11 +243,10 @@ export const competitionResultsApi = {
     if (seasonId) queryParams.set('seasonId', seasonId);
     queryParams.set('limit', limit.toString());
 
-    const response = await fetch(
-      `${API_BASE_URL}/api/standings/format/${format}?${queryParams}`
+    const response = await axios.get(
+      `/api/standings/format/${format}?${queryParams}`
     );
-    if (!response.ok) throw new Error(`Failed to fetch ${format} standings`);
-    return response.json();
+    return response.data;
   },
 
   /**
@@ -330,11 +262,10 @@ export const competitionResultsApi = {
     if (seasonId) queryParams.set('seasonId', seasonId);
     queryParams.set('limit', limit.toString());
 
-    const response = await fetch(
-      `${API_BASE_URL}/api/standings/format/${format}/class/${encodeURIComponent(className)}?${queryParams}`
+    const response = await axios.get(
+      `/api/standings/format/${format}/class/${encodeURIComponent(className)}?${queryParams}`
     );
-    if (!response.ok) throw new Error(`Failed to fetch class standings`);
-    return response.json();
+    return response.data;
   },
 
   /**
@@ -348,9 +279,8 @@ export const competitionResultsApi = {
     if (seasonId) queryParams.set('seasonId', seasonId);
     queryParams.set('limit', limit.toString());
 
-    const response = await fetch(`${API_BASE_URL}/api/standings/teams?${queryParams}`);
-    if (!response.ok) throw new Error('Failed to fetch team standings');
-    return response.json();
+    const response = await axios.get(`/api/standings/teams?${queryParams}`);
+    return response.data;
   },
 
   /**
@@ -361,12 +291,11 @@ export const competitionResultsApi = {
     if (seasonId) queryParams.set('seasonId', seasonId);
 
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/api/standings/formats?${queryParams}`
-      : `${API_BASE_URL}/api/standings/formats`;
+      ? `/api/standings/formats?${queryParams}`
+      : '/api/standings/formats';
 
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch format summaries');
-    return response.json();
+    const response = await axios.get(url);
+    return response.data;
   },
 
   /**
@@ -380,15 +309,16 @@ export const competitionResultsApi = {
     if (seasonId) queryParams.set('seasonId', seasonId);
 
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/api/standings/competitor/${mecaId}?${queryParams}`
-      : `${API_BASE_URL}/api/standings/competitor/${mecaId}`;
+      ? `/api/standings/competitor/${mecaId}?${queryParams}`
+      : `/api/standings/competitor/${mecaId}`;
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error('Failed to fetch competitor stats');
+    try {
+      const response = await axios.get(url);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) return null;
+      throw error;
     }
-    return response.json();
   },
 
   /**
@@ -403,12 +333,11 @@ export const competitionResultsApi = {
     if (seasonId) queryParams.set('seasonId', seasonId);
 
     const url = queryParams.toString()
-      ? `${API_BASE_URL}/api/standings/classes?${queryParams}`
-      : `${API_BASE_URL}/api/standings/classes`;
+      ? `/api/standings/classes?${queryParams}`
+      : '/api/standings/classes';
 
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch classes');
-    return response.json();
+    const response = await axios.get(url);
+    return response.data;
   },
 };
 

@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { WorldFinalsQualification } from './world-finals-qualification.entity';
@@ -9,6 +9,9 @@ import { Profile } from '../profiles/profiles.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { Notification } from '../notifications/notifications.entity';
 import { EmailService } from '../email/email.service';
+
+// Only load the Profile fields we actually need (avoids failures when DB is missing newer columns)
+const PROFILE_FIELDS = ['id', 'email', 'meca_id', 'first_name', 'last_name', 'full_name'] as const;
 
 // DTOs for registration and voting
 export interface CreateFinalsRegistrationDto {
@@ -30,11 +33,23 @@ export interface CreateFinalsVoteDto {
 
 @Injectable()
 export class WorldFinalsService {
+  private readonly logger = new Logger(WorldFinalsService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
   ) {}
+
+  private async loadProfile(em: EntityManager, profileId: string): Promise<Profile | null> {
+    return em.findOne(Profile, { id: profileId }, { fields: [...PROFILE_FIELDS] as any });
+  }
+
+  private async loadProfiles(em: EntityManager, profileIds: string[]): Promise<Map<string, Profile>> {
+    if (profileIds.length === 0) return new Map();
+    const profiles = await em.find(Profile, { id: { $in: profileIds } }, { fields: [...PROFILE_FIELDS] as any });
+    return new Map(profiles.map(p => [p.id, p]));
+  }
 
   /**
    * Check if a competitor has qualified for World Finals in a specific class
@@ -154,7 +169,7 @@ export class WorldFinalsService {
 
     if (qualification.user) {
       const userId = (qualification.user as any).id || qualification.user;
-      const profile = await em.findOne(Profile, { id: userId });
+      const profile = await this.loadProfile(em, userId);
       if (profile) {
         email = profile.email;
         firstName = profile.first_name || qualification.competitorName.split(' ')[0];
@@ -162,7 +177,7 @@ export class WorldFinalsService {
     }
 
     if (!email) {
-      console.log(`[WorldFinals] No email found for MECA ID ${qualification.mecaId} - skipping email notification`);
+      this.logger.log(`No email found for MECA ID ${qualification.mecaId} - skipping email notification`);
       return;
     }
 
@@ -223,16 +238,37 @@ export class WorldFinalsService {
   /**
    * Get all qualifications for a season
    */
-  async getSeasonQualifications(seasonId: string): Promise<WorldFinalsQualification[]> {
+  async getSeasonQualifications(seasonId: string): Promise<any[]> {
     const em = this.em.fork();
-    return em.find(
+    const qualifications = await em.find(
       WorldFinalsQualification,
       { season: seasonId },
       {
-        populate: ['user', 'season'],
+        populate: ['season'],
         orderBy: { competitionClass: 'ASC', totalPoints: 'DESC' },
       }
     );
+
+    // Load user profiles separately with only needed fields
+    const userIds = [...new Set(qualifications.map(q => (q.user as any)?.id || q.user).filter(Boolean))] as string[];
+    const profileMap = await this.loadProfiles(em, userIds);
+
+    return qualifications.map(q => {
+      const userId = (q.user as any)?.id || q.user;
+      const profile = userId ? profileMap.get(userId) : null;
+      const obj = (q as any).toJSON ? (q as any).toJSON() : { ...q };
+      if (profile) {
+        obj.user = {
+          id: profile.id,
+          email: profile.email,
+          meca_id: profile.meca_id,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          full_name: profile.full_name,
+        };
+      }
+      return obj;
+    });
   }
 
   /**
@@ -302,7 +338,7 @@ export class WorldFinalsService {
     const em = this.em.fork();
 
     const qualification = await em.findOne(WorldFinalsQualification, { id: qualificationId }, {
-      populate: ['user', 'season'],
+      populate: ['season'],
     });
 
     if (!qualification) {
@@ -333,7 +369,7 @@ export class WorldFinalsService {
     let firstName: string | undefined;
 
     if (qualification.user) {
-      const profile = await em.findOne(Profile, { id: (qualification.user as any).id || qualification.user });
+      const profile = await this.loadProfile(em, (qualification.user as any).id || qualification.user);
       if (profile) {
         email = profile.email;
         firstName = profile.first_name || qualification.competitorName.split(' ')[0];
@@ -341,7 +377,7 @@ export class WorldFinalsService {
     }
 
     if (!email) {
-      console.log(`[WorldFinals] No email found for MECA ID ${qualification.mecaId} - skipping invitation email`);
+      this.logger.log(`No email found for MECA ID ${qualification.mecaId} - skipping invitation email`);
       return;
     }
 
@@ -419,7 +455,7 @@ export class WorldFinalsService {
       season: seasonId,
       invitationSent: false,
     }, {
-      populate: ['user', 'season'],
+      populate: ['season'],
     });
 
     let sent = 0;
@@ -448,7 +484,7 @@ export class WorldFinalsService {
       invitationToken: token,
       invitationRedeemed: false,
     }, {
-      populate: ['user', 'season'],
+      populate: ['season'],
     });
 
     if (!qualification) {
@@ -677,9 +713,30 @@ export class WorldFinalsService {
       criteria.competitionClass = competitionClass;
     }
 
-    return em.find(FinalsRegistration, criteria, {
-      populate: ['user', 'season'],
+    const registrations = await em.find(FinalsRegistration, criteria, {
+      populate: ['season'],
       orderBy: { registeredAt: 'ASC' },
+    });
+
+    // Load user profiles separately with only needed fields
+    const userIds = [...new Set(registrations.map(r => (r.user as any)?.id || r.user).filter(Boolean))] as string[];
+    const profileMap = await this.loadProfiles(em, userIds);
+
+    return registrations.map(r => {
+      const userId = (r.user as any)?.id || r.user;
+      const profile = userId ? profileMap.get(userId) : null;
+      const obj = (r as any).toJSON ? (r as any).toJSON() : { ...r };
+      if (profile) {
+        obj.user = {
+          id: profile.id,
+          email: profile.email,
+          meca_id: profile.meca_id,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          full_name: profile.full_name,
+        };
+      }
+      return obj;
     });
   }
 
@@ -849,9 +906,28 @@ export class WorldFinalsService {
    */
   async getVotesByCategory(category: string): Promise<FinalsVote[]> {
     const em = this.em.fork();
-    return em.find(FinalsVote, { category }, {
-      populate: ['voter'],
+    const votes = await em.find(FinalsVote, { category }, {
       orderBy: { createdAt: 'DESC' },
+    });
+
+    // Load voter profiles separately with only needed fields
+    const voterIds = [...new Set(votes.map(v => (v.voter as any)?.id || v.voter).filter(Boolean))] as string[];
+    const profileMap = await this.loadProfiles(em, voterIds);
+
+    return votes.map(v => {
+      const voterId = (v.voter as any)?.id || v.voter;
+      const profile = voterId ? profileMap.get(voterId) : null;
+      const obj = (v as any).toJSON ? (v as any).toJSON() : { ...v };
+      if (profile) {
+        obj.voter = {
+          id: profile.id,
+          email: profile.email,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          full_name: profile.full_name,
+        };
+      }
+      return obj;
     });
   }
 

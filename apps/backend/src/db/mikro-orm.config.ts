@@ -1,4 +1,4 @@
-import { defineConfig, LoggerNamespace } from '@mikro-orm/core';
+import { defineConfig, LoadStrategy, LoggerNamespace } from '@mikro-orm/core';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
@@ -35,6 +35,7 @@ export default defineConfig({
     const abbreviated = abbreviateQuery(message);
     console.log(abbreviated);
   },
+  loadStrategy: LoadStrategy.SELECT_IN,
   extensions: [Migrator, SeedManager],
   migrations: {
     tableName: 'mikro_orm_migrations',

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 // Team member roles
 export type TeamMemberRole = 'owner' | 'co_owner' | 'moderator' | 'member';

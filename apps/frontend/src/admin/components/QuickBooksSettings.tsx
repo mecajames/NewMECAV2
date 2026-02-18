@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link2, Link2Off, RefreshCw, Building2, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 interface QuickBooksCompanyInfo {
   companyName: string;
@@ -40,12 +39,8 @@ export default function QuickBooksSettings() {
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/quickbooks/status`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch QuickBooks status');
-      }
-      const data = await response.json();
-      setStatus(data);
+      const response = await axios.get('/api/quickbooks/status');
+      setStatus(response.data);
       setError(null);
     } catch (err) {
       console.error('Error fetching QuickBooks status:', err);
@@ -57,7 +52,7 @@ export default function QuickBooksSettings() {
 
   const handleConnect = () => {
     // Redirect to backend OAuth endpoint
-    window.location.href = `${API_URL}/api/quickbooks/connect`;
+    window.location.href = '/api/quickbooks/connect';
   };
 
   const handleDisconnect = async () => {
@@ -67,13 +62,7 @@ export default function QuickBooksSettings() {
 
     try {
       setDisconnecting(true);
-      const response = await fetch(`${API_URL}/api/quickbooks/disconnect`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to disconnect QuickBooks');
-      }
+      await axios.delete('/api/quickbooks/disconnect');
 
       await fetchStatus();
     } catch (err) {

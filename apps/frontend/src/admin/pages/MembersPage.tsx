@@ -7,7 +7,7 @@ import { usePermissions } from '@/auth';
 import AdminUserWizard from '../components/AdminUserWizard';
 import { Pagination } from '@/shared/components';
 import { membershipsApi } from '@/memberships/memberships.api-client';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -47,8 +47,6 @@ interface MemberWithMembership extends Profile {
   membershipInfo?: MembershipInfo;
   masterProfileName?: string; // For secondary profiles, the name of their master
 }
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export default function MembersPage() {
   const navigate = useNavigate();
@@ -386,13 +384,7 @@ export default function MembersPage() {
 
     setDeleteLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/profiles/admin/delete-user/${memberToDelete.id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete user');
-      }
+      await axios.delete(`/api/profiles/admin/delete-user/${memberToDelete.id}`);
 
       // Refresh the members list
       fetchMembers();
@@ -428,24 +420,9 @@ export default function MembersPage() {
       sessionStorage.setItem('impersonatedUserName', `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email);
 
       // Get impersonation link from backend
-      const response = await fetch(`${API_BASE_URL}/api/profiles/admin/impersonate/${member.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminSession.access_token}`,
-        },
-        body: JSON.stringify({
-          redirectTo: `${window.location.origin}/dashboard`,
-        }),
+      const { data } = await axios.post(`/api/profiles/admin/impersonate/${member.id}`, {
+        redirectTo: `${window.location.origin}/dashboard`,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Impersonation API error:', response.status, errorData);
-        throw new Error(errorData.message || errorData.error || `Server error: ${response.status}`);
-      }
-
-      const data = await response.json();
 
       if (data.success && data.link) {
         // Navigate to the impersonation link
@@ -1015,7 +992,7 @@ export default function MembersPage() {
 
         {/* Members Table */}
         <div className="bg-slate-800 rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-hidden">
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-700">
               <thead className="bg-slate-700">
                 <tr>

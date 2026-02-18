@@ -4,7 +4,7 @@ import { User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XC
 import { useAuth } from '@/auth';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 interface EventHostingRequest {
   id: string;

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 // ==================== ENUMS ====================
 
@@ -201,90 +201,59 @@ export const eventHostingRequestsApi = {
     if (status) params.append('status', status);
     if (search) params.append('search', search);
 
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests?${params}`);
-    if (!response.ok) throw new Error('Failed to fetch event hosting requests');
-    return response.json();
+    const response = await axios.get(`/api/event-hosting-requests?${params}`);
+    return response.data;
   },
 
   getById: async (id: string): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch event hosting request');
-    return response.json();
+    const response = await axios.get(`/api/event-hosting-requests/${id}`);
+    return response.data;
   },
 
   getByUserId: async (userId: string): Promise<EventHostingRequest[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/user/${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch user hosting requests');
-    return response.json();
+    const response = await axios.get(`/api/event-hosting-requests/user/${userId}`);
+    return response.data;
   },
 
   create: async (data: Partial<EventHostingRequest>): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Event hosting request creation failed:', response.status, errorBody);
-      throw new Error(`Failed to create event hosting request: ${errorBody}`);
-    }
-    return response.json();
+    const response = await axios.post('/api/event-hosting-requests', data);
+    return response.data;
   },
 
   update: async (id: string, data: Partial<EventHostingRequest>): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Event hosting request update failed:', response.status, errorBody);
-      throw new Error(`Failed to update event hosting request: ${errorBody}`);
-    }
-    return response.json();
+    const response = await axios.put(`/api/event-hosting-requests/${id}`, data);
+    return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete event hosting request');
+    await axios.delete(`/api/event-hosting-requests/${id}`);
   },
 
   getStats: async (): Promise<EventHostingRequestStats> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/stats`);
-    if (!response.ok) throw new Error('Failed to fetch event hosting request stats');
-    return response.json();
+    const response = await axios.get('/api/event-hosting-requests/stats');
+    return response.data;
   },
 
   // Legacy respond endpoint
   respond: async (
     id: string,
-    response: string,
+    responseText: string,
     status: EventHostingRequestStatus,
     adminId: string
   ): Promise<EventHostingRequest> => {
-    const res = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${id}/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        response,
-        status,
-        admin_id: adminId,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${id}/respond`, {
+      response: responseText,
+      status,
+      admin_id: adminId,
     });
-    if (!res.ok) throw new Error('Failed to respond to event hosting request');
-    return res.json();
+    return response.data;
   },
 
   // ==================== EVENT DIRECTOR ASSIGNMENT ====================
 
   getAvailableEventDirectors: async (): Promise<EventDirectorOption[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/available-event-directors`);
-    if (!response.ok) throw new Error('Failed to fetch available event directors');
-    return response.json();
+    const response = await axios.get('/api/event-hosting-requests/available-event-directors');
+    return response.data;
   },
 
   assignToEventDirector: async (
@@ -293,17 +262,12 @@ export const eventHostingRequestsApi = {
     adminId: string,
     notes?: string
   ): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/assign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_director_id: eventDirectorId,
-        admin_id: adminId,
-        notes,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/assign`, {
+      event_director_id: eventDirectorId,
+      admin_id: adminId,
+      notes,
     });
-    if (!response.ok) throw new Error('Failed to assign event director');
-    return response.json();
+    return response.data;
   },
 
   reassignEventDirector: async (
@@ -312,17 +276,12 @@ export const eventHostingRequestsApi = {
     adminId: string,
     notes?: string
   ): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/reassign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        new_event_director_id: newEventDirectorId,
-        admin_id: adminId,
-        notes,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/reassign`, {
+      new_event_director_id: newEventDirectorId,
+      admin_id: adminId,
+      notes,
     });
-    if (!response.ok) throw new Error('Failed to reassign event director');
-    return response.json();
+    return response.data;
   },
 
   revokeEDAssignment: async (
@@ -330,16 +289,11 @@ export const eventHostingRequestsApi = {
     adminId: string,
     reason?: string
   ): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/revoke-assignment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        admin_id: adminId,
-        reason,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/revoke-assignment`, {
+      admin_id: adminId,
+      reason,
     });
-    if (!response.ok) throw new Error('Failed to revoke ED assignment');
-    return response.json();
+    return response.data;
   },
 
   // ==================== EVENT DIRECTOR ACTIONS ====================
@@ -351,28 +305,21 @@ export const eventHostingRequestsApi = {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
 
-    const url = `${API_BASE_URL}/api/event-hosting-requests/event-director/${eventDirectorId}${params.toString() ? `?${params}` : ''}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch event director requests');
-    return response.json();
+    const url = `/api/event-hosting-requests/event-director/${eventDirectorId}${params.toString() ? `?${params}` : ''}`;
+    const response = await axios.get(url);
+    return response.data;
   },
 
   getEventDirectorStats: async (eventDirectorId: string): Promise<EventDirectorStats> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/event-director/${eventDirectorId}/stats`);
-    if (!response.ok) throw new Error('Failed to fetch event director stats');
-    return response.json();
+    const response = await axios.get(`/api/event-hosting-requests/event-director/${eventDirectorId}/stats`);
+    return response.data;
   },
 
   edAcceptAssignment: async (requestId: string, eventDirectorId: string): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/ed-accept`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_director_id: eventDirectorId,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/ed-accept`, {
+      event_director_id: eventDirectorId,
     });
-    if (!response.ok) throw new Error('Failed to accept assignment');
-    return response.json();
+    return response.data;
   },
 
   edRejectAssignment: async (
@@ -380,16 +327,11 @@ export const eventHostingRequestsApi = {
     eventDirectorId: string,
     reason: string
   ): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/ed-reject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_director_id: eventDirectorId,
-        reason,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/ed-reject`, {
+      event_director_id: eventDirectorId,
+      reason,
     });
-    if (!response.ok) throw new Error('Failed to reject assignment');
-    return response.json();
+    return response.data;
   },
 
   // ==================== MESSAGING ====================
@@ -398,11 +340,10 @@ export const eventHostingRequestsApi = {
     requestId: string,
     viewerRole: 'requestor' | 'event_director' | 'admin' = 'requestor'
   ): Promise<EventHostingRequestMessage[]> => {
-    const response = await fetch(
-      `${API_BASE_URL}/api/event-hosting-requests/${requestId}/messages?viewer_role=${viewerRole}`
+    const response = await axios.get(
+      `/api/event-hosting-requests/${requestId}/messages?viewer_role=${viewerRole}`
     );
-    if (!response.ok) throw new Error('Failed to fetch messages');
-    return response.json();
+    return response.data;
   },
 
   addMessage: async (
@@ -413,19 +354,14 @@ export const eventHostingRequestsApi = {
     isPrivate: boolean = false,
     recipientType?: RecipientType
   ): Promise<EventHostingRequestMessage> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sender_id: senderId,
-        sender_role: senderRole,
-        message,
-        is_private: isPrivate,
-        recipient_type: recipientType,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/messages`, {
+      sender_id: senderId,
+      sender_role: senderRole,
+      message,
+      is_private: isPrivate,
+      recipient_type: recipientType,
     });
-    if (!response.ok) throw new Error('Failed to add message');
-    return response.json();
+    return response.data;
   },
 
   // ==================== FINAL APPROVAL ====================
@@ -436,17 +372,12 @@ export const eventHostingRequestsApi = {
     finalStatus: FinalApprovalStatus,
     reason?: string
   ): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/final-approval`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        admin_id: adminId,
-        final_status: finalStatus,
-        reason,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/final-approval`, {
+      admin_id: adminId,
+      final_status: finalStatus,
+      reason,
     });
-    if (!response.ok) throw new Error('Failed to set final approval');
-    return response.json();
+    return response.data;
   },
 
   // ==================== INFORMATION REQUESTS ====================
@@ -457,17 +388,12 @@ export const eventHostingRequestsApi = {
     senderRole: SenderRole,
     message: string
   ): Promise<EventHostingRequest> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/request-info`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sender_id: senderId,
-        sender_role: senderRole,
-        message,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/request-info`, {
+      sender_id: senderId,
+      sender_role: senderRole,
+      message,
     });
-    if (!response.ok) throw new Error('Failed to request further information');
-    return response.json();
+    return response.data;
   },
 
   requestorRespond: async (
@@ -475,16 +401,11 @@ export const eventHostingRequestsApi = {
     requestorId: string,
     message: string
   ): Promise<EventHostingRequestMessage> => {
-    const response = await fetch(`${API_BASE_URL}/api/event-hosting-requests/${requestId}/requestor-respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestor_id: requestorId,
-        message,
-      }),
+    const response = await axios.post(`/api/event-hosting-requests/${requestId}/requestor-respond`, {
+      requestor_id: requestorId,
+      message,
     });
-    if (!response.ok) throw new Error('Failed to submit response');
-    return response.json();
+    return response.data;
   },
 };
 

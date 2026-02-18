@@ -1,10 +1,8 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export const moderationApi = {
   getHiddenImages: async (userId: string, authToken: string): Promise<string[]> => {
-    const response = await axios.get(`${API_BASE_URL}/api/moderation/images/${userId}`, {
+    const response = await axios.get(`/api/moderation/images/${userId}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
     return response.data;
@@ -20,7 +18,7 @@ export const moderationApi = {
     },
     authToken: string,
   ): Promise<{ isHidden: boolean }> => {
-    const response = await axios.post(`${API_BASE_URL}/api/moderation/images/toggle`, data, {
+    const response = await axios.post(`/api/moderation/images/toggle`, data, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
     return response.data;
@@ -39,7 +37,7 @@ export const moderationApi = {
     },
     authToken: string,
   ): Promise<{ success: boolean }> => {
-    const response = await axios.post(`${API_BASE_URL}/api/moderation/images/delete-notify`, data, {
+    const response = await axios.post(`/api/moderation/images/delete-notify`, data, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
     return response.data;

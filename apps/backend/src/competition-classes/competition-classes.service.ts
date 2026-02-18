@@ -49,16 +49,22 @@ export class CompetitionClassesService {
 
   async create(data: Partial<CompetitionClass>): Promise<CompetitionClass> {
     const em = this.em.fork();
+    const input = data as any;
 
     // Load the season reference
-    const season = await em.findOne('Season', { id: (data as any).season_id });
+    const seasonId = input.season_id || input.seasonId;
+    const season = await em.findOne(Season, { id: seasonId });
     if (!season) {
-      throw new NotFoundException(`Season with ID ${(data as any).season_id} not found`);
+      throw new NotFoundException(`Season with ID ${seasonId} not found`);
     }
 
     const competitionClass = em.create(CompetitionClass, {
-      ...data,
-      season, // Assign the loaded season entity
+      name: input.name,
+      abbreviation: input.abbreviation,
+      format: input.format,
+      season,
+      isActive: input.is_active ?? input.isActive ?? true,
+      displayOrder: input.display_order ?? input.displayOrder ?? 0,
     } as any);
     await em.persistAndFlush(competitionClass);
     return competitionClass;
@@ -71,7 +77,26 @@ export class CompetitionClassesService {
       throw new NotFoundException(`Competition class with ID ${id} not found`);
     }
 
-    em.assign(competitionClass, data);
+    const input = data as any;
+
+    // Map snake_case input to camelCase entity properties
+    const updateData: any = {};
+    if (input.name !== undefined) updateData.name = input.name;
+    if (input.abbreviation !== undefined) updateData.abbreviation = input.abbreviation;
+    if (input.format !== undefined) updateData.format = input.format;
+    if (input.is_active !== undefined) updateData.isActive = input.is_active;
+    if (input.isActive !== undefined) updateData.isActive = input.isActive;
+    if (input.display_order !== undefined) updateData.displayOrder = input.display_order;
+    if (input.displayOrder !== undefined) updateData.displayOrder = input.displayOrder;
+
+    // Handle season change
+    const seasonId = input.season_id || input.seasonId;
+    if (seasonId) {
+      const season = await em.findOne(Season, { id: seasonId });
+      if (season) updateData.season = season;
+    }
+
+    em.assign(competitionClass, updateData);
     await em.flush();
     return competitionClass;
   }

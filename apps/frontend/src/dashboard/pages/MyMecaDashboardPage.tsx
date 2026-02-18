@@ -8,7 +8,7 @@ import {
 import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth';
 import { supabase } from '@/lib/supabase';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
 import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
@@ -289,13 +289,6 @@ export default function MyMecaDashboardPage() {
         getMyJudgeProfile(),
         getMyEventDirectorProfile(),
       ]);
-      // DEBUG: Log the returned values
-      console.log('DEBUG - Profile permissions:', {
-        can_apply_judge: (profile as any)?.can_apply_judge,
-        can_apply_event_director: (profile as any)?.can_apply_event_director,
-      });
-      console.log('DEBUG - Judge profile:', judge);
-      console.log('DEBUG - ED profile:', ed);
       setJudgeProfile(judge);
       setEdProfile(ed);
 
@@ -1932,8 +1925,6 @@ export default function MyMecaDashboardPage() {
 
       // Get owner info (prefer owner field, fallback to captain)
       const ownerInfo = team.owner || team.captain;
-
-      console.log('Team Debug:', { teamId: team.id, myUserId: profile?.id, myMembership, myRole, isOwner, canManageTeam });
 
       // Calculate total teams the user is on
       const totalTeamsCount = allTeams.ownedTeams.length + allTeams.memberTeams.length;

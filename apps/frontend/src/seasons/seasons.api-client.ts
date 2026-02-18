@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface Season {
   id: string;
@@ -26,24 +26,17 @@ export const seasonsApi = {
    * Get all seasons
    */
   getAll: async (): Promise<Season[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch seasons');
-    }
-    const data = await response.json();
+    const response = await axios.get('/api/seasons');
     // Backend already returns snake_case, just return as-is
-    return data;
+    return response.data;
   },
 
   /**
    * Get current season
    */
   getCurrent: async (): Promise<Season | null> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons/current`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch current season');
-    }
-    const season = await response.json();
+    const response = await axios.get('/api/seasons/current');
+    const season = response.data;
     if (!season) return null;
     // Backend already returns snake_case
     return season;
@@ -53,11 +46,8 @@ export const seasonsApi = {
    * Get next season
    */
   getNext: async (): Promise<Season | null> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons/next`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch next season');
-    }
-    const season = await response.json();
+    const response = await axios.get('/api/seasons/next');
+    const season = response.data;
     if (!season) return null;
     // Backend already returns snake_case
     return season;
@@ -67,13 +57,9 @@ export const seasonsApi = {
    * Get season by ID
    */
   getById: async (id: string): Promise<Season> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons/${id}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch season ${id}`);
-    }
-    const season = await response.json();
+    const response = await axios.get(`/api/seasons/${id}`);
     // Backend already returns snake_case
-    return season;
+    return response.data;
   },
 
   /**
@@ -88,27 +74,17 @@ export const seasonsApi = {
     is_next?: boolean;
     qualification_points_threshold?: number | null;
   }): Promise<Season> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        year: data.year,
-        name: data.name,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        is_current: data.is_current || false,
-        is_next: data.is_next || false,
-        qualification_points_threshold: data.qualification_points_threshold,
-      }),
+    const response = await axios.post('/api/seasons', {
+      year: data.year,
+      name: data.name,
+      start_date: data.start_date,
+      end_date: data.end_date,
+      is_current: data.is_current || false,
+      is_next: data.is_next || false,
+      qualification_points_threshold: data.qualification_points_threshold,
     });
-    if (!response.ok) {
-      throw new Error('Failed to create season');
-    }
-    const season = await response.json();
     // Backend already returns snake_case
-    return season;
+    return response.data;
   },
 
   /**
@@ -125,67 +101,40 @@ export const seasonsApi = {
       qualification_points_threshold?: number | null;
     }
   ): Promise<Season> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: data.name,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        is_current: data.is_current,
-        is_next: data.is_next,
-        qualification_points_threshold: data.qualification_points_threshold,
-      }),
+    const response = await axios.put(`/api/seasons/${id}`, {
+      name: data.name,
+      start_date: data.start_date,
+      end_date: data.end_date,
+      is_current: data.is_current,
+      is_next: data.is_next,
+      qualification_points_threshold: data.qualification_points_threshold,
     });
-    if (!response.ok) {
-      throw new Error(`Failed to update season ${id}`);
-    }
-    const season = await response.json();
     // Backend already returns snake_case
-    return season;
+    return response.data;
   },
 
   /**
    * Delete a season
    */
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to delete season ${id}`);
-    }
+    await axios.delete(`/api/seasons/${id}`);
   },
 
   /**
    * Set a season as current
    */
   setAsCurrent: async (id: string): Promise<Season> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons/${id}/set-current`, {
-      method: 'PUT',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to set season ${id} as current`);
-    }
-    const season = await response.json();
+    const response = await axios.put(`/api/seasons/${id}/set-current`);
     // Backend already returns snake_case
-    return season;
+    return response.data;
   },
 
   /**
    * Set a season as next
    */
   setAsNext: async (id: string): Promise<Season> => {
-    const response = await fetch(`${API_BASE_URL}/api/seasons/${id}/set-next`, {
-      method: 'PUT',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to set season ${id} as next`);
-    }
-    const season = await response.json();
+    const response = await axios.put(`/api/seasons/${id}/set-next`);
     // Backend already returns snake_case
-    return season;
+    return response.data;
   },
 };

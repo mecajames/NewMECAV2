@@ -1,7 +1,6 @@
 import axios from '@/lib/axios';
 import { supabase } from '@/lib/supabase';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
 
 export type MultiDayResultsMode = 'separate' | 'combined_score' | 'combined_points';
@@ -49,12 +48,12 @@ export interface Event {
 
 export const eventsApi = {
   getAll: async (page: number = 1, limit: number = 100): Promise<Event[]> => {
-    const response = await axios.get(`${API_BASE_URL}/api/events?page=${page}&limit=${limit}`);
+    const response = await axios.get(`/api/events?page=${page}&limit=${limit}`);
     return response.data;
   },
 
   getAllBySeason: async (seasonId: string, page: number = 1, limit: number = 100): Promise<Event[]> => {
-    const response = await axios.get(`${API_BASE_URL}/api/events?season_id=${seasonId}&page=${page}&limit=${limit}`);
+    const response = await axios.get(`/api/events?season_id=${seasonId}&page=${page}&limit=${limit}`);
     return response.data;
   },
 
@@ -74,7 +73,7 @@ export const eventsApi = {
     if (options?.seasonId) params.append('season_id', options.seasonId);
     if (options?.status) params.append('status', options.status);
 
-    const response = await axios.get(`${API_BASE_URL}/api/events/public?${params.toString()}`);
+    const response = await axios.get(`/api/events/public?${params.toString()}`);
     return response.data;
   },
 
@@ -91,23 +90,23 @@ export const eventsApi = {
     if (options?.limit) params.append('limit', options.limit.toString());
     if (options?.seasonId) params.append('season_id', options.seasonId);
 
-    const response = await axios.get(`${API_BASE_URL}/api/events/completed-with-results?${params.toString()}`);
+    const response = await axios.get(`/api/events/completed-with-results?${params.toString()}`);
     return response.data;
   },
 
   getByDirector: async (directorId: string): Promise<Event[]> => {
-    const response = await axios.get(`${API_BASE_URL}/api/events/by-director/${directorId}`);
+    const response = await axios.get(`/api/events/by-director/${directorId}`);
     return response.data;
   },
 
   getById: async (id: string): Promise<Event> => {
-    const response = await axios.get(`${API_BASE_URL}/api/events/${id}`);
+    const response = await axios.get(`/api/events/${id}`);
     return response.data;
   },
 
   create: async (data: Partial<Event>): Promise<Event> => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/events`, data);
+      const response = await axios.post(`/api/events`, data);
       return response.data;
     } catch (error: any) {
       console.error('Event creation failed:', error.response?.status, error.response?.data);
@@ -116,21 +115,21 @@ export const eventsApi = {
   },
 
   update: async (id: string, data: Partial<Event>): Promise<Event> => {
-    const response = await axios.put(`${API_BASE_URL}/api/events/${id}`, data);
+    const response = await axios.put(`/api/events/${id}`, data);
     return response.data;
   },
 
   updateFlyerImagePosition: async (id: string, position: { x: number; y: number }): Promise<Event> => {
-    const response = await axios.put(`${API_BASE_URL}/api/events/${id}`, { flyer_image_position: position });
+    const response = await axios.put(`/api/events/${id}`, { flyer_image_position: position });
     return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    await axios.delete(`${API_BASE_URL}/api/events/${id}`);
+    await axios.delete(`/api/events/${id}`);
   },
 
   getStats: async (): Promise<{ totalEvents: number }> => {
-    const response = await axios.get(`${API_BASE_URL}/api/events/stats`);
+    const response = await axios.get(`/api/events/stats`);
     return response.data;
   },
 
@@ -142,7 +141,7 @@ export const eventsApi = {
     multiDayResultsMode?: MultiDayResultsMode
   ): Promise<Event[]> => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/events/multi-day`, {
+      const response = await axios.post(`/api/events/multi-day`, {
         data,
         numberOfDays,
         dayDates,
@@ -157,13 +156,13 @@ export const eventsApi = {
   },
 
   getByMultiDayGroup: async (groupId: string): Promise<Event[]> => {
-    const response = await axios.get(`${API_BASE_URL}/api/events/multi-day-group/${groupId}`);
+    const response = await axios.get(`/api/events/multi-day-group/${groupId}`);
     return response.data;
   },
 
   sendRatingEmails: async (eventId: string): Promise<{ sent: number; failed: number; errors: string[] }> => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/events/${eventId}/send-rating-emails`);
+      const response = await axios.post(`/api/events/${eventId}/send-rating-emails`);
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to send rating emails: ${error.response?.data?.message || error.message}`);

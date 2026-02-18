@@ -1,6 +1,6 @@
 import { Calendar, Users, Megaphone, CheckCircle, Send, AlertCircle, Building2, User, Users2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import { ReCaptchaV2Widget } from '@/shared';
 import type { ReCaptchaV2Ref } from '@/shared';
 import { recaptchaApi } from '@/recaptcha';
@@ -129,18 +129,11 @@ export default function HostEventPage() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL ?? 'http://localhost:3001'}/api/competition-formats/active`,
-          { signal: controller.signal }
-        );
+        const response = await axios.get('/api/competition-formats/active', {
+          signal: controller.signal,
+        });
         clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const formats = await response.json();
-          setCompetitionFormats(formats);
-        } else {
-          console.warn('Failed to fetch competition formats, using defaults');
-        }
+        setCompetitionFormats(response.data);
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           console.warn('Competition formats fetch timed out');

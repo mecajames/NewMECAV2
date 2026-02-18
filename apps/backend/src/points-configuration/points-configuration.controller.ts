@@ -8,10 +8,11 @@ import {
   Post,
   Logger,
   Headers,
+  Inject,
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/postgresql';
+import { EntityManager } from '@mikro-orm/core';
 import { PointsConfigurationService } from './points-configuration.service';
 import { UpdatePointsConfigurationSchema, UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
@@ -24,6 +25,7 @@ export class PointsConfigurationController {
   constructor(
     private readonly pointsConfigService: PointsConfigurationService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
 
@@ -80,8 +82,13 @@ export class PointsConfigurationController {
    */
   @Get('season/:seasonId')
   async getConfigForSeason(@Param('seasonId') seasonId: string) {
-    const config = await this.pointsConfigService.getConfigForSeason(seasonId);
-    return config.toJSON();
+    try {
+      const config = await this.pointsConfigService.getConfigForSeason(seasonId);
+      return config.toJSON();
+    } catch (error) {
+      this.logger.error(`Error getting points config for season ${seasonId}:`, error);
+      throw error;
+    }
   }
 
   /**

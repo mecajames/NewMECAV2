@@ -6,8 +6,6 @@ import type {
   RecalculationResult,
 } from '@newmeca/shared';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -41,7 +39,7 @@ export interface UpdateAndRecalculateResponse {
  * Get points configuration for the current active season
  */
 export async function getCurrentSeasonConfig(): Promise<PointsConfiguration | null> {
-  const response = await axios.get(`${API_BASE_URL}/api/points-configuration/current`);
+  const response = await axios.get(`/api/points-configuration/current`);
   if (response.data.config === null) {
     return null;
   }
@@ -52,7 +50,7 @@ export async function getCurrentSeasonConfig(): Promise<PointsConfiguration | nu
  * Get points configuration for a specific season
  */
 export async function getConfigForSeason(seasonId: string): Promise<PointsConfiguration> {
-  const response = await axios.get(`${API_BASE_URL}/api/points-configuration/season/${seasonId}`);
+  const response = await axios.get(`/api/points-configuration/season/${seasonId}`);
   return response.data;
 }
 
@@ -61,7 +59,7 @@ export async function getConfigForSeason(seasonId: string): Promise<PointsConfig
  * Shows calculated points for all placements
  */
 export async function getPointsPreview(seasonId: string): Promise<PointsPreviewResponse> {
-  const response = await axios.get(`${API_BASE_URL}/api/points-configuration/season/${seasonId}/preview`);
+  const response = await axios.get(`/api/points-configuration/season/${seasonId}/preview`);
   return response.data;
 }
 
@@ -73,7 +71,7 @@ export async function calculatePoints(
   placement: number,
   multiplier: number
 ): Promise<{ season_id: string; placement: number; multiplier: number; points: number }> {
-  const response = await axios.get(`${API_BASE_URL}/api/points-configuration/calculate`, {
+  const response = await axios.get(`/api/points-configuration/calculate`, {
     params: { seasonId, placement, multiplier },
   });
   return response.data;
@@ -87,7 +85,7 @@ export async function calculatePoints(
  * Get all points configurations (admin only)
  */
 export async function getAllConfigs(): Promise<PointsConfiguration[]> {
-  const response = await axios.get(`${API_BASE_URL}/api/points-configuration`);
+  const response = await axios.get(`/api/points-configuration`);
   return response.data;
 }
 
@@ -95,7 +93,7 @@ export async function getAllConfigs(): Promise<PointsConfiguration[]> {
  * Get points configuration by ID (admin only)
  */
 export async function getConfigById(id: string): Promise<PointsConfiguration> {
-  const response = await axios.get(`${API_BASE_URL}/api/points-configuration/${id}`);
+  const response = await axios.get(`/api/points-configuration/${id}`);
   return response.data;
 }
 
@@ -106,7 +104,7 @@ export async function updateSeasonConfig(
   seasonId: string,
   data: UpdatePointsConfigurationDto
 ): Promise<{ message: string; config: PointsConfiguration }> {
-  const response = await axios.put(`${API_BASE_URL}/api/points-configuration/season/${seasonId}`, data);
+  const response = await axios.put(`/api/points-configuration/season/${seasonId}`, data);
   return response.data;
 }
 
@@ -118,7 +116,7 @@ export async function updateAndRecalculate(
   data: UpdatePointsConfigurationDto & { recalculate?: boolean }
 ): Promise<UpdateAndRecalculateResponse> {
   const response = await axios.put(
-    `${API_BASE_URL}/api/points-configuration/season/${seasonId}/recalculate`,
+    `/api/points-configuration/season/${seasonId}/recalculate`,
     data
   );
   return response.data;
@@ -129,8 +127,8 @@ export async function updateAndRecalculate(
  */
 export async function invalidateCache(seasonId?: string): Promise<{ message: string }> {
   const url = seasonId
-    ? `${API_BASE_URL}/api/points-configuration/invalidate-cache?seasonId=${seasonId}`
-    : `${API_BASE_URL}/api/points-configuration/invalidate-cache`;
+    ? `/api/points-configuration/invalidate-cache?seasonId=${seasonId}`
+    : `/api/points-configuration/invalidate-cache`;
   const response = await axios.post(url);
   return response.data;
 }
@@ -144,7 +142,7 @@ export async function invalidateCache(seasonId?: string): Promise<{ message: str
  * This is called after updating points configuration
  */
 export async function recalculateSeasonResults(seasonId: string): Promise<RecalculationResult> {
-  const response = await axios.post(`${API_BASE_URL}/api/competition-results/recalculate-season/${seasonId}`);
+  const response = await axios.post(`/api/competition-results/recalculate-season/${seasonId}`);
   return response.data;
 }
 

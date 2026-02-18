@@ -386,34 +386,38 @@ export class MasterSecondaryService {
     const secondaries: SecondaryMembershipInfo[] = [];
 
     for (const secondary of masterMembership.secondaryMemberships) {
-      const isActive = secondary.paymentStatus === PaymentStatus.PAID &&
-                      secondary.startDate <= now &&
-                      (!secondary.endDate || secondary.endDate >= now);
+      try {
+        const isActive = secondary.paymentStatus === PaymentStatus.PAID &&
+                        secondary.startDate <= now &&
+                        (!secondary.endDate || secondary.endDate >= now);
 
-      secondaries.push({
-        id: secondary.id,
-        mecaId: secondary.mecaId || null,
-        competitorName: secondary.competitorName || secondary.getCompetitorDisplayName(),
-        relationshipToMaster: secondary.relationshipToMaster,
-        hasOwnLogin: secondary.hasOwnLogin || false,
-        profileId: secondary.hasOwnLogin && secondary.user ? secondary.user.id : null,
-        membershipType: secondary.membershipTypeConfig ? {
-          id: secondary.membershipTypeConfig.id,
-          name: secondary.membershipTypeConfig.name,
-          category: secondary.membershipTypeConfig.category,
-          price: Number(secondary.membershipTypeConfig.price),
-        } : { id: '', name: 'Unknown', category: MembershipCategory.COMPETITOR, price: 0 },
-        // Vehicle info
-        vehicleMake: secondary.vehicleMake,
-        vehicleModel: secondary.vehicleModel,
-        vehicleColor: secondary.vehicleColor,
-        vehicleLicensePlate: secondary.vehicleLicensePlate,
-        linkedAt: secondary.linkedAt || null,
-        startDate: secondary.startDate,
-        endDate: secondary.endDate || null,
-        paymentStatus: secondary.paymentStatus,
-        isActive,
-      });
+        secondaries.push({
+          id: secondary.id,
+          mecaId: secondary.mecaId || null,
+          competitorName: secondary.competitorName || secondary.getCompetitorDisplayName(),
+          relationshipToMaster: secondary.relationshipToMaster,
+          hasOwnLogin: secondary.hasOwnLogin || false,
+          profileId: (secondary.hasOwnLogin && secondary.user) ? secondary.user.id : null,
+          membershipType: secondary.membershipTypeConfig ? {
+            id: secondary.membershipTypeConfig.id,
+            name: secondary.membershipTypeConfig.name,
+            category: secondary.membershipTypeConfig.category,
+            price: Number(secondary.membershipTypeConfig.price),
+          } : { id: '', name: 'Unknown', category: MembershipCategory.COMPETITOR, price: 0 },
+          // Vehicle info
+          vehicleMake: secondary.vehicleMake,
+          vehicleModel: secondary.vehicleModel,
+          vehicleColor: secondary.vehicleColor,
+          vehicleLicensePlate: secondary.vehicleLicensePlate,
+          linkedAt: secondary.linkedAt || null,
+          startDate: secondary.startDate,
+          endDate: secondary.endDate || null,
+          paymentStatus: secondary.paymentStatus,
+          isActive,
+        });
+      } catch (err) {
+        this.logger.error(`Error processing secondary membership ${secondary.id}:`, err);
+      }
     }
 
     return secondaries;

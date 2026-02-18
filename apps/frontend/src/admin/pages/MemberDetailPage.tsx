@@ -60,6 +60,7 @@ import {
   ManufacturerListing,
 } from '@/business-listings';
 import { useAuth } from '@/auth';
+import axios from '@/lib/axios';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
 
@@ -2348,14 +2349,16 @@ function BusinessInfoTab({
 }
 
 function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () => void }) {
+  const { profile: currentUserProfile } = useAuth();
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('edit_user');
+  const canEditMecaId = canEdit && isSuperAdmin(currentUserProfile);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     first_name: member.first_name,
     last_name: member.last_name,
     phone: member.phone || '',
-    meca_id: member.meca_id || '',
+    meca_id: member.meca_id ? String(member.meca_id) : '',
     role: member.role,
     membership_status: member.membership_status,
     address: member.address || '',
@@ -2382,13 +2385,14 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
 
     setSaving(true);
     try {
-      await profilesApi.update(member.id, formData);
+      const { data: { session } } = await supabase.auth.getSession();
+      await profilesApi.update(member.id, formData, session?.access_token || undefined);
 
       setIsEditing(false);
       onUpdate();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating member:', error);
-      alert('Failed to update member information');
+      alert(error?.message || 'Failed to update member information');
     } finally {
       setSaving(false);
     }
@@ -2399,7 +2403,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
       first_name: member.first_name,
       last_name: member.last_name,
       phone: member.phone || '',
-      meca_id: member.meca_id || '',
+      meca_id: member.meca_id ? String(member.meca_id) : '',
       role: member.role,
       membership_status: member.membership_status,
       address: member.address || '',
@@ -2491,7 +2495,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">MECA ID</label>
-            {isEditing ? (
+            {isEditing && canEditMecaId ? (
               <input
                 type="text"
                 value={formData.meca_id}
@@ -5876,9 +5880,9 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
         const eventIds = [...new Set(data.map(r => r.eventId || r.event_id).filter(Boolean))];
         if (eventIds.length > 0) {
           try {
-            const eventsResponse = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3001'}/api/events`);
-            if (eventsResponse.ok) {
-              const events = await eventsResponse.json();
+            const eventsResponse = await axios.get('/api/events');
+            if (eventsResponse.data) {
+              const events = eventsResponse.data;
               const nameMap: Record<string, string> = {};
               const dataMap: Record<string, any> = {};
               events.forEach((event: any) => {

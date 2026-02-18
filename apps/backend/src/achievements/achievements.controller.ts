@@ -11,6 +11,7 @@ import {
   Headers,
   UnauthorizedException,
   ForbiddenException,
+  Logger,
   Sse,
   MessageEvent,
 } from '@nestjs/common';
@@ -31,6 +32,8 @@ import {
 
 @Controller('api/achievements')
 export class AchievementsController {
+  private readonly logger = new Logger(AchievementsController.name);
+
   constructor(
     private readonly achievementsService: AchievementsService,
     private readonly imageService: AchievementImageService,
@@ -275,7 +278,12 @@ export class AchievementsController {
 
         subject.complete();
       } catch (error: any) {
-        subject.next({ data: { type: 'error', message: error.message } } as MessageEvent);
+        this.logger.error(`Backfill stream error: ${error.message}`, error.stack);
+        // Send a safe error message to the frontend (don't leak SQL or internal details)
+        const safeMessage = error instanceof UnauthorizedException || error instanceof ForbiddenException
+          ? error.message
+          : 'Re-check failed due to a server error. Check backend logs for details.';
+        subject.next({ data: { type: 'error', message: safeMessage } } as MessageEvent);
         subject.complete();
       }
     })();

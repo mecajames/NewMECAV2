@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 // MembershipType enum removed - use membershipTypeConfig instead
 // Categories: competitor, team, retail, manufacturer

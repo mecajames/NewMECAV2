@@ -12,7 +12,6 @@ import type {
   BannerAnalytics,
 } from '@newmeca/shared';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
 
 // =============================================================================
@@ -66,32 +65,32 @@ export async function deleteBannerImage(imageUrl: string): Promise<void> {
 // =============================================================================
 
 export async function getAdvertisers(): Promise<Advertiser[]> {
-  const response = await axios.get(`${API_BASE_URL}/api/admin/advertisers`);
+  const response = await axios.get(`/api/admin/advertisers`);
   return response.data;
 }
 
 export async function getActiveAdvertisers(): Promise<Advertiser[]> {
-  const response = await axios.get(`${API_BASE_URL}/api/admin/advertisers/active`);
+  const response = await axios.get(`/api/admin/advertisers/active`);
   return response.data;
 }
 
 export async function getAdvertiser(id: string): Promise<Advertiser> {
-  const response = await axios.get(`${API_BASE_URL}/api/admin/advertisers/${id}`);
+  const response = await axios.get(`/api/admin/advertisers/${id}`);
   return response.data;
 }
 
 export async function createAdvertiser(dto: CreateAdvertiserDto): Promise<Advertiser> {
-  const response = await axios.post(`${API_BASE_URL}/api/admin/advertisers`, dto);
+  const response = await axios.post(`/api/admin/advertisers`, dto);
   return response.data;
 }
 
 export async function updateAdvertiser(id: string, dto: UpdateAdvertiserDto): Promise<Advertiser> {
-  const response = await axios.put(`${API_BASE_URL}/api/admin/advertisers/${id}`, dto);
+  const response = await axios.put(`/api/admin/advertisers/${id}`, dto);
   return response.data;
 }
 
 export async function deleteAdvertiser(id: string): Promise<void> {
-  await axios.delete(`${API_BASE_URL}/api/admin/advertisers/${id}`);
+  await axios.delete(`/api/admin/advertisers/${id}`);
 }
 
 // =============================================================================
@@ -99,27 +98,27 @@ export async function deleteAdvertiser(id: string): Promise<void> {
 // =============================================================================
 
 export async function getBanners(): Promise<Banner[]> {
-  const response = await axios.get(`${API_BASE_URL}/api/admin/banners`);
+  const response = await axios.get(`/api/admin/banners`);
   return response.data;
 }
 
 export async function getBanner(id: string): Promise<Banner> {
-  const response = await axios.get(`${API_BASE_URL}/api/admin/banners/${id}`);
+  const response = await axios.get(`/api/admin/banners/${id}`);
   return response.data;
 }
 
 export async function createBanner(dto: CreateBannerDto): Promise<Banner> {
-  const response = await axios.post(`${API_BASE_URL}/api/admin/banners`, dto);
+  const response = await axios.post(`/api/admin/banners`, dto);
   return response.data;
 }
 
 export async function updateBanner(id: string, dto: UpdateBannerDto): Promise<Banner> {
-  const response = await axios.put(`${API_BASE_URL}/api/admin/banners/${id}`, dto);
+  const response = await axios.put(`/api/admin/banners/${id}`, dto);
   return response.data;
 }
 
 export async function deleteBanner(id: string): Promise<void> {
-  await axios.delete(`${API_BASE_URL}/api/admin/banners/${id}`);
+  await axios.delete(`/api/admin/banners/${id}`);
 }
 
 // =============================================================================
@@ -147,7 +146,7 @@ export async function getAllActiveBanners(position: BannerPosition): Promise<Pub
   }
 
   // Create promise for deduplication of concurrent requests
-  const fetchPromise = axios.get(`${API_BASE_URL}/api/banners/active/${position}/all`)
+  const fetchPromise = axios.get(`/api/banners/active/${position}/all`)
     .then(response => {
       const data = response.data || [];
       allBannersCache.set(cacheKey, { data, timestamp: Date.now() });
@@ -166,7 +165,7 @@ export async function getAllActiveBanners(position: BannerPosition): Promise<Pub
  * Get a single active banner (uses weighted random selection on backend)
  */
 export async function getActiveBanner(position: BannerPosition): Promise<PublicBanner | null> {
-  const response = await axios.get(`${API_BASE_URL}/api/banners/active/${position}`);
+  const response = await axios.get(`/api/banners/active/${position}`);
   return response.data;
 }
 
@@ -174,7 +173,7 @@ export async function recordBannerEngagement(
   bannerId: string,
   type: 'impression' | 'click'
 ): Promise<void> {
-  await axios.post(`${API_BASE_URL}/api/banners/engagement`, { bannerId, type });
+  await axios.post(`/api/banners/engagement`, { bannerId, type });
 }
 
 // =============================================================================
@@ -191,8 +190,8 @@ export async function getBannerAnalytics(
   if (endDate) params.append('endDate', endDate.toISOString());
 
   const url = params.toString()
-    ? `${API_BASE_URL}/api/admin/banners/${id}/analytics?${params.toString()}`
-    : `${API_BASE_URL}/api/admin/banners/${id}/analytics`;
+    ? `/api/admin/banners/${id}/analytics?${params.toString()}`
+    : `/api/admin/banners/${id}/analytics`;
 
   const response = await axios.get(url);
   return response.data;
@@ -207,8 +206,8 @@ export async function getAllBannersAnalytics(
   if (endDate) params.append('endDate', endDate.toISOString());
 
   const url = params.toString()
-    ? `${API_BASE_URL}/api/admin/banners/analytics/all?${params.toString()}`
-    : `${API_BASE_URL}/api/admin/banners/analytics/all`;
+    ? `/api/admin/banners/analytics/all?${params.toString()}`
+    : `/api/admin/banners/analytics/all`;
 
   const response = await axios.get(url);
   return response.data;

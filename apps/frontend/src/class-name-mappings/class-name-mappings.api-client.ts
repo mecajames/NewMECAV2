@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import axios from '@/lib/axios';
 
 export interface ClassNameMapping {
   id: string;
@@ -30,27 +30,23 @@ export interface UnmappedClass {
 
 export const classNameMappingsApi = {
   getAll: async (): Promise<ClassNameMapping[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings`);
-    if (!response.ok) throw new Error('Failed to fetch class name mappings');
-    return response.json();
+    const response = await axios.get('/api/class-name-mappings');
+    return response.data;
   },
 
   getActive: async (): Promise<ClassNameMapping[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings/active`);
-    if (!response.ok) throw new Error('Failed to fetch active class name mappings');
-    return response.json();
+    const response = await axios.get('/api/class-name-mappings/active');
+    return response.data;
   },
 
   getUnmapped: async (): Promise<UnmappedClass[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings/unmapped`);
-    if (!response.ok) throw new Error('Failed to fetch unmapped classes');
-    return response.json();
+    const response = await axios.get('/api/class-name-mappings/unmapped');
+    return response.data;
   },
 
   getById: async (id: string): Promise<ClassNameMapping> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings/${id}`);
-    if (!response.ok) throw new Error('Failed to fetch class name mapping');
-    return response.json();
+    const response = await axios.get(`/api/class-name-mappings/${id}`);
+    return response.data;
   },
 
   create: async (data: {
@@ -60,16 +56,8 @@ export const classNameMappingsApi = {
     isActive?: boolean;
     notes?: string;
   }): Promise<ClassNameMapping> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(error || 'Failed to create class name mapping');
-    }
-    return response.json();
+    const response = await axios.post('/api/class-name-mappings', data);
+    return response.data;
   },
 
   bulkCreate: async (mappings: {
@@ -78,16 +66,8 @@ export const classNameMappingsApi = {
     sourceSystem?: string;
     notes?: string;
   }[]): Promise<{ created: number; errors: string[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings/bulk`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mappings }),
-    });
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(error || 'Failed to bulk create mappings');
-    }
-    return response.json();
+    const response = await axios.post('/api/class-name-mappings/bulk', { mappings });
+    return response.data;
   },
 
   update: async (id: string, data: {
@@ -97,22 +77,11 @@ export const classNameMappingsApi = {
     isActive?: boolean;
     notes?: string;
   }): Promise<ClassNameMapping> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(error || 'Failed to update class name mapping');
-    }
-    return response.json();
+    const response = await axios.put(`/api/class-name-mappings/${id}`, data);
+    return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/class-name-mappings/${id}`, {
-      method: 'DELETE',
-    });
-    if (!response.ok) throw new Error('Failed to delete class name mapping');
+    await axios.delete(`/api/class-name-mappings/${id}`);
   },
 };
