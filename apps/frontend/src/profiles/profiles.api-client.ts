@@ -162,13 +162,20 @@ export const profilesApi = {
     return response.json();
   },
 
-  update: async (id: string, data: Partial<Profile>): Promise<Profile> => {
+  update: async (id: string, data: Partial<Profile>, authToken?: string): Promise<Profile> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     const response = await fetch(`${API_BASE_URL}/api/profiles/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to update profile');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to update profile' }));
+      throw new Error(error.message || 'Failed to update profile');
+    }
     return response.json();
   },
 

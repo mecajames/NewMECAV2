@@ -2336,14 +2336,16 @@ function BusinessInfoTab({
 }
 
 function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () => void }) {
+  const { profile: currentUserProfile } = useAuth();
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('edit_user');
+  const canEditMecaId = canEdit && isSuperAdmin(currentUserProfile);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     first_name: member.first_name,
     last_name: member.last_name,
     phone: member.phone || '',
-    meca_id: member.meca_id || '',
+    meca_id: member.meca_id ? String(member.meca_id) : '',
     role: member.role,
     membership_status: member.membership_status,
     address: member.address || '',
@@ -2370,13 +2372,14 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
 
     setSaving(true);
     try {
-      await profilesApi.update(member.id, formData);
+      const { data: { session } } = await supabase.auth.getSession();
+      await profilesApi.update(member.id, formData, session?.access_token || undefined);
 
       setIsEditing(false);
       onUpdate();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating member:', error);
-      alert('Failed to update member information');
+      alert(error?.message || 'Failed to update member information');
     } finally {
       setSaving(false);
     }
@@ -2387,7 +2390,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
       first_name: member.first_name,
       last_name: member.last_name,
       phone: member.phone || '',
-      meca_id: member.meca_id || '',
+      meca_id: member.meca_id ? String(member.meca_id) : '',
       role: member.role,
       membership_status: member.membership_status,
       address: member.address || '',
@@ -2479,7 +2482,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">MECA ID</label>
-            {isEditing ? (
+            {isEditing && canEditMecaId ? (
               <input
                 type="text"
                 value={formData.meca_id}

@@ -102,9 +102,35 @@ export class ProfilesService {
     if (!profile) {
       throw new NotFoundException(`Profile with ID ${id} not found`);
     }
-    em.assign(profile, data);
-    await em.flush();
-    return profile;
+
+    // Ensure meca_id is always a string (frontend may send it as a number)
+    if ('meca_id' in data) {
+      if (data.meca_id === '' || data.meca_id === undefined || data.meca_id === null) {
+        data.meca_id = profile.meca_id ?? undefined; // Keep existing value if blank sent
+      } else {
+        data.meca_id = String(data.meca_id);
+      }
+    }
+
+    // Sync full_name when first_name or last_name changes
+    const firstName = (data.first_name ?? profile.first_name ?? '').trim();
+    const lastName = (data.last_name ?? profile.last_name ?? '').trim();
+    if ('first_name' in data || 'last_name' in data) {
+      data.full_name = [firstName, lastName].filter(Boolean).join(' ') || profile.full_name;
+    }
+
+    try {
+      em.assign(profile, data);
+      await em.flush();
+      return profile;
+    } catch (error: any) {
+      this.logger.error(`Failed to update profile ${id}: ${error.message}`, error.stack);
+      throw new BadRequestException(
+        error.message?.includes('unique') || error.message?.includes('duplicate')
+          ? 'A profile with this MECA ID already exists'
+          : `Failed to update profile: ${error.message}`,
+      );
+    }
   }
 
   async delete(id: string): Promise<void> {
