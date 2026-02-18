@@ -295,7 +295,12 @@ export class ProfilesService {
     });
 
     if (!result.success) {
-      throw new BadRequestException(result.error || 'Failed to reset password');
+      const errorMsg = result.error || 'Failed to reset password';
+      // Provide more context if user doesn't exist in auth system
+      if (errorMsg.toLowerCase().includes('not found') || errorMsg.toLowerCase().includes('user_not_found')) {
+        throw new BadRequestException(`User does not exist in the authentication system. The profile may need to be re-created with a login. (${errorMsg})`);
+      }
+      throw new BadRequestException(errorMsg);
     }
 
     // Update force_password_change flag in profile

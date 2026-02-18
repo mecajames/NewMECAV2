@@ -519,11 +519,11 @@ export class AuditService {
   }): Promise<{ activities: any[]; total: number; stats: { newEntries: number; modifications: number; deletions: number } }> {
     const em = this.em.fork();
 
+    try {
     // If seasonId provided, find all event IDs for that season
     let seasonEventIds: string[] | null = null;
-    let seasonNameMap = new Map<string, string>();
     if (filters.seasonId) {
-      const seasonEvents = await em.find(Event, { season: filters.seasonId } as any, { fields: ['id'] });
+      const seasonEvents = await em.find(Event, { season: filters.seasonId } as any);
       seasonEventIds = seasonEvents.map(e => e.id);
       if (seasonEventIds.length === 0) {
         return { activities: [], total: 0, stats: { newEntries: 0, modifications: 0, deletions: 0 } };
@@ -542,20 +542,26 @@ export class AuditService {
       { populate: ['user', 'event'], orderBy: { sessionStart: 'DESC' } }
     );
 
-    // For each session, fetch 'create' audit logs to get competitor names/MECA IDs
-    const sessionIds = sessions.map(s => s.id);
-    const createLogs = sessionIds.length > 0
-      ? await em.find(ResultsAuditLog, { session: { $in: sessionIds }, action: 'create' }, { orderBy: { timestamp: 'ASC' } })
-      : [];
-
-    // Group create logs by session ID
-    const createLogsBySession = new Map<string, typeof createLogs>();
-    for (const log of createLogs) {
-      const sid = log.session?.id || (log as any).sessionId;
-      if (sid) {
-        if (!createLogsBySession.has(sid)) createLogsBySession.set(sid, []);
-        createLogsBySession.get(sid)!.push(log);
+    // For each session, try to fetch 'create' audit logs to get competitor names/MECA IDs
+    let createLogsBySession = new Map<string, ResultsAuditLog[]>();
+    try {
+      const sessionIds = sessions.map(s => s.id);
+      if (sessionIds.length > 0) {
+        const createLogs = await em.find(
+          ResultsAuditLog,
+          { session: { $in: sessionIds }, action: 'create' },
+          { orderBy: { timestamp: 'ASC' } }
+        );
+        for (const log of createLogs) {
+          const sid = (log as any).session?.id || (log as any).sessionId;
+          if (sid) {
+            if (!createLogsBySession.has(sid)) createLogsBySession.set(sid, []);
+            createLogsBySession.get(sid)!.push(log);
+          }
+        }
       }
+    } catch (err) {
+      console.error('[AUDIT] Error fetching create logs for sessions:', err);
     }
 
     const sessionActivities = sessions.map((session) => {
@@ -613,11 +619,11 @@ export class AuditService {
       };
     });
 
-    // 2. Fetch modifications and deletions
+    // 2. Fetch modifications and deletions (no session populate - it can fail if sessions were deleted)
     const auditLogs = await em.find(
       ResultsAuditLog,
       { action: { $in: ['update', 'delete'] } },
-      { populate: ['user', 'session'], orderBy: { timestamp: 'DESC' } }
+      { populate: ['user'], orderBy: { timestamp: 'DESC' } }
     );
 
     // Group audit logs by user + event + action + close timestamps (within 5 seconds)
@@ -651,7 +657,7 @@ export class AuditService {
       const competitorDetails: any[] = [];
       for (const log of logs) {
         const d = log.oldData || log.newData || {};
-        const name = d.competitorName || d.competitor_name || d.competitor?.name || null;
+        const name = d.competitorName || d.competitor_name || null;
         if (name && !competitorNames.includes(name)) {
           competitorNames.push(name);
         }
@@ -667,11 +673,8 @@ export class AuditService {
         });
       }
 
-      // Determine entry method - check if session exists with a method, otherwise "manual"
-      let entryMethod: string | null = 'manual';
-      if (firstLog.session) {
-        entryMethod = (firstLog.session as any).entryMethod || 'manual';
-      }
+      // Modifications/deletions done through the UI are always manual edits
+      const entryMethod = 'manual';
 
       logActivities.push({
         id: firstLog.id,
@@ -691,7 +694,7 @@ export class AuditService {
         resultCount: logs.length,
         filePath: null,
         originalFilename: null,
-        sessionId: firstLog.session?.id || null,
+        sessionId: null,
         competitorNames,
         competitorDetails,
         competitionClass: data.competitionClass || data.competition_class || null,
@@ -707,33 +710,38 @@ export class AuditService {
       });
     }
 
-    // Resolve event titles, dates, and season info for audit log entries
-    const logEventIds = [...new Set(logActivities.map((a: any) => a.eventId).filter(Boolean))];
-    const allEventIds = [...new Set([...logEventIds, ...sessionActivities.map(a => a.eventId).filter(Boolean)])];
+    // Resolve event titles, dates, and season info
+    const allEventIds = [...new Set([
+      ...logActivities.map((a: any) => a.eventId).filter(Boolean),
+      ...sessionActivities.map(a => a.eventId).filter(Boolean),
+    ])];
     if (allEventIds.length > 0) {
-      const events = await em.find(Event, { id: { $in: allEventIds } }, { populate: ['season'] as any });
-      const eventMap = new Map(events.map(e => [e.id, {
-        title: e.title,
-        eventDate: e.eventDate,
-        seasonId: (e as any).season_id || (e.season as any)?.id,
-        seasonName: (e.season as any)?.name || null,
-      }]));
-      for (const activity of logActivities) {
-        if (activity.eventId && eventMap.has(activity.eventId)) {
-          const info = eventMap.get(activity.eventId)!;
-          activity.eventTitle = info.title;
-          activity.eventDate = info.eventDate;
-          activity.seasonId = info.seasonId;
-          activity.seasonName = info.seasonName;
+      try {
+        const events = await em.find(Event, { id: { $in: allEventIds } }, { populate: ['season'] as any });
+        const eventMap = new Map(events.map(e => [e.id, {
+          title: e.title,
+          eventDate: e.eventDate,
+          seasonId: (e as any).season_id || (e.season as any)?.id,
+          seasonName: (e.season as any)?.name || null,
+        }]));
+        for (const activity of logActivities) {
+          if (activity.eventId && eventMap.has(activity.eventId)) {
+            const info = eventMap.get(activity.eventId)!;
+            activity.eventTitle = info.title;
+            activity.eventDate = info.eventDate;
+            activity.seasonId = info.seasonId;
+            activity.seasonName = info.seasonName;
+          }
         }
-      }
-      // Also enrich session activities with season names
-      for (const activity of sessionActivities) {
-        if (activity.eventId && eventMap.has(activity.eventId)) {
-          const info = eventMap.get(activity.eventId)!;
-          activity.seasonName = info.seasonName;
-          if (!activity.eventDate) activity.eventDate = info.eventDate as any;
+        for (const activity of sessionActivities) {
+          if (activity.eventId && eventMap.has(activity.eventId)) {
+            const info = eventMap.get(activity.eventId)!;
+            activity.seasonName = info.seasonName;
+            if (!activity.eventDate) activity.eventDate = info.eventDate as any;
+          }
         }
+      } catch (err) {
+        console.error('[AUDIT] Error resolving event info:', err);
       }
     }
 
@@ -746,12 +754,16 @@ export class AuditService {
     }
     const mecaStatusMap = new Map<string, string>();
     if (allMecaIds.size > 0) {
-      const mecaIdArray = [...allMecaIds];
-      const profiles = await em.find(Profile, { meca_id: { $in: mecaIdArray } });
-      for (const p of profiles) {
-        if (p.meca_id) {
-          mecaStatusMap.set(String(p.meca_id).trim(), p.membership_status || 'none');
+      try {
+        const mecaIdArray = [...allMecaIds];
+        const profiles = await em.find(Profile, { meca_id: { $in: mecaIdArray } });
+        for (const p of profiles) {
+          if (p.meca_id) {
+            mecaStatusMap.set(String(p.meca_id).trim(), p.membership_status || 'none');
+          }
         }
+      } catch (err) {
+        console.error('[AUDIT] Error looking up membership status:', err);
       }
     }
     // Enrich competitor details with membership status
@@ -833,6 +845,11 @@ export class AuditService {
     const paginated = allActivities.slice(offset, offset + limit);
 
     return { activities: paginated, total, stats };
+
+    } catch (error) {
+      console.error('[AUDIT] getAllActivity error:', error);
+      throw error;
+    }
   }
 
   /**

@@ -22,6 +22,11 @@ import {
   MembershipCategory,
 } from '@newmeca/shared';
 
+// Only load the Profile fields that achievements actually needs.
+// This avoids selecting unrelated columns (is_trainer, can_apply_judge, etc.)
+// which would break if those migrations haven't been applied yet.
+const PROFILE_FIELDS = ['id', 'email', 'meca_id', 'first_name', 'last_name', 'full_name'] as const;
+
 @Injectable()
 export class AchievementsService {
   private readonly logger = new Logger(AchievementsService.name);
@@ -31,6 +36,18 @@ export class AchievementsService {
     @Inject(forwardRef(() => AchievementImageService))
     private readonly imageService: AchievementImageService,
   ) {}
+
+  /** Load a single profile with only achievement-relevant fields */
+  private async loadProfile(em: EntityManager, profileId: string): Promise<Profile | null> {
+    return em.findOne(Profile, { id: profileId }, { fields: [...PROFILE_FIELDS] as any });
+  }
+
+  /** Load multiple profiles with only achievement-relevant fields */
+  private async loadProfiles(em: EntityManager, profileIds: string[]): Promise<Map<string, Profile>> {
+    if (profileIds.length === 0) return new Map();
+    const profiles = await em.find(Profile, { id: { $in: profileIds } }, { fields: [...PROFILE_FIELDS] as any });
+    return new Map(profiles.map(p => [p.id, p]));
+  }
 
   // =============================================================================
   // Membership Eligibility Check
@@ -76,8 +93,8 @@ export class AchievementsService {
 
     const em = this.em.fork();
 
-    // Find profile by MECA ID
-    const profile = await em.findOne(Profile, { meca_id: mecaId });
+    // Find profile by MECA ID (only need the id)
+    const profile = await em.findOne(Profile, { meca_id: mecaId }, { fields: ['id'] as any });
     if (!profile) {
       return false;
     }
@@ -242,20 +259,25 @@ export class AchievementsService {
         { mecaId: { $ilike: `%${search}%` } },
         { profile: { first_name: { $ilike: `%${search}%` } } },
         { profile: { last_name: { $ilike: `%${search}%` } } },
+        { profile: { full_name: { $ilike: `%${search}%` } } },
       ] as any;
     }
 
     this.logger.log(`Recipients filter: ${JSON.stringify(where)}`);
 
     const [items, total] = await em.findAndCount(AchievementRecipient, where, {
-      populate: ['achievement', 'profile', 'event', 'season'],
+      populate: ['achievement', 'event', 'season'],
       orderBy: { achievedAt: 'DESC' },
       limit,
       offset: (page - 1) * limit,
     });
 
+    // Load profile data separately with only the fields we need
+    const profileIds = [...new Set(items.map(i => i.profile?.id).filter(Boolean))] as string[];
+    const profileMap = await this.loadProfiles(em, profileIds);
+
     return {
-      items: items.map((item) => this.serializeRecipient(item)),
+      items: items.map((item) => this.serializeRecipient(item, profileMap)),
       total,
       page,
       limit,
@@ -386,7 +408,7 @@ export class AchievementsService {
    */
   async checkAndAwardAchievements(resultId: string): Promise<AchievementRecipient[]> {
     const result = await this.em.findOne(CompetitionResult, { id: resultId }, {
-      populate: ['competitor', 'event', 'season'],
+      populate: ['event', 'season'],
     });
 
     if (!result) {
@@ -395,15 +417,24 @@ export class AchievementsService {
     }
 
     // Skip if no competitor linked (guest entry)
-    if (!result.competitor) {
+    // competitor is a Reference with just the FK id when not populated
+    const competitorId = result.competitor?.id;
+    if (!competitorId) {
       this.logger.debug(`Skipping achievement check for result ${resultId} - no competitor linked`);
       return [];
     }
 
+    // Load only the profile fields we actually need
+    const competitor = await this.loadProfile(this.em, competitorId);
+    if (!competitor) {
+      this.logger.debug(`Skipping achievement check for result ${resultId} - competitor profile not found`);
+      return [];
+    }
+
     // Skip if member does not have an active membership
-    const isActive = await this.isActiveMember(result.competitor.id);
+    const isActive = await this.isActiveMember(competitor.id);
     if (!isActive) {
-      this.logger.debug(`Skipping achievement check for result ${resultId} - member ${result.competitor.email} is not an active member`);
+      this.logger.debug(`Skipping achievement check for result ${resultId} - member ${competitor.email} is not an active member`);
       return [];
     }
 
@@ -446,7 +477,7 @@ export class AchievementsService {
 
       // Check if member already has an achievement in this group
       const existingRecipient = await this.em.findOne(AchievementRecipient, {
-        profile: { id: result.competitor.id },
+        profile: { id: competitor.id },
         achievement: { groupName: groupName },
       }, {
         populate: ['achievement'],
@@ -457,7 +488,7 @@ export class AchievementsService {
         const existingThreshold = Number(existingRecipient.achievement.thresholdValue);
         if (qualifyingThreshold <= existingThreshold) {
           this.logger.debug(
-            `Skipping "${targetDef.name}" for ${result.competitor.email} - ` +
+            `Skipping "${targetDef.name}" for ${competitor.email} - ` +
             `already has ${existingThreshold}+ in ${groupName}`
           );
           continue;
@@ -465,7 +496,7 @@ export class AchievementsService {
 
         // Delete the old achievement to upgrade
         this.logger.log(
-          `Upgrading ${groupName} achievement for ${result.competitor.email}: ` +
+          `Upgrading ${groupName} achievement for ${competitor.email}: ` +
           `${existingThreshold}+ -> ${qualifyingThreshold}+`
         );
         await this.em.removeAndFlush(existingRecipient);
@@ -475,7 +506,7 @@ export class AchievementsService {
       const now = new Date();
       const recipient = this.em.create(AchievementRecipient, {
         achievement: targetDef,
-        profile: result.competitor,
+        profile: competitor,
         mecaId: result.mecaId,
         achievedValue: score,
         achievedAt: now,
@@ -489,7 +520,7 @@ export class AchievementsService {
       awardedAchievements.push(recipient);
 
       this.logger.log(
-        `Awarded achievement "${targetDef.name}" to ${result.competitor.email} ` +
+        `Awarded achievement "${targetDef.name}" to ${competitor.email} ` +
         `(score: ${score}, threshold: ${qualifyingThreshold}+)`
       );
     }
@@ -542,11 +573,11 @@ export class AchievementsService {
       }
     }
 
-    // Get competition results with linked competitors
+    // Get competition result IDs (no need to populate - checkAndAwardAchievements loads its own data)
     const results = await this.em.find(
       CompetitionResult,
       where,
-      { populate: ['competitor', 'event', 'season'], orderBy: { score: 'DESC' } }
+      { fields: ['id'] as any, orderBy: { score: 'DESC' } }
     );
 
     const total = results.length;
@@ -598,11 +629,11 @@ export class AchievementsService {
       }
     }
 
-    // Get competition results with linked competitors
+    // Get competition result IDs (no need to populate - checkAndAwardAchievements loads its own data)
     const results = await this.em.find(
       CompetitionResult,
       where,
-      { populate: ['competitor', 'event', 'season'], orderBy: { score: 'DESC' } }
+      { fields: ['id'] as any, orderBy: { score: 'DESC' } }
     );
 
     const total = results.length;
@@ -665,8 +696,8 @@ export class AchievementsService {
     const { profile_id, achievement_id, achieved_value, notes } = dto;
     const em = this.em.fork();
 
-    // Get the profile
-    const profile = await em.findOne(Profile, { id: profile_id });
+    // Get the profile (only fields needed for achievements)
+    const profile = await this.loadProfile(em, profile_id);
     if (!profile) {
       throw new NotFoundException(`Profile with ID ${profile_id} not found`);
     }
@@ -749,20 +780,23 @@ export class AchievementsService {
   async deleteRecipient(recipientId: string): Promise<{ success: boolean; deleted: { id: string; achievement_name: string; profile_name: string } }> {
     const em = this.em.fork();
 
-    // Get the recipient with related data for logging
+    // Get the recipient with achievement data for logging
     const recipient = await em.findOne(AchievementRecipient, { id: recipientId }, {
-      populate: ['achievement', 'profile'],
+      populate: ['achievement'],
     });
 
     if (!recipient) {
       throw new NotFoundException(`Achievement recipient with ID ${recipientId} not found`);
     }
 
+    // Load profile separately with only needed fields
+    const profile = recipient.profile?.id ? await this.loadProfile(em, recipient.profile.id) : null;
+
     const achievementName = recipient.achievement?.name || 'Unknown';
-    const profileName = recipient.profile
-      ? `${recipient.profile.first_name || ''} ${recipient.profile.last_name || ''}`.trim() || recipient.profile.email || 'Unknown'
+    const profileName = profile
+      ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'Unknown'
       : 'Unknown';
-    const mecaId = recipient.mecaId || recipient.profile?.meca_id || 'N/A';
+    const mecaId = recipient.mecaId || profile?.meca_id || 'N/A';
 
     // Delete the image from storage if it exists
     if (recipient.imageUrl) {
@@ -809,6 +843,7 @@ export class AchievementsService {
     }
 
     // Get all active memberships (Competitor, Retailer, Manufacturer)
+    // Don't populate 'user' (Profile) - load profile data separately with only needed fields
     const now = new Date();
     const activeMemberships = await em.find(Membership, {
       paymentStatus: PaymentStatus.PAID,
@@ -823,29 +858,37 @@ export class AchievementsService {
         { $or: [{ cancelledAt: null }, { cancelAtPeriodEnd: true, endDate: { $gte: now } }] },
       ],
     }, {
-      populate: ['user', 'membershipTypeConfig'],
+      populate: ['membershipTypeConfig'],
     });
 
     // Get profiles that already have this achievement or higher in the same group
+    // Only need profile.id (available as FK without populate)
     const existingRecipients = achievement.groupName
       ? await em.find(AchievementRecipient, {
           achievement: { groupName: achievement.groupName, thresholdValue: { $gte: achievement.thresholdValue } },
-        }, { populate: ['profile'] })
+        })
       : await em.find(AchievementRecipient, {
           achievement: { id: achievementId },
-        }, { populate: ['profile'] });
+        });
 
     const excludedProfileIds = new Set(existingRecipients.map(r => r.profile?.id).filter(Boolean));
 
-    // Filter to eligible profiles (using 'user' which is the Profile relationship on Membership)
+    // Load profile data for active members with only needed fields
+    const memberUserIds = [...new Set(activeMemberships.map(m => m.user?.id).filter(Boolean))] as string[];
+    const profileMap = await this.loadProfiles(em, memberUserIds);
+
+    // Filter to eligible profiles
     let eligibleProfiles = activeMemberships
-      .filter(m => m.user && !excludedProfileIds.has(m.user.id))
-      .map(m => ({
-        id: m.user.id,
-        meca_id: m.user.meca_id || '',
-        name: `${m.user.first_name || ''} ${m.user.last_name || ''}`.trim() || 'Unknown',
-        email: m.user.email || '',
-      }));
+      .filter(m => m.user?.id && !excludedProfileIds.has(m.user.id) && profileMap.has(m.user.id))
+      .map(m => {
+        const profile = profileMap.get(m.user.id)!;
+        return {
+          id: profile.id,
+          meca_id: profile.meca_id || '',
+          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown',
+          email: profile.email || '',
+        };
+      });
 
     // Apply search filter if provided
     if (search) {
@@ -977,8 +1020,10 @@ export class AchievementsService {
     };
   }
 
-  private serializeRecipient(recipient: AchievementRecipient) {
-    const profile = recipient.profile;
+  private serializeRecipient(recipient: AchievementRecipient, profileMap?: Map<string, Profile>) {
+    // Use profileMap if provided (loaded separately with limited fields), fall back to populated profile
+    const profileId = recipient.profile?.id;
+    const profile = (profileMap && profileId ? profileMap.get(profileId) : recipient.profile) ?? null;
 
     // Build profile name - prioritize first_name + last_name, fall back to full_name
     let profileName: string | null = null;
@@ -997,7 +1042,7 @@ export class AchievementsService {
     return {
       id: recipient.id,
       achievement_id: recipient.achievement?.id ?? null,
-      profile_id: recipient.profile?.id ?? null,
+      profile_id: profileId ?? null,
       profile_name: profileName,
       meca_id: recipient.mecaId ?? null,
       achieved_value: Number(recipient.achievedValue),

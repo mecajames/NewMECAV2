@@ -9,8 +9,6 @@ import {
   getPointsPreview,
 } from '../../api-client/points-configuration.api-client';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 interface Season {
   id: string;
   year: number;
@@ -107,7 +105,7 @@ export default function PointsConfigurationPage() {
   const loadSeasons = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/api/seasons`);
+      const response = await axios.get('/api/seasons');
       const allSeasons: Season[] = response.data;
       // Sort by year descending (most recent first)
       const sorted = allSeasons.sort((a, b) => b.year - a.year);

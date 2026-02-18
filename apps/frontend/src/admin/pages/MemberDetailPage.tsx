@@ -58,6 +58,7 @@ import {
   ManufacturerListing,
 } from '@/business-listings';
 import { useAuth } from '@/auth';
+import axios from '@/lib/axios';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
 
@@ -5898,9 +5899,9 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
         const eventIds = [...new Set(data.map(r => r.eventId || r.event_id).filter(Boolean))];
         if (eventIds.length > 0) {
           try {
-            const eventsResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/events`);
-            if (eventsResponse.ok) {
-              const events = await eventsResponse.json();
+            const eventsResponse = await axios.get('/api/events');
+            if (eventsResponse.data) {
+              const events = eventsResponse.data;
               const nameMap: Record<string, string> = {};
               const dataMap: Record<string, any> = {};
               events.forEach((event: any) => {
