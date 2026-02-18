@@ -46,7 +46,7 @@ export class WorldFinalsController {
     }
 
     const em = this.em.fork();
-    const profile = await em.findOne(Profile, { id: user.id });
+    const profile = await em.findOne(Profile, { id: user.id }, { fields: ['id', 'email', 'role'] as any });
     return { user, profile };
   }
 
