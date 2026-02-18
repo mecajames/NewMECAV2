@@ -992,7 +992,7 @@ export default function MembersPage() {
 
         {/* Members Table */}
         <div className="bg-slate-800 rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-hidden">
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-700">
               <thead className="bg-slate-700">
                 <tr>

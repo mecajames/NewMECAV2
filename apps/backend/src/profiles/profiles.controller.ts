@@ -167,11 +167,34 @@ export class ProfilesController {
     return this.profilesService.create(data);
   }
 
+  // Only these emails can modify MECA IDs
+  private static readonly SUPER_ADMIN_EMAILS = [
+    'james@mecacaraudio.com',
+    'mick@mecausa.com',
+  ];
+
   @Put(':id')
   async updateProfile(
     @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
     @Body() data: Partial<Profile>,
   ): Promise<Profile> {
+    // If meca_id is being changed, verify the caller is a super admin
+    if ('meca_id' in data) {
+      let allowed = false;
+      try {
+        if (authHeader?.startsWith('Bearer ')) {
+          const token = authHeader.substring(7);
+          const { data: { user } } = await this.supabaseAdmin.getClient().auth.getUser(token);
+          if (user?.email && ProfilesController.SUPER_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+            allowed = true;
+          }
+        }
+      } catch {}
+      if (!allowed) {
+        delete (data as any).meca_id;
+      }
+    }
     return this.profilesService.update(id, data);
   }
 
