@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { EmailService } from '../email/email.service';
@@ -28,12 +29,61 @@ export interface ResetPasswordDto {
 export class ProfilesService {
   private readonly logger = new Logger(ProfilesService.name);
 
+  // Cache for profiles endpoints to avoid repeated DB queries (mirrors StandingsService pattern)
+  private publicProfilesCache = new Map<string, { data: any; timestamp: number }>();
+  private adminMembersCache: { data: any; timestamp: number } | null = null;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly emailService: EmailService,
   ) {}
+
+  // ============================================
+  // CACHE HELPERS
+  // ============================================
+
+  private getCached<T>(key: string): T | null {
+    const cached = this.publicProfilesCache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+      return cached.data as T;
+    }
+    return null;
+  }
+
+  private setCache(key: string, data: any): void {
+    this.publicProfilesCache.set(key, { data, timestamp: Date.now() });
+  }
+
+  clearPublicProfilesCache(): void {
+    this.publicProfilesCache.clear();
+    this.logger.log('Public profiles cache cleared');
+  }
+
+  clearAdminMembersCache(): void {
+    this.adminMembersCache = null;
+    this.logger.log('Admin members cache cleared');
+  }
+
+  clearAllProfileCaches(): void {
+    this.publicProfilesCache.clear();
+    this.adminMembersCache = null;
+    this.logger.log('All profile caches cleared');
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async warmProfileCaches(): Promise<void> {
+    this.logger.log('Warming profile caches...');
+    try {
+      await this.findPublicProfiles({ page: 1, limit: 50 });
+      await this.findAdminMembers();
+      this.logger.log('Profile caches warmed successfully');
+    } catch (error) {
+      this.logger.error('Failed to warm profile caches:', error);
+    }
+  }
 
   async findAll(page: number = 1, limit: number = 10): Promise<Profile[]> {
     const em = this.em.fork();
@@ -104,6 +154,24 @@ export class ProfilesService {
     }
     em.assign(profile, data);
     await em.flush();
+
+    // Invalidate caches when profile data changes
+    this.clearAdminMembersCache();
+    if (
+      data.is_public !== undefined ||
+      data.membership_status !== undefined ||
+      data.first_name !== undefined ||
+      data.last_name !== undefined ||
+      data.profile_picture_url !== undefined ||
+      data.profile_images !== undefined ||
+      data.vehicle_info !== undefined ||
+      data.car_audio_system !== undefined ||
+      data.city !== undefined ||
+      data.state !== undefined
+    ) {
+      this.clearPublicProfilesCache();
+    }
+
     return profile;
   }
 
@@ -128,11 +196,52 @@ export class ProfilesService {
     return { totalUsers, totalMembers };
   }
 
-  async findPublicProfiles(): Promise<Profile[]> {
+  async findPublicProfiles(options?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ profiles: Partial<Profile>[]; total: number; page: number; limit: number }> {
+    const page = options?.page || 1;
+    const limit = options?.limit || 50;
+    const search = options?.search?.trim() || '';
+
+    // Cache non-search browsing requests (high cardinality search queries skip cache)
+    const cacheKey = search ? null : `public_profiles_${page}_${limit}`;
+    if (cacheKey) {
+      const cached = this.getCached<{ profiles: Partial<Profile>[]; total: number; page: number; limit: number }>(cacheKey);
+      if (cached !== null) return cached;
+    }
+
     const em = this.em.fork();
-    return em.find(Profile, { is_public: true }, {
-      orderBy: { updated_at: 'DESC' }
+    const where: any = { is_public: true, membership_status: 'active' };
+
+    if (search) {
+      const term = `%${search}%`;
+      where.$or = [
+        { first_name: { $ilike: term } },
+        { last_name: { $ilike: term } },
+        { meca_id: { $ilike: term } },
+        { vehicle_info: { $ilike: term } },
+      ];
+    }
+
+    const [profiles, total] = await em.findAndCount(Profile, where, {
+      fields: [
+        'id', 'first_name', 'last_name', 'meca_id',
+        'city', 'state', 'membership_status',
+        'profile_picture_url', 'profile_images', 'cover_image_position',
+        'vehicle_info', 'car_audio_system',
+      ],
+      orderBy: { last_name: 'ASC', first_name: 'ASC' },
+      limit,
+      offset: (page - 1) * limit,
     });
+
+    const result = { profiles, total, page, limit };
+    if (cacheKey) {
+      this.setCache(cacheKey, result);
+    }
+    return result;
   }
 
   async findPublicById(id: string): Promise<Profile> {
@@ -172,6 +281,37 @@ export class ProfilesService {
 
     // Return raw results - they have all the profile fields
     return results as Profile[];
+  }
+
+  /**
+   * Returns all non-secondary profiles with master profile info populated.
+   * Used by the admin Members page to display the full member list.
+   * Results are cached for 5 minutes to avoid repeated expensive queries.
+   */
+  async findAdminMembers(): Promise<Profile[]> {
+    // Check cache first
+    if (this.adminMembersCache && Date.now() - this.adminMembersCache.timestamp < this.CACHE_TTL_MS) {
+      return this.adminMembersCache.data;
+    }
+
+    const em = this.em.fork();
+    const results = await em.find(
+      Profile,
+      {
+        $or: [
+          { isSecondaryAccount: null },
+          { isSecondaryAccount: false },
+        ],
+      },
+      {
+        populate: ['masterProfile'],
+        orderBy: { created_at: 'DESC' },
+        limit: 10000,
+      },
+    );
+
+    this.adminMembersCache = { data: results, timestamp: Date.now() };
+    return results;
   }
 
   /**

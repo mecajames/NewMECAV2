@@ -73,13 +73,43 @@ export class ProfilesController {
   }
 
   @Get('public')
-  async getPublicProfiles(): Promise<Profile[]> {
-    return this.profilesService.findPublicProfiles();
+  async getPublicProfiles(
+    @Query('search') search?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<{ profiles: Partial<Profile>[]; total: number; page: number; limit: number }> {
+    return this.profilesService.findPublicProfiles({ search, page, limit });
   }
 
   @Get('public/:id')
   async getPublicProfile(@Param('id') id: string): Promise<Profile> {
     return this.profilesService.findPublicById(id);
+  }
+
+  /**
+   * Clears all profile caches (admin only).
+   * Use after bulk profile changes or data imports.
+   */
+  @Post('cache/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearProfileCaches(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.requireAdmin(authHeader);
+    this.profilesService.clearAllProfileCaches();
+    return { success: true, message: 'All profile caches cleared' };
+  }
+
+  /**
+   * Returns all non-secondary profiles with master profile info (admin only).
+   * Used by the admin Members page.
+   */
+  @Get('admin/members')
+  async getAdminMembers(
+    @Headers('authorization') authHeader: string,
+  ): Promise<Profile[]> {
+    await this.requireAdmin(authHeader);
+    return this.profilesService.findAdminMembers();
   }
 
   @Get(':id')

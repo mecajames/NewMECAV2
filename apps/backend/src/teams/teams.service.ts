@@ -229,7 +229,24 @@ export class TeamsService {
     };
   }
 
-  // Helper to build member with user data
+  // Helper to build member with user data from a pre-loaded profile map
+  private buildMemberWithUserFromMap(member: TeamMember, profileMap: Map<string, Profile>): MemberWithUser {
+    const user = profileMap.get(member.userId);
+    return {
+      ...member,
+      user: user ? {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        meca_id: user.meca_id,
+        profile_picture_url: user.profile_picture_url || user.profile_images?.[0] || undefined,
+        email: user.email,
+        membership_status: user.membership_status,
+      } : undefined,
+    } as MemberWithUser;
+  }
+
+  // Helper to build member with user data (single query - kept for single-member use)
   private async buildMemberWithUser(em: EntityManager, member: TeamMember): Promise<MemberWithUser> {
     const user = await em.findOne(Profile, { id: member.userId });
     return {
@@ -239,12 +256,23 @@ export class TeamsService {
         first_name: user.first_name,
         last_name: user.last_name,
         meca_id: user.meca_id,
-        // Use profile_picture_url if set, otherwise use first image from profile_images
         profile_picture_url: user.profile_picture_url || user.profile_images?.[0] || undefined,
         email: user.email,
         membership_status: user.membership_status,
       } : undefined,
     } as MemberWithUser;
+  }
+
+  // Batch-load profiles by IDs into a Map for efficient lookups
+  private async loadProfileMap(em: EntityManager, userIds: string[]): Promise<Map<string, Profile>> {
+    const uniqueIds = [...new Set(userIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return new Map();
+    const profiles = await em.find(Profile, { id: { $in: uniqueIds } });
+    const map = new Map<string, Profile>();
+    for (const p of profiles) {
+      map.set(p.id, p);
+    }
+    return map;
   }
 
   async findAll(): Promise<TeamWithMembers[]> {
@@ -253,32 +281,48 @@ export class TeamsService {
       orderBy: { name: 'ASC' },
     });
 
-    // Fetch owners and members for each team
-    const teamsWithDetails = await Promise.all(
-      teams.map(async (team) => {
-        const owner = await em.findOne(Profile, { id: team.captainId });
-        // Only fetch active members for public listing
-        const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
+    if (teams.length === 0) return [];
 
-        const membersWithUsers = await Promise.all(
-          members.map(m => this.buildMemberWithUser(em, m))
-        );
+    const teamIds = teams.map(t => t.id);
 
-        return {
-          ...team,
-          owner: owner ? {
-            id: owner.id,
-            first_name: owner.first_name,
-            last_name: owner.last_name,
-            meca_id: owner.meca_id,
-            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
-          } : undefined,
-          members: membersWithUsers,
-        };
-      })
-    );
+    // Batch-load all active members for all teams in one query
+    const allMembers = await em.find(TeamMember, { teamId: { $in: teamIds }, status: 'active' });
 
-    return teamsWithDetails;
+    // Collect all user IDs (owners + members)
+    const allUserIds = [
+      ...teams.map(t => t.captainId),
+      ...allMembers.map(m => m.userId),
+    ];
+
+    // Batch-load all profiles in one query
+    const profileMap = await this.loadProfileMap(em, allUserIds);
+
+    // Group members by team
+    const membersByTeam = new Map<string, TeamMember[]>();
+    for (const member of allMembers) {
+      const list = membersByTeam.get(member.teamId) || [];
+      list.push(member);
+      membersByTeam.set(member.teamId, list);
+    }
+
+    // Build results using pre-loaded data
+    return teams.map(team => {
+      const owner = profileMap.get(team.captainId);
+      const members = membersByTeam.get(team.id) || [];
+      const membersWithUsers = members.map(m => this.buildMemberWithUserFromMap(m, profileMap));
+
+      return {
+        ...team,
+        owner: owner ? {
+          id: owner.id,
+          first_name: owner.first_name,
+          last_name: owner.last_name,
+          meca_id: owner.meca_id,
+          profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+        } : undefined,
+        members: membersWithUsers,
+      };
+    });
   }
 
   async findById(id: string, requesterId?: string): Promise<TeamWithMembers> {
@@ -288,13 +332,38 @@ export class TeamsService {
       throw new NotFoundException(`Team with ID ${id} not found`);
     }
 
-    const owner = await em.findOne(Profile, { id: team.captainId });
-
-    // Get active members only
+    // Get active members
     const activeMembers = await em.find(TeamMember, { teamId: team.id, status: 'active' });
-    const membersWithUsers = await Promise.all(
-      activeMembers.map(m => this.buildMemberWithUser(em, m))
-    );
+
+    // Collect all user IDs we'll need (owner + members + requester)
+    const userIds = [team.captainId, ...activeMembers.map(m => m.userId)];
+
+    let pendingRequests: TeamMember[] = [];
+    let pendingInvites: TeamMember[] = [];
+
+    // If requester, check permissions and possibly load pending members
+    if (requesterId) {
+      userIds.push(requesterId);
+      const requesterRole = await this.getUserTeamRole(em, id, requesterId);
+
+      // Pre-load requester profile to check admin
+      const profileMap = await this.loadProfileMap(em, [requesterId]);
+      const requester = profileMap.get(requesterId);
+      const isAdmin = requester?.role === 'admin';
+
+      if (requesterRole === 'owner' || requesterRole === 'co_owner' || isAdmin) {
+        pendingRequests = await em.find(TeamMember, { teamId: team.id, status: 'pending_approval' });
+        pendingInvites = await em.find(TeamMember, { teamId: team.id, status: 'pending_invite' });
+        // Add pending member user IDs for batch loading
+        userIds.push(...pendingRequests.map(m => m.userId), ...pendingInvites.map(m => m.userId));
+      }
+    }
+
+    // Batch-load all profiles in one query
+    const profileMap = await this.loadProfileMap(em, userIds);
+    const owner = profileMap.get(team.captainId);
+
+    const membersWithUsers = activeMembers.map(m => this.buildMemberWithUserFromMap(m, profileMap));
 
     const result: TeamWithMembers = {
       ...team,
@@ -309,23 +378,11 @@ export class TeamsService {
       members: membersWithUsers,
     };
 
-    // If requester is owner/co-owner, also include pending requests and invites
-    if (requesterId) {
-      const requesterRole = await this.getUserTeamRole(em, id, requesterId);
-      const requester = await em.findOne(Profile, { id: requesterId });
-      const isAdmin = requester?.role === 'admin';
-
-      if (requesterRole === 'owner' || requesterRole === 'co_owner' || isAdmin) {
-        const pendingRequests = await em.find(TeamMember, { teamId: team.id, status: 'pending_approval' });
-        const pendingInvites = await em.find(TeamMember, { teamId: team.id, status: 'pending_invite' });
-
-        result.pendingRequests = await Promise.all(
-          pendingRequests.map(m => this.buildMemberWithUser(em, m))
-        );
-        result.pendingInvites = await Promise.all(
-          pendingInvites.map(m => this.buildMemberWithUser(em, m))
-        );
-      }
+    if (pendingRequests.length > 0) {
+      result.pendingRequests = pendingRequests.map(m => this.buildMemberWithUserFromMap(m, profileMap));
+    }
+    if (pendingInvites.length > 0) {
+      result.pendingInvites = pendingInvites.map(m => this.buildMemberWithUserFromMap(m, profileMap));
     }
 
     return result;
@@ -1197,18 +1254,17 @@ export class TeamsService {
 
     const invites = await em.find(TeamMember, { userId, status: 'pending_invite' });
 
-    // Fetch team details for each invite
-    const invitesWithTeams = await Promise.all(
-      invites.map(async (invite) => {
-        const team = await em.findOne(Team, { id: invite.teamId });
-        return {
-          ...invite,
-          team: team || undefined,
-        };
-      })
-    );
+    if (invites.length === 0) return [];
 
-    return invitesWithTeams;
+    // Batch-load all teams in one query
+    const teamIds = [...new Set(invites.map(i => i.teamId))];
+    const teams = await em.find(Team, { id: { $in: teamIds } });
+    const teamMap = new Map(teams.map(t => [t.id, t]));
+
+    return invites.map(invite => ({
+      ...invite,
+      team: teamMap.get(invite.teamId) || undefined,
+    }));
   }
 
   // Get user's pending join requests
@@ -1217,18 +1273,17 @@ export class TeamsService {
 
     const requests = await em.find(TeamMember, { userId, status: 'pending_approval' });
 
-    // Fetch team details for each request
-    const requestsWithTeams = await Promise.all(
-      requests.map(async (request) => {
-        const team = await em.findOne(Team, { id: request.teamId });
-        return {
-          ...request,
-          team: team || undefined,
-        };
-      })
-    );
+    if (requests.length === 0) return [];
 
-    return requestsWithTeams;
+    // Batch-load all teams in one query
+    const teamIds = [...new Set(requests.map(r => r.teamId))];
+    const teams = await em.find(Team, { id: { $in: teamIds } });
+    const teamMap = new Map(teams.map(t => [t.id, t]));
+
+    return requests.map(request => ({
+      ...request,
+      team: teamMap.get(request.teamId) || undefined,
+    }));
   }
 
   // Cancel a pending join request (by the user who made it)
@@ -1610,37 +1665,53 @@ export class TeamsService {
     // Get membership-based teams
     const membershipTeams = await this.findAllMembershipTeams();
 
-    // Build legacy teams with details
-    const legacyTeamsWithDetails = await Promise.all(
-      legacyTeams.map(async (team) => {
-        const owner = await em.findOne(Profile, { id: team.captainId });
-        const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
+    // Batch-load all legacy team members and profiles
+    const legacyTeamIds = legacyTeams.map(t => t.id);
+    const allLegacyMembers = legacyTeamIds.length > 0
+      ? await em.find(TeamMember, { teamId: { $in: legacyTeamIds }, status: 'active' })
+      : [];
 
-        const membersWithUsers = await Promise.all(
-          members.map(m => this.buildMemberWithUser(em, m))
-        );
+    // Collect all user IDs for batch profile loading
+    const legacyUserIds = [
+      ...legacyTeams.map(t => t.captainId),
+      ...allLegacyMembers.map(m => m.userId),
+    ];
+    const legacyProfileMap = await this.loadProfileMap(em, legacyUserIds);
 
-        return {
-          id: team.id,
-          name: team.name,
-          teamType: team.teamType || 'competitive',
-          description: team.description,
-          logoUrl: team.logoUrl,
-          location: team.location,
-          isPublic: team.isPublic,
-          memberCount: members.length,
-          source: 'legacy' as const,
-          owner: owner ? {
-            id: owner.id,
-            first_name: owner.first_name,
-            last_name: owner.last_name,
-            meca_id: owner.meca_id,
-            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
-          } : undefined,
-          members: membersWithUsers,
-        };
-      })
-    );
+    // Group members by team
+    const legacyMembersByTeam = new Map<string, TeamMember[]>();
+    for (const member of allLegacyMembers) {
+      const list = legacyMembersByTeam.get(member.teamId) || [];
+      list.push(member);
+      legacyMembersByTeam.set(member.teamId, list);
+    }
+
+    // Build legacy teams with details (no more N+1)
+    const legacyTeamsWithDetails = legacyTeams.map(team => {
+      const owner = legacyProfileMap.get(team.captainId);
+      const members = legacyMembersByTeam.get(team.id) || [];
+      const membersWithUsers = members.map(m => this.buildMemberWithUserFromMap(m, legacyProfileMap));
+
+      return {
+        id: team.id,
+        name: team.name,
+        teamType: team.teamType || 'competitive',
+        description: team.description,
+        logoUrl: team.logoUrl,
+        location: team.location,
+        isPublic: team.isPublic,
+        memberCount: members.length,
+        source: 'legacy' as const,
+        owner: owner ? {
+          id: owner.id,
+          first_name: owner.first_name,
+          last_name: owner.last_name,
+          meca_id: owner.meca_id,
+          profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+        } : undefined,
+        members: membersWithUsers,
+      };
+    });
 
     // Transform membership teams to match the format
     const membershipTeamsFormatted = membershipTeams.map(team => ({
@@ -1684,11 +1755,11 @@ export class TeamsService {
 
     if (team) {
       // Legacy team found - return with full details
-      const owner = await em.findOne(Profile, { id: team.captainId });
       const activeMembers = await em.find(TeamMember, { teamId: team.id, status: 'active' });
-      const membersWithUsers = await Promise.all(
-        activeMembers.map(m => this.buildMemberWithUser(em, m))
-      );
+      const userIds = [team.captainId, ...activeMembers.map(m => m.userId)];
+      const profileMap = await this.loadProfileMap(em, userIds);
+      const owner = profileMap.get(team.captainId);
+      const membersWithUsers = activeMembers.map(m => this.buildMemberWithUserFromMap(m, profileMap));
 
       return {
         ...team,
@@ -1841,49 +1912,48 @@ export class TeamsService {
       ? await em.find(Team, { id: { $in: memberTeamIds }, isActive: true }, { orderBy: { name: 'ASC' } })
       : [];
 
-    // Build full team details for owned teams
-    const ownedTeams = await Promise.all(
-      ownedTeamsRaw.map(async (team) => {
-        const owner = await em.findOne(Profile, { id: team.captainId });
-        const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
-        const membersWithUsers = await Promise.all(
-          members.map(m => this.buildMemberWithUser(em, m))
-        );
-        return {
-          ...team,
-          owner: owner ? {
-            id: owner.id,
-            first_name: owner.first_name,
-            last_name: owner.last_name,
-            meca_id: owner.meca_id,
-            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
-          } : undefined,
-          members: membersWithUsers,
-        };
-      })
-    );
+    // Batch-load all team members for all teams in one query
+    const allTeamIds = [...ownedTeamsRaw, ...memberTeamsRaw].map(t => t.id);
+    const allTeamMembers = allTeamIds.length > 0
+      ? await em.find(TeamMember, { teamId: { $in: allTeamIds }, status: 'active' })
+      : [];
 
-    // Build full team details for member teams
-    const memberTeams = await Promise.all(
-      memberTeamsRaw.map(async (team) => {
-        const owner = await em.findOne(Profile, { id: team.captainId });
-        const members = await em.find(TeamMember, { teamId: team.id, status: 'active' });
-        const membersWithUsers = await Promise.all(
-          members.map(m => this.buildMemberWithUser(em, m))
-        );
-        return {
-          ...team,
-          owner: owner ? {
-            id: owner.id,
-            first_name: owner.first_name,
-            last_name: owner.last_name,
-            meca_id: owner.meca_id,
-            profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
-          } : undefined,
-          members: membersWithUsers,
-        };
-      })
-    );
+    // Collect all user IDs for batch profile loading
+    const allUserIds = [
+      ...ownedTeamsRaw.map(t => t.captainId),
+      ...memberTeamsRaw.map(t => t.captainId),
+      ...allTeamMembers.map(m => m.userId),
+    ];
+    const profileMap = await this.loadProfileMap(em, allUserIds);
+
+    // Group members by team
+    const membersByTeam = new Map<string, TeamMember[]>();
+    for (const member of allTeamMembers) {
+      const list = membersByTeam.get(member.teamId) || [];
+      list.push(member);
+      membersByTeam.set(member.teamId, list);
+    }
+
+    // Build details using pre-loaded data
+    const buildTeamDetails = (team: Team): TeamWithMembers => {
+      const owner = profileMap.get(team.captainId);
+      const members = membersByTeam.get(team.id) || [];
+      const membersWithUsers = members.map(m => this.buildMemberWithUserFromMap(m, profileMap));
+      return {
+        ...team,
+        owner: owner ? {
+          id: owner.id,
+          first_name: owner.first_name,
+          last_name: owner.last_name,
+          meca_id: owner.meca_id,
+          profile_picture_url: owner.profile_picture_url || owner.profile_images?.[0] || undefined,
+        } : undefined,
+        members: membersWithUsers,
+      };
+    };
+
+    const ownedTeams = ownedTeamsRaw.map(buildTeamDetails);
+    const memberTeams = memberTeamsRaw.map(buildTeamDetails);
 
     return { ownedTeams, memberTeams };
   }

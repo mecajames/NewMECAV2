@@ -6,6 +6,11 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Cursor / BMAD agent files
+.cursor/
+_bmad/
+_bmad-output/
+
 # Rush
 common/temp/
 common/autoinstallers/*/.npmrc
