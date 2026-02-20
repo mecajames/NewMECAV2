@@ -1091,19 +1091,10 @@ export class MembershipsService {
       Membership,
       {},
       {
-        populate: ['user', 'membershipTypeConfig'],
+        populate: ['membershipTypeConfig'],
         orderBy: { createdAt: 'DESC' }
       }
     );
-
-    // Populate team info for memberships that have associated teams
-    for (const membership of memberships) {
-      const team = await this.teamsService.getTeamByMembership(membership.id);
-      if (team) {
-        membership.teamName = team.name;
-        membership.teamDescription = team.description;
-      }
-    }
 
     return memberships;
   }

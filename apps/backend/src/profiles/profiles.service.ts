@@ -390,7 +390,7 @@ export class ProfilesService {
    * Used by the admin Members page to display the full member list.
    * Results are cached for 5 minutes to avoid repeated expensive queries.
    */
-  async findAdminMembers(): Promise<Profile[]> {
+  async findAdminMembers(): Promise<any[]> {
     // Check cache first
     if (this.adminMembersCache && Date.now() - this.adminMembersCache.timestamp < this.CACHE_TTL_MS) {
       return this.adminMembersCache.data;
@@ -406,14 +406,41 @@ export class ProfilesService {
         ],
       },
       {
-        populate: ['masterProfile'],
         orderBy: { created_at: 'DESC' },
         limit: 10000,
       },
     );
 
-    this.adminMembersCache = { data: results, timestamp: Date.now() };
-    return results;
+    // Load master profiles separately with only needed fields (avoids loading ALL 40+ Profile columns)
+    const masterIds = [...new Set(
+      results.map(p => (p.masterProfile as any)?.id || p.masterProfile).filter(Boolean)
+    )] as string[];
+
+    let masterMap = new Map<string, { id: string; first_name?: string; last_name?: string; email?: string }>();
+    if (masterIds.length > 0) {
+      const masters = await em.find(Profile, { id: { $in: masterIds } }, {
+        fields: ['id', 'first_name', 'last_name', 'email'] as any,
+      });
+      masterMap = new Map(masters.map(m => [m.id, {
+        id: m.id,
+        first_name: m.first_name,
+        last_name: m.last_name,
+        email: m.email,
+      }]));
+    }
+
+    // Serialize and attach master profile data
+    const serialized = results.map(p => {
+      const obj = (p as any).toJSON ? (p as any).toJSON() : { ...p };
+      const masterId = (p.masterProfile as any)?.id || p.masterProfile;
+      if (masterId && masterMap.has(masterId)) {
+        obj.masterProfile = masterMap.get(masterId);
+      }
+      return obj;
+    });
+
+    this.adminMembersCache = { data: serialized, timestamp: Date.now() };
+    return serialized;
   }
 
   /**
