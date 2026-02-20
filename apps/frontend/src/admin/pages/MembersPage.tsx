@@ -77,13 +77,12 @@ export default function MembersPage() {
   // Expanded rows state for hierarchical view (tracks which members have their secondaries expanded)
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
 
-  // Total count including secondaries (derived from debugAllMemberships)
-  // totalMembershipCount removed - now calculated directly from debugAllMemberships
-
-  // Debug: track orphaned secondaries for display (can be removed after testing)
-  const [debugOrphanedSecondaries, setDebugOrphanedSecondaries] = useState<SecondaryMembershipInfo[]>([]);
-  const [debugAllMemberships, setDebugAllMemberships] = useState<any[]>([]);
-  const [showDebugPanel, setShowDebugPanel] = useState(false); // Toggle for debug panel
+  // Lightweight membership counts for the results summary
+  const [membershipCounts, setMembershipCounts] = useState<{
+    total: number;
+    secondaryCount: number;
+    upgradeCount: number;
+  }>({ total: 0, secondaryCount: 0, upgradeCount: 0 });
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -113,9 +112,11 @@ export default function MembersPage() {
 
   const fetchMembers = async () => {
     try {
-      // Fetch profiles EXCLUDING secondary profiles via backend API
-      // Secondary profiles are shown nested under their masters in the hierarchical view
-      const { data: backendProfiles } = await axios.get('/api/profiles/admin/members');
+      // Fetch profiles and memberships in PARALLEL for faster load
+      const [{ data: backendProfiles }, backendMemberships] = await Promise.all([
+        axios.get('/api/profiles/admin/members'),
+        membershipsApi.getMembersList(),
+      ]);
 
       // Map backend camelCase response to snake_case shape for compatibility with existing processing code
       const profilesData = backendProfiles.map((p: any) => ({
@@ -136,9 +137,6 @@ export default function MembersPage() {
         } : null,
       }));
 
-      // Fetch ALL memberships via backend API (includes type configs via MikroORM populate)
-      // This includes master, independent, AND secondary memberships
-      const backendMemberships = await membershipsApi.getAll();
       // Map backend camelCase response to snake_case shape for compatibility with processing below
       const membershipsData = backendMemberships
         .filter((m: any) => m.paymentStatus === 'paid' || m.paymentStatus === 'pending')
@@ -208,7 +206,6 @@ export default function MembersPage() {
         const isUpgradeOnly = config.is_upgrade_only === true;
         const userHasNonUpgrade = usersWithNonUpgradeMembership.has(m.user_id);
         if (isUpgradeOnly && userHasNonUpgrade) {
-          console.log('[MembersPage Debug] Skipping upgrade-only membership (user has base membership):', config.name, m.id);
           return;
         }
 
@@ -297,60 +294,25 @@ export default function MembersPage() {
         }
       });
 
-      // Debug: Log info about secondaries and their master linkage
-      console.log('[MembersPage Debug] Total memberships fetched:', membershipsData?.length);
-      console.log('[MembersPage Debug] All memberships:', membershipsData?.map((m: any) => ({
-        id: m.id,
-        user_id: m.user_id,
-        competitor_name: m.competitor_name,
-        account_type: m.account_type,
-        master_membership_id: m.master_membership_id,
-        has_own_login: m.has_own_login,
-        payment_status: m.payment_status,
-      })));
-      console.log('[MembersPage Debug] Secondaries by master:', Object.fromEntries(secondariesByMaster));
-      console.log('[MembersPage Debug] All master membership IDs in membershipMap:',
-        Array.from(membershipMap.entries())
-          .filter(([_, info]) => info.accountType === 'master' || info.accountType === 'independent')
-          .map(([userId, info]) => ({ userId, membershipId: info.id, accountType: info.accountType }))
-      );
-
-      // Check for orphaned secondaries (secondaries whose master_membership_id doesn't match any loaded master)
-      const allMasterMembershipIds = new Set(
-        Array.from(membershipMap.values())
-          .filter(info => info.accountType !== 'secondary')
-          .map(info => info.id)
-      );
-      const orphanedSecondaries: SecondaryMembershipInfo[] = [];
-      secondariesByMaster.forEach((secondaries, masterMembershipId) => {
-        if (!allMasterMembershipIds.has(masterMembershipId)) {
-          console.warn('[MembersPage Debug] ORPHANED SECONDARIES - master_membership_id not found:', masterMembershipId, secondaries);
-          orphanedSecondaries.push(...secondaries);
-        }
-      });
-      if (orphanedSecondaries.length > 0) {
-        console.warn('[MembersPage Debug] Total orphaned secondaries:', orphanedSecondaries.length, orphanedSecondaries);
+      // Calculate lightweight membership counts for the summary display
+      {
+        let totalNonUpgrade = 0;
+        let secondaryTotal = 0;
+        let upgradeTotal = 0;
+        (membershipsData || []).forEach((m: any) => {
+          const cfg = Array.isArray(m.membership_type_configs)
+            ? m.membership_type_configs[0]
+            : m.membership_type_configs;
+          if (!cfg) return;
+          if (cfg.is_upgrade_only) {
+            upgradeTotal++;
+          } else {
+            totalNonUpgrade++;
+            if (m.account_type === 'secondary') secondaryTotal++;
+          }
+        });
+        setMembershipCounts({ total: totalNonUpgrade, secondaryCount: secondaryTotal, upgradeCount: upgradeTotal });
       }
-
-      // Set debug state for UI display
-      setDebugOrphanedSecondaries(orphanedSecondaries);
-      setDebugAllMemberships(membershipsData?.map((m: any) => {
-        const cfg = Array.isArray(m.membership_type_configs)
-          ? m.membership_type_configs[0]
-          : m.membership_type_configs;
-        return {
-          id: m.id,
-          user_id: m.user_id,
-          meca_id: m.meca_id,
-          competitor_name: m.competitor_name,
-          account_type: m.account_type,
-          master_membership_id: m.master_membership_id,
-          has_own_login: m.has_own_login,
-          payment_status: m.payment_status,
-          type_name: cfg?.name || 'Unknown',
-          is_upgrade_only: cfg?.is_upgrade_only || false,
-        };
-      }) || []);
 
       // Merge profiles with membership info
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -869,15 +831,12 @@ export default function MembersPage() {
         <div className="mb-4 text-sm text-gray-400">
           Showing {filteredMembers.length} of {members.length} members
           {(() => {
-            // Filter out upgrade-only memberships from counts
-            const nonUpgradeMemberships = debugAllMemberships.filter((m: any) => !m.is_upgrade_only);
-            const secondaryCount = nonUpgradeMemberships.filter((m: any) => m.account_type === 'secondary').length;
-            const upgradeCount = debugAllMemberships.filter((m: any) => m.is_upgrade_only).length;
+            const { total, secondaryCount, upgradeCount } = membershipCounts;
 
             if (secondaryCount > 0) {
               return (
                 <span className="ml-2 text-orange-400">
-                  ({nonUpgradeMemberships.length} total memberships including {secondaryCount} sub-account{secondaryCount !== 1 ? 's' : ''})
+                  ({total} total memberships including {secondaryCount} sub-account{secondaryCount !== 1 ? 's' : ''})
                   {upgradeCount > 0 && (
                     <span className="text-gray-500 ml-1">
                       + {upgradeCount} upgrade{upgradeCount !== 1 ? 's' : ''}
@@ -885,10 +844,10 @@ export default function MembersPage() {
                   )}
                 </span>
               );
-            } else if (nonUpgradeMemberships.length > members.length) {
+            } else if (total > members.length) {
               return (
                 <span className="ml-2 text-gray-500">
-                  ({nonUpgradeMemberships.length} total memberships - some members have multiple)
+                  ({total} total memberships - some members have multiple)
                   {upgradeCount > 0 && ` + ${upgradeCount} upgrade${upgradeCount !== 1 ? 's' : ''}`}
                 </span>
               );
@@ -902,93 +861,6 @@ export default function MembersPage() {
             return null;
           })()}
         </div>
-
-        {/* DEBUG PANEL - Hidden by default, click to toggle */}
-        {debugAllMemberships.length > 0 && (
-          <button
-            onClick={() => setShowDebugPanel(!showDebugPanel)}
-            className="mb-2 text-xs text-gray-500 hover:text-gray-400"
-          >
-            {showDebugPanel ? '▼ Hide Debug Info' : '▶ Show Debug Info'}
-          </button>
-        )}
-        {showDebugPanel && debugAllMemberships.length > 0 && (
-          <div className="mb-4 p-4 bg-yellow-900/50 border border-yellow-600 rounded-lg text-xs">
-            <h4 className="text-yellow-400 font-bold mb-2">DEBUG: All Memberships ({debugAllMemberships.length})</h4>
-            <div className="space-y-1 font-mono text-yellow-200 max-h-48 overflow-y-auto">
-              {debugAllMemberships.map((m: any, i: number) => {
-                // Count non-upgrade memberships for the same user
-                const sameUserNonUpgrade = debugAllMemberships.filter(
-                  (x: any) => x.user_id === m.user_id && !x.is_upgrade_only
-                );
-                const hasMultipleNonUpgrade = sameUserNonUpgrade.length > 1;
-
-                return (
-                  <div key={i} className={
-                    m.is_upgrade_only ? 'text-cyan-300 italic' :
-                    m.account_type === 'secondary' ? 'text-purple-300 pl-4' :
-                    hasMultipleNonUpgrade ? 'text-orange-300' : ''
-                  }>
-                    {m.account_type === 'secondary' ? '↳ ' : ''}
-                    {m.is_upgrade_only ? '⬆️ ' : ''}
-                    {hasMultipleNonUpgrade && !m.is_upgrade_only && '⚠️ '}
-                    <span className="text-gray-400">MECA ID:</span> <span className="text-white font-bold">{m.meca_id || 'N/A'}</span> |
-                    <span className="text-gray-400"> user_id:</span> {m.user_id?.slice(0, 8)}... |
-                    <span className="text-gray-400"> Type:</span> <span className={
-                      m.is_upgrade_only ? 'text-cyan-400' :
-                      m.account_type === 'secondary' ? 'text-purple-400' : 'text-green-400'
-                    }>{m.account_type || 'null'}</span> |
-                    <span className="text-gray-400"> Name:</span> {m.type_name} |
-                    {m.is_upgrade_only ? (
-                      <span className="text-cyan-400 ml-2">(UPGRADE - excluded from member count)</span>
-                    ) : (
-                      <>
-                        <span className="text-gray-400"> has_own_login:</span> {m.has_own_login ? 'YES' : 'NO'}
-                        {hasMultipleNonUpgrade && (
-                          <span className="text-red-400 ml-2">(USER HAS {sameUserNonUpgrade.length} NON-UPGRADE MEMBERSHIPS - should one be secondary?)</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {debugOrphanedSecondaries.length > 0 && (
-              <div className="mt-3 p-2 bg-red-900/50 border border-red-600 rounded">
-                <h5 className="text-red-400 font-bold">ORPHANED SECONDARIES ({debugOrphanedSecondaries.length}):</h5>
-                <p className="text-red-300">These secondaries have master_membership_id that doesn't match any loaded membership:</p>
-                {debugOrphanedSecondaries.map((s, i) => (
-                  <div key={i} className="text-red-200">
-                    {s.competitorName} - master_membership_id: {s.masterMembershipId}
-                  </div>
-                ))}
-              </div>
-            )}
-            {debugOrphanedSecondaries.length === 0 && (
-              <div className="mt-2 text-green-400">
-                No orphaned secondaries detected. Check if master membership has correct account_type.
-              </div>
-            )}
-            <div className="mt-2 text-gray-400">
-              Members with secondaries attached: {members.filter(m => m.membershipInfo?.secondaries && m.membershipInfo.secondaries.length > 0).length}
-            </div>
-            <div className="mt-2 text-gray-400">
-              Loaded profile IDs: {members.map(m => m.id.slice(0, 8)).join(', ')}
-            </div>
-            <div className="mt-2">
-              {debugAllMemberships.filter(m => !members.find(p => p.id === m.user_id)).length > 0 && (
-                <div className="text-orange-400">
-                  Memberships without loaded profile (profile may be is_secondary_account=true):
-                  {debugAllMemberships.filter(m => !members.find(p => p.id === m.user_id)).map((m, i) => (
-                    <div key={i} className="text-orange-300 ml-2">
-                      Membership {m.id?.slice(0, 8)}... belongs to user_id: {m.user_id?.slice(0, 8)}... (not in loaded profiles)
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Members Table */}
         <div className="bg-slate-800 rounded-lg shadow-sm overflow-hidden">

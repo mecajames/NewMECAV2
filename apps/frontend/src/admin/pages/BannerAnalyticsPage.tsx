@@ -10,13 +10,24 @@ export default function BannerAnalyticsPage() {
   const navigate = useNavigate();
   const [analytics, setAnalytics] = useState<BannerAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>('last30');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [selectedBanner, setSelectedBanner] = useState<BannerAnalytics | null>(null);
 
+  // Helper to check if a date string is a complete valid date (YYYY-MM-DD)
+  const isValidDate = (dateStr: string) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+
   useEffect(() => {
+    // For custom range, only fetch when both dates are fully entered
+    if (dateRange === 'custom') {
+      if (isValidDate(customStartDate) && isValidDate(customEndDate)) {
+        loadAnalytics();
+      }
+      return;
+    }
     loadAnalytics();
   }, [dateRange, customStartDate, customEndDate]);
 
@@ -59,7 +70,12 @@ export default function BannerAnalyticsPage() {
 
   const loadAnalytics = async () => {
     try {
-      setLoading(true);
+      // Only show full-page spinner on initial load, not on date changes
+      if (analytics.length === 0) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       const { startDate, endDate } = getDateRangeParams();
       const data = await getAllBannersAnalytics(startDate, endDate);
       setAnalytics(data);
@@ -67,6 +83,7 @@ export default function BannerAnalyticsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -187,7 +204,7 @@ export default function BannerAnalyticsPage() {
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 transition-opacity ${refreshing ? 'opacity-50' : ''}`}>
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
@@ -220,7 +237,7 @@ export default function BannerAnalyticsPage() {
         </div>
 
         {/* Banners Table */}
-        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden mb-8">
+        <div className={`bg-slate-800 rounded-xl border border-slate-700 overflow-hidden mb-8 transition-opacity ${refreshing ? 'opacity-50' : ''}`}>
           <div className="p-4 border-b border-slate-700">
             <h2 className="text-lg font-bold text-white">Banner Performance</h2>
           </div>

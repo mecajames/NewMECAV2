@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Package,
@@ -13,9 +13,11 @@ import {
   Image,
   DollarSign,
   ArrowLeft,
+  Upload,
 } from 'lucide-react';
 import { ShopProduct, CreateShopProductDto, UpdateShopProductDto } from '@newmeca/shared';
 import { shopApi } from '@/shop/shop.api-client';
+import { uploadFile } from '@/api-client/uploads.api-client';
 
 // Local type to avoid Rollup issues with CommonJS enum re-exports
 type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
@@ -77,6 +79,10 @@ export function AdminShopProductsPage() {
 
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Image upload state
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProducts();
@@ -201,6 +207,27 @@ export function AdminShopProductsPage() {
       loadProducts();
     } catch (err) {
       console.error('Error updating product:', err);
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const result = await uploadFile(file, 'product-images');
+      setFormData({ ...formData, image_url: result.publicUrl });
+    } catch (err: any) {
+      console.error('Error uploading image:', err);
+      const message = err.response?.data?.message || err.message || 'Failed to upload image';
+      setError(message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -546,8 +573,70 @@ export function AdminShopProductsPage() {
 
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Image URL
+                      Product Image
                     </label>
+
+                    {/* Image preview */}
+                    {formData.image_url && (
+                      <div className="mb-3 relative inline-block">
+                        <img
+                          src={formData.image_url}
+                          alt="Product preview"
+                          className="w-32 h-32 object-cover rounded-lg border border-slate-600"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, image_url: '' })}
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600"
+                          title="Remove image"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Upload button */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImageUpload(file);
+                        }}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {uploading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4" />
+                            Upload Image
+                          </>
+                        )}
+                      </button>
+                      <span className="text-xs text-gray-500">JPEG, PNG, GIF, WebP (max 5MB)</span>
+                    </div>
+
+                    {/* Or enter URL manually */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 h-px bg-slate-600" />
+                      <span className="text-xs text-gray-500">or enter URL</span>
+                      <div className="flex-1 h-px bg-slate-600" />
+                    </div>
                     <input
                       type="url"
                       value={formData.image_url}

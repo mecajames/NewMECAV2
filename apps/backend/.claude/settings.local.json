@@ -67,7 +67,8 @@
       "Bash(head:*)",
       "Bash(tasklist:*)",
       "Bash(git checkout:*)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(PGPASSWORD='gQNyCDu4Wz9L94Nn4gKaBnjH' psql:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

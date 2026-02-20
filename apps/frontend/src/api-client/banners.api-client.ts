@@ -1,5 +1,4 @@
 import axios from '@/lib/axios';
-import { supabase } from '@/lib/supabase';
 import type {
   Advertiser,
   CreateAdvertiserDto,
@@ -11,51 +10,33 @@ import type {
   BannerPosition,
   BannerAnalytics,
 } from '@newmeca/shared';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
+import { uploadFile } from './uploads.api-client';
 
 // =============================================================================
 // IMAGE UPLOAD
 // =============================================================================
 
 /**
- * Upload a banner image to Supabase storage
+ * Upload a banner image through the backend
  * Returns the public URL of the uploaded image
  */
 export async function uploadBannerImage(file: File): Promise<string> {
-  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
-  const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-  const filePath = `banners/${fileName}`;
-
-  const { error } = await supabase.storage
-    .from('banner-images')
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-
-  if (error) {
-    throw new Error(`Failed to upload image: ${error.message}`);
-  }
-
-  // Return the public URL
-  return `${SUPABASE_URL}/storage/v1/object/public/banner-images/${filePath}`;
+  const result = await uploadFile(file, 'banner-images');
+  return result.publicUrl;
 }
 
 /**
- * Delete a banner image from Supabase storage
+ * Delete a banner image via the backend
  */
 export async function deleteBannerImage(imageUrl: string): Promise<void> {
-  // Extract the path from the URL
-  const match = imageUrl.match(/banner-images\/(.+)$/);
+  const match = imageUrl.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
   if (!match) return;
 
-  const filePath = match[1];
-  const { error } = await supabase.storage
-    .from('banner-images')
-    .remove([filePath]);
-
-  if (error) {
+  try {
+    await axios.delete('/api/uploads', {
+      data: { bucket: match[1], storagePath: match[2] },
+    });
+  } catch (error: any) {
     console.error('Failed to delete image:', error.message);
   }
 }

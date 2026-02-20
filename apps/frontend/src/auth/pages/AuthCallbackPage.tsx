@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/auth';
+import { REDIRECT_STORAGE_KEY } from '../idle-timeout.constants';
 
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -10,6 +11,18 @@ export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
   const { ensureProfileExists } = useAuth();
   const handled = useRef(false);
+
+  /** Resolve redirect: query param > sessionStorage (from idle timeout) > /dashboard */
+  const resolveRedirect = (): string => {
+    const paramRedirect = searchParams.get('redirect');
+    const storedRedirect = sessionStorage.getItem(REDIRECT_STORAGE_KEY);
+    const target = paramRedirect || storedRedirect || '/dashboard';
+    sessionStorage.removeItem(REDIRECT_STORAGE_KEY);
+    if (target.startsWith('/') && !target.includes('://')) {
+      return target;
+    }
+    return '/dashboard';
+  };
 
   useEffect(() => {
     if (handled.current) return;
@@ -20,8 +33,7 @@ export default function AuthCallbackPage() {
       if (event === 'SIGNED_IN' && session?.user) {
         try {
           await ensureProfileExists(session.user);
-          const redirectTo = searchParams.get('redirect') || '/dashboard';
-          navigate(redirectTo, { replace: true });
+          navigate(resolveRedirect(), { replace: true });
         } catch (err) {
           console.error('Profile creation error:', err);
           setError('An unexpected error occurred. Please try again.');
@@ -36,8 +48,7 @@ export default function AuthCallbackPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await ensureProfileExists(session.user);
-        const redirectTo = searchParams.get('redirect') || '/dashboard';
-        navigate(redirectTo, { replace: true });
+        navigate(resolveRedirect(), { replace: true });
       } else {
         setError('Authentication failed. Please try again.');
         setTimeout(() => navigate('/login'), 3000);

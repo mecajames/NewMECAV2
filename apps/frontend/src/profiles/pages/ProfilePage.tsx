@@ -966,7 +966,7 @@ export default function ProfilePage() {
                   </label>
                   <div className="bg-slate-700 px-4 py-3 rounded-lg text-white flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-400" />
-                    {new Date(profile.created_at).toLocaleDateString('en-US', {
+                    {new Date(profile.member_since || profile.created_at).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',

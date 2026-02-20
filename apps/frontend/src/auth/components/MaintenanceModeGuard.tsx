@@ -1,7 +1,7 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { Wrench, AlertTriangle } from 'lucide-react';
+import axios from '@/lib/axios';
 import { useAuth } from '../contexts/AuthContext';
-import { siteSettingsApi } from '@/site-settings';
 
 interface MaintenanceModeGuardProps {
   children: ReactNode;
@@ -23,7 +23,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
   useEffect(() => {
     const checkMaintenanceMode = async () => {
       try {
-        const settings = await siteSettingsApi.getAll();
+        const { data: settings } = await axios.get('/api/site-settings', { _background: true } as any);
         const settingsMap: Record<string, string> = {};
         settings.forEach(s => {
           settingsMap[s.setting_key] = s.setting_value;

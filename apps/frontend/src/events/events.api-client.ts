@@ -1,7 +1,5 @@
 import axios from '@/lib/axios';
-import { supabase } from '@/lib/supabase';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
+import { uploadFile } from '@/api-client/uploads.api-client';
 
 export type MultiDayResultsMode = 'separate' | 'combined_score' | 'combined_points';
 
@@ -170,43 +168,26 @@ export const eventsApi = {
   },
 
   /**
-   * Upload an event flyer image to Supabase storage
+   * Upload an event flyer image through the backend
    * Returns the public URL of the uploaded image
    */
   uploadFlyerImage: async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `flyers/${fileName}`;
-
-    const { error } = await supabase.storage
-      .from('event-images')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-    if (error) {
-      throw new Error(`Failed to upload image: ${error.message}`);
-    }
-
-    // Return the public URL
-    return `${SUPABASE_URL}/storage/v1/object/public/event-images/${filePath}`;
+    const result = await uploadFile(file, 'event-images');
+    return result.publicUrl;
   },
 
   /**
-   * Delete an event flyer image from Supabase storage
+   * Delete an event flyer image via the backend
    */
   deleteFlyerImage: async (imageUrl: string): Promise<void> => {
-    // Extract the path from the URL
-    const match = imageUrl.match(/event-images\/(.+)$/);
+    const match = imageUrl.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
     if (!match) return;
 
-    const filePath = match[1];
-    const { error } = await supabase.storage
-      .from('event-images')
-      .remove([filePath]);
-
-    if (error) {
+    try {
+      await axios.delete('/api/uploads', {
+        data: { bucket: match[1], storagePath: match[2] },
+      });
+    } catch (error: any) {
       console.error('Failed to delete image:', error.message);
     }
   },

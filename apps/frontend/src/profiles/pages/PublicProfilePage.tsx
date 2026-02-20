@@ -5,7 +5,7 @@ import { useAuth } from '@/auth';
 import { profilesApi, Profile as ProfileType } from '@/profiles';
 import { membershipsApi, ControlledMecaId, Membership, RELATIONSHIP_TYPES } from '@/memberships';
 import { MecaIdSwitcher } from '@/shared/components';
-import { supabase } from '@/lib/supabase';
+import { uploadFile } from '@/api-client/uploads.api-client';
 
 export default function PublicProfilePage() {
   const navigate = useNavigate();
@@ -152,25 +152,14 @@ export default function PublicProfilePage() {
     setError(null);
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const result = await uploadFile(file, 'gallery-images');
 
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(fileName);
-
-      setProfileImages(prev => [...prev, publicUrl]);
+      setProfileImages(prev => [...prev, result.publicUrl]);
       setSuccess('Image uploaded successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       console.error('Error uploading image:', err);
-      setError(err.message || 'Failed to upload image');
+      setError(err.response?.data?.message || err.message || 'Failed to upload image');
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) {
