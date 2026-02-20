@@ -545,6 +545,8 @@ export class ProfilesService {
 
   /**
    * Resets the password for an existing user.
+   * If the user exists in the profiles table but not in Supabase Auth (orphaned profile),
+   * automatically creates the auth account so the user can sign in.
    */
   async resetPassword(userId: string, dto: ResetPasswordDto): Promise<{ success: boolean; emailSent: boolean }> {
     // Validate password strength
@@ -553,7 +555,7 @@ export class ProfilesService {
       throw new BadRequestException(validation.errors.join(', '));
     }
 
-    // Verify user exists
+    // Verify user exists in profiles table
     const profile = await this.findById(userId);
 
     // Reset password in Supabase Auth
@@ -565,11 +567,32 @@ export class ProfilesService {
 
     if (!result.success) {
       const errorMsg = result.error || 'Failed to reset password';
-      // Provide more context if user doesn't exist in auth system
+      // If user doesn't exist in auth system, auto-create the auth account
       if (errorMsg.toLowerCase().includes('not found') || errorMsg.toLowerCase().includes('user_not_found')) {
-        throw new BadRequestException(`User does not exist in the authentication system. The profile may need to be re-created with a login. (${errorMsg})`);
+        this.logger.warn(`User ${userId} exists in profiles but not in Supabase Auth - creating auth account for ${profile.email}`);
+
+        if (!profile.email) {
+          throw new BadRequestException('Cannot create auth account: profile has no email address');
+        }
+
+        // Create the auth user with the same ID as the existing profile
+        const createResult = await this.supabaseAdmin.createUserWithPassword({
+          id: userId,
+          email: profile.email,
+          password: dto.newPassword,
+          firstName: profile.first_name,
+          lastName: profile.last_name,
+          forcePasswordChange: dto.forcePasswordChange ?? false,
+        });
+
+        if (!createResult.success) {
+          throw new BadRequestException(`Failed to create auth account for orphaned profile: ${createResult.error}`);
+        }
+
+        this.logger.log(`Successfully created auth account for orphaned profile ${profile.email} (ID: ${userId})`);
+      } else {
+        throw new BadRequestException(errorMsg);
       }
-      throw new BadRequestException(errorMsg);
     }
 
     // Update force_password_change flag in profile

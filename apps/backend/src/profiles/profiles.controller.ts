@@ -200,7 +200,11 @@ export class ProfilesController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteProfile(@Param('id') id: string): Promise<void> {
+  async deleteProfile(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<void> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.delete(id);
   }
 
@@ -278,10 +282,23 @@ export class ProfilesController {
   }
 
   /**
-   * Clears the force password change flag after user changes their password
+   * Clears the force password change flag after user changes their password.
+   * Requires the authenticated user to match the profile ID, or be an admin.
    */
   @Post(':id/clear-force-password-change')
-  async clearForcePasswordChange(@Param('id') id: string): Promise<{ success: boolean }> {
+  async clearForcePasswordChange(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean }> {
+    const authUser = await this.requireAuthUser(authHeader);
+    // Allow if the user is clearing their own flag, or if they're an admin
+    if (authUser.id !== id) {
+      const em = this.em.fork();
+      const callerProfile = await em.findOne(Profile, { id: authUser.id });
+      if (callerProfile?.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('You can only clear your own force password change flag');
+      }
+    }
     await this.profilesService.clearForcePasswordChange(id);
     return { success: true };
   }

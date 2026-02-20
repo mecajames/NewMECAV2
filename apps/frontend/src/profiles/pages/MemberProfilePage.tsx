@@ -261,10 +261,10 @@ export default function MemberProfilePage() {
                     </span>
                   )}
 
-                  {profile.created_at && (
+                  {(profile.member_since || profile.created_at) && (
                     <span className="flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
-                      Member since {new Date(profile.created_at).toLocaleDateString('en-US', {
+                      Member since {new Date(profile.member_since || profile.created_at).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
                       })}

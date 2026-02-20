@@ -8,6 +8,7 @@ export interface CreateUserWithPasswordDto {
   firstName?: string;
   lastName?: string;
   forcePasswordChange?: boolean;
+  id?: string; // Optional: specify the user ID (useful for linking to existing profile records)
 }
 
 export interface ResetPasswordDto {
@@ -71,7 +72,7 @@ export class SupabaseAdminService {
       }
 
       // Create user in Supabase Auth
-      const { data, error } = await this.supabaseAdmin.auth.admin.createUser({
+      const createPayload: any = {
         email: dto.email,
         password: dto.password,
         email_confirm: true, // Auto-confirm email since admin is creating the user
@@ -80,7 +81,12 @@ export class SupabaseAdminService {
           last_name: dto.lastName,
           force_password_change: dto.forcePasswordChange ?? false,
         },
-      });
+      };
+      // Allow specifying the user ID (e.g., to match an existing profile record)
+      if (dto.id) {
+        createPayload.id = dto.id;
+      }
+      const { data, error } = await this.supabaseAdmin.auth.admin.createUser(createPayload);
 
       if (error) {
         this.logger.error(`Failed to create user: ${error.message}`);

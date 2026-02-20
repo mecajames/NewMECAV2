@@ -67,6 +67,7 @@ export interface Profile {
   ed_certification_expires?: string;
   force_password_change?: boolean;
   cover_image_position?: { x: number; y: number };
+  member_since?: string;
   created_at: string;
   updated_at: string;
 }

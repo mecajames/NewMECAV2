@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { LogIn, Mail, Lock } from 'lucide-react';
+import { LogIn, Mail, Lock, Clock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth';
+import { REDIRECT_STORAGE_KEY } from '../idle-timeout.constants';
 
 // Google OAuth icon
 const GoogleIcon = () => (
@@ -16,7 +17,26 @@ const GoogleIcon = () => (
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectUrl = searchParams.get('redirect');
+  const redirectParam = searchParams.get('redirect');
+  const timeoutReason = searchParams.get('reason') === 'timeout';
+
+  // Resolve redirect: query param > sessionStorage (from timeout) > /dashboard
+  const resolveRedirect = (): string => {
+    const storedRedirect = sessionStorage.getItem(REDIRECT_STORAGE_KEY);
+    const target = redirectParam || storedRedirect || '/dashboard';
+    // L3 fix: Decode and validate to prevent open redirect via encoded characters
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(target);
+    } catch {
+      return '/dashboard';
+    }
+    if (decoded.startsWith('/') && !decoded.includes('://') && !decoded.startsWith('//')) {
+      return target;
+    }
+    return '/dashboard';
+  };
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -38,8 +58,9 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      // Navigate to redirect URL if provided, otherwise dashboard
-      navigate(redirectUrl || '/dashboard');
+      // Clean up timeout redirect storage
+      sessionStorage.removeItem(REDIRECT_STORAGE_KEY);
+      navigate(resolveRedirect());
     }
   };
 
@@ -94,6 +115,13 @@ export default function LoginPage() {
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Welcome Back</h2>
             <p className="text-gray-400 text-sm sm:text-base">Sign in to your MECACARAUDIO account</p>
           </div>
+
+          {timeoutReason && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500 rounded-lg flex items-start gap-3">
+              <Clock className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-amber-500 text-sm">Your session has expired due to inactivity. Please sign in again.</p>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
