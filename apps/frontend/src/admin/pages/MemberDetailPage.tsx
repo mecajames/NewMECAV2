@@ -1515,7 +1515,7 @@ function OverviewTab({
         <div className="bg-slate-700 rounded-lg p-4">
           <div className="text-sm text-gray-400 mb-1">Member Since</div>
           <div className="text-xl font-bold text-white">
-            {new Date(member.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+            {new Date(member.member_since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
           </div>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">

@@ -59,7 +59,7 @@ export default function MembersPage() {
   const [membershipTypeFilter, setMembershipTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [autoRenewFilter, setAutoRenewFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'meca_id' | 'created_at'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'meca_id' | 'member_since'>('name');
   const [showUserWizard, setShowUserWizard] = useState(false);
 
   // MECA ID range filter
@@ -472,8 +472,8 @@ export default function MembersPage() {
           return (a.first_name || '').localeCompare(b.first_name || '');
         case 'meca_id':
           return (parseInt(a.meca_id || '0', 10)) - (parseInt(b.meca_id || '0', 10));
-        case 'created_at':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'member_since':
+          return new Date(b.member_since).getTime() - new Date(a.member_since).getTime();
         default:
           return 0;
       }
@@ -814,9 +814,9 @@ export default function MembersPage() {
                 MECA ID
               </button>
               <button
-                onClick={() => setSortBy('created_at')}
+                onClick={() => setSortBy('member_since')}
                 className={`px-3 py-1 rounded-lg text-sm ${
-                  sortBy === 'created_at'
+                  sortBy === 'member_since'
                     ? 'bg-orange-500 text-white'
                     : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
                 }`}
@@ -891,7 +891,7 @@ export default function MembersPage() {
                     Auto-Renew
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Joined
+                    Member Since
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Actions
@@ -1065,7 +1065,7 @@ export default function MembersPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                            {new Date(member.created_at).toLocaleDateString()}
+                            {new Date(member.member_since).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
                             <div className="flex items-center justify-end gap-2">
