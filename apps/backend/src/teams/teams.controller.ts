@@ -16,6 +16,7 @@ import {
 import { TeamsService } from './teams.service';
 import { Team } from './team.entity';
 import { TeamMember, TeamMemberRole } from './team-member.entity';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
 
 interface CreateTeamDto {
   name: string;
@@ -79,15 +80,22 @@ interface LookupMemberDto {
 
 @Controller('api/teams')
 export class TeamsController {
-  constructor(private readonly teamsService: TeamsService) {}
+  constructor(
+    private readonly teamsService: TeamsService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+  ) {}
 
-  // Helper to extract user ID from request header (set by auth middleware)
-  private getUserId(headers: any): string {
-    const userId = headers['x-user-id'];
-    if (!userId) {
-      throw new UnauthorizedException('User ID not found in request');
+  // Helper to validate Bearer token via Supabase and return authenticated user ID
+  private async requireAuth(authHeader?: string): Promise<string> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
     }
-    return userId;
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    return user.id;
   }
 
   @Get()
@@ -117,9 +125,9 @@ export class TeamsController {
   }
 
   @Get('can-create')
-  async canCreateTeam(@Headers() headers: any): Promise<{ canCreate: boolean; reason?: string }> {
+  async canCreateTeam(@Headers('authorization') authHeader: string): Promise<{ canCreate: boolean; reason?: string }> {
     try {
-      const userId = this.getUserId(headers);
+      const userId = await this.requireAuth(authHeader);
       const canCreate = await this.teamsService.hasTeamMembership(userId);
       return {
         canCreate,
@@ -131,14 +139,14 @@ export class TeamsController {
   }
 
   @Get('can-upgrade')
-  async canUpgradeToTeam(@Headers() headers: any): Promise<{
+  async canUpgradeToTeam(@Headers('authorization') authHeader: string): Promise<{
     canUpgrade: boolean;
     hasCompetitorMembership: boolean;
     hasTeamMembership: boolean;
     reason?: string;
   }> {
     try {
-      const userId = this.getUserId(headers);
+      const userId = await this.requireAuth(authHeader);
       const result = await this.teamsService.checkUpgradeEligibility(userId);
       return result;
     } catch {
@@ -152,26 +160,26 @@ export class TeamsController {
   }
 
   @Get('my-team')
-  async getMyTeam(@Headers() headers: any): Promise<Team | null> {
-    const userId = this.getUserId(headers);
+  async getMyTeam(@Headers('authorization') authHeader: string): Promise<Team | null> {
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.findByUserId(userId);
   }
 
   // Get all teams the user is associated with (owned and member of)
   @Get('my-teams')
-  async getMyTeams(@Headers() headers: any): Promise<{
+  async getMyTeams(@Headers('authorization') authHeader: string): Promise<{
     ownedTeams: Team[];
     memberTeams: Team[];
   }> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.findAllTeamsByUserId(userId);
   }
 
   // Check if the user owns any team
   @Get('owns-team')
-  async ownsTeam(@Headers() headers: any): Promise<{ ownsTeam: boolean }> {
+  async ownsTeam(@Headers('authorization') authHeader: string): Promise<{ ownsTeam: boolean }> {
     try {
-      const userId = this.getUserId(headers);
+      const userId = await this.requireAuth(authHeader);
       const ownsTeam = await this.teamsService.userOwnsAnyTeam(userId);
       return { ownsTeam };
     } catch {
@@ -181,15 +189,15 @@ export class TeamsController {
 
   // Get my pending invites (must be before :id route)
   @Get('my-invites')
-  async getMyPendingInvites(@Headers() headers: any): Promise<any[]> {
-    const userId = this.getUserId(headers);
+  async getMyPendingInvites(@Headers('authorization') authHeader: string): Promise<any[]> {
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.getMyPendingInvites(userId);
   }
 
   // Get my pending join requests (must be before :id route)
   @Get('my-requests')
-  async getMyPendingRequests(@Headers() headers: any): Promise<any[]> {
-    const userId = this.getUserId(headers);
+  async getMyPendingRequests(@Headers('authorization') authHeader: string): Promise<any[]> {
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.getMyPendingRequests(userId);
   }
 
@@ -199,9 +207,9 @@ export class TeamsController {
   }
 
   @Get(':id')
-  async getTeam(@Param('id') id: string, @Headers() headers: any): Promise<Team> {
+  async getTeam(@Param('id') id: string, @Headers('authorization') authHeader: string): Promise<Team> {
     try {
-      const userId = this.getUserId(headers);
+      const userId = await this.requireAuth(authHeader);
       return this.teamsService.findById(id, userId);
     } catch {
       // Not authenticated, return without pending data
@@ -213,9 +221,9 @@ export class TeamsController {
   @HttpCode(HttpStatus.CREATED)
   async createTeam(
     @Body() data: CreateTeamDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<Team> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.create(
       {
         name: data.name,
@@ -239,9 +247,9 @@ export class TeamsController {
   async updateTeam(
     @Param('id') id: string,
     @Body() data: UpdateTeamDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<Team> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.update(
       id,
       {
@@ -266,9 +274,9 @@ export class TeamsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteTeam(
     @Param('id') id: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<void> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.delete(id, userId);
   }
 
@@ -277,9 +285,9 @@ export class TeamsController {
   async addMember(
     @Param('id') teamId: string,
     @Body() data: AddMemberDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<TeamMember> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.addMember(teamId, data.user_id, userId);
   }
 
@@ -288,9 +296,9 @@ export class TeamsController {
   async removeMember(
     @Param('id') teamId: string,
     @Param('userId') memberId: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<void> {
-    const requesterId = this.getUserId(headers);
+    const requesterId = await this.requireAuth(authHeader);
     return this.teamsService.removeMember(teamId, memberId, requesterId);
   }
 
@@ -299,9 +307,9 @@ export class TeamsController {
     @Param('id') teamId: string,
     @Param('userId') memberId: string,
     @Body() data: UpdateMemberRoleDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<TeamMember> {
-    const requesterId = this.getUserId(headers);
+    const requesterId = await this.requireAuth(authHeader);
     return this.teamsService.updateMemberRole(teamId, memberId, data.role, requesterId);
   }
 
@@ -309,9 +317,9 @@ export class TeamsController {
   async transferOwnership(
     @Param('id') teamId: string,
     @Body() data: TransferOwnershipDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<Team> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.transferOwnership(teamId, data.new_owner_id, userId);
   }
 
@@ -320,16 +328,16 @@ export class TeamsController {
   async transferCaptaincy(
     @Param('id') teamId: string,
     @Body() data: TransferCaptaincyDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<Team> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.transferCaptaincy(teamId, data.new_captain_id, userId);
   }
 
   @Post('leave')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async leaveTeam(@Headers() headers: any): Promise<void> {
-    const userId = this.getUserId(headers);
+  async leaveTeam(@Headers('authorization') authHeader: string): Promise<void> {
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.leaveTeam(userId);
   }
 
@@ -353,9 +361,9 @@ export class TeamsController {
   async inviteMember(
     @Param('id') teamId: string,
     @Body() data: InviteMemberDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<TeamMember> {
-    const requesterId = this.getUserId(headers);
+    const requesterId = await this.requireAuth(authHeader);
     return this.teamsService.inviteMember(teamId, data.user_id, requesterId, data.message);
   }
 
@@ -365,9 +373,9 @@ export class TeamsController {
   async cancelInvite(
     @Param('id') teamId: string,
     @Param('userId') inviteeId: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<void> {
-    const requesterId = this.getUserId(headers);
+    const requesterId = await this.requireAuth(authHeader);
     return this.teamsService.cancelInvite(teamId, inviteeId, requesterId);
   }
 
@@ -375,9 +383,9 @@ export class TeamsController {
   @Post(':id/accept-invite')
   async acceptInvite(
     @Param('id') teamId: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<TeamMember> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.acceptInvite(teamId, userId);
   }
 
@@ -386,9 +394,9 @@ export class TeamsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async declineInvite(
     @Param('id') teamId: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<void> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.declineInvite(teamId, userId);
   }
 
@@ -402,9 +410,9 @@ export class TeamsController {
   async requestToJoin(
     @Param('id') teamId: string,
     @Body() data: RequestToJoinDto,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<TeamMember> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.requestToJoin(teamId, userId, data.message);
   }
 
@@ -413,9 +421,9 @@ export class TeamsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async cancelJoinRequest(
     @Param('id') teamId: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<void> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.teamsService.cancelJoinRequest(teamId, userId);
   }
 
@@ -424,9 +432,9 @@ export class TeamsController {
   async approveJoinRequest(
     @Param('id') teamId: string,
     @Param('userId') requesterId: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<TeamMember> {
-    const approverId = this.getUserId(headers);
+    const approverId = await this.requireAuth(authHeader);
     return this.teamsService.approveJoinRequest(teamId, requesterId, approverId);
   }
 
@@ -436,9 +444,9 @@ export class TeamsController {
   async rejectJoinRequest(
     @Param('id') teamId: string,
     @Param('userId') requesterId: string,
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
   ): Promise<void> {
-    const approverId = this.getUserId(headers);
+    const approverId = await this.requireAuth(authHeader);
     return this.teamsService.rejectJoinRequest(teamId, requesterId, approverId);
   }
 }

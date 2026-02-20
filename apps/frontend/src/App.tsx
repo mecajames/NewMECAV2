@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider, ForcePasswordChangeGuard, MaintenanceModeGuard } from '@/auth';
+import { AuthProvider, ForcePasswordChangeGuard, IdleTimeoutGuard, MaintenanceModeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
@@ -139,6 +139,7 @@ function App() {
           <ImpersonationBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
+            <IdleTimeoutGuard>
             <ForcePasswordChangeGuard>
             <div className="flex-1">
               <Routes>
@@ -292,6 +293,7 @@ function App() {
             </Routes>
           </div>
             </ForcePasswordChangeGuard>
+            </IdleTimeoutGuard>
           <Footer />
         </div>
                 </BrowserRouter>

@@ -10,7 +10,11 @@ import {
   HttpStatus,
   Res,
   Header,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Response } from 'express';
 import {
   CreateInvoiceDto,
@@ -19,22 +23,49 @@ import {
   UpdateInvoiceStatusSchema,
   InvoiceListQuery,
   InvoiceListQuerySchema,
+  UserRole,
 } from '@newmeca/shared';
 import { InvoicesService } from './invoices.service';
 import { InvoicePdfService } from './pdf/invoice-pdf.service';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
 
 @Controller('api/invoices')
 export class InvoicesController {
   constructor(
     private readonly invoicesService: InvoicesService,
     private readonly pdfService: InvoicePdfService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
   ) {}
+
+  // Helper to require admin authentication
+  private async requireAdmin(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return { user, profile };
+  }
 
   /**
    * Get all invoices with filters (admin)
    */
   @Get()
-  async findAll(@Query() query: InvoiceListQuery) {
+  async findAll(
+    @Headers('authorization') authHeader: string,
+    @Query() query: InvoiceListQuery,
+  ) {
+    await this.requireAdmin(authHeader);
     const validatedQuery = InvoiceListQuerySchema.parse(query);
     return this.invoicesService.findAll(validatedQuery);
   }
@@ -152,74 +183,104 @@ export class InvoicesController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() data: CreateInvoiceDto) {
+  async create(
+    @Headers('authorization') authHeader: string,
+    @Body() data: CreateInvoiceDto,
+  ) {
+    await this.requireAdmin(authHeader);
     const validatedData = CreateInvoiceSchema.parse(data);
     return this.invoicesService.create(validatedData);
   }
 
   /**
-   * Create invoice from order
+   * Create invoice from order (admin)
    */
   @Post('from-order/:orderId')
   @HttpCode(HttpStatus.CREATED)
-  async createFromOrder(@Param('orderId') orderId: string) {
+  async createFromOrder(
+    @Headers('authorization') authHeader: string,
+    @Param('orderId') orderId: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.invoicesService.createFromOrder(orderId);
   }
 
   /**
-   * Update invoice status
+   * Update invoice status (admin)
    */
   @Put(':id/status')
   async updateStatus(
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() data: UpdateInvoiceStatusDto,
   ) {
+    await this.requireAdmin(authHeader);
     const validatedData = UpdateInvoiceStatusSchema.parse(data);
     return this.invoicesService.updateStatus(id, validatedData);
   }
 
   /**
-   * Send invoice email to user
+   * Send invoice email to user (admin)
    */
   @Post(':id/send')
   @HttpCode(HttpStatus.OK)
-  async sendInvoice(@Param('id') id: string) {
+  async sendInvoice(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.invoicesService.sendInvoice(id);
   }
 
   /**
-   * Resend invoice email (for already sent invoices)
+   * Resend invoice email (admin)
    */
   @Post(':id/resend')
   @HttpCode(HttpStatus.OK)
-  async resendInvoice(@Param('id') id: string) {
+  async resendInvoice(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.invoicesService.resendInvoice(id);
   }
 
   /**
-   * Mark invoice as paid
+   * Mark invoice as paid (admin)
    */
   @Post(':id/paid')
   @HttpCode(HttpStatus.OK)
-  async markAsPaid(@Param('id') id: string) {
+  async markAsPaid(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.invoicesService.markAsPaid(id);
   }
 
   /**
-   * Cancel an invoice
+   * Cancel an invoice (admin)
    */
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  async cancel(@Param('id') id: string, @Body() body: { reason?: string }) {
+  async cancel(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    await this.requireAdmin(authHeader);
     return this.invoicesService.cancel(id, body.reason);
   }
 
   /**
-   * Mark overdue invoices (cron job endpoint)
+   * Mark overdue invoices (admin/cron job endpoint)
    */
   @Post('batch/mark-overdue')
   @HttpCode(HttpStatus.OK)
-  async markOverdueInvoices() {
+  async markOverdueInvoices(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
     const count = await this.invoicesService.markOverdueInvoices();
     return { markedOverdue: count };
   }

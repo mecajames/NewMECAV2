@@ -8,14 +8,16 @@ import {
   Param,
   Headers,
   UnauthorizedException,
+  ForbiddenException,
   Query,
-  Inject,
 } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { BusinessListingsService } from './business-listings.service';
 import { RetailerListing, GalleryImage } from './retailer-listing.entity';
 import { ManufacturerListing } from './manufacturer-listing.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { UserRole } from '@newmeca/shared';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
 
 interface CreateRetailerDto {
   business_name: string;
@@ -54,31 +56,32 @@ interface CreateManufacturerDto {
 export class BusinessListingsController {
   constructor(
     private readonly businessListingsService: BusinessListingsService,
-    @Inject('EntityManager')
+    private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
 
-  // Helper to extract user ID from request header (set by auth middleware)
-  private getUserId(headers: any): string {
-    const userId = headers['x-user-id'];
-    if (!userId) {
-      throw new UnauthorizedException('User ID not found in request');
+  // Helper to validate Bearer token via Supabase and return authenticated user ID
+  private async requireAuth(authHeader?: string): Promise<string> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
     }
-    return userId;
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    return user.id;
   }
 
-  // Check if the user has admin role
-  private async isAdmin(headers: any): Promise<boolean> {
-    try {
-      const userId = headers['x-user-id'];
-      if (!userId) return false;
-
-      const em = this.em.fork();
-      const profile = await em.findOne(Profile, { id: userId });
-      return profile?.role === 'admin';
-    } catch {
-      return false;
+  // Helper to require admin authentication
+  private async requireAdmin(authHeader?: string): Promise<string> {
+    const userId = await this.requireAuth(authHeader);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: userId });
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
     }
+    return userId;
   }
 
   // ============================================
@@ -115,17 +118,17 @@ export class BusinessListingsController {
   // ============================================
 
   @Get('my/retailer')
-  async getMyRetailerListing(@Headers() headers: any): Promise<RetailerListing | null> {
-    const userId = this.getUserId(headers);
+  async getMyRetailerListing(@Headers('authorization') authHeader: string): Promise<RetailerListing | null> {
+    const userId = await this.requireAuth(authHeader);
     return this.businessListingsService.findRetailerByUserId(userId);
   }
 
   @Post('my/retailer')
   async createMyRetailerListing(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateRetailerDto,
   ): Promise<RetailerListing> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.businessListingsService.createRetailer(userId, {
       businessName: data.business_name,
       description: data.description,
@@ -146,10 +149,10 @@ export class BusinessListingsController {
 
   @Put('my/retailer')
   async updateMyRetailerListing(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Body() data: any,
   ): Promise<RetailerListing> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     const listing = await this.businessListingsService.findRetailerByUserId(userId);
     if (!listing) {
       throw new UnauthorizedException('No retailer listing found for this user');
@@ -179,17 +182,17 @@ export class BusinessListingsController {
   }
 
   @Get('my/manufacturer')
-  async getMyManufacturerListing(@Headers() headers: any): Promise<ManufacturerListing | null> {
-    const userId = this.getUserId(headers);
+  async getMyManufacturerListing(@Headers('authorization') authHeader: string): Promise<ManufacturerListing | null> {
+    const userId = await this.requireAuth(authHeader);
     return this.businessListingsService.findManufacturerByUserId(userId);
   }
 
   @Post('my/manufacturer')
   async createMyManufacturerListing(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateManufacturerDto,
   ): Promise<ManufacturerListing> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     return this.businessListingsService.createManufacturer(userId, {
       businessName: data.business_name,
       description: data.description,
@@ -209,10 +212,10 @@ export class BusinessListingsController {
 
   @Put('my/manufacturer')
   async updateMyManufacturerListing(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Body() data: any,
   ): Promise<ManufacturerListing> {
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAuth(authHeader);
     const listing = await this.businessListingsService.findManufacturerByUserId(userId);
     if (!listing) {
       throw new UnauthorizedException('No manufacturer listing found for this user');
@@ -246,49 +249,37 @@ export class BusinessListingsController {
 
   @Get('admin/retailers/user/:userId')
   async adminGetRetailerByUserId(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('userId') userId: string,
   ): Promise<RetailerListing | null> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.findRetailerByUserId(userId);
   }
 
   @Get('admin/manufacturers/user/:userId')
   async adminGetManufacturerByUserId(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('userId') userId: string,
   ): Promise<ManufacturerListing | null> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.findManufacturerByUserId(userId);
   }
 
   @Get('admin/retailers')
   async adminGetAllRetailers(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Query('includeInactive') includeInactive?: string,
   ): Promise<RetailerListing[]> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.findAllRetailers(includeInactive === 'true');
   }
 
   @Post('admin/retailers')
   async adminCreateRetailer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateRetailerDto & { user_id: string; is_approved?: boolean },
   ): Promise<RetailerListing> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.adminCreateRetailer({
       userId: data.user_id,
       businessName: data.business_name,
@@ -311,15 +302,11 @@ export class BusinessListingsController {
 
   @Put('admin/retailers/:id')
   async adminUpdateRetailer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() data: any,
   ): Promise<RetailerListing> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAdmin(authHeader);
     return this.businessListingsService.updateRetailer(
       id,
       {
@@ -353,50 +340,37 @@ export class BusinessListingsController {
 
   @Put('admin/retailers/:id/approve')
   async approveRetailer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ): Promise<RetailerListing> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.approveRetailer(id);
   }
 
   @Delete('admin/retailers/:id')
   async adminDeleteRetailer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ): Promise<void> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAdmin(authHeader);
     return this.businessListingsService.deleteRetailer(id, userId, true);
   }
 
   @Get('admin/manufacturers')
   async adminGetAllManufacturers(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Query('includeInactive') includeInactive?: string,
   ): Promise<ManufacturerListing[]> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.findAllManufacturers(includeInactive === 'true');
   }
 
   @Post('admin/manufacturers')
   async adminCreateManufacturer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateManufacturerDto & { user_id: string; is_approved?: boolean },
   ): Promise<ManufacturerListing> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.adminCreateManufacturer({
       userId: data.user_id,
       businessName: data.business_name,
@@ -418,15 +392,11 @@ export class BusinessListingsController {
 
   @Put('admin/manufacturers/:id')
   async adminUpdateManufacturer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() data: any,
   ): Promise<ManufacturerListing> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAdmin(authHeader);
     return this.businessListingsService.updateManufacturer(
       id,
       {
@@ -459,26 +429,19 @@ export class BusinessListingsController {
 
   @Put('admin/manufacturers/:id/approve')
   async approveManufacturer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ): Promise<ManufacturerListing> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
+    await this.requireAdmin(authHeader);
     return this.businessListingsService.approveManufacturer(id);
   }
 
   @Delete('admin/manufacturers/:id')
   async adminDeleteManufacturer(
-    @Headers() headers: any,
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ): Promise<void> {
-    const admin = await this.isAdmin(headers);
-    if (!admin) {
-      throw new UnauthorizedException('Admin access required');
-    }
-    const userId = this.getUserId(headers);
+    const userId = await this.requireAdmin(authHeader);
     return this.businessListingsService.deleteManufacturer(id, userId, true);
   }
 }

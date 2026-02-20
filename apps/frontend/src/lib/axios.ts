@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { supabase } from './supabase';
+import { emitActivitySignal, BACKGROUND_REQUEST_KEY } from './activitySignal';
 
 // Store for the current user ID
 let currentUserId: string | null = null;
@@ -22,6 +23,20 @@ axios.interceptors.request.use(
     }
 
     return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Signal activity on successful API responses (resets idle timer)
+// Skip background requests (e.g., polling, heartbeats) — they should not keep sessions alive
+axios.interceptors.response.use(
+  (response) => {
+    if (!response.config[BACKGROUND_REQUEST_KEY]) {
+      emitActivitySignal();
+    }
+    return response;
   },
   (error) => {
     return Promise.reject(error);

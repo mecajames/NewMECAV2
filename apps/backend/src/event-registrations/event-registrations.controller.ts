@@ -9,14 +9,42 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { EventRegistrationsService, CreateRegistrationDto, AdminListFilters, CheckInResponse } from './event-registrations.service';
 import { EventRegistration } from './event-registrations.entity';
-import { RegistrationStatus, PaymentStatus } from '@newmeca/shared';
+import { RegistrationStatus, PaymentStatus, UserRole } from '@newmeca/shared';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
 
 @Controller('api/event-registrations')
 export class EventRegistrationsController {
-  constructor(private readonly eventRegistrationsService: EventRegistrationsService) {}
+  constructor(
+    private readonly eventRegistrationsService: EventRegistrationsService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
+  ) {}
+
+  // Helper to require admin authentication
+  private async requireAdmin(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return { user, profile };
+  }
 
   // ========================
   // Public Endpoints
@@ -130,6 +158,7 @@ export class EventRegistrationsController {
 
   @Get('admin/list')
   async adminList(
+    @Headers('authorization') authHeader: string,
     @Query('eventId') eventId?: string,
     @Query('status') status?: RegistrationStatus,
     @Query('paymentStatus') paymentStatus?: PaymentStatus,
@@ -138,6 +167,7 @@ export class EventRegistrationsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    await this.requireAdmin(authHeader);
     const filters: AdminListFilters = {
       eventId,
       status,
@@ -151,27 +181,47 @@ export class EventRegistrationsController {
   }
 
   @Get('admin/:id')
-  async adminGetRegistration(@Param('id') id: string): Promise<EventRegistration> {
+  async adminGetRegistration(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<EventRegistration> {
+    await this.requireAdmin(authHeader);
     return this.eventRegistrationsService.findById(id);
   }
 
   @Post('admin/:id/cancel')
-  async adminCancelRegistration(@Param('id') id: string): Promise<EventRegistration> {
+  async adminCancelRegistration(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<EventRegistration> {
+    await this.requireAdmin(authHeader);
     return this.eventRegistrationsService.cancelRegistration(id);
   }
 
   @Post('admin/:id/refund')
-  async adminProcessRefund(@Param('id') id: string): Promise<EventRegistration> {
+  async adminProcessRefund(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<EventRegistration> {
+    await this.requireAdmin(authHeader);
     return this.eventRegistrationsService.processRefund(id);
   }
 
   @Get('admin/event/:eventId/stats')
-  async getEventCheckInStats(@Param('eventId') eventId: string) {
+  async getEventCheckInStats(
+    @Headers('authorization') authHeader: string,
+    @Param('eventId') eventId: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.eventRegistrationsService.getEventCheckInStats(eventId);
   }
 
   @Get('admin/event/:eventId/registrations')
-  async getEventRegistrations(@Param('eventId') eventId: string): Promise<EventRegistration[]> {
+  async getEventRegistrations(
+    @Headers('authorization') authHeader: string,
+    @Param('eventId') eventId: string,
+  ): Promise<EventRegistration[]> {
+    await this.requireAdmin(authHeader);
     return this.eventRegistrationsService.findByEvent(eventId);
   }
 

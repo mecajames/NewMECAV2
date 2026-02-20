@@ -46,6 +46,7 @@ export interface Profile {
   ed_permission_granted_by?: string;
   judge_certification_expires?: string;
   ed_certification_expires?: string;
+  member_since?: string;
   created_at: string;
   updated_at: string;
 }
