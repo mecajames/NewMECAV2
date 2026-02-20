@@ -390,7 +390,7 @@ export class ProfilesService {
    * Used by the admin Members page to display the full member list.
    * Results are cached for 5 minutes to avoid repeated expensive queries.
    */
-  async findAdminMembers(): Promise<Profile[]> {
+  async findAdminMembers(): Promise<any[]> {
     // Check cache first
     if (this.adminMembersCache && Date.now() - this.adminMembersCache.timestamp < this.CACHE_TTL_MS) {
       return this.adminMembersCache.data;
@@ -406,14 +406,41 @@ export class ProfilesService {
         ],
       },
       {
-        populate: ['masterProfile'],
         orderBy: { created_at: 'DESC' },
         limit: 10000,
       },
     );
 
-    this.adminMembersCache = { data: results, timestamp: Date.now() };
-    return results;
+    // Load master profiles separately with only needed fields (avoids loading ALL 40+ Profile columns)
+    const masterIds = [...new Set(
+      results.map(p => (p.masterProfile as any)?.id || p.masterProfile).filter(Boolean)
+    )] as string[];
+
+    let masterMap = new Map<string, { id: string; first_name?: string; last_name?: string; email?: string }>();
+    if (masterIds.length > 0) {
+      const masters = await em.find(Profile, { id: { $in: masterIds } }, {
+        fields: ['id', 'first_name', 'last_name', 'email'] as any,
+      });
+      masterMap = new Map(masters.map(m => [m.id, {
+        id: m.id,
+        first_name: m.first_name,
+        last_name: m.last_name,
+        email: m.email,
+      }]));
+    }
+
+    // Serialize and attach master profile data
+    const serialized = results.map(p => {
+      const obj = (p as any).toJSON ? (p as any).toJSON() : { ...p };
+      const masterId = (p.masterProfile as any)?.id || p.masterProfile;
+      if (masterId && masterMap.has(masterId)) {
+        obj.masterProfile = masterMap.get(masterId);
+      }
+      return obj;
+    });
+
+    this.adminMembersCache = { data: serialized, timestamp: Date.now() };
+    return serialized;
   }
 
   /**
@@ -518,6 +545,8 @@ export class ProfilesService {
 
   /**
    * Resets the password for an existing user.
+   * If the user exists in the profiles table but not in Supabase Auth (orphaned profile),
+   * automatically creates the auth account so the user can sign in.
    */
   async resetPassword(userId: string, dto: ResetPasswordDto): Promise<{ success: boolean; emailSent: boolean }> {
     // Validate password strength
@@ -526,7 +555,7 @@ export class ProfilesService {
       throw new BadRequestException(validation.errors.join(', '));
     }
 
-    // Verify user exists
+    // Verify user exists in profiles table
     const profile = await this.findById(userId);
 
     // Reset password in Supabase Auth
@@ -538,11 +567,32 @@ export class ProfilesService {
 
     if (!result.success) {
       const errorMsg = result.error || 'Failed to reset password';
-      // Provide more context if user doesn't exist in auth system
+      // If user doesn't exist in auth system, auto-create the auth account
       if (errorMsg.toLowerCase().includes('not found') || errorMsg.toLowerCase().includes('user_not_found')) {
-        throw new BadRequestException(`User does not exist in the authentication system. The profile may need to be re-created with a login. (${errorMsg})`);
+        this.logger.warn(`User ${userId} exists in profiles but not in Supabase Auth - creating auth account for ${profile.email}`);
+
+        if (!profile.email) {
+          throw new BadRequestException('Cannot create auth account: profile has no email address');
+        }
+
+        // Create the auth user with the same ID as the existing profile
+        const createResult = await this.supabaseAdmin.createUserWithPassword({
+          id: userId,
+          email: profile.email,
+          password: dto.newPassword,
+          firstName: profile.first_name,
+          lastName: profile.last_name,
+          forcePasswordChange: dto.forcePasswordChange ?? false,
+        });
+
+        if (!createResult.success) {
+          throw new BadRequestException(`Failed to create auth account for orphaned profile: ${createResult.error}`);
+        }
+
+        this.logger.log(`Successfully created auth account for orphaned profile ${profile.email} (ID: ${userId})`);
+      } else {
+        throw new BadRequestException(errorMsg);
       }
-      throw new BadRequestException(errorMsg);
     }
 
     // Update force_password_change flag in profile
