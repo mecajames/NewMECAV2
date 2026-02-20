@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Upload, Trash2, Edit2, FileText, Archive, Eye, EyeOff, FolderOpen, X, ExternalLink, Calendar, GripVertical } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { getStorageUrl } from '@/lib/storage';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { seasonsApi, Season } from '@/seasons';
 import { useAuth } from '@/auth';
 import { useMediaFiles, useCreateMediaFile } from '@/media-files';
+import { uploadFile } from '@/api-client/uploads.api-client';
 
 // Types
 type RulebookCategory = 'SPL Rulebook' | 'SQL Rulebook' | 'MECA Kids' | 'Dueling Demos' | 'Show and Shine' | 'Ride the Light';
@@ -85,23 +85,13 @@ export default function RulebookManagement() {
   };
 
   const uploadPDF = async (file: File): Promise<string | null> => {
-    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const filePath = `rulebooks/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(filePath, file);
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
+    try {
+      const result = await uploadFile(file, 'rulebooks');
+      return result.publicUrl;
+    } catch (err: any) {
+      console.error('Upload error:', err.response?.data?.message || err.message);
       return null;
     }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('documents')
-      .getPublicUrl(filePath);
-
-    return publicUrl;
   };
 
 

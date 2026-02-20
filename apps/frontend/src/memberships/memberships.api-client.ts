@@ -386,6 +386,15 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: Get lightweight memberships for the Members page.
+   * Returns only the fields needed for display, cached on the server.
+   */
+  getMembersList: async (): Promise<any[]> => {
+    const response = await axios.get('/api/memberships/admin/members-list');
+    return response.data;
+  },
+
+  /**
    * Admin: Assign a membership to a user without payment (legacy - use adminCreate instead)
    */
   adminAssign: async (data: AdminAssignMembershipDto): Promise<Membership> => {

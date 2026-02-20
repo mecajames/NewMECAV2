@@ -1099,6 +1099,61 @@ export class MembershipsService {
     return memberships;
   }
 
+  // Cache for admin members list memberships
+  private adminMembershipsListCache: { data: any[]; timestamp: number } | null = null;
+  private readonly MEMBERSHIPS_LIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  clearAdminMembershipsListCache(): void {
+    this.adminMembershipsListCache = null;
+  }
+
+  /**
+   * Lightweight endpoint for the admin Members page.
+   * Returns only the fields needed for the member list display, with caching.
+   * Excludes billing, business, and other heavy fields.
+   */
+  async getAllMembershipsForMembersList(): Promise<any[]> {
+    // Check cache
+    if (this.adminMembershipsListCache &&
+        Date.now() - this.adminMembershipsListCache.timestamp < this.MEMBERSHIPS_LIST_CACHE_TTL) {
+      return this.adminMembershipsListCache.data;
+    }
+
+    const em = this.em.fork();
+    const memberships = await em.find(
+      Membership,
+      {},
+      {
+        fields: [
+          'id', 'user', 'mecaId', 'competitorName', 'hasTeamAddon',
+          'paymentStatus', 'endDate', 'accountType', 'masterMembership',
+          'hasOwnLogin', 'createdAt', 'stripeSubscriptionId', 'hadLegacySubscription',
+          'vehicleLicensePlate', 'vehicleColor', 'vehicleMake', 'vehicleModel',
+          'membershipTypeConfig',
+        ] as any,
+        populate: ['membershipTypeConfig'],
+        orderBy: { createdAt: 'DESC' },
+      }
+    );
+
+    // Serialize with only necessary membershipTypeConfig fields
+    const result = memberships.map(m => {
+      const obj = (m as any).toJSON ? (m as any).toJSON() : { ...m };
+      // Slim down membershipTypeConfig to only what the Members page needs
+      if (obj.membershipTypeConfig && typeof obj.membershipTypeConfig === 'object') {
+        obj.membershipTypeConfig = {
+          category: obj.membershipTypeConfig.category,
+          name: obj.membershipTypeConfig.name,
+          isUpgradeOnly: obj.membershipTypeConfig.isUpgradeOnly,
+        };
+      }
+      return obj;
+    });
+
+    this.adminMembershipsListCache = { data: result, timestamp: Date.now() };
+    return result;
+  }
+
   /**
    * Get membership by MECA ID
    */

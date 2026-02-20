@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth';
-import { supabase } from '@/lib/supabase';
+import { uploadFile } from '@/api-client/uploads.api-client';
 import axios from '@/lib/axios';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
@@ -785,23 +785,11 @@ export default function MyMecaDashboardPage() {
     setTeamError('');
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `team-logos/${profile.id}/${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(fileName);
-
-      setTeamLogoUrl(publicUrl);
+      const result = await uploadFile(file, 'team-logos');
+      setTeamLogoUrl(result.publicUrl);
     } catch (err: any) {
       console.error('Error uploading team logo:', err);
-      setTeamError(err.message || 'Failed to upload team logo');
+      setTeamError(err.response?.data?.message || err.message || 'Failed to upload team logo');
     } finally {
       setUploadingTeamLogo(false);
       if (teamLogoInputRef.current) {
@@ -836,20 +824,9 @@ export default function MyMecaDashboardPage() {
     setTeamError('');
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `team-gallery/${team.id}/${Date.now()}.${fileExt}`;
+      const result = await uploadFile(file, 'team-gallery', team.id);
 
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(fileName);
-
-      const newGalleryImages = [...teamGalleryImages, publicUrl];
+      const newGalleryImages = [...teamGalleryImages, result.publicUrl];
       setTeamGalleryImages(newGalleryImages);
 
       // Save to team
@@ -903,21 +880,10 @@ export default function MyMecaDashboardPage() {
     setTeamError('');
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `team-logos/${team.id}/${Date.now()}.${fileExt}`;
+      const result = await uploadFile(file, 'team-logos', team.id);
 
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(fileName);
-
-      await teamsApi.updateTeam(team.id, { logo_url: publicUrl });
-      setTeam({ ...team, logoUrl: publicUrl });
+      await teamsApi.updateTeam(team.id, { logo_url: result.publicUrl });
+      setTeam({ ...team, logoUrl: result.publicUrl });
     } catch (err: any) {
       console.error('Error updating team logo:', err);
       setTeamError(err.message || 'Failed to update team logo');
@@ -967,23 +933,12 @@ export default function MyMecaDashboardPage() {
 
     setUpdatingProfileImage(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `profile-pictures/${profile.id}/${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(fileName);
+      const result = await uploadFile(file, 'profile-images');
 
       // Update profile with new image URL and add to profile_images array
-      const newProfileImages = [...(profile.profile_images || []), publicUrl];
+      const newProfileImages = [...(profile.profile_images || []), result.publicUrl];
       await axios.put(`/api/profiles/${profile.id}`, {
-        profile_picture_url: publicUrl,
+        profile_picture_url: result.publicUrl,
         profile_images: newProfileImages,
       });
 

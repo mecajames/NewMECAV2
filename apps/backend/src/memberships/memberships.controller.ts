@@ -199,6 +199,18 @@ export class MembershipsController {
   }
 
   /**
+   * Admin: Lightweight memberships list for the Members page.
+   * Returns only the fields needed for display, with server-side caching.
+   */
+  @Get('admin/members-list')
+  async getMembershipsForMembersList(
+    @Headers('authorization') authHeader: string,
+  ): Promise<any[]> {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.getAllMembershipsForMembersList();
+  }
+
+  /**
    * Admin: Assign a membership to a user without payment (legacy - use admin/create instead)
    */
   @Post('admin/assign')

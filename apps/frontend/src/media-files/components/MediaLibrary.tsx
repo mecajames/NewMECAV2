@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Upload, Trash2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, X } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { getStorageUrl } from '@/lib/storage';
 import { MediaType, MediaFile } from '@/media-files';
 import { useAuth } from '@/auth';
 import { useMediaFiles, useCreateMediaFile, useDeleteMediaFile } from '@/media-files/useMediaFiles';
+import { uploadFile as backendUpload } from '@/api-client/uploads.api-client';
+import axios from '@/lib/axios';
 
 export default function MediaLibrary() {
   const { user } = useAuth();
@@ -77,18 +78,8 @@ export default function MediaLibrary() {
     setUploading(true);
 
     try {
-      const fileName = `${Date.now()}-${uploadData.file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-      const filePath = `media/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(filePath, uploadData.file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(filePath);
+      // Upload through backend
+      const result = await backendUpload(uploadData.file, 'media-library');
 
       // Get image dimensions if it's an image
       let dimensions = undefined;
@@ -106,10 +97,10 @@ export default function MediaLibrary() {
       const mediaData = {
         title: uploadData.title,
         description: uploadData.description || undefined,
-        fileUrl: publicUrl,
+        fileUrl: result.publicUrl,
         fileType: getFileType(uploadData.file.type),
-        fileSize: uploadData.file.size,
-        mimeType: uploadData.file.type,
+        fileSize: result.fileSize,
+        mimeType: result.mimeType,
         dimensions,
         isExternal: false,
         tags: uploadData.tags ? uploadData.tags.split(',').map((t) => t.trim()) : undefined,
@@ -122,7 +113,8 @@ export default function MediaLibrary() {
       setUploadData({ title: '', description: '', tags: '', file: null });
       refetch();
     } catch (error: any) {
-      alert('Error uploading file: ' + error.message);
+      const msg = error.response?.data?.message || error.message;
+      alert('Error uploading file: ' + msg);
     } finally {
       setUploading(false);
     }
@@ -162,10 +154,19 @@ export default function MediaLibrary() {
     if (!confirm('Are you sure you want to delete this media file?')) return;
 
     try {
-      // Delete from storage if not external
-      if (!isExternal && fileUrl.includes('supabase')) {
-        const path = fileUrl.split('/').slice(-2).join('/');
-        await supabase.storage.from('documents').remove([path]);
+      // Delete from storage via backend if not external
+      if (!isExternal && fileUrl.includes('storage/v1/object/public/')) {
+        try {
+          // Extract bucket and path from the URL
+          const match = fileUrl.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+          if (match) {
+            await axios.delete('/api/uploads', {
+              data: { bucket: match[1], storagePath: match[2] },
+            });
+          }
+        } catch {
+          // Non-critical: file delete from storage failed, but we still remove the DB record
+        }
       }
 
       await deleteMediaFile(id);
