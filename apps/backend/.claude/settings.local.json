@@ -68,7 +68,17 @@
       "Bash(tasklist:*)",
       "Bash(git checkout:*)",
       "Bash(ssh:*)",
-      "Bash(PGPASSWORD='gQNyCDu4Wz9L94Nn4gKaBnjH' psql:*)"
+      "Bash(PGPASSWORD='gQNyCDu4Wz9L94Nn4gKaBnjH' psql:*)",
+      "Bash(for dir in achievements world-finals standings competition-classes competition-formats judges event-directors ratings banners rulebooks seasons result-teams site-settings states training-records member-gallery tickets points-configuration class-name-mappings audit)",
+      "Bash(do)",
+      "Bash(path=\"/c/git/NewMECAV2/apps/backend/src/$dir\")",
+      "Bash(if [ -d \"$path\" ])",
+      "Bash(then)",
+      "Bash(if [ -d \"$path/__tests__\" ])",
+      "Bash(echo:*)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(done)"
     ]
   },
   "enableAllProjectMcpServers": true,

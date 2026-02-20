@@ -212,6 +212,7 @@ export class ProfilesService {
       force_password_change: false,
       canApplyJudge: false,
       canApplyEventDirector: false,
+      member_since: now,
       created_at: now,
       updated_at: now,
     });
@@ -406,7 +407,7 @@ export class ProfilesService {
         ],
       },
       {
-        orderBy: { created_at: 'DESC' },
+        orderBy: { member_since: 'DESC' },
         limit: 10000,
       },
     );
@@ -517,6 +518,7 @@ export class ProfilesService {
         account_type: AccountType.MEMBER,
         canApplyJudge: false,
         canApplyEventDirector: false,
+        member_since: now,
         created_at: now,
         updated_at: now,
       });
