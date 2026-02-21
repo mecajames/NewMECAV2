@@ -317,9 +317,9 @@ function EntityListPicker({
             {filter ? 'No matches found' : 'No options available'}
           </div>
         ) : (
-          filtered.map((entity) => (
+          filtered.map((entity, idx) => (
             <button
-              key={entity.id}
+              key={`${entity.id}-${idx}`}
               onClick={() => onSelect(entity)}
               className="w-full flex items-center gap-3 p-3 hover:bg-slate-700 transition-colors text-left"
             >
