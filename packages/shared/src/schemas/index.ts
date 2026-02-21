@@ -57,3 +57,6 @@ export * from "./member-gallery.schema.js";
 
 // Standings
 export * from "./standings.schema.js";
+
+// Finals Voting
+export * from "./finals-voting.schema.js";

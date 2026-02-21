@@ -412,3 +412,29 @@ export const TrainingResultSchema = z.nativeEnum(TrainingResult);
 
 // Multi-Day Event Schemas
 export const MultiDayResultsModeSchema = z.nativeEnum(MultiDayResultsMode);
+
+// =============================================================================
+// Finals Voting
+// =============================================================================
+
+export enum VotingSessionStatus {
+  DRAFT = 'draft',
+  OPEN = 'open',
+  CLOSED = 'closed',
+  FINALIZED = 'finalized',
+}
+
+export const VotingSessionStatusSchema = z.nativeEnum(VotingSessionStatus);
+
+export enum VotingAnswerType {
+  MEMBER = 'member',
+  JUDGE = 'judge',
+  EVENT_DIRECTOR = 'event_director',
+  RETAILER = 'retailer',
+  MANUFACTURER = 'manufacturer',
+  VENUE = 'venue',
+  TEAM = 'team',
+  TEXT = 'text',
+}
+
+export const VotingAnswerTypeSchema = z.nativeEnum(VotingAnswerType);

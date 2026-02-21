@@ -24,6 +24,9 @@ import { EventRatingsPanel } from '@/ratings';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { AchievementsGallery } from '@/achievements';
 import { membershipsApi, Membership, MemberCancelMembershipModal } from '@/memberships';
+import { Vote } from 'lucide-react';
+import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
+import type { VotingPublicStatus } from '@newmeca/shared';
 
 interface EventHostingRequest {
   id: string;
@@ -91,6 +94,9 @@ export default function MyMecaDashboardPage() {
 
   // Cancel membership modal state
   const [showCancelMembershipModal, setShowCancelMembershipModal] = useState(false);
+
+  // Voting status
+  const [votingStatus, setVotingStatus] = useState<VotingPublicStatus | null>(null);
 
   // Judge and Event Director state
   const [judgeProfile, setJudgeProfile] = useState<Judge | null>(null);
@@ -197,6 +203,7 @@ export default function MyMecaDashboardPage() {
       fetchJudgeEDData();
       fetchNotifications();
       fetchActiveMembership();
+      fetchVotingStatus();
     }
   }, [profile, authLoading]);
 
@@ -227,6 +234,15 @@ export default function MyMecaDashboardPage() {
       }
     } catch (error) {
       console.error('Error fetching active membership:', error);
+    }
+  };
+
+  const fetchVotingStatus = async () => {
+    try {
+      const status = await finalsVotingApi.getVotingStatus();
+      setVotingStatus(status);
+    } catch {
+      // Silently ignore - voting status is optional
     }
   };
 
@@ -1206,6 +1222,36 @@ export default function MyMecaDashboardPage() {
               <CreditCard className="h-5 w-5" />
               Purchase Membership
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Voting Status Banner */}
+      {votingStatus?.has_active_session && votingStatus.status === 'open' && (
+        <div className="bg-gradient-to-r from-purple-600/20 to-orange-600/20 border border-purple-500/30 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
+                <Vote className="h-6 w-6 text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">{votingStatus.title}</h3>
+                <p className="text-slate-300">
+                  {votingStatus.user_has_voted
+                    ? 'You\'ve already cast your vote. Thank you!'
+                    : 'Season-end voting is now open! Cast your vote.'}
+                </p>
+              </div>
+            </div>
+            {!votingStatus.user_has_voted && (
+              <button
+                onClick={() => navigate('/finals-voting')}
+                className="px-4 py-2 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2"
+              >
+                <Vote className="h-5 w-5" />
+                Vote Now
+              </button>
+            )}
           </div>
         </div>
       )}

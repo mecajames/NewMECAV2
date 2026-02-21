@@ -4,7 +4,7 @@ import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
-  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText
+  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -424,6 +424,21 @@ export default function AdminDashboard() {
           action: 'banner-analytics',
           color: 'cyan',
           navigateTo: '/admin/banners/analytics',
+        },
+      ],
+    },
+    {
+      id: 'finals-voting',
+      icon: Vote,
+      title: 'Finals Voting',
+      actions: [
+        {
+          icon: Vote,
+          title: 'Voting Sessions',
+          description: 'Manage season-end voting sessions, categories, and questions',
+          action: 'finals-voting',
+          color: 'orange',
+          navigateTo: '/admin/finals-voting',
         },
       ],
     },

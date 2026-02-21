@@ -52,6 +52,7 @@ import { StandingsModule } from './standings/standings.module';
 import { ConstantContactModule } from './constant-contact/constant-contact.module';
 import { ModerationModule } from './moderation/moderation.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { FinalsVotingModule } from './finals-voting/finals-voting.module';
 
 @Module({
   imports: [
@@ -118,6 +119,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ConstantContactModule,
     ModerationModule,
     UploadsModule,
+    FinalsVotingModule,
   ],
   controllers: [AppController],
   providers: [

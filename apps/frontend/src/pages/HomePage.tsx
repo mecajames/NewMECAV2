@@ -1,8 +1,10 @@
-import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight, Store, Factory, CheckCircle, ArrowRight, Sparkles, Newspaper } from 'lucide-react';
+import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight, Store, Factory, CheckCircle, ArrowRight, Sparkles, Newspaper, Vote } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { useSiteSettings } from '@/shared/contexts';
+import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
+import type { VotingPublicStatus } from '@newmeca/shared';
 import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business-listings';
 import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useHomeSEO } from '@/shared/seo';
@@ -21,6 +23,7 @@ export default function HomePage() {
     manufacturers: ManufacturerListing[];
   }>({ retailers: [], manufacturers: [] });
   const [newsletterModalOpen, setNewsletterModalOpen] = useState(false);
+  const [votingStatus, setVotingStatus] = useState<VotingPublicStatus | null>(null);
 
   // Derive hero settings from cached context
   const heroSettings = useMemo(() => {
@@ -83,6 +86,7 @@ export default function HomePage() {
   useEffect(() => {
     fetchUpcomingEvents();
     fetchSponsors();
+    finalsVotingApi.getVotingStatus().then(setVotingStatus).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -397,6 +401,41 @@ export default function HomePage() {
             </div>
           )}
         </div>
+
+        {/* Season Voting Banner */}
+        {votingStatus?.has_active_session && votingStatus.status !== 'draft' && (
+          <div className="mb-16">
+            <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-purple-900/50 via-slate-800 to-orange-900/50 border border-purple-500/30 p-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center">
+                    <Vote className="h-7 w-7 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{votingStatus.title}</h3>
+                    <p className="text-slate-300">
+                      {votingStatus.status === 'open' && 'Season End Voting is now open! Log in to cast your vote.'}
+                      {votingStatus.status === 'closed' && 'Voting has ended. Results coming soon!'}
+                      {votingStatus.status === 'finalized' && 'The results are in! See who won.'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  {votingStatus.status === 'open' && (
+                    <button onClick={() => navigate('/finals-voting')} className="px-6 py-3 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2">
+                      <Vote className="h-5 w-5" /> Vote Now
+                    </button>
+                  )}
+                  {votingStatus.status === 'finalized' && votingStatus.session_id && (
+                    <button onClick={() => navigate(`/voting-results/${votingStatus.session_id}`)} className="px-6 py-3 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2">
+                      <Trophy className="h-5 w-5" /> View Results
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Newsletter Signup Banner */}
         <div className="mb-16">

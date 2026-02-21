@@ -103,6 +103,9 @@ const BannersAdminPage = lazy(() => import('@/admin/pages/BannersAdminPage'));
 const BannerAnalyticsPage = lazy(() => import('@/admin/pages/BannerAnalyticsPage'));
 const AdminShopProductsPage = lazy(() => import('@/admin/pages/AdminShopProductsPage'));
 const AdminShopOrdersPage = lazy(() => import('@/admin/pages/AdminShopOrdersPage'));
+const FinalsVotingAdminPage = lazy(() => import('@/admin/pages/FinalsVotingAdminPage'));
+const FinalsVotingPage = lazy(() => import('@/finals-voting/pages/FinalsVotingPage'));
+const VotingResultsPage = lazy(() => import('@/finals-voting/pages/VotingResultsPage'));
 
 // Lazy-loaded pages - Admin billing
 const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDashboardPage'));
@@ -287,6 +290,15 @@ function App() {
 
               {/* Admin Points Configuration */}
               <Route path="/admin/points-configuration" element={<L><PointsConfigurationPage /></L>} />
+
+              {/* Admin Finals Voting */}
+              <Route path="/admin/finals-voting" element={<L><FinalsVotingAdminPage /></L>} />
+
+              {/* Finals Voting (Member) */}
+              <Route path="/finals-voting" element={<L><FinalsVotingPage /></L>} />
+
+              {/* Voting Results (Public) */}
+              <Route path="/voting-results/:sessionId" element={<L><VotingResultsPage /></L>} />
 
               {/* Catch all - redirect to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
