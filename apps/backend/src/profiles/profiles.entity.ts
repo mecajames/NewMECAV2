@@ -174,8 +174,7 @@ export class Profile {
   @OneToMany(() => Profile, profile => profile.masterProfile)
   secondaryProfiles = new Collection<Profile>(this);
 
-  // Original membership date (preserved from V1 migration or set to earliest membership start_date)
-  // Falls back to created_at on the frontend if null
+  // Original membership date (preserved from V1 migration or set on profile creation)
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'member_since' })
   member_since?: Date;
 

@@ -43,7 +43,7 @@ export const ProfileSchema = z.object({
   postal_code: z.string().nullable(),
   country: z.string().nullable(),
   is_public: z.boolean(),
-  member_since: z.coerce.date().nullable().optional(),
+  member_since: z.coerce.date(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),
 });

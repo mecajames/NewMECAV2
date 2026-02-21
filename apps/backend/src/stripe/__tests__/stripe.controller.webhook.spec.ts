@@ -9,6 +9,9 @@ import { OrdersService } from '../../orders/orders.service';
 import { InvoicesService } from '../../invoices/invoices.service';
 import { SupabaseAdminService } from '../../auth/supabase-admin.service';
 import { ShopService } from '../../shop/shop.service';
+import { MasterSecondaryService } from '../../memberships/master-secondary.service';
+import { MecaIdService } from '../../memberships/meca-id.service';
+import { MembershipSyncService } from '../../memberships/membership-sync.service';
 import { ProcessedWebhookEvent } from '../processed-webhook-event.entity';
 import { StripePaymentType } from '@newmeca/shared';
 import {
@@ -29,6 +32,9 @@ describe('StripeController - Webhook Handler', () => {
   let mockInvoicesService: any;
   let mockSupabaseAdminService: any;
   let mockShopService: any;
+  let mockMasterSecondaryService: any;
+  let mockMecaIdService: any;
+  let mockMembershipSyncService: any;
   let mockEm: any;
 
   beforeEach(async () => {
@@ -77,6 +83,18 @@ describe('StripeController - Webhook Handler', () => {
       findOrderById: jest.fn(),
     };
 
+    mockMasterSecondaryService = {
+      createSecondaryMemberships: jest.fn(),
+    };
+
+    mockMecaIdService = {
+      assignMecaId: jest.fn(),
+    };
+
+    mockMembershipSyncService = {
+      syncMembershipStatus: jest.fn(),
+    };
+
     mockEm = createMockEntityManager();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -90,6 +108,9 @@ describe('StripeController - Webhook Handler', () => {
         { provide: InvoicesService, useValue: mockInvoicesService },
         { provide: SupabaseAdminService, useValue: mockSupabaseAdminService },
         { provide: ShopService, useValue: mockShopService },
+        { provide: MasterSecondaryService, useValue: mockMasterSecondaryService },
+        { provide: MecaIdService, useValue: mockMecaIdService },
+        { provide: MembershipSyncService, useValue: mockMembershipSyncService },
         { provide: 'EntityManager', useValue: mockEm },
       ],
     }).compile();
