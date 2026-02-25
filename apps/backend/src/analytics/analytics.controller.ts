@@ -1,0 +1,117 @@
+import {
+  Controller,
+  Get,
+  Query,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
+import { UserRole } from '@newmeca/shared';
+import { AnalyticsService } from './analytics.service';
+
+@Controller('api/admin/analytics')
+export class AnalyticsController {
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
+  ) {}
+
+  private async requireAdmin(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return { user, profile };
+  }
+
+  @Get('status')
+  async getStatus(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ configured: boolean }> {
+    await this.requireAdmin(authHeader);
+    return { configured: this.analyticsService.isConfigured() };
+  }
+
+  @Get('dashboard')
+  async getDashboard(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate = '30daysAgo',
+    @Query('endDate') endDate = 'today',
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.analyticsService.isConfigured()) {
+      throw new InternalServerErrorException('Google Analytics is not configured');
+    }
+    return this.analyticsService.getDashboard(startDate, endDate);
+  }
+
+  @Get('page-views')
+  async getPageViews(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate = '30daysAgo',
+    @Query('endDate') endDate = 'today',
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.analyticsService.isConfigured()) {
+      throw new InternalServerErrorException('Google Analytics is not configured');
+    }
+    return this.analyticsService.getPageViewsOverTime(startDate, endDate);
+  }
+
+  @Get('top-pages')
+  async getTopPages(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate = '30daysAgo',
+    @Query('endDate') endDate = 'today',
+    @Query('limit') limit = 10,
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.analyticsService.isConfigured()) {
+      throw new InternalServerErrorException('Google Analytics is not configured');
+    }
+    return this.analyticsService.getTopPages(startDate, endDate, Number(limit));
+  }
+
+  @Get('traffic-sources')
+  async getTrafficSources(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate = '30daysAgo',
+    @Query('endDate') endDate = 'today',
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.analyticsService.isConfigured()) {
+      throw new InternalServerErrorException('Google Analytics is not configured');
+    }
+    return this.analyticsService.getTrafficSources(startDate, endDate);
+  }
+
+  @Get('devices')
+  async getDevices(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate = '30daysAgo',
+    @Query('endDate') endDate = 'today',
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.analyticsService.isConfigured()) {
+      throw new InternalServerErrorException('Google Analytics is not configured');
+    }
+    return this.analyticsService.getDeviceCategories(startDate, endDate);
+  }
+}

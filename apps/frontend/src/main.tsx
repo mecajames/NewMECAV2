@@ -4,6 +4,9 @@ import App from './App.tsx';
 import './index.css';
 // Initialize axios interceptors for user authentication
 import './lib/axios';
+import { initializeGA4 } from './lib/gtag';
+
+initializeGA4();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

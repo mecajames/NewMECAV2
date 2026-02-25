@@ -39,6 +39,8 @@ interface MembershipInfo {
   accountType?: string;
   // Auto-renewal status: 'on' (active Stripe subscription), 'legacy' (had PMPro recurring), 'off' (one-time payment)
   autoRenewStatus: 'on' | 'legacy' | 'off';
+  // Whether this user also has an upgrade-only membership (e.g. Team Add-on)
+  hasUpgrade: boolean;
   // Secondary memberships attached to this master
   secondaries: SecondaryMembershipInfo[];
 }
@@ -57,8 +59,9 @@ export default function MembersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [membershipTypeFilter, setMembershipTypeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('active');
   const [autoRenewFilter, setAutoRenewFilter] = useState<string>('all');
+  const [renewalDateFilter, setRenewalDateFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'meca_id' | 'member_since'>('name');
   const [showUserWizard, setShowUserWizard] = useState(false);
 
@@ -108,7 +111,7 @@ export default function MembersPage() {
 
   useEffect(() => {
     filterAndSortMembers();
-  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, sortBy, mecaIdMin, mecaIdMax]);
+  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax]);
 
   const fetchMembers = async () => {
     try {
@@ -176,6 +179,8 @@ export default function MembersPage() {
       const usersWithNonUpgradeMembership = new Set<string>();
       // Track which users have ANY membership with has_team_addon = true
       const usersWithTeamAddon = new Set<string>();
+      // Track which users have ANY upgrade-only membership
+      const usersWithUpgrade = new Set<string>();
 
       // First pass: identify users who have non-upgrade-only memberships AND users with team addons
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -186,6 +191,8 @@ export default function MembersPage() {
         if (!config) return;
         if (!config.is_upgrade_only) {
           usersWithNonUpgradeMembership.add(m.user_id);
+        } else {
+          usersWithUpgrade.add(m.user_id);
         }
         // Track if ANY membership for this user has has_team_addon = true
         if (m.has_team_addon === true) {
@@ -253,6 +260,7 @@ export default function MembersPage() {
             endDate: m.end_date || undefined,
             accountType: m.account_type,
             autoRenewStatus,
+            hasUpgrade: usersWithUpgrade.has(m.user_id),
             secondaries: [], // Will be populated below for masters
             priority,
             isUpgradeOnly,
@@ -436,6 +444,8 @@ export default function MembersPage() {
         filtered = filtered.filter(
           (member) => member.membershipInfo?.category === 'competitor' && member.membershipInfo?.hasTeamAddon
         );
+      } else if (membershipTypeFilter === 'has_upgrade') {
+        filtered = filtered.filter((member) => member.membershipInfo?.hasUpgrade);
       } else {
         filtered = filtered.filter((member) => member.membershipInfo?.category === membershipTypeFilter);
       }
@@ -451,6 +461,18 @@ export default function MembersPage() {
       filtered = filtered.filter((member) => {
         if (!member.membershipInfo) return autoRenewFilter === 'none';
         return member.membershipInfo.autoRenewStatus === autoRenewFilter;
+      });
+    }
+
+    // Apply renewal date filter (membership endDate within next N days)
+    if (renewalDateFilter !== 'all') {
+      const days = parseInt(renewalDateFilter, 10);
+      const now = new Date();
+      const cutoff = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter((member) => {
+        if (!member.membershipInfo?.endDate) return false;
+        const endDate = new Date(member.membershipInfo.endDate);
+        return endDate >= now && endDate <= cutoff;
       });
     }
 
@@ -485,7 +507,7 @@ export default function MembersPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, sortBy, mecaIdMin, mecaIdMax]);
+  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax]);
 
   // Paginated members
   const totalPages = Math.ceil(filteredMembers.length / membersPerPage);
@@ -682,6 +704,7 @@ export default function MembersPage() {
                 <option value="competitor_team">Competitor + Team</option>
                 <option value="retail">Retailer</option>
                 <option value="manufacturer">Manufacturer</option>
+                <option value="has_upgrade">Has Upgrade</option>
                 <option value="none">No Membership</option>
               </select>
             </div>
@@ -737,6 +760,23 @@ export default function MembersPage() {
                 <option value="on">On (Active Subscription)</option>
                 <option value="legacy">Legacy (Needs Re-setup)</option>
                 <option value="off">Off (One-time Payment)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Renewal Date
+              </label>
+              <select
+                value={renewalDateFilter}
+                onChange={(e) => setRenewalDateFilter(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              >
+                <option value="all">All</option>
+                <option value="30">Within 30 Days</option>
+                <option value="60">Within 60 Days</option>
+                <option value="90">Within 90 Days</option>
+                <option value="120">Within 120 Days</option>
               </select>
             </div>
           </div>
@@ -1006,13 +1046,23 @@ export default function MembersPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getMembershipTypeBadgeColor(
-                                member.membershipInfo
-                              )}`}
-                            >
-                              {getMembershipTypeDisplay(member.membershipInfo)}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getMembershipTypeBadgeColor(
+                                  member.membershipInfo
+                                )}`}
+                              >
+                                {getMembershipTypeDisplay(member.membershipInfo)}
+                              </span>
+                              {member.membershipInfo?.hasUpgrade && (
+                                <span
+                                  className="px-1.5 py-0.5 inline-flex text-[10px] leading-4 font-bold rounded bg-emerald-600 text-white"
+                                  title="Has upgrade add-on purchase"
+                                >
+                                  +UPG
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {member.role !== 'user' ? (
