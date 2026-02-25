@@ -19,7 +19,9 @@
         "EMAIL_PROVIDER": "sendgrid",
         "SENDGRID_API_KEY": "PLACEHOLDER",
         "SENDGRID_FROM_EMAIL": "noreply@meca.com",
-        "SUPER_ADMIN_PASSWORD": "PLACEHOLDER"
+        "SUPER_ADMIN_PASSWORD": "PLACEHOLDER",
+        "GA4_PROPERTY_ID": "PLACEHOLDER",
+        "GA4_CREDENTIALS_JSON": "PLACEHOLDER"
       },
       "ports": {
         "3000": "HTTP"
