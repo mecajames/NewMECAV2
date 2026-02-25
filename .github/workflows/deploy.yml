@@ -82,6 +82,8 @@ jobs:
           echo "image=$nginx_image" >> "$GITHUB_OUTPUT"
 
       - name: Build deployment config from template and deploy
+        env:
+          GA4_CREDENTIALS_JSON: ${{ secrets.GA4_CREDENTIALS_JSON }}
         run: |
           echo "Backend image: ${{ steps.push-backend.outputs.image }}"
           echo "Nginx image: ${{ steps.push-nginx.outputs.image }}"
@@ -101,7 +103,6 @@ jobs:
             --arg sendgrid_api_key "${{ secrets.SENDGRID_API_KEY }}" \
             --arg super_admin_password "${{ secrets.SUPER_ADMIN_PASSWORD }}" \
             --arg ga4_property_id "${{ secrets.GA4_PROPERTY_ID }}" \
-            --arg ga4_credentials_json "${{ secrets.GA4_CREDENTIALS_JSON }}" \
             '
             .containers.backend.image = $backend |
             .containers.nginx.image = $nginx |
@@ -116,7 +117,7 @@ jobs:
             .containers.backend.environment.SENDGRID_API_KEY = $sendgrid_api_key |
             .containers.backend.environment.SUPER_ADMIN_PASSWORD = $super_admin_password |
             .containers.backend.environment.GA4_PROPERTY_ID = $ga4_property_id |
-            .containers.backend.environment.GA4_CREDENTIALS_JSON = $ga4_credentials_json
+            .containers.backend.environment.GA4_CREDENTIALS_JSON = $ENV.GA4_CREDENTIALS_JSON
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"
