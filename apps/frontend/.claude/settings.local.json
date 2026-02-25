@@ -4,7 +4,8 @@
       "Bash(xargs ls:*)",
       "Bash(find:*)",
       "Bash(cat:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(ssh:*)"
     ],
     "deny": [],
     "ask": []
