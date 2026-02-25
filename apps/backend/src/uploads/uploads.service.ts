@@ -57,6 +57,13 @@ const UPLOAD_DESTINATIONS: Record<string, UploadDestination> = {
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     maxSizeBytes: 10 * 1024 * 1024, // 10MB
   },
+  'voting-item-images': {
+    bucket: 'documents',
+    folder: 'voting-items',
+    adminOnly: true,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    maxSizeBytes: 5 * 1024 * 1024, // 5MB
+  },
   'rulebooks': {
     bucket: 'documents',
     folder: 'rulebooks',

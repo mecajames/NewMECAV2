@@ -31,6 +31,7 @@ export type UploadDestination =
   | 'media-library'
   | 'banner-images'
   | 'event-images'
+  | 'voting-item-images'
   | 'rulebooks'
   | 'profile-images'
   | 'cover-images'
