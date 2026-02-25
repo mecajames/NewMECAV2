@@ -5,6 +5,7 @@ import { AuthProvider, ForcePasswordChangeGuard, IdleTimeoutGuard, MaintenanceMo
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
+import { usePageTracking } from '@/shared/hooks/usePageTracking';
 // Static pages
 import HomePage from '@/pages/HomePage';
 import ContactPage from '@/pages/ContactPage';
@@ -106,6 +107,7 @@ const AdminShopOrdersPage = lazy(() => import('@/admin/pages/AdminShopOrdersPage
 const FinalsVotingAdminPage = lazy(() => import('@/admin/pages/FinalsVotingAdminPage'));
 const FinalsVotingPage = lazy(() => import('@/finals-voting/pages/FinalsVotingPage'));
 const VotingResultsPage = lazy(() => import('@/finals-voting/pages/VotingResultsPage'));
+const AnalyticsPage = lazy(() => import('@/admin/pages/AnalyticsPage'));
 
 // Lazy-loaded pages - Admin billing
 const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDashboardPage'));
@@ -127,6 +129,12 @@ const L = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>
 );
 
+// Null-rendering component that tracks page views in Google Analytics
+function PageTracker() {
+  usePageTracking();
+  return null;
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -139,6 +147,7 @@ function App() {
               <ReCaptchaProvider version="v2">
                 <BrowserRouter>
                   <ScrollToTop />
+                  <PageTracker />
           <ImpersonationBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
@@ -290,6 +299,9 @@ function App() {
 
               {/* Admin Points Configuration */}
               <Route path="/admin/points-configuration" element={<L><PointsConfigurationPage /></L>} />
+
+              {/* Admin Analytics */}
+              <Route path="/admin/analytics" element={<L><AnalyticsPage /></L>} />
 
               {/* Admin Finals Voting */}
               <Route path="/admin/finals-voting" element={<L><FinalsVotingAdminPage /></L>} />

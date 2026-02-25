@@ -98,7 +98,8 @@ if (-not $SkipBuild) {
             "--build-arg", "VITE_SUPABASE_ANON_KEY=$($EnvVars['VITE_SUPABASE_ANON_KEY'])",
             "--build-arg", "VITE_API_URL=$($EnvVars['VITE_API_URL'])",
             "--build-arg", "VITE_RECAPTCHA_SITE_KEY=$($EnvVars['VITE_RECAPTCHA_SITE_KEY'])",
-            "--build-arg", "VITE_STRIPE_PUBLISHABLE_KEY=$($EnvVars['VITE_STRIPE_PUBLISHABLE_KEY'])"
+            "--build-arg", "VITE_STRIPE_PUBLISHABLE_KEY=$($EnvVars['VITE_STRIPE_PUBLISHABLE_KEY'])",
+            "--build-arg", "VITE_GA4_MEASUREMENT_ID=$($EnvVars['VITE_GA4_MEASUREMENT_ID'])"
         )
 
         docker build `
@@ -176,7 +177,8 @@ $envMap = $deploymentConfig.containers.backend.environment
 $secretKeys = @(
     "DATABASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
     "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "CORS_ORIGIN",
-    "RECAPTCHA_SECRET_KEY", "SENDGRID_API_KEY", "SUPER_ADMIN_PASSWORD"
+    "RECAPTCHA_SECRET_KEY", "SENDGRID_API_KEY", "SUPER_ADMIN_PASSWORD",
+    "GA4_PROPERTY_ID", "GA4_CREDENTIALS_JSON"
 )
 foreach ($key in $secretKeys) {
     if ($BackendVars.ContainsKey($key)) {

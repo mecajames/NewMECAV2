@@ -53,6 +53,7 @@ jobs:
             --build-arg VITE_API_URL="" \
             --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
             --build-arg VITE_STRIPE_PUBLISHABLE_KEY="${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}" \
+            --build-arg VITE_GA4_MEASUREMENT_ID="${{ secrets.VITE_GA4_MEASUREMENT_ID }}" \
             -t newmeca-nginx:latest \
             .
 
@@ -99,6 +100,8 @@ jobs:
             --arg recaptcha_secret_key "${{ secrets.RECAPTCHA_SECRET_KEY }}" \
             --arg sendgrid_api_key "${{ secrets.SENDGRID_API_KEY }}" \
             --arg super_admin_password "${{ secrets.SUPER_ADMIN_PASSWORD }}" \
+            --arg ga4_property_id "${{ secrets.GA4_PROPERTY_ID }}" \
+            --arg ga4_credentials_json "${{ secrets.GA4_CREDENTIALS_JSON }}" \
             '
             .containers.backend.image = $backend |
             .containers.nginx.image = $nginx |
@@ -111,7 +114,9 @@ jobs:
             .containers.backend.environment.CORS_ORIGIN = $cors_origin |
             .containers.backend.environment.RECAPTCHA_SECRET_KEY = $recaptcha_secret_key |
             .containers.backend.environment.SENDGRID_API_KEY = $sendgrid_api_key |
-            .containers.backend.environment.SUPER_ADMIN_PASSWORD = $super_admin_password
+            .containers.backend.environment.SUPER_ADMIN_PASSWORD = $super_admin_password |
+            .containers.backend.environment.GA4_PROPERTY_ID = $ga4_property_id |
+            .containers.backend.environment.GA4_CREDENTIALS_JSON = $ga4_credentials_json
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"

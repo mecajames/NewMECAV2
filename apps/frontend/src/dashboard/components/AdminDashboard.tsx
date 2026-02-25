@@ -4,7 +4,7 @@ import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
-  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote
+  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -16,6 +16,7 @@ import ClassNameMappingManagement from '@/class-name-mappings/components/ClassNa
 import { profilesApi } from '@/profiles';
 import { eventsApi } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
+import { billingApi } from '@/api-client/billing.api-client';
 
 type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
 
@@ -44,6 +45,7 @@ export default function AdminDashboard() {
     totalEvents: 0,
     totalRegistrations: 0,
     totalMembers: 0,
+    totalRevenue: '0.00',
   });
   const [loading, setLoading] = useState(true);
   // Load expanded sections from localStorage, default to all collapsed
@@ -70,10 +72,11 @@ export default function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      const [profileStats, eventStats, registrationStats] = await Promise.all([
+      const [profileStats, eventStats, registrationStats, billingStats] = await Promise.all([
         profilesApi.getStats(),
         eventsApi.getStats(),
         eventRegistrationsApi.getStats(),
+        billingApi.getDashboardStats().catch(() => null),
       ]);
 
       setStats({
@@ -81,6 +84,7 @@ export default function AdminDashboard() {
         totalEvents: eventStats.totalEvents,
         totalRegistrations: registrationStats.totalRegistrations,
         totalMembers: profileStats.totalMembers,
+        totalRevenue: billingStats?.revenue?.total || '0.00',
       });
     } catch (error) {
       console.error('Failed to fetch admin stats:', error);
@@ -89,6 +93,7 @@ export default function AdminDashboard() {
         totalEvents: 0,
         totalRegistrations: 0,
         totalMembers: 0,
+        totalRevenue: '0.00',
       });
     } finally {
       setLoading(false);
@@ -349,6 +354,14 @@ export default function AdminDashboard() {
           color: 'slate',
         },
         {
+          icon: TrendingUp,
+          title: 'Site Analytics',
+          description: 'View Google Analytics traffic and user data',
+          action: 'site-analytics',
+          color: 'cyan',
+          navigateTo: '/admin/analytics',
+        },
+        {
           icon: BookOpen,
           title: 'Documentation',
           description: 'View system documentation and guides',
@@ -508,8 +521,8 @@ export default function AdminDashboard() {
         <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Total Users</p>
-              <p className="text-2xl font-bold text-white mt-1">{stats.totalUsers}</p>
+              <p className="text-slate-400 text-sm">Total Active Users</p>
+              <p className="text-2xl font-bold text-white mt-1">{stats.totalMembers}</p>
             </div>
             <Users className="h-8 w-8 text-blue-500" />
           </div>
@@ -538,8 +551,8 @@ export default function AdminDashboard() {
         <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Active Members</p>
-              <p className="text-2xl font-bold text-white mt-1">{stats.totalMembers}</p>
+              <p className="text-slate-400 text-sm">Total Revenue</p>
+              <p className="text-2xl font-bold text-white mt-1">${Number(stats.totalRevenue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <DollarSign className="h-8 w-8 text-green-500" />
           </div>

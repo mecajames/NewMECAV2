@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, User, CreditCard, MapPin, XCircle, DollarSign, Ban } from 'lucide-react';
+import { ArrowLeft, Package, User, CreditCard, MapPin, XCircle, DollarSign, Ban, FileText, Info } from 'lucide-react';
 import { billingApi, Order, ordersApi, invoicesApi } from '../../../api-client/billing.api-client';
 import { OrderStatusBadge } from '../components/BillingStatusBadge';
 import { OrderType, OrderStatus } from '../billing.types';
@@ -59,18 +59,11 @@ export default function OrderDetailPage() {
   // For membership orders, show buttons even without a specific membership item (legacy orders)
   const canCancelOrRefund = useMemo(() => {
     if (!order) return false;
-    // Show for COMPLETED MEMBERSHIP orders
-    // For legacy orders without membershipItem, admin will need to find the membership manually
     return (
       order.status === OrderStatus.COMPLETED &&
       order.orderType === OrderType.MEMBERSHIP
     );
   }, [order]);
-
-  // Determine if we have a valid membership reference for the modal
-  const hasMembershipReference = useMemo(() => {
-    return !!membershipItem?.referenceId || !!order?.user?.id;
-  }, [membershipItem, order]);
 
   // Check if there's a Stripe payment for refund
   const hasStripePayment = useMemo(() => {
@@ -159,7 +152,7 @@ export default function OrderDetailPage() {
         <p className="text-red-400 mb-4">{error || 'Order not found'}</p>
         <button
           onClick={() => navigate('/admin/billing/orders')}
-          className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+          className="px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
         >
           Back to Orders
         </button>
@@ -170,54 +163,68 @@ export default function OrderDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Back Navigation */}
+        <button
+          onClick={() => navigate('/admin/billing/orders')}
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors mb-6"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Orders
+        </button>
+
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-white">{order.orderNumber}</h1>
-              <OrderStatusBadge status={order.status} />
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">{order.orderNumber}</h1>
+                <OrderStatusBadge status={order.status} />
+              </div>
+              <p className="text-gray-400 mt-1 text-sm">
+                {orderTypeLabels[order.orderType]} &middot; {formatDate(order.createdAt)}
+              </p>
             </div>
-            <p className="text-gray-400 mt-1">
-              {orderTypeLabels[order.orderType]} - Created {formatDate(order.createdAt)}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {order.status === OrderStatus.PENDING && (
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {order.status === OrderStatus.PENDING && (
+                <button
+                  onClick={handleCancelOrder}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg border border-red-500/20 transition-colors"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Cancel Order
+                </button>
+              )}
+              {canCancelOrRefund && (
+                <>
+                  <button
+                    onClick={handleOpenCancelModal}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-medium rounded-lg border border-amber-500/20 transition-colors"
+                    title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
+                  >
+                    <Ban className="h-4 w-4" />
+                    Cancel Membership
+                  </button>
+                  <button
+                    onClick={handleOpenRefundModal}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg border border-red-500/20 transition-colors"
+                    title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    Refund
+                  </button>
+                </>
+              )}
               <button
-                onClick={handleCancelOrder}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold rounded-lg transition-colors"
+                onClick={handleViewInvoice}
+                disabled={viewingInvoice}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
               >
-                <XCircle className="h-4 w-4" />
-                Cancel Order
+                <FileText className="h-4 w-4" />
+                {viewingInvoice ? 'Loading...' : 'View Invoice'}
               </button>
-            )}
-            {canCancelOrRefund && (
-              <>
-                <button
-                  onClick={handleOpenCancelModal}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-semibold rounded-lg transition-colors"
-                  title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
-                >
-                  <Ban className="h-4 w-4" />
-                  Cancel Membership
-                </button>
-                <button
-                  onClick={handleOpenRefundModal}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold rounded-lg transition-colors"
-                  title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
-                >
-                  <DollarSign className="h-4 w-4" />
-                  Refund
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => navigate('/admin/billing/orders')}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-              Back to Orders
-            </button>
+            </div>
           </div>
         </div>
 
@@ -228,7 +235,7 @@ export default function OrderDetailPage() {
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center gap-2 mb-4">
                 <Package className="h-5 w-5 text-orange-500" />
-                <h2 className="text-xl font-semibold text-white">Order Items</h2>
+                <h2 className="text-lg font-semibold text-white">Order Items</h2>
               </div>
               <div className="overflow-hidden rounded-lg border border-slate-700">
                 <table className="min-w-full divide-y divide-slate-700">
@@ -251,13 +258,16 @@ export default function OrderDetailPage() {
                   <tbody className="divide-y divide-slate-700">
                     {order.items.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-6 text-center text-gray-500 text-sm">
-                          No itemized details available (legacy order)
+                        <td colSpan={4} className="px-4 py-6">
+                          <div className="flex items-center justify-center gap-2 text-gray-500 text-sm">
+                            <Info className="h-4 w-4" />
+                            <span>No itemized details available (legacy order)</span>
+                          </div>
                         </td>
                       </tr>
                     ) : (
                       order.items.map((item) => (
-                        <tr key={item.id}>
+                        <tr key={item.id} className="hover:bg-slate-700/30 transition-colors">
                           <td className="px-4 py-3">
                             <div className="text-sm text-white">{item.description}</div>
                             <div className="text-xs text-gray-500 capitalize">{item.itemType.replace('_', ' ')}</div>
@@ -321,7 +331,7 @@ export default function OrderDetailPage() {
             {/* Customer Info */}
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center gap-2 mb-4">
-                <User className="h-5 w-5 text-blue-500" />
+                <User className="h-5 w-5 text-blue-400" />
                 <h2 className="text-lg font-semibold text-white">Customer</h2>
               </div>
               {(() => {
@@ -375,7 +385,7 @@ export default function OrderDetailPage() {
             {order.payment && (
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-2 mb-4">
-                  <CreditCard className="h-5 w-5 text-green-500" />
+                  <CreditCard className="h-5 w-5 text-green-400" />
                   <h2 className="text-lg font-semibold text-white">Payment</h2>
                 </div>
                 <div className="space-y-2 text-sm">
@@ -395,7 +405,7 @@ export default function OrderDetailPage() {
             {order.billingAddress && (
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-2 mb-4">
-                  <MapPin className="h-5 w-5 text-purple-500" />
+                  <MapPin className="h-5 w-5 text-purple-400" />
                   <h2 className="text-lg font-semibold text-white">Billing Address</h2>
                 </div>
                 <div className="text-sm text-gray-300 space-y-1">
@@ -412,15 +422,6 @@ export default function OrderDetailPage() {
                 </div>
               </div>
             )}
-
-            {/* Invoice Link */}
-            <button
-              onClick={handleViewInvoice}
-              disabled={viewingInvoice}
-              className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-center"
-            >
-              {viewingInvoice ? 'Loading Invoice...' : 'View Invoice'}
-            </button>
           </div>
         </div>
       </div>
