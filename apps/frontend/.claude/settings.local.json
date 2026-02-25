@@ -5,7 +5,9 @@
       "Bash(find:*)",
       "Bash(cat:*)",
       "Bash(npx tsc:*)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(head:*)",
+      "Bash(cd /c/git/NewMECAV2/apps/backend && npx tsx scripts/backfill-pmpro-order-items.ts --dry-run 2>&1)"
     ],
     "deny": [],
     "ask": []

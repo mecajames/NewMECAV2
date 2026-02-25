@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, User, MapPin, Building, Download, Send, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, FileText, User, MapPin, Building, Download, Send, CheckCircle, XCircle, RefreshCw, Package, Info } from 'lucide-react';
 import { billingApi, Invoice, invoicesApi } from '../../../api-client/billing.api-client';
 import { InvoiceStatusBadge } from '../components/BillingStatusBadge';
 import { InvoiceStatus } from '../billing.types';
@@ -133,7 +133,7 @@ export default function InvoiceDetailPage() {
         <p className="text-red-400 mb-4">{error || 'Invoice not found'}</p>
         <button
           onClick={() => navigate('/admin/billing/invoices')}
-          className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
+          className="px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"
         >
           Back to Invoices
         </button>
@@ -150,68 +150,83 @@ export default function InvoiceDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Back Navigation */}
+        <button
+          onClick={() => navigate('/admin/billing/invoices')}
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors mb-6"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Invoices
+        </button>
+
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-white">{invoice.invoiceNumber}</h1>
-              <InvoiceStatusBadge status={invoice.status} />
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">{invoice.invoiceNumber}</h1>
+                <InvoiceStatusBadge status={invoice.status} />
+              </div>
+              <p className="text-gray-400 mt-1 text-sm">
+                Created {formatDateTime(invoice.createdAt)}
+              </p>
             </div>
-            <p className="text-gray-400 mt-1">
-              Created {formatDateTime(invoice.createdAt)}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleViewPdf}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              <Download className="h-4 w-4" />
-              View PDF
-            </button>
-            {canSend && (
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={handleSendInvoice}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg transition-colors"
+                onClick={handleViewPdf}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
               >
-                <Send className="h-4 w-4" />
-                Send
+                <Download className="h-4 w-4" />
+                PDF
               </button>
-            )}
-            {canResend && (
-              <button
-                onClick={handleResendInvoice}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg transition-colors"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Resend
-              </button>
-            )}
-            {canMarkPaid && (
-              <button
-                onClick={handleMarkPaid}
-                className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors"
-              >
-                <CheckCircle className="h-4 w-4" />
-                Mark Paid
-              </button>
-            )}
-            {canCancel && (
-              <button
-                onClick={handleCancelInvoice}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold rounded-lg transition-colors"
-              >
-                <XCircle className="h-4 w-4" />
-                Cancel
-              </button>
-            )}
-            <button
-              onClick={() => navigate('/admin/billing/invoices')}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-              Back to Invoices
-            </button>
+              {canSend && (
+                <button
+                  onClick={handleSendInvoice}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 font-medium rounded-lg border border-blue-500/20 transition-colors"
+                >
+                  <Send className="h-4 w-4" />
+                  Send
+                </button>
+              )}
+              {canResend && (
+                <button
+                  onClick={handleResendInvoice}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Resend
+                </button>
+              )}
+              {canMarkPaid && (
+                <button
+                  onClick={handleMarkPaid}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-green-500/15 hover:bg-green-500/25 text-green-400 font-medium rounded-lg border border-green-500/20 transition-colors"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Mark Paid
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  onClick={handleCancelInvoice}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg border border-red-500/20 transition-colors"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Cancel
+                </button>
+              )}
+              {invoice.order && (
+                <button
+                  onClick={() => navigate(`/admin/billing/orders/${invoice.order!.id}`)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors"
+                >
+                  <Package className="h-4 w-4" />
+                  View Order
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -222,7 +237,7 @@ export default function InvoiceDetailPage() {
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center gap-2 mb-4">
                 <FileText className="h-5 w-5 text-orange-500" />
-                <h2 className="text-xl font-semibold text-white">Invoice Items</h2>
+                <h2 className="text-lg font-semibold text-white">Invoice Items</h2>
               </div>
               <div className="overflow-hidden rounded-lg border border-slate-700">
                 <table className="min-w-full divide-y divide-slate-700">
@@ -243,23 +258,34 @@ export default function InvoiceDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
-                    {invoice.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-4 py-3">
-                          <div className="text-sm text-white">{item.description}</div>
-                          <div className="text-xs text-gray-500 capitalize">{item.itemType.replace('_', ' ')}</div>
-                        </td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-300">
-                          {item.quantity}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-300">
-                          {formatCurrency(item.unitPrice, invoice.currency)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-medium text-white">
-                          {formatCurrency(item.total, invoice.currency)}
+                    {invoice.items.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6">
+                          <div className="flex items-center justify-center gap-2 text-gray-500 text-sm">
+                            <Info className="h-4 w-4" />
+                            <span>No itemized details available</span>
+                          </div>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      invoice.items.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-700/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-white">{item.description}</div>
+                            <div className="text-xs text-gray-500 capitalize">{item.itemType.replace('_', ' ')}</div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm text-gray-300">
+                            {item.quantity}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-300">
+                            {formatCurrency(item.unitPrice, invoice.currency)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-medium text-white">
+                            {formatCurrency(item.total, invoice.currency)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -302,12 +328,12 @@ export default function InvoiceDetailPage() {
             )}
           </div>
 
-          {/* Right Column - Customer & Payment Info */}
+          {/* Right Column - Customer & Info */}
           <div className="space-y-6">
             {/* Customer Info */}
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center gap-2 mb-4">
-                <User className="h-5 w-5 text-blue-500" />
+                <User className="h-5 w-5 text-blue-400" />
                 <h2 className="text-lg font-semibold text-white">Customer</h2>
               </div>
               {invoice.user ? (
@@ -360,7 +386,7 @@ export default function InvoiceDetailPage() {
             {invoice.companyInfo && (
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-2 mb-4">
-                  <Building className="h-5 w-5 text-purple-500" />
+                  <Building className="h-5 w-5 text-purple-400" />
                   <h2 className="text-lg font-semibold text-white">From</h2>
                 </div>
                 <div className="text-sm text-gray-300 space-y-1">
@@ -378,7 +404,7 @@ export default function InvoiceDetailPage() {
             {invoice.billingAddress && (
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-2 mb-4">
-                  <MapPin className="h-5 w-5 text-green-500" />
+                  <MapPin className="h-5 w-5 text-purple-400" />
                   <h2 className="text-lg font-semibold text-white">Billing Address</h2>
                 </div>
                 <div className="text-sm text-gray-300 space-y-1">
@@ -394,16 +420,6 @@ export default function InvoiceDetailPage() {
                   {invoice.billingAddress.country && <p>{invoice.billingAddress.country}</p>}
                 </div>
               </div>
-            )}
-
-            {/* Related Order Link */}
-            {invoice.order && (
-              <button
-                onClick={() => navigate(`/admin/billing/orders/${invoice.order!.id}`)}
-                className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors text-center"
-              >
-                View Order {invoice.order.orderNumber}
-              </button>
             )}
           </div>
         </div>

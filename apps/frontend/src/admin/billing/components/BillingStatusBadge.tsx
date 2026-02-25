@@ -5,25 +5,24 @@ interface StatusBadgeProps {
   size?: 'sm' | 'md';
 }
 
-const orderStatusConfig: Record<OrderStatus, { label: string; color: string; bg: string }> = {
-  [OrderStatus.PENDING]: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
-  [OrderStatus.PROCESSING]: { label: 'Processing', color: 'text-blue-700', bg: 'bg-blue-100' },
-  [OrderStatus.COMPLETED]: { label: 'Completed', color: 'text-green-700', bg: 'bg-green-100' },
-  [OrderStatus.CANCELLED]: { label: 'Cancelled', color: 'text-gray-700', bg: 'bg-gray-100' },
-  [OrderStatus.REFUNDED]: { label: 'Refunded', color: 'text-orange-700', bg: 'bg-orange-100' },
+const orderStatusConfig: Record<OrderStatus, { label: string; color: string; bg: string; border: string }> = {
+  [OrderStatus.PENDING]: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/15', border: 'border-amber-500/30' },
+  [OrderStatus.PROCESSING]: { label: 'Processing', color: 'text-blue-400', bg: 'bg-blue-500/15', border: 'border-blue-500/30' },
+  [OrderStatus.COMPLETED]: { label: 'Completed', color: 'text-green-400', bg: 'bg-green-500/15', border: 'border-green-500/30' },
+  [OrderStatus.CANCELLED]: { label: 'Cancelled', color: 'text-red-400', bg: 'bg-red-500/15', border: 'border-red-500/30' },
+  [OrderStatus.REFUNDED]: { label: 'Refunded', color: 'text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/30' },
 };
 
-const invoiceStatusConfig: Record<InvoiceStatus, { label: string; color: string; bg: string }> = {
-  [InvoiceStatus.DRAFT]: { label: 'Draft', color: 'text-gray-700', bg: 'bg-gray-100' },
-  [InvoiceStatus.SENT]: { label: 'Sent', color: 'text-blue-700', bg: 'bg-blue-100' },
-  [InvoiceStatus.PAID]: { label: 'Paid', color: 'text-green-700', bg: 'bg-green-100' },
-  [InvoiceStatus.OVERDUE]: { label: 'Overdue', color: 'text-red-700', bg: 'bg-red-100' },
-  [InvoiceStatus.CANCELLED]: { label: 'Cancelled', color: 'text-gray-700', bg: 'bg-gray-100' },
-  [InvoiceStatus.REFUNDED]: { label: 'Refunded', color: 'text-orange-700', bg: 'bg-orange-100' },
+const invoiceStatusConfig: Record<InvoiceStatus, { label: string; color: string; bg: string; border: string }> = {
+  [InvoiceStatus.DRAFT]: { label: 'Draft', color: 'text-gray-400', bg: 'bg-gray-500/15', border: 'border-gray-500/30' },
+  [InvoiceStatus.SENT]: { label: 'Sent', color: 'text-blue-400', bg: 'bg-blue-500/15', border: 'border-blue-500/30' },
+  [InvoiceStatus.PAID]: { label: 'Paid', color: 'text-green-400', bg: 'bg-green-500/15', border: 'border-green-500/30' },
+  [InvoiceStatus.OVERDUE]: { label: 'Overdue', color: 'text-orange-400', bg: 'bg-orange-500/15', border: 'border-orange-500/30' },
+  [InvoiceStatus.CANCELLED]: { label: 'Cancelled', color: 'text-red-400', bg: 'bg-red-500/15', border: 'border-red-500/30' },
+  [InvoiceStatus.REFUNDED]: { label: 'Refunded', color: 'text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/30' },
 };
 
 export function BillingStatusBadge({ status, size = 'md' }: StatusBadgeProps) {
-  // Check if it's an order status or invoice status
   const config = Object.values(OrderStatus).includes(status as OrderStatus)
     ? orderStatusConfig[status as OrderStatus]
     : invoiceStatusConfig[status as InvoiceStatus];
@@ -32,7 +31,7 @@ export function BillingStatusBadge({ status, size = 'md' }: StatusBadgeProps) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full font-medium ${config.bg} ${config.color} ${sizeClasses}`}
+      className={`inline-flex items-center rounded-full font-medium border ${config.bg} ${config.color} ${config.border} ${sizeClasses}`}
     >
       {config.label}
     </span>
@@ -45,7 +44,7 @@ export function OrderStatusBadge({ status, size = 'md' }: { status: OrderStatus;
 
   return (
     <span
-      className={`inline-flex items-center rounded-full font-medium ${config.bg} ${config.color} ${sizeClasses}`}
+      className={`inline-flex items-center rounded-full font-medium border ${config.bg} ${config.color} ${config.border} ${sizeClasses}`}
     >
       {config.label}
     </span>
@@ -58,7 +57,7 @@ export function InvoiceStatusBadge({ status, size = 'md' }: { status: InvoiceSta
 
   return (
     <span
-      className={`inline-flex items-center rounded-full font-medium ${config.bg} ${config.color} ${sizeClasses}`}
+      className={`inline-flex items-center rounded-full font-medium border ${config.bg} ${config.color} ${config.border} ${sizeClasses}`}
     >
       {config.label}
     </span>
