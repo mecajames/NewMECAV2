@@ -9,6 +9,8 @@ import type {
   PublicBanner,
   BannerPosition,
   BannerAnalytics,
+  BannerAnalyticsFilter,
+  SendBannerReportRequest,
 } from '@newmeca/shared';
 import { uploadFile } from './uploads.api-client';
 
@@ -100,6 +102,11 @@ export async function updateBanner(id: string, dto: UpdateBannerDto): Promise<Ba
 
 export async function deleteBanner(id: string): Promise<void> {
   await axios.delete(`/api/admin/banners/${id}`);
+}
+
+export async function autoDetectBannerSizes(): Promise<{ updated: number; failed: string[] }> {
+  const response = await axios.post('/api/admin/banners/auto-detect-sizes');
+  return response.data;
 }
 
 // =============================================================================
@@ -194,6 +201,49 @@ export async function getAllBannersAnalytics(
   return response.data;
 }
 
+export async function getFilteredBannersAnalytics(
+  filter: BannerAnalyticsFilter
+): Promise<BannerAnalytics[]> {
+  const params = new URLSearchParams();
+  if (filter.startDate) params.append('startDate', filter.startDate);
+  if (filter.endDate) params.append('endDate', filter.endDate);
+  if (filter.advertiserId) params.append('advertiserId', filter.advertiserId);
+  if (filter.size) params.append('size', filter.size);
+
+  const query = params.toString();
+  const url = query
+    ? `/api/admin/banners/analytics/filtered?${query}`
+    : `/api/admin/banners/analytics/filtered`;
+
+  const response = await axios.get(url);
+  return response.data;
+}
+
+export async function fetchBannerReportHtml(params: {
+  advertiserId: string;
+  startDate: string;
+  endDate: string;
+  size?: string;
+}): Promise<string> {
+  const searchParams = new URLSearchParams();
+  searchParams.append('advertiserId', params.advertiserId);
+  searchParams.append('startDate', params.startDate);
+  searchParams.append('endDate', params.endDate);
+  if (params.size) searchParams.append('size', params.size);
+  const response = await axios.get(`/api/admin/banners/analytics/report?${searchParams.toString()}`, {
+    responseType: 'text',
+    headers: { Accept: 'text/html' },
+  });
+  return response.data;
+}
+
+export async function sendBannerReport(
+  dto: SendBannerReportRequest
+): Promise<{ success: boolean; sentTo: string }> {
+  const response = await axios.post('/api/admin/banners/analytics/email-report', dto);
+  return response.data;
+}
+
 // Export as object for consistent API pattern
 export const bannersApi = {
   // Image Upload
@@ -214,6 +264,7 @@ export const bannersApi = {
   createBanner,
   updateBanner,
   deleteBanner,
+  autoDetectBannerSizes,
 
   // Public
   getActiveBanner,
@@ -222,4 +273,7 @@ export const bannersApi = {
   // Analytics
   getBannerAnalytics,
   getAllBannersAnalytics,
+  getFilteredBannersAnalytics,
+  fetchBannerReportHtml,
+  sendBannerReport,
 };

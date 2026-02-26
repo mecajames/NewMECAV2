@@ -108,6 +108,8 @@ const FinalsVotingAdminPage = lazy(() => import('@/admin/pages/FinalsVotingAdmin
 const FinalsVotingPage = lazy(() => import('@/finals-voting/pages/FinalsVotingPage'));
 const VotingResultsPage = lazy(() => import('@/finals-voting/pages/VotingResultsPage'));
 const AnalyticsPage = lazy(() => import('@/admin/pages/AnalyticsPage'));
+const SearchConsolePage = lazy(() => import('@/admin/pages/SearchConsolePage'));
+const SEOSettingsPage = lazy(() => import('@/admin/pages/SEOSettingsPage'));
 
 // Lazy-loaded pages - Admin billing
 const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDashboardPage'));
@@ -302,6 +304,8 @@ function App() {
 
               {/* Admin Analytics */}
               <Route path="/admin/analytics" element={<L><AnalyticsPage /></L>} />
+              <Route path="/admin/search-console" element={<L><SearchConsolePage /></L>} />
+              <Route path="/admin/seo-settings" element={<L><SEOSettingsPage /></L>} />
 
               {/* Admin Finals Voting */}
               <Route path="/admin/finals-voting" element={<L><FinalsVotingAdminPage /></L>} />

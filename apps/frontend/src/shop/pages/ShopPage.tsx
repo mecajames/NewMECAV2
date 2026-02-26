@@ -6,6 +6,9 @@ import { shopApi } from '../shop.api-client';
 import { ProductGrid } from '../components/ProductGrid';
 import { useCart } from '../context/CartContext';
 import { SEOHead, useShopSEO } from '@/shared/seo';
+import { trackViewItemList } from '@/lib/gtag';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 // Local type to avoid Rollup issues with CommonJS enum re-exports
 type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
@@ -26,6 +29,7 @@ export function ShopPage() {
   const [loading, setLoading] = useState(true);
   const { itemCount, subtotal } = useCart();
   const seoProps = useShopSEO();
+  const { banners: shopBanners } = useBanners(BannerPosition.SHOP_TOP);
 
   useEffect(() => {
     loadInitialData();
@@ -53,6 +57,17 @@ export function ShopPage() {
     try {
       const data = await shopApi.getProducts(selectedCategory);
       setProducts(data);
+      if (data.length > 0) {
+        trackViewItemList(
+          data.map(p => ({
+            item_id: p.id,
+            item_name: p.name,
+            price: Number(p.price),
+            item_category: p.category,
+          })),
+          selectedCategory || 'All Products',
+        );
+      }
     } catch (error) {
       console.error('Error loading products:', error);
     } finally {
@@ -100,6 +115,9 @@ export function ShopPage() {
           </div>
         </div>
       </div>
+
+      {/* SHOP_TOP banner */}
+      {shopBanners.length > 0 && <BannerDisplay banner={shopBanners[0]} />}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Featured Products Section */}

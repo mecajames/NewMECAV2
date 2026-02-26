@@ -904,36 +904,36 @@ export default function MembersPage() {
 
         {/* Members Table */}
         <div className="bg-slate-800 rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-700">
+          <div className="overflow-hidden">
+            <table className="w-full divide-y divide-slate-700 table-fixed">
               <thead className="bg-slate-700">
                 <tr>
-                  <th className="w-10 px-2 py-3"></th>{/* Expand/collapse column */}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-8 px-1 py-3"></th>{/* Expand/collapse column */}
+                  <th className="w-[14%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Member
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[7%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     MECA ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Contact
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[12%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Membership Type
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[8%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Staff Role
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[7%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[8%] px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Auto-Renew
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[9%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Member Since
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[10%] px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -958,7 +958,7 @@ export default function MembersPage() {
                           onClick={() => navigate(`/admin/members/${member.id}`)}
                         >
                           {/* Expand/Collapse Button */}
-                          <td className="px-2 py-4 whitespace-nowrap">
+                          <td className="px-1 py-4 whitespace-nowrap">
                             {hasSecondaries ? (
                               <button
                                 onClick={(e) => {
@@ -978,8 +978,8 @@ export default function MembersPage() {
                               <span className="w-7 inline-block"></span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
+                          <td className="px-3 py-4">
+                            <div className="flex items-center min-w-0">
                               <div className="flex-shrink-0 h-10 w-10">
                                 {member.profile_picture_url ? (
                                   <img
@@ -993,8 +993,8 @@ export default function MembersPage() {
                                   </div>
                                 )}
                               </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-white flex items-center gap-2">
+                              <div className="ml-3 min-w-0">
+                                <div className="text-sm font-medium text-white flex items-center gap-1 truncate">
                                   {member.first_name} {member.last_name}
                                   {(member as any).is_secondary_account && (
                                     <span className="px-1.5 py-0.5 text-[10px] bg-purple-900 text-purple-300 rounded">
@@ -1015,7 +1015,7 @@ export default function MembersPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm font-mono text-white">
                               {member.meca_id || 'N/A'}
                             </div>
@@ -1028,24 +1028,24 @@ export default function MembersPage() {
                             )}
                             {/* Show secondary membership MECA IDs if any */}
                             {member.membershipInfo?.secondaries && member.membershipInfo.secondaries.length > 0 && (
-                              <div className="text-xs font-mono text-purple-400" title="Secondary MECA IDs">
+                              <div className="text-xs font-mono text-purple-400 truncate" title="Secondary MECA IDs">
                                 +{member.membershipInfo.secondaries.filter(s => s.mecaId).map(s => s.mecaId).join(', ')}
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-white flex items-center gap-1">
-                              <Mail className="h-4 w-4 text-gray-400" />
-                              {member.email}
+                          <td className="px-3 py-4 min-w-0">
+                            <div className="text-sm text-white flex items-center gap-1 min-w-0">
+                              <Mail className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                              <span className="truncate">{member.email}</span>
                             </div>
                             {member.phone && (
                               <div className="text-sm text-gray-400 flex items-center gap-1 mt-1">
-                                <Phone className="h-4 w-4 text-gray-500" />
-                                {member.phone}
+                                <Phone className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                                <span className="truncate">{member.phone}</span>
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               <span
                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getMembershipTypeBadgeColor(
@@ -1064,7 +1064,7 @@ export default function MembersPage() {
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-4 whitespace-nowrap">
                             {member.role !== 'user' ? (
                               <span
                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(
@@ -1077,7 +1077,7 @@ export default function MembersPage() {
                               <span className="text-sm text-gray-500">-</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-4 whitespace-nowrap">
                             <span
                               className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(
                                 getDerivedMembershipStatus(member.membershipInfo)
@@ -1086,7 +1086,7 @@ export default function MembersPage() {
                               {getDerivedMembershipStatus(member.membershipInfo)}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <td className="px-3 py-4 whitespace-nowrap text-center">
                             {member.membershipInfo ? (
                               <span
                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -1114,11 +1114,11 @@ export default function MembersPage() {
                               <span className="text-sm text-gray-500">-</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-400">
                             {new Date(member.member_since).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className="flex items-center justify-end gap-2">
+                          <td className="px-3 py-4 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1">
                               {/* View Details */}
                               <button
                                 onClick={(e) => {
@@ -1169,8 +1169,8 @@ export default function MembersPage() {
                             style={{ backgroundColor: 'rgb(30, 41, 59)' }}
                           >
                             {/* Indentation column */}
-                            <td className="px-2 py-3"></td>
-                            <td className="px-6 py-3 whitespace-nowrap">
+                            <td className="px-1 py-3"></td>
+                            <td className="px-3 py-3">
                               <div className="flex items-center pl-6">
                                 <div className="flex-shrink-0 h-8 w-8">
                                   <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm ${
@@ -1196,12 +1196,12 @@ export default function MembersPage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap">
+                            <td className="px-3 py-3 whitespace-nowrap">
                               <div className="text-sm font-mono text-gray-300">
                                 {secondary.mecaId || <span className="text-yellow-500 text-xs">Pending</span>}
                               </div>
                             </td>
-                            <td className="px-6 py-3 text-gray-400 text-sm">
+                            <td className="px-3 py-3 text-gray-400 text-sm min-w-0">
                               {/* Vehicle info for differentiation */}
                               {(secondary.vehicleMake || secondary.vehicleModel || secondary.vehicleColor || secondary.vehicleLicensePlate) ? (
                                 <div className="text-xs space-y-0.5">
@@ -1221,16 +1221,16 @@ export default function MembersPage() {
                                 <span>—</span>
                               )}
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap">
+                            <td className="px-3 py-3 whitespace-nowrap">
                               <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
                                 {secondary.category === 'competitor' ? 'Competitor' : secondary.category}
                                 {secondary.hasTeamAddon && ' + Team'}
                               </span>
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap">
+                            <td className="px-3 py-3 whitespace-nowrap">
                               <span className="text-sm text-gray-500">—</span>
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap">
+                            <td className="px-3 py-3 whitespace-nowrap">
                               <span
                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                   secondary.paymentStatus === 'paid'
@@ -1241,10 +1241,10 @@ export default function MembersPage() {
                                 {secondary.paymentStatus === 'paid' ? 'active' : 'pending'}
                               </span>
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-400">
+                            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-400">
                               {new Date(secondary.createdAt).toLocaleDateString()}
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-right">
+                            <td className="px-3 py-3 whitespace-nowrap text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={(e) => {

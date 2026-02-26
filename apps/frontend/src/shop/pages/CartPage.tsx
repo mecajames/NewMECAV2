@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShoppingCart,
@@ -9,9 +10,27 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { trackViewCart, trackRemoveFromCart } from '@/lib/gtag';
 
 export function CartPage() {
   const { items, itemCount, subtotal, removeItem, updateQuantity, clearCart } = useCart();
+  const trackedRef = useRef(false);
+
+  useEffect(() => {
+    if (items.length > 0 && !trackedRef.current) {
+      trackedRef.current = true;
+      trackViewCart(
+        items.map(item => ({
+          item_id: item.productId,
+          item_name: item.product.name,
+          price: Number(item.product.price),
+          quantity: item.quantity,
+          item_category: item.product.category,
+        })),
+        subtotal,
+      );
+    }
+  }, [items, subtotal]);
 
   if (items.length === 0) {
     return (
@@ -131,7 +150,16 @@ export function CartPage() {
                         </div>
 
                         <button
-                          onClick={() => removeItem(item.productId)}
+                          onClick={() => {
+                            trackRemoveFromCart({
+                              item_id: item.productId,
+                              item_name: item.product.name,
+                              price: Number(item.product.price),
+                              quantity: item.quantity,
+                              item_category: item.product.category,
+                            });
+                            removeItem(item.productId);
+                          }}
                           className="p-2 text-gray-400 hover:text-red-400 transition-colors"
                           title="Remove item"
                         >

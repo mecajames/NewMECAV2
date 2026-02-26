@@ -1,8 +1,11 @@
 import {
   Controller,
   Get,
+  Post,
   Query,
   Headers,
+  HttpCode,
+  HttpStatus,
   UnauthorizedException,
   ForbiddenException,
   InternalServerErrorException,
@@ -12,11 +15,13 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
 import { AnalyticsService } from './analytics.service';
+import { SearchConsoleService } from './search-console.service';
 
 @Controller('api/admin/analytics')
 export class AnalyticsController {
   constructor(
     private readonly analyticsService: AnalyticsService,
+    private readonly searchConsoleService: SearchConsoleService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -113,5 +118,95 @@ export class AnalyticsController {
       throw new InternalServerErrorException('Google Analytics is not configured');
     }
     return this.analyticsService.getDeviceCategories(startDate, endDate);
+  }
+
+  // =============================================================================
+  // SEARCH CONSOLE ENDPOINTS
+  // =============================================================================
+
+  @Get('search-console/status')
+  async getSearchConsoleStatus(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return { configured: this.searchConsoleService.isConfigured() };
+  }
+
+  @Get('search-console/dashboard')
+  async getSearchConsoleDashboard(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.searchConsoleService.isConfigured()) {
+      throw new InternalServerErrorException('Google Search Console is not configured');
+    }
+
+    // Default to last 28 days (Search Console data has a 2-3 day delay)
+    const end = endDate || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0];
+    const start = startDate || new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0];
+
+    return this.searchConsoleService.getDashboard(start, end);
+  }
+
+  @Get('search-console/queries')
+  async getSearchConsoleQueries(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit = 50,
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.searchConsoleService.isConfigured()) {
+      throw new InternalServerErrorException('Google Search Console is not configured');
+    }
+
+    const end = endDate || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0];
+    const start = startDate || new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0];
+
+    return this.searchConsoleService.getTopQueries(start, end, Number(limit));
+  }
+
+  @Get('search-console/pages')
+  async getSearchConsolePages(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit = 50,
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.searchConsoleService.isConfigured()) {
+      throw new InternalServerErrorException('Google Search Console is not configured');
+    }
+
+    const end = endDate || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0];
+    const start = startDate || new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0];
+
+    return this.searchConsoleService.getTopPages(start, end, Number(limit));
+  }
+
+  @Get('search-console/sitemaps')
+  async getSitemapStatus(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.searchConsoleService.isConfigured()) {
+      throw new InternalServerErrorException('Google Search Console is not configured');
+    }
+    return this.searchConsoleService.getSitemapStatus();
+  }
+
+  @Post('search-console/submit-sitemap')
+  @HttpCode(HttpStatus.OK)
+  async submitSitemap(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!this.searchConsoleService.isConfigured()) {
+      throw new InternalServerErrorException('Google Search Console is not configured');
+    }
+    const success = await this.searchConsoleService.submitSitemap();
+    return { success };
   }
 }

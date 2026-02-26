@@ -10,25 +10,36 @@ import {
   HttpCode,
   HttpStatus,
   Headers,
+  Res,
   UnauthorizedException,
   ForbiddenException,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { BannersService } from './banners.service';
+import { BannerReportService } from './banner-report.service';
+import { EmailService } from '../email/email.service';
 import {
   BannerPosition,
+  BannerSize,
   CreateBannerDto,
   UpdateBannerDto,
   RecordEngagementDto,
+  SendBannerReportRequest,
   UserRole,
 } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { Advertiser } from './entities/advertiser.entity';
 
 @Controller('api')
 export class BannersController {
   constructor(
     private readonly bannersService: BannersService,
+    private readonly bannerReportService: BannerReportService,
+    private readonly emailService: EmailService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -91,6 +102,12 @@ export class BannersController {
     return this.bannersService.findAll();
   }
 
+  @Post('admin/banners/auto-detect-sizes')
+  async autoDetectBannerSizes(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.bannersService.autoDetectBannerSizes();
+  }
+
   @Get('admin/banners/analytics/all')
   async getAllBannersAnalytics(
     @Headers('authorization') authHeader: string,
@@ -102,6 +119,109 @@ export class BannersController {
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
     );
+  }
+
+  @Get('admin/banners/analytics/filtered')
+  async getFilteredBannersAnalytics(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('advertiserId') advertiserId?: string,
+    @Query('size') size?: BannerSize,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.bannersService.getFilteredBannersAnalytics({
+      startDate,
+      endDate,
+      advertiserId,
+      size,
+    });
+  }
+
+  @Get('admin/banners/analytics/report')
+  async getBannerReport(
+    @Headers('authorization') authHeader: string,
+    @Res() res: Response,
+    @Query('advertiserId') advertiserId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('size') size?: BannerSize,
+  ) {
+    await this.requireAdmin(authHeader);
+
+    if (!advertiserId || !startDate || !endDate) {
+      throw new BadRequestException('advertiserId, startDate, and endDate are required');
+    }
+
+    const em = this.em.fork();
+    const advertiser = await em.findOne(Advertiser, { id: advertiserId });
+    if (!advertiser) {
+      throw new NotFoundException(`Advertiser with ID ${advertiserId} not found`);
+    }
+
+    const analytics = await this.bannersService.getFilteredBannersAnalytics({
+      startDate,
+      endDate,
+      advertiserId,
+      size,
+    });
+
+    const html = this.bannerReportService.generateReportHtml(
+      advertiser.companyName,
+      analytics,
+      startDate,
+      endDate,
+    );
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  }
+
+  @Post('admin/banners/analytics/email-report')
+  async sendBannerReport(
+    @Headers('authorization') authHeader: string,
+    @Body() dto: SendBannerReportRequest,
+  ) {
+    await this.requireAdmin(authHeader);
+
+    const em = this.em.fork();
+    const advertiser = await em.findOne(Advertiser, { id: dto.advertiserId });
+    if (!advertiser) {
+      throw new NotFoundException(`Advertiser with ID ${dto.advertiserId} not found`);
+    }
+
+    if (!advertiser.contactEmail) {
+      throw new BadRequestException('Advertiser does not have a contact email');
+    }
+
+    const analytics = await this.bannersService.getFilteredBannersAnalytics({
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      advertiserId: dto.advertiserId,
+      size: dto.size,
+    });
+
+    const html = this.bannerReportService.generateReportHtml(
+      advertiser.companyName,
+      analytics,
+      dto.startDate,
+      dto.endDate,
+    );
+
+    const formatDate = (dateStr: string) =>
+      new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    const result = await this.emailService.sendEmail({
+      to: advertiser.contactEmail,
+      subject: `MECA Banner Analytics Report — ${formatDate(dto.startDate)} to ${formatDate(dto.endDate)}`,
+      html,
+    });
+
+    if (!result.success) {
+      throw new BadRequestException(result.error || 'Failed to send email');
+    }
+
+    return { success: true, sentTo: advertiser.contactEmail };
   }
 
   @Get('admin/banners/:id')

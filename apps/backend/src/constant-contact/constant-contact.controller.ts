@@ -44,7 +44,7 @@ export class ConstantContactController {
         message: 'Successfully subscribed to newsletter!',
       };
     } catch (error: any) {
-      this.logger.error(`Newsletter signup failed: ${error.message}`);
+      this.logger.error(`Newsletter signup failed for ${dto.email}: ${error.message}`);
 
       // Return user-friendly error
       if (error.status === 409) {
@@ -64,7 +64,6 @@ export class ConstantContactController {
   /**
    * GET /api/newsletter/lists
    * Get all contact lists (admin use - for finding list IDs)
-   * You may want to add authentication to this endpoint
    */
   @Get('lists')
   async getLists() {

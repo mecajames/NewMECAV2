@@ -3,6 +3,8 @@ import { type PublicBanner } from '@newmeca/shared';
 import { recordBannerEngagement } from '../../api-client/banners.api-client';
 
 const STORAGE_KEY = 'meca_banner_impressions';
+const DEFAULT_WIDTH = 728;
+const DEFAULT_HEIGHT = 90;
 
 interface BannerImpressions {
   [bannerId: string]: number;
@@ -43,11 +45,19 @@ export function hasExceededUserLimit(bannerId: string, maxImpressions: number): 
   return (impressions[bannerId] || 0) >= maxImpressions;
 }
 
-interface EventsBannerProps {
+/** Parse "WIDTHxHEIGHT" from a banner size string */
+function parseSizeDimensions(size: string | null | undefined): { width: number; height: number } {
+  if (!size) return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+  const match = size.match(/^(\d+)x(\d+)$/);
+  if (!match) return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+  return { width: parseInt(match[1]), height: parseInt(match[2]) };
+}
+
+interface BannerDisplayProps {
   banner?: PublicBanner | null;
 }
 
-export function EventsBanner({ banner: propBanner }: EventsBannerProps) {
+export function BannerDisplay({ banner: propBanner }: BannerDisplayProps) {
   const [banner, setBanner] = useState<PublicBanner | null>(propBanner || null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hidden, setHidden] = useState(false);
@@ -96,12 +106,14 @@ export function EventsBanner({ banner: propBanner }: EventsBannerProps) {
     return null;
   }
 
+  const { width, height } = parseSizeDimensions(banner.size);
+
   const bannerContent = (
     <img
       src={banner.imageUrl}
       alt={banner.altText || 'Advertisement'}
       className="w-full h-full object-contain"
-      style={{ maxWidth: '728px', maxHeight: '90px' }}
+      style={{ maxWidth: `${width}px`, maxHeight: `${height}px` }}
       onLoad={() => setImageLoaded(true)}
       onError={() => setBanner(null)}
     />
@@ -111,7 +123,7 @@ export function EventsBanner({ banner: propBanner }: EventsBannerProps) {
     <div className="w-full flex justify-center my-6">
       <div
         className="relative bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700/50"
-        style={{ width: '728px', height: '90px' }}
+        style={{ width: `${width}px`, height: `${height}px`, maxWidth: '100%' }}
       >
         {banner.clickUrl ? (
           <a
@@ -134,4 +146,6 @@ export function EventsBanner({ banner: propBanner }: EventsBannerProps) {
   );
 }
 
-export default EventsBanner;
+// Backwards-compatible alias
+export const EventsBanner = BannerDisplay;
+export default BannerDisplay;

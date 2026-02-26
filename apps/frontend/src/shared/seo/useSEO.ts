@@ -1,7 +1,15 @@
 import { useMemo } from 'react';
 import { SITE_CONFIG, PAGE_TITLES, PAGE_DESCRIPTIONS } from './seo.constants';
-import { generateOrganizationSchema, generateEventSchema, generateProductSchema } from './json-ld';
-import type { SEOProps, EventSEOData, ProductSEOData, ProfileSEOData } from './seo.types';
+import {
+  generateOrganizationSchema,
+  generateEventSchema,
+  generateProductSchema,
+  generateLocalBusinessSchema,
+  generateFAQSchema,
+} from './json-ld';
+import type { LocalBusinessData } from './json-ld';
+import type { FAQItem } from './json-ld';
+import type { SEOProps, EventSEOData, ProductSEOData, ProfileSEOData, RetailerSEOData, FAQPageSEOData } from './seo.types';
 
 /**
  * Truncate text to a maximum length, adding ellipsis if needed
@@ -34,6 +42,7 @@ export function useHomeSEO(subtitle: string): SEOProps {
       canonical: '/',
       type: 'website' as const,
       jsonLd: generateOrganizationSchema(),
+      // No breadcrumbs on homepage — it IS the root
     }),
     [subtitle]
   );
@@ -49,6 +58,7 @@ export function useEventsListSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.events,
       canonical: '/events',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Events', path: '/events' }],
     }),
     []
   );
@@ -61,7 +71,6 @@ export function useEventDetailSEO(event: EventSEOData | null): SEOProps | null {
   return useMemo(() => {
     if (!event) return null;
 
-    // Generate description from event data or auto-generate
     const description = event.description
       ? truncate(event.description, 160)
       : `Join us at ${event.location.name}${event.location.city ? ` in ${event.location.city}` : ''}${event.location.state ? `, ${event.location.state}` : ''} on ${formatDate(event.date)} for this exciting car audio competition event.`;
@@ -73,6 +82,10 @@ export function useEventDetailSEO(event: EventSEOData | null): SEOProps | null {
       image: event.image || SITE_CONFIG.defaultImage,
       type: 'event' as const,
       jsonLd: generateEventSchema(event),
+      breadcrumbs: [
+        { name: 'Events', path: '/events' },
+        { name: event.title, path: `/events/${event.id}` },
+      ],
     };
   }, [event]);
 }
@@ -89,6 +102,7 @@ export function useShopSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.shop,
       canonical: '/shop',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Shop', path: '/shop' }],
     }),
     []
   );
@@ -112,6 +126,10 @@ export function useProductDetailSEO(product: ProductSEOData | null): SEOProps | 
       image: product.image || SITE_CONFIG.defaultImage,
       type: 'product' as const,
       jsonLd: generateProductSchema(product),
+      breadcrumbs: [
+        { name: 'Shop', path: '/shop' },
+        { name: product.name, path: `/shop/products/${product.id}` },
+      ],
     };
   }, [product]);
 }
@@ -128,6 +146,7 @@ export function useResultsSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.results,
       canonical: '/results',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Results', path: '/results' }],
     }),
     []
   );
@@ -143,6 +162,7 @@ export function useLeaderboardSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.leaderboard,
       canonical: '/leaderboard',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Leaderboard', path: '/leaderboard' }],
     }),
     []
   );
@@ -158,6 +178,7 @@ export function useStandingsSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.standings,
       canonical: '/standings',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Standings', path: '/standings' }],
     }),
     []
   );
@@ -173,6 +194,10 @@ export function useTeamStandingsSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.teamStandings,
       canonical: '/team-standings',
       type: 'website' as const,
+      breadcrumbs: [
+        { name: 'Teams', path: '/teams' },
+        { name: 'Standings', path: '/team-standings' },
+      ],
     }),
     []
   );
@@ -188,6 +213,10 @@ export function useTeamLeaderboardSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.teamLeaderboard,
       canonical: '/team-leaderboard',
       type: 'website' as const,
+      breadcrumbs: [
+        { name: 'Teams', path: '/teams' },
+        { name: 'Leaderboard', path: '/team-leaderboard' },
+      ],
     }),
     []
   );
@@ -205,6 +234,7 @@ export function useMemberDirectorySEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.members,
       canonical: '/members',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Members', path: '/members' }],
     }),
     []
   );
@@ -227,6 +257,10 @@ export function useMemberProfileSEO(profile: ProfileSEOData | null): SEOProps | 
       canonical: `/members/${profile.id}`,
       image: profile.image || SITE_CONFIG.defaultImage,
       type: 'website' as const,
+      breadcrumbs: [
+        { name: 'Members', path: '/members' },
+        { name: profile.name, path: `/members/${profile.id}` },
+      ],
     };
   }, [profile]);
 }
@@ -241,6 +275,7 @@ export function useTeamDirectorySEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.teams,
       canonical: '/teams',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Teams', path: '/teams' }],
     }),
     []
   );
@@ -263,6 +298,10 @@ export function useTeamProfileSEO(team: ProfileSEOData | null): SEOProps | null 
       canonical: `/teams/${team.id}`,
       image: team.image || SITE_CONFIG.defaultImage,
       type: 'website' as const,
+      breadcrumbs: [
+        { name: 'Teams', path: '/teams' },
+        { name: team.name, path: `/teams/${team.id}` },
+      ],
     };
   }, [team]);
 }
@@ -277,15 +316,16 @@ export function useRetailerDirectorySEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.retailers,
       canonical: '/retailers',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Retailers', path: '/retailers' }],
     }),
     []
   );
 }
 
 /**
- * Hook for Retailer Profile Page SEO
+ * Hook for Retailer Profile Page SEO (with LocalBusiness schema)
  */
-export function useRetailerProfileSEO(retailer: ProfileSEOData | null): SEOProps | null {
+export function useRetailerProfileSEO(retailer: RetailerSEOData | ProfileSEOData | null): SEOProps | null {
   return useMemo(() => {
     if (!retailer) return null;
 
@@ -293,12 +333,32 @@ export function useRetailerProfileSEO(retailer: ProfileSEOData | null): SEOProps
       ? truncate(retailer.description, 160)
       : `${retailer.name} - MECA authorized retailer. Professional car audio installation and equipment.`;
 
+    // Build LocalBusiness JSON-LD if we have address data
+    const jsonLd: object[] = [];
+    if ('address' in retailer && retailer.address) {
+      jsonLd.push(generateLocalBusinessSchema({
+        id: retailer.id,
+        name: retailer.name,
+        description: retailer.description,
+        image: retailer.image,
+        address: retailer.address,
+        phone: 'phone' in retailer ? retailer.phone : undefined,
+        email: 'email' in retailer ? retailer.email : undefined,
+        website: 'website' in retailer ? retailer.website : undefined,
+      }));
+    }
+
     return {
       title: PAGE_TITLES.retailerProfile(retailer.name),
       description,
       canonical: `/retailers/${retailer.id}`,
       image: retailer.image || SITE_CONFIG.defaultImage,
       type: 'website' as const,
+      jsonLd: jsonLd.length > 0 ? jsonLd : undefined,
+      breadcrumbs: [
+        { name: 'Retailers', path: '/retailers' },
+        { name: retailer.name, path: `/retailers/${retailer.id}` },
+      ],
     };
   }, [retailer]);
 }
@@ -313,6 +373,7 @@ export function useManufacturerDirectorySEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.manufacturers,
       canonical: '/manufacturers',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Manufacturers', path: '/manufacturers' }],
     }),
     []
   );
@@ -335,6 +396,10 @@ export function useManufacturerProfileSEO(manufacturer: ProfileSEOData | null): 
       canonical: `/manufacturers/${manufacturer.id}`,
       image: manufacturer.image || SITE_CONFIG.defaultImage,
       type: 'website' as const,
+      breadcrumbs: [
+        { name: 'Manufacturers', path: '/manufacturers' },
+        { name: manufacturer.name, path: `/manufacturers/${manufacturer.id}` },
+      ],
     };
   }, [manufacturer]);
 }
@@ -349,6 +414,7 @@ export function useJudgeDirectorySEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.judges,
       canonical: '/judges',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Judges', path: '/judges' }],
     }),
     []
   );
@@ -369,6 +435,10 @@ export function useJudgeProfileSEO(judge: ProfileSEOData | null): SEOProps | nul
       canonical: `/judges/${judge.id}`,
       image: judge.image || SITE_CONFIG.defaultImage,
       type: 'website' as const,
+      breadcrumbs: [
+        { name: 'Judges', path: '/judges' },
+        { name: judge.name, path: `/judges/${judge.id}` },
+      ],
     };
   }, [judge]);
 }
@@ -383,6 +453,7 @@ export function useEventDirectorDirectorySEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.eventDirectors,
       canonical: '/event-directors',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Event Directors', path: '/event-directors' }],
     }),
     []
   );
@@ -403,6 +474,10 @@ export function useEventDirectorProfileSEO(director: ProfileSEOData | null): SEO
       canonical: `/event-directors/${director.id}`,
       image: director.image || SITE_CONFIG.defaultImage,
       type: 'website' as const,
+      breadcrumbs: [
+        { name: 'Event Directors', path: '/event-directors' },
+        { name: director.name, path: `/event-directors/${director.id}` },
+      ],
     };
   }, [director]);
 }
@@ -419,6 +494,7 @@ export function useRulebooksSEO(): SEOProps {
       description: PAGE_DESCRIPTIONS.rulebooks,
       canonical: '/rulebooks',
       type: 'website' as const,
+      breadcrumbs: [{ name: 'Rulebooks', path: '/rulebooks' }],
     }),
     []
   );
@@ -436,11 +512,44 @@ export function useRulebookDetailSEO(title: string | null): SEOProps | null {
       description: `Read the ${title}. Official MECA competition rules and regulations.`,
       canonical: '/rulebooks',
       type: 'article' as const,
+      breadcrumbs: [
+        { name: 'Rulebooks', path: '/rulebooks' },
+        { name: title, path: '/rulebooks' },
+      ],
     };
   }, [title]);
 }
 
 // ============ STATIC PAGES ============
+
+/**
+ * Hook for Competition Guides Page SEO with FAQ schema
+ */
+export function useCompetitionGuidesSEO(faqs?: FAQItem[]): SEOProps {
+  return useMemo(
+    () => ({
+      title: PAGE_TITLES.competitionGuides,
+      description: PAGE_DESCRIPTIONS.competitionGuides,
+      canonical: '/competition-guides',
+      type: 'website' as const,
+      jsonLd: faqs && faqs.length > 0 ? generateFAQSchema(faqs) : undefined,
+      breadcrumbs: [{ name: 'Competition Guides', path: '/competition-guides' }],
+    }),
+    [faqs]
+  );
+}
+
+const STATIC_BREADCRUMBS: Record<string, { name: string; path: string }[]> = {
+  hallOfFame: [{ name: 'Hall of Fame', path: '/hall-of-fame' }],
+  championshipArchives: [{ name: 'Championship Archives', path: '/championship-archives' }],
+  classCalculator: [{ name: 'Class Calculator', path: '/class-calculator' }],
+  membership: [{ name: 'Membership', path: '/membership' }],
+  contact: [{ name: 'Contact', path: '/contact' }],
+  hostEvent: [{ name: 'Host an Event', path: '/host-event' }],
+  privacyPolicy: [{ name: 'Privacy Policy', path: '/privacy-policy' }],
+  termsAndConditions: [{ name: 'Terms & Conditions', path: '/terms-and-conditions' }],
+  competitionGuides: [{ name: 'Competition Guides', path: '/competition-guides' }],
+};
 
 /**
  * Hook for static page SEO (generic)
@@ -466,6 +575,7 @@ export function useStaticPageSEO(
       description: PAGE_DESCRIPTIONS[page],
       canonical: canonicalMap[page],
       type: 'website' as const,
+      breadcrumbs: STATIC_BREADCRUMBS[page],
     };
   }, [page]);
 }

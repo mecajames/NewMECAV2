@@ -21,6 +21,7 @@ import { ShopAddress } from '@newmeca/shared';
 import { useCart } from '../context/CartContext';
 import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { trackBeginCheckout, trackAddShippingInfo, trackPurchase } from '@/lib/gtag';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
 const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
@@ -388,6 +389,23 @@ export function CheckoutPage() {
     }
   }, [items, orderId, navigate]);
 
+  // Track begin_checkout on mount
+  useEffect(() => {
+    if (items.length > 0) {
+      trackBeginCheckout(
+        items.map(item => ({
+          item_id: item.productId,
+          item_name: item.product.name,
+          price: Number(item.product.price),
+          quantity: item.quantity,
+          item_category: item.product.category,
+        })),
+        subtotal,
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -422,6 +440,18 @@ export function CheckoutPage() {
       setClientSecret(result.clientSecret);
       setOrderId(result.orderId);
       setStep('payment');
+
+      trackAddShippingInfo(
+        items.map(item => ({
+          item_id: item.productId,
+          item_name: item.product.name,
+          price: Number(item.product.price),
+          quantity: item.quantity,
+          item_category: item.product.category,
+        })),
+        orderTotal,
+        selectedShippingMethod,
+      );
     } catch (err) {
       console.error('Error creating payment intent:', err);
       setError('Failed to initialize checkout. Please try again.');
@@ -431,6 +461,18 @@ export function CheckoutPage() {
   };
 
   const handlePaymentSuccess = async (_paymentIntentId: string) => {
+    trackPurchase(
+      orderId || '',
+      items.map(item => ({
+        item_id: item.productId,
+        item_name: item.product.name,
+        price: Number(item.product.price),
+        quantity: item.quantity,
+        item_category: item.product.category,
+      })),
+      orderTotal,
+      shippingCost,
+    );
     clearCart();
     navigate(`/shop/orders/${orderId}/confirmation`);
   };

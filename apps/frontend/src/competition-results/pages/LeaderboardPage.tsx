@@ -3,6 +3,8 @@ import { Trophy, TrendingUp, Filter, Medal } from 'lucide-react';
 import { competitionResultsApi } from '@/competition-results';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useLeaderboardSEO } from '@/shared/seo';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 interface LeaderboardEntry {
   competitor_id: string;
@@ -33,6 +35,7 @@ export default function LeaderboardPage() {
   const [mostEventsAttended, setMostEventsAttended] = useState<LeaderboardEntry[]>([]);
   const [highestSPLScores, setHighestSPLScores] = useState<any[]>([]);
   const seoProps = useLeaderboardSEO();
+  const { banners: leaderboardBanners } = useBanners(BannerPosition.LEADERBOARD_TOP);
 
   useEffect(() => {
     fetchLeaderboard();
@@ -168,6 +171,9 @@ export default function LeaderboardPage() {
             The best competitors based on {rankBy === 'points' ? 'total points earned' : 'highest score achieved'}
           </p>
         </div>
+
+        {/* LEADERBOARD_TOP banner */}
+        {leaderboardBanners.length > 0 && <BannerDisplay banner={leaderboardBanners[0]} />}
 
         {/* Filters */}
         <div className="mb-16 bg-slate-800 rounded-xl p-6">

@@ -3,10 +3,12 @@ import { EntityManager, wrap } from '@mikro-orm/core';
 import {
   BannerPosition,
   BannerStatus,
+  BannerSize,
   CreateBannerDto,
   UpdateBannerDto,
   PublicBanner,
   BannerAnalytics,
+  BannerAnalyticsFilter,
 } from '@newmeca/shared';
 import { Banner } from './entities/banner.entity';
 import { BannerEngagement } from './entities/banner-engagement.entity';
@@ -62,6 +64,7 @@ export class BannersService {
       priority: dto.priority ?? 0,
       advertiser,
       altText: dto.altText,
+      size: dto.size || undefined,
       maxImpressionsPerUser: dto.maxImpressionsPerUser ?? 0,
       maxTotalImpressions: dto.maxTotalImpressions ?? 0,
       rotationWeight: dto.rotationWeight ?? 100,
@@ -99,6 +102,7 @@ export class BannersService {
       ...(dto.endDate !== undefined && { endDate: new Date(dto.endDate) }),
       ...(dto.priority !== undefined && { priority: dto.priority }),
       ...(dto.altText !== undefined && { altText: dto.altText }),
+      ...(dto.size !== undefined && { size: dto.size || undefined }),
       ...(dto.maxImpressionsPerUser !== undefined && { maxImpressionsPerUser: dto.maxImpressionsPerUser }),
       ...(dto.maxTotalImpressions !== undefined && { maxTotalImpressions: dto.maxTotalImpressions }),
       ...(dto.rotationWeight !== undefined && { rotationWeight: dto.rotationWeight }),
@@ -200,6 +204,7 @@ export class BannersService {
       imageUrl: banner.imageUrl,
       clickUrl: banner.clickUrl || null,
       altText: banner.altText || null,
+      size: banner.size || null,
       maxImpressionsPerUser: banner.maxImpressionsPerUser,
     }));
   }
@@ -292,6 +297,8 @@ export class BannersService {
       bannerId: banner.id,
       bannerName: banner.name,
       advertiserName: banner.advertiser.companyName,
+      advertiserId: banner.advertiser.id,
+      bannerSize: banner.size || null,
       totalImpressions,
       totalClicks,
       clickThroughRate: Math.round(clickThroughRate * 100) / 100,
@@ -311,5 +318,145 @@ export class BannersService {
     return Promise.all(
       banners.map(banner => this.getBannerAnalytics(banner.id, startDate, endDate)),
     );
+  }
+
+  async getFilteredBannersAnalytics(
+    filter: BannerAnalyticsFilter,
+  ): Promise<BannerAnalytics[]> {
+    const em = this.em.fork();
+
+    const where: Record<string, any> = {};
+    if (filter.advertiserId) {
+      where.advertiser = filter.advertiserId;
+    }
+    if (filter.size) {
+      where.size = filter.size;
+    }
+
+    const banners = await em.find(Banner, where, {
+      populate: ['advertiser'],
+      orderBy: { createdAt: 'DESC' },
+    });
+
+    const startDate = filter.startDate ? new Date(filter.startDate) : undefined;
+    const endDate = filter.endDate ? new Date(filter.endDate) : undefined;
+
+    return Promise.all(
+      banners.map(banner => this.getBannerAnalytics(banner.id, startDate, endDate)),
+    );
+  }
+
+  /**
+   * Auto-detect and update sizes for banners that don't have a size set.
+   * Fetches each banner's image and checks dimensions against known BannerSize values.
+   */
+  async autoDetectBannerSizes(): Promise<{ updated: number; failed: string[] }> {
+    const em = this.em.fork();
+    const banners = await em.find(Banner, { size: null });
+
+    const sizeMap: Record<string, BannerSize> = {};
+    for (const val of Object.values(BannerSize)) {
+      sizeMap[val] = val;
+    }
+
+    let updated = 0;
+    const failed: string[] = [];
+
+    for (const banner of banners) {
+      try {
+        const dimensions = await this.getImageDimensions(banner.imageUrl);
+        if (!dimensions) {
+          failed.push(`${banner.name}: could not load image`);
+          continue;
+        }
+
+        const sizeKey = `${dimensions.width}x${dimensions.height}`;
+        const matchedSize = sizeMap[sizeKey];
+
+        if (matchedSize) {
+          banner.size = matchedSize;
+          updated++;
+          this.logger.log(`Banner "${banner.name}" auto-detected as ${sizeKey}`);
+        } else {
+          failed.push(`${banner.name}: ${sizeKey} is not a standard size`);
+        }
+      } catch (err) {
+        failed.push(`${banner.name}: ${err instanceof Error ? err.message : 'unknown error'}`);
+      }
+    }
+
+    await em.flush();
+    return { updated, failed };
+  }
+
+  private async getImageDimensions(url: string): Promise<{ width: number; height: number } | null> {
+    try {
+      // Use probe-image-size or fetch + buffer approach
+      // For simplicity, fetch the image headers/data and decode dimensions
+      const response = await fetch(url);
+      if (!response.ok) return null;
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      return this.parseImageDimensions(buffer);
+    } catch {
+      return null;
+    }
+  }
+
+  private parseImageDimensions(buffer: Buffer): { width: number; height: number } | null {
+    // PNG: bytes 16-23 contain width and height as 4-byte big-endian integers
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      const width = buffer.readUInt32BE(16);
+      const height = buffer.readUInt32BE(20);
+      return { width, height };
+    }
+
+    // JPEG: search for SOF0 (0xFFC0) or SOF2 (0xFFC2) marker
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+      let offset = 2;
+      while (offset < buffer.length - 9) {
+        if (buffer[offset] !== 0xFF) { offset++; continue; }
+        const marker = buffer[offset + 1];
+        if (marker === 0xC0 || marker === 0xC2) {
+          const height = buffer.readUInt16BE(offset + 5);
+          const width = buffer.readUInt16BE(offset + 7);
+          return { width, height };
+        }
+        const segLen = buffer.readUInt16BE(offset + 2);
+        offset += 2 + segLen;
+      }
+    }
+
+    // GIF: bytes 6-9 contain width and height as 2-byte little-endian
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+      const width = buffer.readUInt16LE(6);
+      const height = buffer.readUInt16LE(8);
+      return { width, height };
+    }
+
+    // WebP: RIFF header, then check VP8 chunk
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) {
+      // VP8 (lossy)
+      if (buffer[12] === 0x56 && buffer[13] === 0x50 && buffer[14] === 0x38 && buffer[15] === 0x20) {
+        const width = buffer.readUInt16LE(26) & 0x3FFF;
+        const height = buffer.readUInt16LE(28) & 0x3FFF;
+        return { width, height };
+      }
+      // VP8L (lossless)
+      if (buffer[12] === 0x56 && buffer[13] === 0x50 && buffer[14] === 0x38 && buffer[15] === 0x4C) {
+        const bits = buffer.readUInt32LE(21);
+        const width = (bits & 0x3FFF) + 1;
+        const height = ((bits >> 14) & 0x3FFF) + 1;
+        return { width, height };
+      }
+      // VP8X (extended)
+      if (buffer[12] === 0x56 && buffer[13] === 0x50 && buffer[14] === 0x38 && buffer[15] === 0x58) {
+        const width = (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16)) + 1;
+        const height = (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16)) + 1;
+        return { width, height };
+      }
+    }
+
+    return null;
   }
 }

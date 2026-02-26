@@ -1194,13 +1194,31 @@ export class FinalsVotingService {
       return this.statusCache.data;
     }
 
-    const em = this.em.fork();
+    const noSessionStatus: VotingPublicStatus = {
+      has_active_session: false,
+      session_id: null,
+      title: null,
+      status: null,
+      start_date: null,
+      end_date: null,
+    };
 
-    const sessions = await em.find(
-      VotingSession,
-      {},
-      { orderBy: { createdAt: 'DESC' }, limit: 10 },
-    );
+    let sessions: VotingSession[];
+    try {
+      const em = this.em.fork();
+      sessions = await em.find(
+        VotingSession,
+        {},
+        { orderBy: { createdAt: 'DESC' }, limit: 10 },
+      );
+    } catch (err: any) {
+      // Table may not exist if migrations haven't been run
+      if (err.message?.includes('does not exist') || err.code === '42P01') {
+        this.logger.warn('voting_sessions table does not exist. Run migrations on this environment.');
+        return noSessionStatus;
+      }
+      throw err;
+    }
 
     const openSession = sessions.find(s => s.status === VotingSessionStatus.OPEN);
     const closedSession = sessions.find(s => s.status === VotingSessionStatus.CLOSED);
@@ -1212,18 +1230,10 @@ export class FinalsVotingService {
     const activeSession = openSession || closedSession || finalizedSession || draftSession;
 
     if (!activeSession) {
-      const status: VotingPublicStatus = {
-        has_active_session: false,
-        session_id: null,
-        title: null,
-        status: null,
-        start_date: null,
-        end_date: null,
-      };
       if (!userId) {
-        this.statusCache = { data: status, expiry: Date.now() + 30000 };
+        this.statusCache = { data: noSessionStatus, expiry: Date.now() + 30000 };
       }
-      return status;
+      return noSessionStatus;
     }
 
     const status: VotingPublicStatus = {

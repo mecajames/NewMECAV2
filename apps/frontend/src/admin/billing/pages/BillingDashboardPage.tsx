@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Zap,
   Search,
+  MoreVertical,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
 import { OrderTable } from '../components/OrderTable';
@@ -27,6 +28,23 @@ export default function BillingDashboardPage() {
     message: string;
     errors?: string[];
   } | null>(null);
+
+  // Mobile action menu
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [menuOpen]);
 
   // Filter state for orders
   const [orderSearch, setOrderSearch] = useState('');
@@ -153,8 +171,8 @@ export default function BillingDashboardPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">
               Billing Dashboard
             </h1>
@@ -162,7 +180,9 @@ export default function BillingDashboardPage() {
               Overview of orders, invoices, and revenue
             </p>
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Desktop buttons */}
+          <div className="hidden sm:flex items-center gap-3 shrink-0">
             <button
               onClick={handleSync}
               disabled={syncing}
@@ -178,6 +198,42 @@ export default function BillingDashboardPage() {
               <ArrowLeft className="h-4 w-4" />
               Back to Dashboard
             </button>
+          </div>
+
+          {/* Mobile hamburger menu */}
+          <div className="sm:hidden relative shrink-0" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              aria-label="Actions menu"
+            >
+              <MoreVertical className="h-5 w-5" />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-slate-700 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    handleSync();
+                  }}
+                  disabled={syncing}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-slate-600 transition-colors disabled:opacity-50 text-left"
+                >
+                  <Zap className={`h-4 w-4 text-orange-400 ${syncing ? 'animate-pulse' : ''}`} />
+                  {syncing ? 'Syncing...' : 'Sync Registrations'}
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate('/dashboard/admin');
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-slate-600 transition-colors text-left"
+                >
+                  <ArrowLeft className="h-4 w-4 text-gray-400" />
+                  Back to Dashboard
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
