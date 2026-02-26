@@ -7,7 +7,8 @@ import { Pagination } from '@/shared/components';
 
 export default function MemberDirectoryPage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [totalProfiles, setTotalProfiles] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,7 +33,7 @@ export default function MemberDirectoryPage() {
   // Fetch profiles when page, limit, or debounced search changes
   const fetchPublicProfiles = useCallback(async () => {
     try {
-      setLoading(true);
+      setSearching(true);
       setError(null);
       const data = await profilesApi.getPublicProfiles({
         search: debouncedSearch || undefined,
@@ -45,7 +46,8 @@ export default function MemberDirectoryPage() {
       console.error('Error fetching public profiles:', err);
       setError('Failed to load member profiles');
     } finally {
-      setLoading(false);
+      setSearching(false);
+      setInitialLoading(false);
     }
   }, [debouncedSearch, currentPage, membersPerPage]);
 
@@ -55,7 +57,7 @@ export default function MemberDirectoryPage() {
 
   const totalPages = Math.ceil(totalProfiles / membersPerPage);
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <>
         <SEOHead {...seoProps} />
@@ -107,6 +109,12 @@ export default function MemberDirectoryPage() {
         </div>
 
         {/* Profile Grid */}
+        {searching && (
+          <div className="mb-4 flex items-center gap-2 text-gray-400">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-500 border-r-transparent"></div>
+            <span className="text-sm">Searching...</span>
+          </div>
+        )}
         {profiles.length > 0 ? (
           <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
