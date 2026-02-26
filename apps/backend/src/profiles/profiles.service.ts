@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, raw } from '@mikro-orm/core';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
@@ -323,7 +323,7 @@ export class ProfilesService {
       where.$or = [
         { first_name: { $ilike: term } },
         { last_name: { $ilike: term } },
-        { meca_id: { $ilike: term } },
+        { [raw(`"meca_id"::text`)]: { $ilike: term } },
         { vehicle_info: { $ilike: term } },
       ];
     }
