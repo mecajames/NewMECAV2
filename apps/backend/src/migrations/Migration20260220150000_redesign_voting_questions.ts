@@ -1,6 +1,6 @@
 import { Migration } from '@mikro-orm/migrations';
 
-export class Migration20260221000000_redesign_voting_questions extends Migration {
+export class Migration20260220150000_redesign_voting_questions extends Migration {
   async up(): Promise<void> {
     // =========================================================================
     // 1. Create voting_answer_type enum
