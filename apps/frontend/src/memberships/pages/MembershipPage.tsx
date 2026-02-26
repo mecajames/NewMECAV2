@@ -3,8 +3,6 @@ import { Check, Star, Users, Trophy, Calendar, DollarSign, Globe, Loader2 } from
 import { useNavigate } from 'react-router-dom';
 import { membershipTypeConfigsApi, MembershipTypeConfig, MembershipCategory } from '@/membership-type-configs';
 import { SEOHead, useStaticPageSEO } from '@/shared/seo';
-import { BannerDisplay, useBanners } from '@/banners';
-import { BannerPosition } from '@newmeca/shared';
 
 export default function MembershipPage() {
   const navigate = useNavigate();
@@ -12,7 +10,6 @@ export default function MembershipPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seoProps = useStaticPageSEO('membership');
-  const { banners: membersBanners } = useBanners(BannerPosition.MEMBERS_TOP);
 
   useEffect(() => {
     const fetchMemberships = async () => {
@@ -109,9 +106,6 @@ export default function MembershipPage() {
           </p>
         </div>
       </div>
-
-      {/* MEMBERS_TOP banner */}
-      {membersBanners.length > 0 && <BannerDisplay banner={membersBanners[0]} />}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 md:py-16">
         <div className="mb-12 sm:mb-16 md:mb-20">

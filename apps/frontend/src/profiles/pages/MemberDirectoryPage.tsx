@@ -4,6 +4,8 @@ import { Users, Search, Car, Music, User, Award } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
 import { SEOHead, useMemberDirectorySEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 export default function MemberDirectoryPage() {
   const navigate = useNavigate();
@@ -15,6 +17,7 @@ export default function MemberDirectoryPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const seoProps = useMemberDirectorySEO();
+  const { banners: membersBanners } = useBanners(BannerPosition.MEMBERS_TOP);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,6 +83,9 @@ export default function MemberDirectoryPage() {
           </div>
           <p className="text-gray-400">Browse MECA members who have made their profiles public</p>
         </div>
+
+        {/* MEMBERS_TOP banner */}
+        {membersBanners.length > 0 && <BannerDisplay banner={membersBanners[0]} />}
 
         {error && (
           <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4">
