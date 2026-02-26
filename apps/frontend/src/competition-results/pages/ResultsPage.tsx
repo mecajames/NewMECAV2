@@ -7,6 +7,8 @@ import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useResultsSEO } from '@/shared/seo';
 import { useAuth } from '@/auth';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 interface GroupedResults {
   [format: string]: {
@@ -43,6 +45,7 @@ export default function ResultsPage() {
   const [multiDayEvents, setMultiDayEvents] = useState<Event[]>([]);
   const [isAggregatedView, setIsAggregatedView] = useState(false);
   const [eventResultCounts, setEventResultCounts] = useState<Record<string, number>>({});
+  const { banners: resultsBanners } = useBanners(BannerPosition.RESULTS_TOP);
 
   // Memoized list of recent events (past 10 days to capture weekend events)
   const recentEvents = useMemo(() => {
@@ -432,6 +435,9 @@ export default function ResultsPage() {
             View detailed results from completed events
           </p>
         </div>
+
+        {/* RESULTS_TOP banner */}
+        {resultsBanners.length > 0 && <BannerDisplay banner={resultsBanners[0]} />}
 
         {/* Season and Event Selectors - Same Row */}
         <div className="mb-6 sm:mb-8 bg-slate-800 rounded-xl p-4 sm:p-6">

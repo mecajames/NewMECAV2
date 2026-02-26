@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ShoppingCart, Plus, Check } from 'lucide-react';
 import { ShopProduct } from '@newmeca/shared';
 import { useCart } from '../context/CartContext';
+import { trackAddToCart } from '@/lib/gtag';
 
 interface ProductCardProps {
   product: ShopProduct;
@@ -16,6 +17,13 @@ export function ProductCard({ product, showAddToCart = true }: ProductCardProps)
     e.preventDefault();
     e.stopPropagation();
     addItem(product);
+    trackAddToCart({
+      item_id: product.id,
+      item_name: product.name,
+      price: Number(product.price),
+      quantity: 1,
+      item_category: product.category,
+    });
   };
 
   const isOutOfStock = product.trackInventory && product.stockQuantity === 0;

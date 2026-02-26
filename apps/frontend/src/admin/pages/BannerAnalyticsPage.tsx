@@ -1,24 +1,43 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, Eye, MousePointer, TrendingUp, ArrowLeft, Calendar } from 'lucide-react';
+import { BarChart3, Eye, MousePointer, TrendingUp, ArrowLeft, Calendar, FileText, Send, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { BannerAnalytics } from '@newmeca/shared';
-import { getAllBannersAnalytics } from '../../api-client/banners.api-client';
+import type { BannerAnalytics, Advertiser, BannerSize } from '@newmeca/shared';
+import { BannerSizeLabels } from '@newmeca/shared';
+import {
+  getFilteredBannersAnalytics,
+  getActiveAdvertisers,
+  fetchBannerReportHtml,
+  sendBannerReport,
+} from '../../api-client/banners.api-client';
 
 type DateRange = 'last7' | 'last30' | 'last90' | 'custom';
+
+const bannerSizeOptions: { value: BannerSize; label: string }[] = Object.entries(BannerSizeLabels).map(
+  ([value, label]) => ({ value: value as BannerSize, label })
+);
 
 export default function BannerAnalyticsPage() {
   const navigate = useNavigate();
   const [analytics, setAnalytics] = useState<BannerAnalytics[]>([]);
+  const [advertisers, setAdvertisers] = useState<Advertiser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>('last30');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [selectedAdvertiserId, setSelectedAdvertiserId] = useState('');
+  const [selectedSize, setSelectedSize] = useState('');
   const [selectedBanner, setSelectedBanner] = useState<BannerAnalytics | null>(null);
+  const [sendingReport, setSendingReport] = useState(false);
+  const [reportMessage, setReportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Helper to check if a date string is a complete valid date (YYYY-MM-DD)
   const isValidDate = (dateStr: string) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+
+  useEffect(() => {
+    loadAdvertisers();
+  }, []);
 
   useEffect(() => {
     // For custom range, only fetch when both dates are fully entered
@@ -29,9 +48,18 @@ export default function BannerAnalyticsPage() {
       return;
     }
     loadAnalytics();
-  }, [dateRange, customStartDate, customEndDate]);
+  }, [dateRange, customStartDate, customEndDate, selectedAdvertiserId, selectedSize]);
 
-  const getDateRangeParams = (): { startDate?: Date; endDate?: Date } => {
+  const loadAdvertisers = async () => {
+    try {
+      const data = await getActiveAdvertisers();
+      setAdvertisers(data);
+    } catch {
+      // Non-critical, advertisers dropdown will just be empty
+    }
+  };
+
+  const getDateRangeParams = (): { startDate?: string; endDate?: string } => {
     const now = new Date();
     now.setHours(23, 59, 59, 999);
 
@@ -40,25 +68,25 @@ export default function BannerAnalyticsPage() {
         const start = new Date(now);
         start.setDate(start.getDate() - 7);
         start.setHours(0, 0, 0, 0);
-        return { startDate: start, endDate: now };
+        return { startDate: start.toISOString(), endDate: now.toISOString() };
       }
       case 'last30': {
         const start = new Date(now);
         start.setDate(start.getDate() - 30);
         start.setHours(0, 0, 0, 0);
-        return { startDate: start, endDate: now };
+        return { startDate: start.toISOString(), endDate: now.toISOString() };
       }
       case 'last90': {
         const start = new Date(now);
         start.setDate(start.getDate() - 90);
         start.setHours(0, 0, 0, 0);
-        return { startDate: start, endDate: now };
+        return { startDate: start.toISOString(), endDate: now.toISOString() };
       }
       case 'custom': {
         if (customStartDate && customEndDate) {
           return {
-            startDate: new Date(customStartDate),
-            endDate: new Date(customEndDate),
+            startDate: new Date(customStartDate).toISOString(),
+            endDate: new Date(customEndDate).toISOString(),
           };
         }
         return {};
@@ -70,14 +98,18 @@ export default function BannerAnalyticsPage() {
 
   const loadAnalytics = async () => {
     try {
-      // Only show full-page spinner on initial load, not on date changes
       if (analytics.length === 0) {
         setLoading(true);
       } else {
         setRefreshing(true);
       }
       const { startDate, endDate } = getDateRangeParams();
-      const data = await getAllBannersAnalytics(startDate, endDate);
+      const data = await getFilteredBannersAnalytics({
+        startDate,
+        endDate,
+        advertiserId: selectedAdvertiserId || undefined,
+        size: (selectedSize as BannerSize) || undefined,
+      });
       setAnalytics(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
@@ -85,6 +117,70 @@ export default function BannerAnalyticsPage() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const handlePreviewReport = async () => {
+    if (!selectedAdvertiserId) {
+      setReportMessage({ type: 'error', text: 'Please select an advertiser to generate a report.' });
+      return;
+    }
+    const { startDate, endDate } = getDateRangeParams();
+    if (!startDate || !endDate) {
+      setReportMessage({ type: 'error', text: 'Please select a valid date range.' });
+      return;
+    }
+    try {
+      const html = await fetchBannerReportHtml({
+        advertiserId: selectedAdvertiserId,
+        startDate,
+        endDate,
+        size: selectedSize || undefined,
+      });
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err: unknown) {
+      setReportMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to generate report',
+      });
+    }
+  };
+
+  const handleSendReport = async () => {
+    if (!selectedAdvertiserId) {
+      setReportMessage({ type: 'error', text: 'Please select an advertiser to send a report.' });
+      return;
+    }
+    const { startDate, endDate } = getDateRangeParams();
+    if (!startDate || !endDate) {
+      setReportMessage({ type: 'error', text: 'Please select a valid date range.' });
+      return;
+    }
+
+    setSendingReport(true);
+    setReportMessage(null);
+    try {
+      const result = await sendBannerReport({
+        advertiserId: selectedAdvertiserId,
+        startDate,
+        endDate,
+        size: (selectedSize as BannerSize) || undefined,
+      });
+      setReportMessage({ type: 'success', text: `Report sent to ${result.sentTo}` });
+    } catch (err: unknown) {
+      setReportMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to send report',
+      });
+    } finally {
+      setSendingReport(false);
+    }
+  };
+
+  const getSizeLabel = (size: BannerSize | null | undefined) => {
+    if (!size) return '-';
+    return BannerSizeLabels[size] || size;
   };
 
   // Calculate totals
@@ -196,6 +292,77 @@ export default function BannerAnalyticsPage() {
           </div>
         </div>
 
+        {/* Filter Bar */}
+        <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-slate-300 mb-1">Advertiser</label>
+              <select
+                value={selectedAdvertiserId}
+                onChange={(e) => setSelectedAdvertiserId(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">All Advertisers</option>
+                {advertisers.map((adv) => (
+                  <option key={adv.id} value={adv.id}>
+                    {adv.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-slate-300 mb-1">Banner Size</label>
+              <select
+                value={selectedSize}
+                onChange={(e) => setSelectedSize(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">All Sizes</option>
+                {bannerSizeOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePreviewReport}
+                disabled={!selectedAdvertiserId}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title={!selectedAdvertiserId ? 'Select an advertiser to preview report' : 'Preview report in new tab'}
+              >
+                <FileText className="h-4 w-4" />
+                Preview Report
+              </button>
+              <button
+                onClick={handleSendReport}
+                disabled={!selectedAdvertiserId || sendingReport}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title={!selectedAdvertiserId ? 'Select an advertiser to email report' : 'Email report to advertiser'}
+              >
+                {sendingReport ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {sendingReport ? 'Sending...' : 'Email Report'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Report Message */}
+        {reportMessage && (
+          <div className={`mb-6 p-4 rounded-lg ${
+            reportMessage.type === 'success'
+              ? 'bg-green-500/10 border border-green-500 text-green-400'
+              : 'bg-red-500/10 border border-red-500 text-red-400'
+          }`}>
+            {reportMessage.text}
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg text-red-400">
@@ -247,6 +414,7 @@ export default function BannerAnalyticsPage() {
                 <tr className="border-b border-slate-700">
                   <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Banner</th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Advertiser</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Size</th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-slate-300">Impressions</th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-slate-300">Clicks</th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-slate-300">CTR</th>
@@ -256,8 +424,8 @@ export default function BannerAnalyticsPage() {
               <tbody>
                 {analytics.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
-                      No analytics data available for the selected date range.
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                      No analytics data available for the selected filters.
                     </td>
                   </tr>
                 ) : (
@@ -265,6 +433,7 @@ export default function BannerAnalyticsPage() {
                     <tr key={banner.bannerId} className="border-b border-slate-700/50 hover:bg-slate-700/30">
                       <td className="py-4 px-6 text-white font-medium">{banner.bannerName}</td>
                       <td className="py-4 px-6 text-slate-300">{banner.advertiserName}</td>
+                      <td className="py-4 px-6 text-slate-300 text-sm">{getSizeLabel(banner.bannerSize as BannerSize | null)}</td>
                       <td className="py-4 px-6 text-right text-white">{formatNumber(banner.totalImpressions)}</td>
                       <td className="py-4 px-6 text-right text-white">{formatNumber(banner.totalClicks)}</td>
                       <td className="py-4 px-6 text-right">
@@ -308,9 +477,6 @@ export default function BannerAnalyticsPage() {
                 {selectedBanner.dailyStats.slice(-14).map((day, index) => {
                   const maxImpressions = Math.max(...selectedBanner.dailyStats.map(d => d.impressions), 1);
                   const impressionWidth = (day.impressions / maxImpressions) * 100;
-                  // clickWidth could be used for a separate click bar visualization
-                  const _clickWidth = (day.clicks / maxImpressions) * 100;
-                  void _clickWidth; // Suppress unused variable warning
 
                   return (
                     <div key={index} className="flex items-center gap-4">

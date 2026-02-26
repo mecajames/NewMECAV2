@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { getRetailerById, updateMyRetailerListing, adminUpdateRetailer, RetailerListing } from '@/business-listings';
 import { useAuth } from '@/auth';
+import { SEOHead, useRetailerProfileSEO } from '@/shared/seo';
 
 const STORE_TYPE_LABELS: Record<string, { label: string; description: string }> = {
   brick_and_mortar: { label: 'Physical Store', description: 'Visit us at our physical location' },
@@ -192,8 +193,26 @@ export default function RetailerProfilePage() {
   const address = formatAddress();
   const storeTypeInfo = STORE_TYPE_LABELS[retailer.storeType] || { label: retailer.storeType, description: '' };
 
+  const seoProps = useRetailerProfileSEO(retailer ? {
+    id: retailer.id,
+    name: retailer.businessName,
+    description: retailer.description,
+    image: retailer.profileImageUrl,
+    address: {
+      street: retailer.streetAddress,
+      city: retailer.city,
+      state: retailer.state,
+      zip: retailer.postalCode,
+      country: retailer.country,
+    },
+    phone: retailer.businessPhone,
+    email: retailer.businessEmail,
+    website: retailer.website,
+  } : null);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+      {seoProps && <SEOHead {...seoProps} />}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header with Back Button */}
         <div className="flex items-center justify-between mb-6">

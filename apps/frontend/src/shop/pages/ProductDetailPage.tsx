@@ -16,6 +16,7 @@ import { shopApi } from '../shop.api-client';
 import { useCart } from '../context/CartContext';
 import { SEOHead, useProductDetailSEO } from '@/shared/seo';
 import type { ProductSEOData } from '@/shared/seo';
+import { trackViewItem, trackAddToCart } from '@/lib/gtag';
 
 // Local type to avoid Rollup issues with CommonJS enum re-exports
 type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
@@ -66,6 +67,12 @@ export function ProductDetailPage() {
     try {
       const data = await shopApi.getProduct(productId);
       setProduct(data);
+      trackViewItem({
+        item_id: data.id,
+        item_name: data.name,
+        price: Number(data.price),
+        item_category: data.category,
+      });
     } catch (err) {
       console.error('Error loading product:', err);
       setError('Product not found');
@@ -77,6 +84,13 @@ export function ProductDetailPage() {
   const handleAddToCart = () => {
     if (product) {
       addItem(product, quantity);
+      trackAddToCart({
+        item_id: product.id,
+        item_name: product.name,
+        price: Number(product.price),
+        quantity,
+        item_category: product.category,
+      });
       setAddedToCart(true);
       setTimeout(() => setAddedToCart(false), 2000);
     }

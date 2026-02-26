@@ -1,5 +1,6 @@
 import { Helmet } from 'react-helmet-async';
 import { SITE_CONFIG } from './seo.constants';
+import { generateBreadcrumbSchema } from './json-ld';
 import type { SEOProps } from './seo.types';
 
 /**
@@ -11,6 +12,7 @@ import type { SEOProps } from './seo.types';
  * - Open Graph tags for social sharing
  * - Twitter Card tags
  * - JSON-LD structured data
+ * - BreadcrumbList JSON-LD (when breadcrumbs are provided)
  */
 export function SEOHead({
   title,
@@ -20,10 +22,26 @@ export function SEOHead({
   type = 'website',
   noindex = false,
   jsonLd,
+  breadcrumbs,
 }: SEOProps) {
   const fullUrl = canonical
     ? `${SITE_CONFIG.siteUrl}${canonical}`
     : SITE_CONFIG.siteUrl;
+
+  // Build array of all JSON-LD blocks to render
+  const jsonLdBlocks: object[] = [];
+
+  if (jsonLd) {
+    if (Array.isArray(jsonLd)) {
+      jsonLdBlocks.push(...jsonLd);
+    } else {
+      jsonLdBlocks.push(jsonLd);
+    }
+  }
+
+  if (breadcrumbs && breadcrumbs.length > 0) {
+    jsonLdBlocks.push(generateBreadcrumbSchema(breadcrumbs));
+  }
 
   return (
     <Helmet>
@@ -51,11 +69,11 @@ export function SEOHead({
       )}
 
       {/* JSON-LD Structured Data */}
-      {jsonLd && (
-        <script type="application/ld+json">
-          {JSON.stringify(jsonLd)}
+      {jsonLdBlocks.map((block, i) => (
+        <script key={i} type="application/ld+json">
+          {JSON.stringify(block)}
         </script>
-      )}
+      ))}
     </Helmet>
   );
 }

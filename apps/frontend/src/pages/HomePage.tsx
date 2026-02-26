@@ -9,6 +9,8 @@ import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business
 import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useHomeSEO } from '@/shared/seo';
 import { NewsletterModal } from '@/newsletter';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -24,6 +26,11 @@ export default function HomePage() {
   }>({ retailers: [], manufacturers: [] });
   const [newsletterModalOpen, setNewsletterModalOpen] = useState(false);
   const [votingStatus, setVotingStatus] = useState<VotingPublicStatus | null>(null);
+
+  // Banner ads
+  const { banners: homepageTopBanners } = useBanners(BannerPosition.HOMEPAGE_TOP);
+  const { banners: homepageMidBanners } = useBanners(BannerPosition.HOMEPAGE_MID);
+  const { banners: homepageBottomBanners } = useBanners(BannerPosition.HOMEPAGE_BOTTOM);
 
   // Derive hero settings from cached context
   const heroSettings = useMemo(() => {
@@ -239,6 +246,9 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* HOMEPAGE_TOP banner */}
+      {homepageTopBanners.length > 0 && <BannerDisplay banner={homepageTopBanners[0]} />}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="mb-16">
@@ -575,6 +585,9 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* HOMEPAGE_MID banner */}
+        {homepageMidBanners.length > 0 && <BannerDisplay banner={homepageMidBanners[0]} />}
+
         {/* Sponsors & Directory Section */}
         <div className="mb-16 relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
             {/* Subtle gradient overlays */}
@@ -826,6 +839,9 @@ export default function HomePage() {
             </div>
           </div>
         )}
+
+        {/* HOMEPAGE_BOTTOM banner */}
+        {homepageBottomBanners.length > 0 && <BannerDisplay banner={homepageBottomBanners[0]} />}
 
         <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-6 sm:p-8 md:p-12 text-center text-white">
           <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-4">Are you ready to be a MECA World Champion?</h2>

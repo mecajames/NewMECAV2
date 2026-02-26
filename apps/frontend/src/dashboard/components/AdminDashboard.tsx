@@ -4,7 +4,7 @@ import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
-  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp
+  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -360,6 +360,22 @@ export default function AdminDashboard() {
           action: 'site-analytics',
           color: 'cyan',
           navigateTo: '/admin/analytics',
+        },
+        {
+          icon: Search,
+          title: 'Search Console',
+          description: 'Search keywords, rankings, and indexing status',
+          action: 'search-console',
+          color: 'violet',
+          navigateTo: '/admin/search-console',
+        },
+        {
+          icon: Globe,
+          title: 'SEO Settings',
+          description: 'Global SEO config, page overrides, and verification',
+          action: 'seo-settings',
+          color: 'teal',
+          navigateTo: '/admin/seo-settings',
         },
         {
           icon: BookOpen,

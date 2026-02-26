@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne, OneToMany, Collection, Index } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { BannerPosition, BannerStatus } from '@newmeca/shared';
+import { BannerPosition, BannerStatus, BannerSize } from '@newmeca/shared';
 import { Advertiser } from './advertiser.entity';
 import { BannerEngagement } from './banner-engagement.entity';
 
@@ -41,6 +41,10 @@ export class Banner {
 
   @Property({ type: 'text', nullable: true, fieldName: 'alt_text' })
   altText?: string;
+
+  @Enum({ items: () => BannerSize, nullable: true })
+  @Property({ fieldName: 'size', nullable: true })
+  size?: BannerSize;
 
   // Frequency capping fields
   @Property({ type: 'integer', default: 0, fieldName: 'max_impressions_per_user' })

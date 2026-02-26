@@ -1,9 +1,36 @@
 import { Link } from 'react-router-dom';
 import { BookOpen, Zap, Music, Award, ArrowLeft } from 'lucide-react';
-import { SEOHead, useStaticPageSEO } from '@/shared/seo';
+import { SEOHead, useCompetitionGuidesSEO } from '@/shared/seo';
+
+const COMPETITION_FAQS = [
+  {
+    question: 'What is MECA?',
+    answer: 'MECA (Mobile Electronics Competition Association) is the premier organization for car audio competitions in the United States. We sanction events for SPL (Sound Pressure Level), SQL (Sound Quality League), and Show & Shine competitions.',
+  },
+  {
+    question: 'How do I compete in a MECA event?',
+    answer: 'To compete, you need a MECA membership, which you can purchase on our website. Then find an upcoming event in your area, register, and show up with your vehicle. First-time competitors are always welcome!',
+  },
+  {
+    question: 'What types of competitions does MECA offer?',
+    answer: 'MECA offers three main competition types: SPL (Sound Pressure Level) which measures loudness, SQL (Sound Quality League) which judges sound quality and installation, and Show & Shine which evaluates vehicle aesthetics and installation quality.',
+  },
+  {
+    question: 'How much does it cost to compete?',
+    answer: 'An annual MECA membership is required to compete. Event entry fees vary by event and are set by each event director. Check the specific event listing for pricing details.',
+  },
+  {
+    question: 'What do I need to bring to my first competition?',
+    answer: 'Bring your vehicle, your MECA membership ID, any required safety equipment (ear protection for SPL), and your music if competing in SQL. Check the rulebook for your specific competition format requirements.',
+  },
+  {
+    question: 'How are MECA competitions scored?',
+    answer: 'Scoring varies by competition type. SPL competitions use calibrated microphones to measure sound pressure. SQL competitions use trained judges who evaluate sound quality, staging, and installation. Show & Shine is judged on visual appearance and craftsmanship.',
+  },
+];
 
 export default function CompetitionGuidesPage() {
-  const seoProps = useStaticPageSEO('competitionGuides');
+  const seoProps = useCompetitionGuidesSEO(COMPETITION_FAQS);
   const guides = [
     {
       icon: Zap,

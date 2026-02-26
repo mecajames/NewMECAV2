@@ -47,3 +47,97 @@ export function trackEvent(
     value,
   });
 }
+
+// ===========================================================================
+// GA4 Ecommerce Events
+// https://developers.google.com/analytics/devguides/collection/ga4/ecommerce
+// ===========================================================================
+
+export interface EcommerceItem {
+  item_id: string;
+  item_name: string;
+  price: number;
+  quantity?: number;
+  item_category?: string;
+}
+
+export function trackViewItemList(items: EcommerceItem[], listName: string): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'view_item_list', {
+    item_list_name: listName,
+    items: items.map((item, i) => ({ ...item, index: i })),
+  });
+}
+
+export function trackViewItem(item: EcommerceItem): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'view_item', {
+    currency: 'USD',
+    value: item.price,
+    items: [item],
+  });
+}
+
+export function trackAddToCart(item: EcommerceItem): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'add_to_cart', {
+    currency: 'USD',
+    value: item.price * (item.quantity || 1),
+    items: [item],
+  });
+}
+
+export function trackRemoveFromCart(item: EcommerceItem): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'remove_from_cart', {
+    currency: 'USD',
+    value: item.price * (item.quantity || 1),
+    items: [item],
+  });
+}
+
+export function trackViewCart(items: EcommerceItem[], total: number): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'view_cart', {
+    currency: 'USD',
+    value: total,
+    items,
+  });
+}
+
+export function trackBeginCheckout(items: EcommerceItem[], total: number): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'begin_checkout', {
+    currency: 'USD',
+    value: total,
+    items,
+  });
+}
+
+export function trackAddShippingInfo(items: EcommerceItem[], total: number, shippingTier?: string): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'add_shipping_info', {
+    currency: 'USD',
+    value: total,
+    shipping_tier: shippingTier,
+    items,
+  });
+}
+
+export function trackPurchase(
+  transactionId: string,
+  items: EcommerceItem[],
+  total: number,
+  shipping?: number,
+  tax?: number,
+): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('event', 'purchase', {
+    transaction_id: transactionId,
+    currency: 'USD',
+    value: total,
+    shipping: shipping || 0,
+    tax: tax || 0,
+    items,
+  });
+}

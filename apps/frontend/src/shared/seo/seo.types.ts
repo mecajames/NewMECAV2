@@ -10,6 +10,7 @@ export interface SEOProps {
   type?: 'website' | 'article' | 'event' | 'product';
   noindex?: boolean;
   jsonLd?: object | object[];
+  breadcrumbs?: { name: string; path: string }[];
 }
 
 export interface EventSEOData {
@@ -44,4 +45,25 @@ export interface ProfileSEOData {
   description?: string;
   image?: string;
   type: 'member' | 'team' | 'retailer' | 'manufacturer' | 'judge' | 'eventDirector';
+}
+
+export interface RetailerSEOData {
+  id: string;
+  name: string;
+  description?: string;
+  image?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+  };
+  phone?: string;
+  email?: string;
+  website?: string;
+}
+
+export interface FAQPageSEOData {
+  faqs: { question: string; answer: string }[];
 }

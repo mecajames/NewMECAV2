@@ -1,4 +1,6 @@
 import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
+import { SiteSettings } from '../site-settings/site-settings.entity';
 
 interface ContactCreateDto {
   email: string;
@@ -13,16 +15,84 @@ interface ConstantContactResponse {
   };
 }
 
+// site_settings keys for persisted tokens
+const CC_TOKEN_KEY = 'cc_access_token';
+const CC_REFRESH_KEY = 'cc_refresh_token';
+
 @Injectable()
 export class ConstantContactService {
   private readonly logger = new Logger(ConstantContactService.name);
   private readonly apiBaseUrl = 'https://api.cc.email/v3';
   private accessToken: string;
   private refreshToken: string;
+  private tokensLoaded = false;
 
-  constructor() {
+  constructor(private readonly em: EntityManager) {
+    // Load initial tokens from env vars (DB tokens will override on first request)
     this.accessToken = process.env.CONSTANT_CONTACT_ACCESS_TOKEN || '';
     this.refreshToken = process.env.CONSTANT_CONTACT_REFRESH_TOKEN || '';
+  }
+
+  /**
+   * Load persisted tokens from DB if available (overrides .env values)
+   */
+  private async loadPersistedTokens(): Promise<void> {
+    if (this.tokensLoaded) return;
+    this.tokensLoaded = true;
+
+    try {
+      const em = this.em.fork();
+      const rows = await em.find(SiteSettings, {
+        setting_key: { $in: [CC_TOKEN_KEY, CC_REFRESH_KEY] },
+      });
+
+      for (const row of rows) {
+        if (row.setting_key === CC_TOKEN_KEY && row.setting_value) {
+          this.accessToken = row.setting_value;
+          this.logger.log('Loaded persisted CC access token from DB');
+        }
+        if (row.setting_key === CC_REFRESH_KEY && row.setting_value) {
+          this.refreshToken = row.setting_value;
+          this.logger.log('Loaded persisted CC refresh token from DB');
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not load CC tokens from DB, using .env values: ${err.message}`);
+    }
+  }
+
+  /**
+   * Persist refreshed tokens to DB so they survive server restarts
+   */
+  private async persistTokens(): Promise<void> {
+    try {
+      const em = this.em.fork();
+
+      for (const [key, value] of [
+        [CC_TOKEN_KEY, this.accessToken],
+        [CC_REFRESH_KEY, this.refreshToken],
+      ] as const) {
+        const existing = await em.findOne(SiteSettings, { setting_key: key });
+        if (existing) {
+          existing.setting_value = value;
+          existing.updated_at = new Date();
+        } else {
+          em.create(SiteSettings, {
+            setting_key: key,
+            setting_value: value,
+            setting_type: 'secret',
+            description: `Constant Contact ${key === CC_TOKEN_KEY ? 'access' : 'refresh'} token (auto-managed)`,
+            updated_by: 'system',
+            updated_at: new Date(),
+          });
+        }
+      }
+
+      await em.flush();
+      this.logger.log('Persisted refreshed CC tokens to DB');
+    } catch (err: any) {
+      this.logger.warn(`Could not persist CC tokens to DB: ${err.message}`);
+    }
   }
 
   /**
@@ -30,6 +100,8 @@ export class ConstantContactService {
    * Supports multiple lists via comma-separated CONSTANT_CONTACT_LIST_ID env var
    */
   async addContact(data: ContactCreateDto): Promise<ConstantContactResponse> {
+    await this.loadPersistedTokens();
+
     const listIdEnv = process.env.CONSTANT_CONTACT_LIST_ID;
 
     if (!listIdEnv) {
@@ -43,14 +115,11 @@ export class ConstantContactService {
     const listIds = listIdEnv.split(',').map(id => id.trim()).filter(id => id);
 
     const contactPayload = {
-      email_address: {
-        address: data.email,
-        permission_to_send: 'implicit', // or 'explicit' if you have double opt-in
-      },
+      email_address: data.email,
       first_name: data.firstName || '',
       last_name: data.lastName || '',
       list_memberships: listIds,
-      create_source: 'Contact', // Indicates contact was created via API
+      create_source: 'Contact',
     };
 
     try {
@@ -65,7 +134,6 @@ export class ConstantContactService {
       // Handle duplicate contact (409 Conflict)
       if (error.status === 409) {
         this.logger.log(`Contact already exists: ${data.email}`);
-        // Optionally update their list membership
         return this.updateContactListMembership(data.email, listIds);
       }
       throw error;
@@ -115,15 +183,18 @@ export class ConstantContactService {
    * Get all contact lists (useful for finding your list ID)
    */
   async getLists(): Promise<any> {
+    await this.loadPersistedTokens();
     return this.makeApiRequest('/contact_lists', { method: 'GET' });
   }
 
   /**
-   * Make an authenticated API request to Constant Contact
+   * Make an authenticated API request to Constant Contact.
+   * Automatically handles token refresh on 401 with a single retry.
    */
   private async makeApiRequest(
     endpoint: string,
-    options: { method: string; body?: string }
+    options: { method: string; body?: string },
+    isRetry = false,
   ): Promise<any> {
     const url = `${this.apiBaseUrl}${endpoint}`;
 
@@ -138,11 +209,11 @@ export class ConstantContactService {
         body: options.body,
       });
 
-      // Handle token expiration
-      if (response.status === 401) {
+      // Handle token expiration — refresh and retry ONCE
+      if (response.status === 401 && !isRetry) {
+        this.logger.warn('CC access token expired, refreshing...');
         await this.refreshAccessToken();
-        // Retry the request with new token
-        return this.makeApiRequest(endpoint, options);
+        return this.makeApiRequest(endpoint, options, true);
       }
 
       if (!response.ok) {
@@ -176,7 +247,8 @@ export class ConstantContactService {
   }
 
   /**
-   * Refresh the access token using the refresh token
+   * Refresh the access token using the refresh token.
+   * Persists the new tokens to the database.
    */
   private async refreshAccessToken(): Promise<void> {
     const apiKey = process.env.CONSTANT_CONTACT_API_KEY;
@@ -184,7 +256,7 @@ export class ConstantContactService {
 
     if (!apiKey || !clientSecret || !this.refreshToken) {
       throw new HttpException(
-        'Constant Contact credentials not configured',
+        'Constant Contact credentials not configured. Set CONSTANT_CONTACT_API_KEY, CONSTANT_CONTACT_CLIENT_SECRET, and CONSTANT_CONTACT_REFRESH_TOKEN.',
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -207,9 +279,9 @@ export class ConstantContactService {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        this.logger.error(`Token refresh failed: ${errorBody}`);
+        this.logger.error(`CC token refresh failed (${response.status}): ${errorBody}`);
         throw new HttpException(
-          'Failed to refresh Constant Contact token',
+          `Failed to refresh Constant Contact token: ${errorBody}`,
           HttpStatus.UNAUTHORIZED
         );
       }
@@ -217,12 +289,15 @@ export class ConstantContactService {
       const data = await response.json() as { access_token: string; refresh_token?: string };
       this.accessToken = data.access_token;
 
-      // If a new refresh token is provided, update it
+      // Constant Contact may issue a new refresh token — always update it
       if (data.refresh_token) {
         this.refreshToken = data.refresh_token;
       }
 
-      this.logger.log('Constant Contact access token refreshed');
+      this.logger.log('Constant Contact access token refreshed successfully');
+
+      // Persist to DB so the new tokens survive server restarts
+      await this.persistTokens();
     } catch (error: any) {
       if (error instanceof HttpException) {
         throw error;
