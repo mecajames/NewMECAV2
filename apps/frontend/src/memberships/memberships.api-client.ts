@@ -318,6 +318,64 @@ export interface PaymentIntentResult {
   amount: number;
 }
 
+// =============================================================================
+// Card Data Types
+// =============================================================================
+
+export interface CardData {
+  membershipId: string;
+  memberName: string;
+  mecaId: number | string | null;
+  memberSince: string;
+  expirationDate: string | null;
+  membershipType: string;
+  membershipCategory: string;
+  isActive: boolean;
+}
+
+export interface AdminCardItem {
+  id: string;
+  meca_id: number;
+  competitor_name: string | null;
+  start_date: string;
+  end_date: string | null;
+  card_created_at: string | null;
+  card_assigned_at: string | null;
+  card_shipped_at: string | null;
+  card_tracking_number: string | null;
+  card_notes: string | null;
+  payment_status: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  membership_type_name: string;
+  membership_type_category: string;
+  // ORM-style (when returned from MikroORM instead of raw SQL)
+  mecaId?: number;
+  competitorName?: string | null;
+  startDate?: string;
+  endDate?: string | null;
+  cardCreatedAt?: string | null;
+  cardAssignedAt?: string | null;
+  cardShippedAt?: string | null;
+  cardTrackingNumber?: string | null;
+  cardNotes?: string | null;
+  paymentStatus?: string;
+  user?: { id: string; firstName: string; lastName: string; email: string };
+  membershipTypeConfig?: { id: string; name: string; category: string };
+  isActive?: boolean;
+}
+
+export interface AdminCardsFilters {
+  search?: string;
+  membershipStatus?: 'active' | 'expired';
+  cardStatus?: 'no_card' | 'created' | 'shipped';
+  membershipTypeConfigId?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export const membershipsApi = {
   /**
    * Get a membership by ID
@@ -850,6 +908,85 @@ export const membershipsApi = {
   }> => {
     const response = await axios.post('/api/memberships/billing-portal', {
       returnUrl,
+    });
+    return response.data;
+  },
+
+  // ============================================================
+  // MEMBERSHIP CARD ENDPOINTS
+  // ============================================================
+
+  /**
+   * Get current user's card data
+   */
+  getMyCardData: async (): Promise<CardData | null> => {
+    try {
+      const response = await axios.get('/api/memberships/my-card');
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Get card data for a specific membership
+   */
+  getCardData: async (membershipId: string): Promise<CardData> => {
+    const response = await axios.get(`/api/memberships/${membershipId}/card-data`);
+    return response.data;
+  },
+
+  /**
+   * Admin: Get list of memberships with card tracking status
+   */
+  getAdminCardsList: async (params: AdminCardsFilters): Promise<{ items: AdminCardItem[]; total: number }> => {
+    const response = await axios.get('/api/memberships/admin/cards', { params });
+    return response.data;
+  },
+
+  /**
+   * Admin: Update card tracking status for a membership
+   */
+  updateCardStatus: async (membershipId: string, data: {
+    cardCreatedAt?: string | null;
+    cardAssignedAt?: string | null;
+    cardShippedAt?: string | null;
+    cardTrackingNumber?: string | null;
+    cardNotes?: string | null;
+  }): Promise<any> => {
+    const response = await axios.put(`/api/memberships/${membershipId}/admin/card-status`, data);
+    return response.data;
+  },
+
+  /**
+   * Admin: Get card stats across all active memberships
+   */
+  getAdminCardStats: async (): Promise<{ total: number; cardsCreated: number; cardsShipped: number; pending: number }> => {
+    const response = await axios.get('/api/memberships/admin/card-stats');
+    return response.data;
+  },
+
+  /**
+   * Admin: Assign cards to all active members who don't have one yet
+   */
+  assignCardsToAllActive: async (): Promise<{ updated: number }> => {
+    const response = await axios.post('/api/memberships/admin/cards-assign-all-active');
+    return response.data;
+  },
+
+  /**
+   * Admin: Bulk update card status for multiple memberships
+   */
+  bulkUpdateCardStatus: async (membershipIds: string[], data: {
+    cardCreatedAt?: string | null;
+    cardShippedAt?: string | null;
+  }): Promise<{ updated: number }> => {
+    const response = await axios.put('/api/memberships/admin/card-bulk-status', {
+      membershipIds,
+      ...data,
     });
     return response.data;
   },

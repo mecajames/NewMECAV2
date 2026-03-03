@@ -22,8 +22,10 @@ import {
 } from 'recharts';
 import { EventRatingsPanel } from '@/ratings';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
+import { countries as isoCountries, getStatesForCountry } from '@/utils/countries';
 import { AchievementsGallery } from '@/achievements';
-import { membershipsApi, Membership, MemberCancelMembershipModal } from '@/memberships';
+import { membershipsApi, Membership, MemberCancelMembershipModal, MembershipCard } from '@/memberships';
+import type { CardData } from '@/memberships';
 import { Vote } from 'lucide-react';
 import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
 import type { VotingPublicStatus } from '@newmeca/shared';
@@ -41,7 +43,7 @@ interface EventHostingRequest {
   createdAt: string;
 }
 
-type TabType = 'overview' | 'profile' | 'gallery' | 'team' | 'events' | 'results' | 'analytics';
+type TabType = 'overview' | 'profile' | 'gallery' | 'team' | 'events' | 'results' | 'analytics' | 'card';
 
 export default function MyMecaDashboardPage() {
   const navigate = useNavigate();
@@ -75,6 +77,10 @@ export default function MyMecaDashboardPage() {
 
   // Active membership for displaying membership type badge
   const [activeMembership, setActiveMembership] = useState<Membership | null>(null);
+
+  // Card data for ID Card tab
+  const [cardData, setCardData] = useState<CardData | null>(null);
+  const [cardLoading, setCardLoading] = useState(false);
 
   // Auto-renewal/subscription status
   const [subscriptionStatus, setSubscriptionStatus] = useState<{
@@ -245,6 +251,25 @@ export default function MyMecaDashboardPage() {
       // Silently ignore - voting status is optional
     }
   };
+
+  const fetchCardData = async () => {
+    setCardLoading(true);
+    try {
+      const data = await membershipsApi.getMyCardData();
+      setCardData(data);
+    } catch {
+      // Silently ignore - card data is optional
+    } finally {
+      setCardLoading(false);
+    }
+  };
+
+  // Fetch card data when tab becomes active
+  useEffect(() => {
+    if (activeTab === 'card' && !cardData && !cardLoading && profile) {
+      fetchCardData();
+    }
+  }, [activeTab, profile]);
 
   // Open Stripe Billing Portal for managing payment methods and subscriptions
   const handleOpenBillingPortal = async () => {
@@ -1120,6 +1145,7 @@ export default function MyMecaDashboardPage() {
     { id: 'profile', label: 'Profile', icon: Settings },
     { id: 'gallery', label: 'Gallery', icon: Image },
     { id: 'team', label: 'Team', icon: Users },
+    { id: 'card', label: 'Membership Card', icon: CreditCard },
     { id: 'events', label: 'Event Registrations', icon: Calendar },
     { id: 'results', label: 'Results', icon: Trophy },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
@@ -1133,6 +1159,8 @@ export default function MyMecaDashboardPage() {
         return renderProfile();
       case 'gallery':
         return renderGallery();
+      case 'card':
+        return renderCard();
       case 'team':
         return renderTeam();
       case 'events':
@@ -1144,6 +1172,80 @@ export default function MyMecaDashboardPage() {
       default:
         return renderOverview();
     }
+  };
+
+  const renderCard = () => {
+    if (cardLoading) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+        </div>
+      );
+    }
+
+    if (!cardData) {
+      return (
+        <div className="bg-slate-800 rounded-xl p-8 text-center">
+          <CreditCard className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-white mb-2">No Active Membership</h3>
+          <p className="text-slate-400 mb-6">
+            You need an active MECA membership to view your digital ID card.
+          </p>
+          <button
+            onClick={() => navigate('/membership')}
+            className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+          >
+            Get a Membership
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-slate-800 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-2">Your Digital Membership Card</h3>
+          <p className="text-slate-400 text-sm mb-6">
+            This is your official MECA membership card. You can print it or show it on your phone at events.
+          </p>
+          <div className="flex justify-center">
+            <MembershipCard
+              memberName={cardData.memberName}
+              mecaId={cardData.mecaId}
+              memberSince={cardData.memberSince}
+              expirationDate={cardData.expirationDate}
+              membershipId={cardData.membershipId}
+            />
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-6">
+          <h4 className="text-md font-semibold text-white mb-3">Card Details</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-slate-500 text-xs uppercase tracking-wider">Name</p>
+              <p className="text-white">{cardData.memberName}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 text-xs uppercase tracking-wider">MECA ID</p>
+              <p className="text-orange-400 font-bold">{cardData.mecaId ?? 'Pending'}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 text-xs uppercase tracking-wider">Membership Type</p>
+              <p className="text-white">{cardData.membershipType}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 text-xs uppercase tracking-wider">Status</p>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                cardData.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+              }`}>
+                {cardData.isActive ? 'Active' : 'Expired'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderOverview = () => (
@@ -3257,19 +3359,36 @@ export default function MyMecaDashboardPage() {
   };
 
   const renderEvents = () => {
-    // Get unique countries and states from registrations for filter dropdowns
-    const uniqueCountries = [...new Set(
+    // Get unique country codes from registrations, then resolve to ISO names
+    const uniqueCountryCodes = [...new Set(
       registrations
         .map(reg => reg.event?.venue_country)
         .filter(Boolean)
-    )].sort();
+    )].sort() as string[];
 
-    const uniqueStates = [...new Set(
-      registrations
-        .filter(reg => !registrationFilters.country || reg.event?.venue_country === registrationFilters.country)
-        .map(reg => reg.event?.venue_state)
-        .filter(Boolean)
-    )].sort();
+    // Map country codes to { code, name } using ISO data, falling back to code as name
+    const countryOptions = uniqueCountryCodes.map(code => {
+      const iso = isoCountries.find(c => c.code === code);
+      return { code, name: iso ? iso.name : code };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Get state options: if a country is selected, show full ISO state list for that country;
+    // otherwise show unique state codes from registrations
+    const stateOptions = registrationFilters.country
+      ? getStatesForCountry(registrationFilters.country)
+      : [...new Set(
+          registrations
+            .map(reg => reg.event?.venue_state)
+            .filter(Boolean)
+        )].sort().map(code => {
+          // Try to resolve state code from all countries in registrations
+          for (const cc of uniqueCountryCodes) {
+            const states = getStatesForCountry(cc);
+            const found = states.find(s => s.code === code);
+            if (found) return found;
+          }
+          return { code: code as string, name: code as string };
+        });
 
     // Filter registrations based on current filters
     const filteredRegistrations = registrations.filter(reg => {
@@ -3374,8 +3493,8 @@ export default function MyMecaDashboardPage() {
               className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
             >
               <option value="">All Countries</option>
-              {uniqueCountries.map(country => (
-                <option key={country} value={country}>{country}</option>
+              {countryOptions.map(country => (
+                <option key={country.code} value={country.code}>{country.name}</option>
               ))}
             </select>
           </div>
@@ -3387,11 +3506,11 @@ export default function MyMecaDashboardPage() {
               value={registrationFilters.state}
               onChange={(e) => setRegistrationFilters(prev => ({ ...prev, state: e.target.value }))}
               className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
-              disabled={!registrationFilters.country && uniqueStates.length === 0}
+              disabled={!registrationFilters.country && stateOptions.length === 0}
             >
               <option value="">All States</option>
-              {uniqueStates.map(state => (
-                <option key={state} value={state}>{state}</option>
+              {stateOptions.map(state => (
+                <option key={state.code} value={state.code}>{state.name}</option>
               ))}
             </select>
           </div>
@@ -3426,8 +3545,8 @@ export default function MyMecaDashboardPage() {
                         <MapPin className="h-3 w-3" />
                         {reg.event?.venue_name}
                         {reg.event?.venue_city && `, ${reg.event.venue_city}`}
-                        {reg.event?.venue_state && `, ${reg.event.venue_state}`}
-                        {reg.event?.venue_country && reg.event.venue_country !== 'USA' && `, ${reg.event.venue_country}`}
+                        {reg.event?.venue_state && `, ${getStatesForCountry(reg.event?.venue_country || 'US').find(s => s.code === reg.event?.venue_state)?.name || reg.event.venue_state}`}
+                        {reg.event?.venue_country && reg.event.venue_country !== 'US' && `, ${isoCountries.find(c => c.code === reg.event?.venue_country)?.name || reg.event.venue_country}`}
                       </p>
                       <p className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
@@ -4347,6 +4466,16 @@ export default function MyMecaDashboardPage() {
                 <span className="text-orange-500 font-mono font-semibold">{profile.meca_id}</span>
               </div>
             )}
+            <a
+              href="/faq-docs/index.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+              title="Help & FAQs"
+            >
+              <HelpCircle className="h-4 w-4 text-gray-400" />
+              <span className="text-gray-400 text-sm hidden sm:inline">Help</span>
+            </a>
             {activeMembership?.membershipTypeConfig?.category && (
               <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg ${
                 activeMembership.membershipTypeConfig.category === 'competitor' ? 'bg-blue-500/10 text-blue-400' :

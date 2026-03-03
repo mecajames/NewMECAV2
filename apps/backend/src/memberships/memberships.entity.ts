@@ -174,6 +174,25 @@ export class Membership {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'linked_at' })
   linkedAt?: Date;
 
+  // =============================================================================
+  // Physical Card Tracking Fields
+  // =============================================================================
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'card_created_at' })
+  cardCreatedAt?: Date;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'card_assigned_at' })
+  cardAssignedAt?: Date;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'card_shipped_at' })
+  cardShippedAt?: Date;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'card_tracking_number' })
+  cardTrackingNumber?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'card_notes' })
+  cardNotes?: string;
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   createdAt: Date = new Date();
 

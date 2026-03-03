@@ -65,6 +65,9 @@ export class MecaIdService {
         const mecaId = previousMembership.mecaId;
         membership.mecaId = mecaId;
 
+        // Auto-create membership card when MECA ID is assigned
+        membership.cardCreatedAt = new Date();
+
         // Update history to mark reactivation
         await this.recordReactivation(mecaId, membership, previousMembership.endDate, em);
 
@@ -81,6 +84,9 @@ export class MecaIdService {
     const newMecaId = await this.getNextMecaId();
     this.logger.log(`Got MECA ID ${newMecaId}, assigning to membership ${membership.id}`);
     membership.mecaId = newMecaId;
+
+    // Auto-create membership card when MECA ID is assigned
+    membership.cardCreatedAt = new Date();
 
     // Create history record
     this.logger.log(`Creating history record for MECA ID ${newMecaId}`);

@@ -2048,4 +2048,340 @@ export class MembershipsService {
 
     this.logger.log(`Removed Stripe subscription ${stripeSubscriptionId} from membership ${membership.id}`);
   }
+
+  // =============================================================================
+  // Card Tracking Methods
+  // =============================================================================
+
+  /**
+   * Get card display data for a specific membership.
+   * Returns the data needed to render a membership ID card.
+   */
+  async getCardData(membershipId: string): Promise<{
+    membershipId: string;
+    memberName: string;
+    mecaId: number | string | null;
+    memberSince: string;
+    expirationDate: string | null;
+    membershipType: string;
+    membershipCategory: string;
+    isActive: boolean;
+  }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${membershipId} not found`);
+    }
+
+    const memberName = membership.getCompetitorDisplayName();
+    // Fall back to profile.meca_id if membership doesn't have one
+    const mecaId = membership.mecaId ?? membership.user?.meca_id ?? null;
+
+    return {
+      membershipId: membership.id,
+      memberName,
+      mecaId,
+      memberSince: membership.startDate?.toISOString() ?? membership.createdAt.toISOString(),
+      expirationDate: membership.endDate?.toISOString() ?? null,
+      membershipType: membership.membershipTypeConfig?.name ?? 'Unknown',
+      membershipCategory: membership.membershipTypeConfig?.category ?? 'competitor',
+      isActive: membership.isActive(),
+    };
+  }
+
+  /**
+   * Get card data for the currently authenticated user's active membership.
+   */
+  async getMyCardData(userId: string): Promise<{
+    membershipId: string;
+    memberName: string;
+    mecaId: number | string | null;
+    memberSince: string;
+    expirationDate: string | null;
+    membershipType: string;
+    membershipCategory: string;
+    isActive: boolean;
+  } | null> {
+    const em = this.em.fork();
+    const membership = await em.findOne(
+      Membership,
+      { user: userId, paymentStatus: PaymentStatus.PAID },
+      {
+        populate: ['user', 'membershipTypeConfig'],
+        orderBy: { createdAt: 'DESC' },
+      }
+    );
+
+    if (!membership) {
+      return null;
+    }
+
+    const memberName = membership.getCompetitorDisplayName();
+    // Fall back to profile.meca_id if membership doesn't have one
+    const mecaId = membership.mecaId ?? membership.user?.meca_id ?? null;
+
+    return {
+      membershipId: membership.id,
+      memberName,
+      mecaId,
+      memberSince: membership.startDate?.toISOString() ?? membership.createdAt.toISOString(),
+      expirationDate: membership.endDate?.toISOString() ?? null,
+      membershipType: membership.membershipTypeConfig?.name ?? 'Unknown',
+      membershipCategory: membership.membershipTypeConfig?.category ?? 'competitor',
+      isActive: membership.isActive(),
+    };
+  }
+
+  /**
+   * Admin: Get card stats across all memberships (not page-limited).
+   */
+  async getAdminCardStats(): Promise<{
+    total: number;
+    cardsCreated: number;
+    cardsShipped: number;
+    pending: number;
+  }> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    const baseWhere = `payment_status = 'paid' AND meca_id IS NOT NULL AND end_date >= NOW()`;
+
+    const result = await conn.execute(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(card_created_at) as cards_created,
+        COUNT(card_shipped_at) as cards_shipped,
+        COUNT(*) - COUNT(card_created_at) as pending
+      FROM memberships
+      WHERE ${baseWhere}
+    `);
+
+    const row = result[0] || {};
+    return {
+      total: parseInt(row.total ?? '0', 10),
+      cardsCreated: parseInt(row.cards_created ?? '0', 10),
+      cardsShipped: parseInt(row.cards_shipped ?? '0', 10),
+      pending: parseInt(row.pending ?? '0', 10),
+    };
+  }
+
+  /**
+   * Admin: Get paginated list of memberships with card tracking status.
+   */
+  async getAdminCardsList(filters: {
+    search?: string;
+    membershipStatus?: 'active' | 'expired';
+    cardStatus?: 'no_card' | 'created' | 'shipped';
+    membershipTypeConfigId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: any[]; total: number }> {
+    const em = this.em.fork();
+    const where: any = {
+      paymentStatus: PaymentStatus.PAID,
+      mecaId: { $ne: null },
+    };
+
+    // Membership status filter
+    if (filters.membershipStatus === 'active') {
+      where.endDate = { $gte: new Date() };
+    } else if (filters.membershipStatus === 'expired') {
+      where.endDate = { $lt: new Date() };
+    }
+
+    // Card status filter
+    if (filters.cardStatus === 'no_card') {
+      where.cardCreatedAt = null;
+    } else if (filters.cardStatus === 'created') {
+      where.cardCreatedAt = { $ne: null };
+      where.cardShippedAt = null;
+    } else if (filters.cardStatus === 'shipped') {
+      where.cardShippedAt = { $ne: null };
+    }
+
+    // Membership type filter
+    if (filters.membershipTypeConfigId) {
+      where.membershipTypeConfig = filters.membershipTypeConfigId;
+    }
+
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+
+    // If search, use raw query for ILIKE support
+    if (filters.search && filters.search.trim()) {
+      const searchTerm = `%${filters.search.trim()}%`;
+      const conn = em.getConnection();
+
+      // Build WHERE clause
+      let whereClause = `m.payment_status = 'paid' AND m.meca_id IS NOT NULL`;
+
+      if (filters.membershipStatus === 'active') {
+        whereClause += ` AND m.end_date >= NOW()`;
+      } else if (filters.membershipStatus === 'expired') {
+        whereClause += ` AND m.end_date < NOW()`;
+      }
+
+      if (filters.cardStatus === 'no_card') {
+        whereClause += ` AND m.card_created_at IS NULL`;
+      } else if (filters.cardStatus === 'created') {
+        whereClause += ` AND m.card_created_at IS NOT NULL AND m.card_shipped_at IS NULL`;
+      } else if (filters.cardStatus === 'shipped') {
+        whereClause += ` AND m.card_shipped_at IS NOT NULL`;
+      }
+
+      if (filters.membershipTypeConfigId) {
+        whereClause += ` AND m.membership_type_config_id = ?`;
+      }
+
+      const searchClause = `AND (
+        p.first_name ILIKE ? OR p.last_name ILIKE ?
+        OR p.email ILIKE ? OR CAST(m.meca_id AS TEXT) ILIKE ?
+        OR m.competitor_name ILIKE ?
+      )`;
+
+      const params: any[] = [];
+      if (filters.membershipTypeConfigId) params.push(filters.membershipTypeConfigId);
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+
+      const countResult = await conn.execute(
+        `SELECT COUNT(*) as total FROM memberships m
+         JOIN profiles p ON p.id = m.user_id
+         WHERE ${whereClause} ${searchClause}`,
+        params
+      );
+
+      const rows = await conn.execute(
+        `SELECT m.id, m.meca_id, m.competitor_name, m.start_date, m.end_date,
+                m.card_created_at, m.card_assigned_at, m.card_shipped_at,
+                m.card_tracking_number, m.card_notes, m.payment_status,
+                m.membership_type_config_id,
+                p.id as user_id, p.first_name, p.last_name, p.email,
+                mtc.name as membership_type_name, mtc.category as membership_type_category
+         FROM memberships m
+         JOIN profiles p ON p.id = m.user_id
+         LEFT JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
+         WHERE ${whereClause} ${searchClause}
+         ORDER BY m.created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      );
+
+      return {
+        items: rows,
+        total: parseInt(countResult[0]?.total ?? '0', 10),
+      };
+    }
+
+    // No search - use MikroORM
+    const [memberships, total] = await em.findAndCount(
+      Membership,
+      where,
+      {
+        populate: ['user', 'membershipTypeConfig'],
+        orderBy: { createdAt: 'DESC' },
+        limit,
+        offset,
+      }
+    );
+
+    const items = memberships.map(m => {
+      return {
+        id: m.id,
+        mecaId: m.mecaId,
+        competitorName: m.competitorName,
+        startDate: m.startDate,
+        endDate: m.endDate,
+        cardCreatedAt: m.cardCreatedAt,
+        cardAssignedAt: m.cardAssignedAt,
+        cardShippedAt: m.cardShippedAt,
+        cardTrackingNumber: m.cardTrackingNumber,
+        cardNotes: m.cardNotes,
+        paymentStatus: m.paymentStatus,
+        user: m.user ? {
+          id: m.user.id,
+          firstName: m.user.first_name,
+          lastName: m.user.last_name,
+          email: m.user.email,
+        } : null,
+        membershipTypeConfig: m.membershipTypeConfig ? {
+          id: m.membershipTypeConfig.id,
+          name: m.membershipTypeConfig.name,
+          category: m.membershipTypeConfig.category,
+        } : null,
+        isActive: m.isActive(),
+      };
+    });
+
+    return { items, total };
+  }
+
+  /**
+   * Admin: Update card tracking fields for a membership.
+   */
+  async updateCardStatus(membershipId: string, updates: {
+    cardCreatedAt?: Date | null;
+    cardAssignedAt?: Date | null;
+    cardShippedAt?: Date | null;
+    cardTrackingNumber?: string | null;
+    cardNotes?: string | null;
+  }): Promise<Membership> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId });
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${membershipId} not found`);
+    }
+
+    if (updates.cardCreatedAt !== undefined) membership.cardCreatedAt = updates.cardCreatedAt ?? undefined;
+    if (updates.cardAssignedAt !== undefined) membership.cardAssignedAt = updates.cardAssignedAt ?? undefined;
+    if (updates.cardShippedAt !== undefined) membership.cardShippedAt = updates.cardShippedAt ?? undefined;
+    if (updates.cardTrackingNumber !== undefined) membership.cardTrackingNumber = updates.cardTrackingNumber ?? undefined;
+    if (updates.cardNotes !== undefined) membership.cardNotes = updates.cardNotes ?? undefined;
+
+    await em.flush();
+    return membership;
+  }
+
+  /**
+   * Admin: Assign cards to all active members who don't have one yet.
+   * Sets cardCreatedAt to now for all paid memberships with a MECA ID
+   * that have a non-expired end_date and no cardCreatedAt.
+   */
+  async assignCardsToAllActive(): Promise<{ updated: number }> {
+    const em = this.em.fork();
+    const memberships = await em.find(Membership, {
+      paymentStatus: PaymentStatus.PAID,
+      mecaId: { $ne: null },
+      endDate: { $gte: new Date() },
+      cardCreatedAt: null,
+    });
+
+    const now = new Date();
+    for (const m of memberships) {
+      m.cardCreatedAt = now;
+    }
+
+    await em.flush();
+    return { updated: memberships.length };
+  }
+
+  /**
+   * Admin: Bulk update card status for multiple memberships.
+   */
+  async bulkUpdateCardStatus(membershipIds: string[], updates: {
+    cardCreatedAt?: Date | null;
+    cardShippedAt?: Date | null;
+  }): Promise<{ updated: number }> {
+    const em = this.em.fork();
+    const memberships = await em.find(Membership, { id: { $in: membershipIds } });
+
+    for (const membership of memberships) {
+      if (updates.cardCreatedAt !== undefined) membership.cardCreatedAt = updates.cardCreatedAt ?? undefined;
+      if (updates.cardShippedAt !== undefined) membership.cardShippedAt = updates.cardShippedAt ?? undefined;
+    }
+
+    await em.flush();
+    return { updated: memberships.length };
+  }
 }

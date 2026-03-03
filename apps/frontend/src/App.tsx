@@ -104,7 +104,9 @@ const BannersAdminPage = lazy(() => import('@/admin/pages/BannersAdminPage'));
 const BannerAnalyticsPage = lazy(() => import('@/admin/pages/BannerAnalyticsPage'));
 const AdminShopProductsPage = lazy(() => import('@/admin/pages/AdminShopProductsPage'));
 const AdminShopOrdersPage = lazy(() => import('@/admin/pages/AdminShopOrdersPage'));
+const MembershipCardsAdminPage = lazy(() => import('@/admin/pages/MembershipCardsAdminPage'));
 const FinalsVotingAdminPage = lazy(() => import('@/admin/pages/FinalsVotingAdminPage'));
+const CardRedirectPage = lazy(() => import('@/memberships/pages/CardRedirectPage'));
 const FinalsVotingPage = lazy(() => import('@/finals-voting/pages/FinalsVotingPage'));
 const VotingResultsPage = lazy(() => import('@/finals-voting/pages/VotingResultsPage'));
 const AnalyticsPage = lazy(() => import('@/admin/pages/AnalyticsPage'));
@@ -307,8 +309,14 @@ function App() {
               <Route path="/admin/search-console" element={<L><SearchConsolePage /></L>} />
               <Route path="/admin/seo-settings" element={<L><SEOSettingsPage /></L>} />
 
+              {/* Admin Membership Cards */}
+              <Route path="/admin/membership-cards" element={<L><MembershipCardsAdminPage /></L>} />
+
               {/* Admin Finals Voting */}
               <Route path="/admin/finals-voting" element={<L><FinalsVotingAdminPage /></L>} />
+
+              {/* Card QR Code Redirect */}
+              <Route path="/card/:membershipId" element={<L><CardRedirectPage /></L>} />
 
               {/* Finals Voting (Member) */}
               <Route path="/finals-voting" element={<L><FinalsVotingPage /></L>} />

@@ -178,6 +178,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/membership-types',
         },
         {
+          icon: QrCode,
+          title: 'Membership Cards',
+          description: 'Track and manage physical membership ID cards',
+          action: 'membership-cards',
+          color: 'orange',
+          navigateTo: '/admin/membership-cards',
+        },
+        {
           icon: DollarSign,
           title: 'Billing',
           description: 'Manage orders, invoices, and revenue',

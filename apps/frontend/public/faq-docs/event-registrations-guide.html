@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Registrations Guide - MECA Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    h3 { color: #60a5fa; font-size: 1.1rem; margin: 16px 0 12px 0; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-left: 24px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    .highlight { background: #475569; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #f97316; }
+    .tip-box { background: #1e3a5f; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
+    .warning-box { background: #7c2d12; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #ef4444; }
+    .flow-diagram { background: #1e293b; padding: 20px; border-radius: 8px; margin: 16px 0; }
+    .flow-step { display: flex; align-items: flex-start; margin-bottom: 12px; }
+    .flow-number {
+      background: #f97316; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-weight: 600;
+      margin-right: 12px; flex-shrink: 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 12px; text-align: left; border: 1px solid #475569; }
+    th { background: #475569; color: #f97316; }
+    tr:nth-child(even) { background: #3d4f63; }
+    .footer-help { text-align: center; margin-top: 40px; padding: 24px; background: #334155; border-radius: 12px; }
+    .footer-help a { color: #f97316; text-decoration: none; }
+    .footer-help a:hover { text-decoration: underline; }
+    .screenshot-wrap { margin: 16px 0; text-align: center; }
+    .screenshot-wrap img { max-width: 100%; border-radius: 8px; border: 1px solid #475569; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .screenshot-wrap .caption { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+    .screenshot-wrap .missing { display: block; padding: 48px 24px; background: #1e293b; border-radius: 8px; border: 1px dashed #475569; color: #64748b; font-style: italic; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+      table { font-size: 0.85rem; }
+      th, td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Help Center</a>
+
+    <h1>&#128197; Event Registrations Guide</h1>
+    <p class="subtitle">Managing your event registrations and signing up for competitions</p>
+
+    <div class="section">
+      <h2>Registration List</h2>
+      <p>The <strong>Event Registrations</strong> tab shows all events you've registered for, with key details at a glance:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/registrations-table.png"
+             alt="Event registrations table showing registered events" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: registrations-table.png</span>'">
+        <p class="caption">The event registrations list with status indicators</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> registrations-table.png &bull;
+          <strong>Title:</strong> Event Registrations Table &bull;
+          <strong>Desc:</strong> Event Registrations tab showing the table of registered events with name, date, location, format, class, and status columns &bull;
+          <strong>Tags:</strong> faq, registrations, events, table
+        </p>
+      </div>
+
+      <table>
+        <tr><th>Column</th><th>What It Shows</th></tr>
+        <tr><td><strong>Event Name</strong></td><td>The name of the competition event</td></tr>
+        <tr><td><strong>Date</strong></td><td>When the event takes place</td></tr>
+        <tr><td><strong>Location</strong></td><td>Venue city and state</td></tr>
+        <tr><td><strong>Format</strong></td><td>Competition format (SPL, SQL, Show & Shine, Ride the Light)</td></tr>
+        <tr><td><strong>Class</strong></td><td>Your registered competition class</td></tr>
+        <tr><td><strong>Status</strong></td><td>Registration status (Confirmed, Pending, Cancelled)</td></tr>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Using Filters</h2>
+      <p>When you have many registrations, use the filters to find what you need:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/registrations-filters.png"
+             alt="Registration filter controls for search, season, country, and state" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: registrations-filters.png</span>'">
+        <p class="caption">Filter controls for narrowing down your registrations</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> registrations-filters.png &bull;
+          <strong>Title:</strong> Registration Filter Controls &bull;
+          <strong>Desc:</strong> Filter bar above registrations table with search box, season dropdown, country picker, and state picker &bull;
+          <strong>Tags:</strong> faq, registrations, filters, search, season
+        </p>
+      </div>
+
+      <ul>
+        <li><strong>Search</strong> &mdash; Type an event name or location to quickly find a specific registration</li>
+        <li><strong>Season</strong> &mdash; Filter by competition season to view registrations from a specific year</li>
+        <li><strong>Country</strong> &mdash; Filter by event country</li>
+        <li><strong>State</strong> &mdash; Filter by event state/province</li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> Filters can be combined. For example, select "2025" season and "Texas" state to see only your Texas events from 2025.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Registration Statuses</h2>
+      <p>Each registration has one of these statuses:</p>
+
+      <table>
+        <tr><th>Status</th><th>Meaning</th><th>What to Do</th></tr>
+        <tr>
+          <td><strong style="color: #22c55e;">Confirmed</strong></td>
+          <td>Your registration is complete and confirmed</td>
+          <td>You're all set! Show up on event day ready to compete.</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #eab308;">Pending</strong></td>
+          <td>Registration received but awaiting confirmation</td>
+          <td>Payment may be processing, or the event director needs to approve. Check back soon.</td>
+        </tr>
+        <tr>
+          <td><strong style="color: #ef4444;">Cancelled</strong></td>
+          <td>Registration has been cancelled</td>
+          <td>The event may have been cancelled, or you cancelled your registration.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Viewing Event Details</h2>
+      <p>Click on any registration to view the full event details:</p>
+      <ul>
+        <li>Complete event schedule and timeline</li>
+        <li>Venue address with map link</li>
+        <li>Competition formats and classes offered</li>
+        <li>Event director and contact information</li>
+        <li>Other registered competitors (if publicly visible)</li>
+        <li>Entry fees and payment details</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Finding &amp; Registering for Events</h2>
+      <p>Ready to sign up for a new competition?</p>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Visit the <a href="/events" style="color: #60a5fa;">Events page</a> from the main navigation.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Browse upcoming events or use filters to find events near you.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>Click on an event to view its details, formats, and registration information.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>Click <strong>"Register"</strong> and select your competition format and class.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">5</div>
+          <div>Complete payment if required. Your registration will appear in the Event Registrations tab.</div>
+        </div>
+      </div>
+
+      <div class="highlight">
+        <strong>Requirements:</strong> You must have an active MECA membership to register for competitions. If you don't have one, you'll be prompted to purchase a membership during registration.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Tips for Competition Day</h2>
+      <ul>
+        <li><strong>Arrive early</strong> &mdash; Check-in usually opens 30-60 minutes before the event starts</li>
+        <li><strong>Bring your card</strong> &mdash; Have your membership card ready (phone or printed) for check-in</li>
+        <li><strong>Know your class</strong> &mdash; Confirm your registered class and format before arriving</li>
+        <li><strong>Check the rules</strong> &mdash; Review the <a href="/rulebooks" style="color: #60a5fa;">Rulebooks</a> for your competition format</li>
+        <li><strong>Test your system</strong> &mdash; Make sure your audio setup is working properly before the event</li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> Not sure which class to register for? Use the <a href="/class-calculator" style="color: #60a5fa;">Class Calculator</a> to determine your SPL class based on your vehicle and equipment setup.
+      </div>
+    </div>
+
+    <div class="footer-help">
+      <p style="color: #94a3b8;">Need more help? <a href="/member-support">Contact Member Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

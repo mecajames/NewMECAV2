@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MECA Member Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; font-size: 1.1rem; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+    .card {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 20px;
+      text-decoration: none;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      transition: all 0.2s ease;
+      display: block;
+    }
+    .card:hover { border-color: #f97316; transform: translateY(-2px); background: #263248; }
+    .card-icon { font-size: 2rem; margin-bottom: 10px; }
+    .card h3 { color: #f97316; font-size: 1.05rem; margin-bottom: 6px; }
+    .card p { color: #94a3b8; font-size: 0.9rem; }
+    .quick-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+    .quick-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #1e293b;
+      border: 1px solid #475569;
+      padding: 10px 16px;
+      border-radius: 8px;
+      color: #60a5fa;
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+    }
+    .quick-link:hover { border-color: #60a5fa; background: #1e3a5f; }
+    .hero { text-align: center; margin-bottom: 32px; }
+    .hero-logo { margin-bottom: 16px; }
+    .hero-logo img { height: 80px; width: auto; }
+    .footer-cta {
+      text-align: center;
+      margin-top: 40px;
+      padding: 32px;
+      background: #334155;
+      border-radius: 12px;
+    }
+    .footer-cta p { color: #94a3b8; margin-bottom: 16px; font-size: 1.05rem; }
+    .footer-cta a {
+      display: inline-block;
+      background: #f97316;
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .footer-cta a:hover { background: #ea580c; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+      .card-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/member-support" class="back-link">&larr; Back to Member Support</a>
+
+    <div class="hero">
+      <div class="hero-logo"><img src="/meca-logo-transparent.png" alt="MECA Logo"></div>
+      <h1>MECA Member Help Center</h1>
+      <p class="subtitle">Step-by-step guides and answers to help you get the most out of your MECA membership</p>
+    </div>
+
+    <!-- Getting Started -->
+    <div class="section">
+      <h2>&#127919; Getting Started</h2>
+      <p style="color: #94a3b8; margin-bottom: 16px;">New to MECA? Start here to learn the basics and set up your account.</p>
+      <a href="getting-started.html" class="card" style="max-width: 360px;">
+        <div class="card-icon">&#128640;</div>
+        <h3>New Member Guide</h3>
+        <p>Account setup, membership purchase, profile configuration, and your first competition</p>
+      </a>
+    </div>
+
+    <!-- Dashboard Guides -->
+    <div class="section">
+      <h2>&#128187; My MECA Dashboard Guides</h2>
+      <p style="color: #94a3b8; margin-bottom: 16px;">Detailed guides for every section of your My MECA member dashboard.</p>
+      <div class="card-grid">
+        <a href="dashboard-overview.html" class="card">
+          <div class="card-icon">&#128200;</div>
+          <h3>Dashboard Overview</h3>
+          <p>Stats cards, quick actions, notifications, and your activity feed</p>
+        </a>
+        <a href="profile-guide.html" class="card">
+          <div class="card-icon">&#128100;</div>
+          <h3>Profile & Account</h3>
+          <p>Personal info, public profile, billing, membership, and support tickets</p>
+        </a>
+        <a href="gallery-guide.html" class="card">
+          <div class="card-icon">&#128247;</div>
+          <h3>Photo Gallery</h3>
+          <p>Viewing, uploading, and managing your competition photos</p>
+        </a>
+        <a href="team-guide.html" class="card">
+          <div class="card-icon">&#128101;</div>
+          <h3>Team Management</h3>
+          <p>Create teams, invite members, manage roles, and team galleries</p>
+        </a>
+        <a href="membership-card-guide.html" class="card">
+          <div class="card-icon">&#127380;</div>
+          <h3>Membership Card</h3>
+          <p>Your digital membership card, printing, QR codes, and event use</p>
+        </a>
+        <a href="event-registrations-guide.html" class="card">
+          <div class="card-icon">&#128197;</div>
+          <h3>Event Registrations</h3>
+          <p>View registrations, filter events, and registration statuses</p>
+        </a>
+        <a href="results-guide.html" class="card">
+          <div class="card-icon">&#127942;</div>
+          <h3>Competition Results</h3>
+          <p>Scores, placements, points, badges, and result disputes</p>
+        </a>
+        <a href="analytics-guide.html" class="card">
+          <div class="card-icon">&#128202;</div>
+          <h3>Performance Analytics</h3>
+          <p>Charts, stats, trends, and tips to improve your competition performance</p>
+        </a>
+      </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="section">
+      <h2>&#128279; Quick Links</h2>
+      <div class="quick-links">
+        <a href="/member-support" class="quick-link">&#127919; Member Support</a>
+        <a href="/competition-guides" class="quick-link">&#128214; Competition Guides</a>
+        <a href="/rulebooks" class="quick-link">&#128220; Rulebooks</a>
+        <a href="/class-calculator" class="quick-link">&#129518; Class Calculator</a>
+        <a href="/events" class="quick-link">&#128197; Upcoming Events</a>
+        <a href="/members" class="quick-link">&#128101; Member Directory</a>
+      </div>
+    </div>
+
+    <!-- Footer CTA -->
+    <div class="footer-cta">
+      <p>Can't find what you're looking for?</p>
+      <a href="/member-support">Contact Member Support</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -146,6 +146,8 @@ export class UploadsService {
    * @param userId - The authenticated user's ID
    * @param userRole - The authenticated user's role
    * @param entityId - Optional entity ID for scoping (e.g., team ID for team uploads)
+   * @param subfolder - Optional subfolder within the destination folder (e.g., 'faq-docs')
+   * @param preserveFilename - If true (admin only), use the original filename instead of generating a unique one
    */
   async uploadFile(
     file: Express.Multer.File,
@@ -153,6 +155,8 @@ export class UploadsService {
     userId: string,
     userRole: string,
     entityId?: string,
+    subfolder?: string,
+    preserveFilename?: boolean,
   ): Promise<UploadResult> {
     // 1. Validate destination exists
     const dest = UPLOAD_DESTINATIONS[destination];
@@ -184,17 +188,35 @@ export class UploadsService {
 
     // 5. Build file path
     const fileExt = file.originalname.split('.').pop()?.toLowerCase() || 'bin';
-    const sanitizedName = file.originalname
-      .replace(/\.[^/.]+$/, '') // Remove extension
-      .replace(/[^a-zA-Z0-9_-]/g, '_') // Sanitize
-      .substring(0, 50); // Limit length
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const fileName = `${uniqueId}-${sanitizedName}.${fileExt}`;
+    let fileName: string;
+    if (preserveFilename && dest.adminOnly) {
+      // Admin requested original filename — sanitize but keep the name
+      const sanitized = file.originalname
+        .replace(/[^a-zA-Z0-9_\-\.]/g, '-') // Sanitize (keep dots for extension)
+        .replace(/-+/g, '-') // Collapse multiple dashes
+        .substring(0, 80);
+      fileName = sanitized;
+    } else {
+      const sanitizedName = file.originalname
+        .replace(/\.[^/.]+$/, '') // Remove extension
+        .replace(/[^a-zA-Z0-9_-]/g, '_') // Sanitize
+        .substring(0, 50); // Limit length
+      const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      fileName = `${uniqueId}-${sanitizedName}.${fileExt}`;
+    }
+
+    // Sanitize subfolder if provided (strip leading/trailing slashes, allow only safe chars)
+    const cleanSubfolder = subfolder
+      ? subfolder.replace(/[^a-zA-Z0-9_\-/]/g, '').replace(/^\/+|\/+$/g, '')
+      : '';
 
     let storagePath: string;
     if (dest.adminOnly) {
-      // Admin uploads go directly into the destination folder
-      storagePath = dest.folder ? `${dest.folder}/${fileName}` : fileName;
+      // Admin uploads go directly into the destination folder (with optional subfolder)
+      const baseFolder = cleanSubfolder
+        ? (dest.folder ? `${dest.folder}/${cleanSubfolder}` : cleanSubfolder)
+        : dest.folder;
+      storagePath = baseFolder ? `${baseFolder}/${fileName}` : fileName;
     } else {
       // Member uploads are scoped to the user's (or entity's) folder
       const scopeId = entityId || userId;
@@ -211,7 +233,7 @@ export class UploadsService {
       .upload(storagePath, file.buffer, {
         contentType: file.mimetype,
         cacheControl: '3600',
-        upsert: false,
+        upsert: preserveFilename || false,
       });
 
     if (uploadError) {
