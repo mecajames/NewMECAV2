@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Management Guide - MECA Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    h3 { color: #60a5fa; font-size: 1.1rem; margin: 16px 0 12px 0; }
+    h4 { color: #a78bfa; font-size: 1rem; margin: 12px 0 8px 0; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-left: 24px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    .highlight { background: #475569; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #f97316; }
+    .tip-box { background: #1e3a5f; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
+    .warning-box { background: #7c2d12; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #ef4444; }
+    .flow-diagram { background: #1e293b; padding: 20px; border-radius: 8px; margin: 16px 0; }
+    .flow-step { display: flex; align-items: flex-start; margin-bottom: 12px; }
+    .flow-number {
+      background: #f97316; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-weight: 600;
+      margin-right: 12px; flex-shrink: 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 12px; text-align: left; border: 1px solid #475569; }
+    th { background: #475569; color: #f97316; }
+    tr:nth-child(even) { background: #3d4f63; }
+    .toc { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 24px; }
+    .toc h3 { color: #f97316; margin-top: 0; }
+    .toc ul { list-style: none; margin-left: 0; }
+    .toc a { color: #60a5fa; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .footer-help { text-align: center; margin-top: 40px; padding: 24px; background: #334155; border-radius: 12px; }
+    .footer-help a { color: #f97316; text-decoration: none; }
+    .footer-help a:hover { text-decoration: underline; }
+    .screenshot-wrap { margin: 16px 0; text-align: center; }
+    .screenshot-wrap img { max-width: 100%; border-radius: 8px; border: 1px solid #475569; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .screenshot-wrap .caption { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+    .screenshot-wrap .missing { display: block; padding: 48px 24px; background: #1e293b; border-radius: 8px; border: 1px dashed #475569; color: #64748b; font-style: italic; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+      table { font-size: 0.85rem; }
+      th, td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Help Center</a>
+
+    <h1>&#128101; Team Management Guide</h1>
+    <p class="subtitle">Creating, joining, and managing MECA competition teams</p>
+
+    <div class="toc">
+      <h3>Table of Contents</h3>
+      <ul>
+        <li><a href="#about">1. About Teams</a></li>
+        <li><a href="#creating">2. Creating a Team</a></li>
+        <li><a href="#joining">3. Joining a Team</a></li>
+        <li><a href="#roles">4. Team Roles &amp; Permissions</a></li>
+        <li><a href="#managing">5. Managing Members</a></li>
+        <li><a href="#gallery-settings">6. Team Gallery &amp; Settings</a></li>
+        <li><a href="#advanced">7. Advanced Team Management</a></li>
+      </ul>
+    </div>
+
+    <div class="section" id="about">
+      <h2>1. About Teams</h2>
+      <p>MECA teams allow competitors to band together, representing a shop, brand, or group at competitions. Teams provide:</p>
+
+      <ul>
+        <li><strong>Group identity</strong> &mdash; A team name, logo, and profile visible in the directory</li>
+        <li><strong>Member organization</strong> &mdash; Keep track of your team roster with roles and permissions</li>
+        <li><strong>Combined results</strong> &mdash; See how your team performs across events</li>
+        <li><strong>Team gallery</strong> &mdash; Showcase your team's builds and competition photos</li>
+      </ul>
+
+      <h3>Team Types</h3>
+      <table>
+        <tr><th>Type</th><th>Description</th></tr>
+        <tr><td><strong>Competition Team</strong></td><td>A group of competitors who compete together at events</td></tr>
+        <tr><td><strong>Shop Team</strong></td><td>A car audio retailer's competition team</td></tr>
+        <tr><td><strong>Brand Team</strong></td><td>A manufacturer-sponsored team</td></tr>
+      </table>
+    </div>
+
+    <div class="section" id="creating">
+      <h2>2. Creating a Team</h2>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Go to <strong>My MECA</strong> &rarr; <strong>Team</strong> tab.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Click <strong>"Create Team"</strong>.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>Fill in the team details:
+            <ul style="margin-top: 8px;">
+              <li><strong>Team Name</strong> &mdash; Choose a unique name for your team</li>
+              <li><strong>Team Type</strong> &mdash; Competition, Shop, or Brand</li>
+              <li><strong>Description</strong> &mdash; A short bio about your team</li>
+              <li><strong>Max Members</strong> &mdash; Set the maximum roster size</li>
+              <li><strong>Join Approval</strong> &mdash; Choose whether new members need approval or can join freely</li>
+            </ul>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>Click <strong>"Create"</strong>. You'll automatically become the team Owner.</div>
+        </div>
+      </div>
+
+      <div class="screenshot-wrap">
+        <img src="images/team-create-form.png"
+             alt="Create team form (top)" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: team-create-form.png</span>'">
+        <p class="caption">The team creation form (top section)</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> team-create-form.png &bull;
+          <strong>Title:</strong> Team Creation Form (Top) &bull;
+          <strong>Desc:</strong> Top half of the Create Team form showing team name, type, and description fields &bull;
+          <strong>Tags:</strong> faq, team, create, form
+        </p>
+      </div>
+
+      <div class="screenshot-wrap">
+        <img src="images/team-create-form-2.png"
+             alt="Create team form (bottom)" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: team-create-form-2.png</span>'">
+        <p class="caption">The team creation form (bottom section)</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> team-create-form-2.png &bull;
+          <strong>Title:</strong> Team Creation Form (Bottom) &bull;
+          <strong>Desc:</strong> Bottom half of the Create Team form showing approval mode, max members, and Create button &bull;
+          <strong>Tags:</strong> faq, team, create, form, settings
+        </p>
+      </div>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> Enable join approval if you want to review and approve members before they join. This is recommended for competition teams to maintain quality control.
+      </div>
+    </div>
+
+    <div class="section" id="joining">
+      <h2>3. Joining a Team</h2>
+
+      <h3>Browsing Available Teams</h3>
+      <p>From the Team tab, you can browse existing teams and request to join:</p>
+      <ul>
+        <li>View team profiles, member counts, and descriptions</li>
+        <li>Click <strong>"Request to Join"</strong> on any team</li>
+        <li>If the team requires approval, your request will be reviewed by team leadership</li>
+        <li>If the team has open joining, you'll be added immediately</li>
+      </ul>
+
+      <h3>Accepting an Invitation</h3>
+      <p>Team owners and moderators can invite you by your MECA ID. When invited:</p>
+      <ul>
+        <li>You'll see a notification in your dashboard</li>
+        <li>Go to the <strong>Team</strong> tab to accept or decline the invitation</li>
+        <li>Accepting adds you to the team immediately</li>
+      </ul>
+    </div>
+
+    <div class="section" id="roles">
+      <h2>4. Team Roles &amp; Permissions</h2>
+      <p>Each team member has a role that determines what they can do:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/team-roster-view.png"
+             alt="Team roster showing members and their roles" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: team-roster-view.png</span>'">
+        <p class="caption">The team roster with members and their roles</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> team-roster-view.png &bull;
+          <strong>Title:</strong> Team Roster View &bull;
+          <strong>Desc:</strong> Team roster showing member list with names, roles (Owner, Co-Owner, Moderator, Member), and action buttons &bull;
+          <strong>Tags:</strong> faq, team, roster, members, roles
+        </p>
+      </div>
+
+      <table>
+        <tr>
+          <th>Permission</th>
+          <th>Owner</th>
+          <th>Co-Owner</th>
+          <th>Moderator</th>
+          <th>Member</th>
+        </tr>
+        <tr>
+          <td>View team info</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+        </tr>
+        <tr>
+          <td>Upload to team gallery</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+        </tr>
+        <tr>
+          <td>Invite members</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#10060;</td>
+        </tr>
+        <tr>
+          <td>Approve join requests</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#10060;</td>
+        </tr>
+        <tr>
+          <td>Remove members</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#10060;</td>
+          <td>&#10060;</td>
+        </tr>
+        <tr>
+          <td>Change member roles</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#10060;</td>
+          <td>&#10060;</td>
+        </tr>
+        <tr>
+          <td>Edit team settings</td>
+          <td>&#9989;</td>
+          <td>&#9989;</td>
+          <td>&#10060;</td>
+          <td>&#10060;</td>
+        </tr>
+        <tr>
+          <td>Transfer ownership</td>
+          <td>&#9989;</td>
+          <td>&#10060;</td>
+          <td>&#10060;</td>
+          <td>&#10060;</td>
+        </tr>
+        <tr>
+          <td>Delete team</td>
+          <td>&#9989;</td>
+          <td>&#10060;</td>
+          <td>&#10060;</td>
+          <td>&#10060;</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section" id="managing">
+      <h2>5. Managing Members</h2>
+
+      <h3>Inviting by MECA ID</h3>
+
+      <div class="screenshot-wrap">
+        <img src="images/team-invite-modal.png"
+             alt="Invite member by MECA ID dialog" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: team-invite-modal.png</span>'">
+        <p class="caption">The invite member dialog where you enter a MECA ID</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> team-invite-modal.png &bull;
+          <strong>Title:</strong> Team Invite Member Modal &bull;
+          <strong>Desc:</strong> Invite Member modal dialog with a MECA ID input field and send invitation button &bull;
+          <strong>Tags:</strong> faq, team, invite, modal, meca-id
+        </p>
+      </div>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Open your team page and click <strong>"Invite Member"</strong>.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Enter the person's <strong>MECA ID</strong> number.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>The system will look up the member and show their name for confirmation.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>Click <strong>"Send Invite"</strong>. They'll receive a notification to accept or decline.</div>
+        </div>
+      </div>
+
+      <h3>Approving Join Requests</h3>
+      <p>If your team requires approval, pending requests appear on the team page. Click <strong>"Approve"</strong> or <strong>"Deny"</strong> for each request.</p>
+
+      <h3>Changing Roles</h3>
+      <p>Owners and Co-Owners can change member roles:</p>
+      <ul>
+        <li>Click on a member's name in the roster</li>
+        <li>Select the new role from the dropdown</li>
+        <li>Confirm the change</li>
+      </ul>
+
+      <h3>Removing Members</h3>
+      <p>Owners and Co-Owners can remove members from the team. Click the <strong>remove</strong> button next to the member's name and confirm.</p>
+
+      <div class="warning-box">
+        <strong>&#9888; Warning:</strong> Removing a member is immediate. They'll need to request to rejoin if they want to come back.
+      </div>
+    </div>
+
+    <div class="section" id="gallery-settings">
+      <h2>6. Team Gallery &amp; Settings</h2>
+
+      <h3>Team Gallery</h3>
+      <p>All team members can upload photos to the team gallery. These photos appear on the team's public profile page. Upload works the same as personal gallery uploads &mdash; click the upload area and select images.</p>
+
+      <h3>Editing Team Settings</h3>
+      <p>Owners and Co-Owners can edit:</p>
+      <ul>
+        <li><strong>Team name and description</strong></li>
+        <li><strong>Team logo/avatar</strong></li>
+        <li><strong>Join approval mode</strong> (open vs. approval required)</li>
+        <li><strong>Maximum member count</strong></li>
+      </ul>
+    </div>
+
+    <div class="section" id="advanced">
+      <h2>7. Advanced Team Management</h2>
+
+      <h3>Transferring Ownership</h3>
+      <p>As the team Owner, you can transfer ownership to another member:</p>
+      <ul>
+        <li>Click the member you want to make the new Owner</li>
+        <li>Select <strong>"Transfer Ownership"</strong></li>
+        <li>Confirm the transfer &mdash; you'll become a Co-Owner</li>
+      </ul>
+
+      <h3>Leaving a Team</h3>
+      <p>Any member (except the Owner) can leave a team at any time from the team page. Click <strong>"Leave Team"</strong> and confirm.</p>
+
+      <h3>Deleting a Team</h3>
+      <p>Only the Owner can delete a team. This permanently removes the team, its gallery, and all member associations. This action cannot be undone.</p>
+
+      <h3>Multiple Teams</h3>
+      <p>You can be a member of multiple teams simultaneously. Use the team switcher at the top of the Team tab to switch between your teams.</p>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> If you're in multiple teams, your competition results are attributed to you individually &mdash; team affiliation doesn't affect scoring.
+      </div>
+    </div>
+
+    <div class="footer-help">
+      <p style="color: #94a3b8;">Need more help? <a href="/member-support">Contact Member Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,11 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Upload, Trash2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Upload, Trash2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, X, FolderOpen } from 'lucide-react';
 import { getStorageUrl } from '@/lib/storage';
 import { MediaType, MediaFile } from '@/media-files';
 import { useAuth } from '@/auth';
 import { useMediaFiles, useCreateMediaFile, useDeleteMediaFile } from '@/media-files/useMediaFiles';
 import { uploadFile as backendUpload } from '@/api-client/uploads.api-client';
 import axios from '@/lib/axios';
+
+/** Known media library subfolders with descriptions. */
+const MEDIA_FOLDERS = [
+  { value: '', label: 'Default (media/)', description: 'General media library — root folder' },
+  { value: 'faq-docs', label: 'FAQ Docs', description: 'Screenshots & images for FAQ help center pages' },
+  { value: 'banners', label: 'Banners', description: 'Homepage & site-wide banner images' },
+  { value: 'events', label: 'Events', description: 'Event-related images & flyers' },
+  { value: 'products', label: 'Products', description: 'Product images for the shop' },
+  { value: 'sponsors', label: 'Sponsors', description: 'Sponsor logos & promotional materials' },
+  { value: 'news', label: 'News & Blog', description: 'Images for news articles & blog posts' },
+  { value: 'email-templates', label: 'Email Templates', description: 'Images used in email templates' },
+  { value: 'misc', label: 'Miscellaneous', description: 'Other files that don\'t fit a specific category' },
+] as const;
 
 export default function MediaLibrary() {
   const { user } = useAuth();
@@ -19,11 +32,14 @@ export default function MediaLibrary() {
   const [filterType, setFilterType] = useState<MediaType | 'all'>('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showExternalModal, setShowExternalModal] = useState(false);
+  const [useCustomFolder, setUseCustomFolder] = useState(false);
 
   const [uploadData, setUploadData] = useState({
     title: '',
     description: '',
     tags: '',
+    subfolder: '',
+    preserveFilename: false,
     file: null as File | null,
   });
 
@@ -79,7 +95,13 @@ export default function MediaLibrary() {
 
     try {
       // Upload through backend
-      const result = await backendUpload(uploadData.file, 'media-library');
+      const result = await backendUpload(
+        uploadData.file,
+        'media-library',
+        undefined,
+        uploadData.subfolder !== '' ? uploadData.subfolder : undefined,
+        uploadData.preserveFilename === true ? true : undefined,
+      );
 
       // Get image dimensions if it's an image
       let dimensions = undefined;
@@ -110,7 +132,8 @@ export default function MediaLibrary() {
       await createMediaFile(mediaData);
 
       setShowUploadModal(false);
-      setUploadData({ title: '', description: '', tags: '', file: null });
+      setUploadData({ title: '', description: '', tags: '', subfolder: '', preserveFilename: false, file: null });
+      setUseCustomFolder(false);
       refetch();
     } catch (error: any) {
       const msg = error.response?.data?.message || error.message;
@@ -354,6 +377,83 @@ export default function MediaLibrary() {
                   placeholder="hero, homepage, banner"
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <FolderOpen className="inline h-4 w-4 mr-1 -mt-0.5" />
+                  Folder
+                </label>
+                {!useCustomFolder ? (
+                  <>
+                    <select
+                      value={uploadData.subfolder}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          setUseCustomFolder(true);
+                          setUploadData({ ...uploadData, subfolder: '' });
+                        } else {
+                          setUploadData({ ...uploadData, subfolder: e.target.value });
+                        }
+                      }}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      {MEDIA_FOLDERS.map((folder) => (
+                        <option key={folder.value} value={folder.value}>
+                          {folder.label} — {folder.description}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ Custom folder...</option>
+                    </select>
+                    {uploadData.subfolder && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Upload path: media/{uploadData.subfolder}/
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={uploadData.subfolder}
+                        onChange={(e) => setUploadData({ ...uploadData, subfolder: e.target.value.replace(/[^a-zA-Z0-9_\-/]/g, '') })}
+                        placeholder="e.g. my-folder"
+                        className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseCustomFolder(false);
+                          setUploadData({ ...uploadData, subfolder: '' });
+                        }}
+                        className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-gray-300 text-sm rounded-lg transition-colors"
+                        title="Back to folder list"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {uploadData.subfolder
+                        ? `Upload path: media/${uploadData.subfolder}/`
+                        : 'Enter a custom folder name (letters, numbers, dashes, underscores)'}
+                    </p>
+                  </>
+                )}
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={uploadData.preserveFilename}
+                    onChange={(e) => setUploadData({ ...uploadData, preserveFilename: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                  />
+                  <span className="text-sm text-gray-300">Use original filename</span>
+                </label>
+                <p className="text-xs text-gray-400 mt-1">
+                  Keep the exact filename (e.g. for FAQ screenshots). Overwrites if the file already exists.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">File *</label>

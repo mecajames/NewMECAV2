@@ -111,6 +111,87 @@ export class MembershipsController {
     };
   }
 
+  // =============================================================================
+  // Card Data Endpoints
+  // =============================================================================
+
+  /**
+   * Get current user's card data (uses auth context)
+   */
+  @Get('my-card')
+  async getMyCardData(
+    @Headers('authorization') authHeader: string,
+  ) {
+    const { user } = await this.getAuthenticatedUser(authHeader);
+    return this.membershipsService.getMyCardData(user.id);
+  }
+
+  /**
+   * Admin: Get card stats across all active memberships
+   */
+  @Get('admin/card-stats')
+  async getAdminCardStats(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.getAdminCardStats();
+  }
+
+  /**
+   * Admin: Assign cards to all active members who don't have one yet
+   */
+  @Post('admin/cards-assign-all-active')
+  @HttpCode(HttpStatus.OK)
+  async assignCardsToAllActive(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.assignCardsToAllActive();
+  }
+
+  /**
+   * Admin: Bulk update card status for multiple memberships
+   */
+  @Put('admin/card-bulk-status')
+  async bulkUpdateCardStatus(
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      membershipIds: string[];
+      cardCreatedAt?: string | null;
+      cardShippedAt?: string | null;
+    },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.bulkUpdateCardStatus(data.membershipIds, {
+      cardCreatedAt: data.cardCreatedAt ? new Date(data.cardCreatedAt) : data.cardCreatedAt === null ? null : undefined,
+      cardShippedAt: data.cardShippedAt ? new Date(data.cardShippedAt) : data.cardShippedAt === null ? null : undefined,
+    });
+  }
+
+  /**
+   * Admin: List all memberships with card status, supports search/filter/pagination
+   */
+  @Get('admin/cards')
+  async getAdminCardsList(
+    @Headers('authorization') authHeader: string,
+    @Query('search') search?: string,
+    @Query('membershipStatus') membershipStatus?: 'active' | 'expired',
+    @Query('cardStatus') cardStatus?: 'no_card' | 'created' | 'shipped',
+    @Query('membershipTypeConfigId') membershipTypeConfigId?: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.getAdminCardsList({
+      search,
+      membershipStatus,
+      cardStatus,
+      membershipTypeConfigId,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  }
+
   @Get(':id')
   async getMembership(@Param('id') id: string): Promise<Membership> {
     return this.membershipsService.findById(id);
@@ -954,4 +1035,44 @@ export class MembershipsController {
 
     return this.membershipsService.createBillingPortalSession(user.id, returnUrl);
   }
+
+  // =============================================================================
+  // Card Tracking Admin Endpoints
+  // =============================================================================
+
+  /**
+   * Get card data for a specific membership (member-facing)
+   */
+  @Get(':id/card-data')
+  async getCardData(
+    @Param('id') membershipId: string,
+  ) {
+    return this.membershipsService.getCardData(membershipId);
+  }
+
+  /**
+   * Admin: Update card tracking fields (created, assigned, shipped dates, tracking number, notes)
+   */
+  @Put(':id/admin/card-status')
+  async updateCardStatus(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      cardCreatedAt?: string | null;
+      cardAssignedAt?: string | null;
+      cardShippedAt?: string | null;
+      cardTrackingNumber?: string | null;
+      cardNotes?: string | null;
+    },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.updateCardStatus(membershipId, {
+      cardCreatedAt: data.cardCreatedAt ? new Date(data.cardCreatedAt) : data.cardCreatedAt === null ? null : undefined,
+      cardAssignedAt: data.cardAssignedAt ? new Date(data.cardAssignedAt) : data.cardAssignedAt === null ? null : undefined,
+      cardShippedAt: data.cardShippedAt ? new Date(data.cardShippedAt) : data.cardShippedAt === null ? null : undefined,
+      cardTrackingNumber: data.cardTrackingNumber,
+      cardNotes: data.cardNotes,
+    });
+  }
+
 }

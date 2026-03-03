@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Overview - MECA Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    h3 { color: #60a5fa; font-size: 1.1rem; margin: 16px 0 12px 0; }
+    h4 { color: #a78bfa; font-size: 1rem; margin: 12px 0 8px 0; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-left: 24px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    .highlight { background: #475569; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #f97316; }
+    .tip-box { background: #1e3a5f; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 12px; text-align: left; border: 1px solid #475569; }
+    th { background: #475569; color: #f97316; }
+    tr:nth-child(even) { background: #3d4f63; }
+    .toc { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 24px; }
+    .toc h3 { color: #f97316; margin-top: 0; }
+    .toc ul { list-style: none; margin-left: 0; }
+    .toc a { color: #60a5fa; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .footer-help { text-align: center; margin-top: 40px; padding: 24px; background: #334155; border-radius: 12px; }
+    .footer-help a { color: #f97316; text-decoration: none; }
+    .footer-help a:hover { text-decoration: underline; }
+    .screenshot-wrap { margin: 16px 0; text-align: center; }
+    .screenshot-wrap img { max-width: 100%; border-radius: 8px; border: 1px solid #475569; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .screenshot-wrap .caption { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+    .screenshot-wrap .missing { display: block; padding: 48px 24px; background: #1e293b; border-radius: 8px; border: 1px dashed #475569; color: #64748b; font-style: italic; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+      table { font-size: 0.85rem; }
+      th, td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Help Center</a>
+
+    <h1>&#128200; Dashboard Overview</h1>
+    <p class="subtitle">Understanding your My MECA home screen</p>
+
+    <div class="toc">
+      <h3>Table of Contents</h3>
+      <ul>
+        <li><a href="#stats">1. Stats Cards</a></li>
+        <li><a href="#membership-cta">2. Membership Banner</a></li>
+        <li><a href="#quick-actions">3. Quick Action Cards</a></li>
+        <li><a href="#notifications">4. Notifications</a></li>
+        <li><a href="#recent-activity">5. Recent Activity</a></li>
+        <li><a href="#special-roles">6. Judge & Event Director Sections</a></li>
+        <li><a href="#voting">7. Finals Voting</a></li>
+      </ul>
+    </div>
+
+    <div class="section" id="stats">
+      <h2>1. Stats Cards</h2>
+      <p>At the top of your Overview tab, you'll see four summary cards that give you a quick snapshot of your MECA activity:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/overview-stats-cards.png"
+             alt="Dashboard stats cards showing Membership Status, Events, Total Points, and Best Placement" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: overview-stats-cards.png</span>'">
+        <p class="caption">The four stats cards at the top of the Overview tab</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> overview-stats-cards.png &bull;
+          <strong>Title:</strong> Overview Stats Cards &bull;
+          <strong>Desc:</strong> The four stat cards at the top of the Overview tab — Membership Status, Events, Total Points, Best Placement &bull;
+          <strong>Tags:</strong> faq, dashboard, overview, stats, cards
+        </p>
+      </div>
+
+      <table>
+        <tr>
+          <th>Card</th>
+          <th>What It Shows</th>
+        </tr>
+        <tr>
+          <td><strong>Membership Status</strong></td>
+          <td>Your current membership status (Active, Expired, or None). Shows your membership type name and expiry date if active.</td>
+        </tr>
+        <tr>
+          <td><strong>Events</strong></td>
+          <td>Total number of events you've registered for across all seasons.</td>
+        </tr>
+        <tr>
+          <td><strong>Total Points</strong></td>
+          <td>Your cumulative competition points earned from placements. Points are awarded for top-5 finishes.</td>
+        </tr>
+        <tr>
+          <td><strong>Best Placement</strong></td>
+          <td>Your highest placement across all competitions (e.g., "1st Place").</td>
+        </tr>
+      </table>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> If your stats seem off, it may be because results from a recent event haven't been published yet. Results are typically posted within a few days after an event.
+      </div>
+    </div>
+
+    <div class="section" id="membership-cta">
+      <h2>2. Membership Banner</h2>
+      <p>If you don't have an active membership, you'll see a prominent banner encouraging you to get one. This banner shows:</p>
+      <ul>
+        <li>Why a membership is important (required to compete, earn points, get a MECA ID)</li>
+        <li>A direct link to purchase a membership</li>
+      </ul>
+      <p>Once you have an active membership, this banner disappears and is replaced by your membership type badge in the dashboard header.</p>
+    </div>
+
+    <div class="section" id="quick-actions">
+      <h2>3. Quick Action Cards</h2>
+      <p>Below the stats, you'll find shortcut cards to the most common tasks:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/overview-quick-actions.png"
+             alt="Quick action cards on the dashboard" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: overview-quick-actions.png</span>'">
+        <p class="caption">Quick action cards for common tasks</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> overview-quick-actions.png &bull;
+          <strong>Title:</strong> Overview Quick Action Cards &bull;
+          <strong>Desc:</strong> Quick action shortcut cards on the Overview tab — Manage Profile, Gallery, Team, Support, Help &bull;
+          <strong>Tags:</strong> faq, dashboard, overview, quick-actions
+        </p>
+      </div>
+
+      <ul>
+        <li><strong>Manage Profile</strong> &mdash; Jump to your Profile tab to update personal info</li>
+        <li><strong>Gallery</strong> &mdash; Go to your photo gallery</li>
+        <li><strong>Team</strong> &mdash; Access team management</li>
+        <li><strong>Support</strong> &mdash; Open a support ticket or visit Member Support</li>
+        <li><strong>Help</strong> &mdash; Come back to this Help Center</li>
+      </ul>
+
+      <p>These cards are just shortcuts &mdash; you can always access the same sections via the tab bar at the top of the dashboard.</p>
+    </div>
+
+    <div class="section" id="notifications">
+      <h2>4. Notifications</h2>
+      <p>The Notifications panel shows important updates about your account and activities:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/overview-notifications.png"
+             alt="Notifications panel in the dashboard" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: overview-notifications.png</span>'">
+        <p class="caption">The notifications panel with unread and read notifications</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> overview-notifications.png &bull;
+          <strong>Title:</strong> Dashboard Notifications Panel &bull;
+          <strong>Desc:</strong> Notifications panel showing unread and read notifications with checkmark and delete icons &bull;
+          <strong>Tags:</strong> faq, dashboard, overview, notifications
+        </p>
+      </div>
+
+      <h3>Types of Notifications</h3>
+      <ul>
+        <li><strong>Event updates</strong> &mdash; Changes to events you're registered for</li>
+        <li><strong>Result postings</strong> &mdash; When your competition results are published</li>
+        <li><strong>Team activity</strong> &mdash; Join requests, role changes, and team updates</li>
+        <li><strong>Membership reminders</strong> &mdash; Renewal and expiration notices</li>
+        <li><strong>System announcements</strong> &mdash; Important MECA news and updates</li>
+      </ul>
+
+      <h3>Managing Notifications</h3>
+      <ul>
+        <li><strong>Mark as read</strong> &mdash; Click the checkmark icon on any notification to mark it as read</li>
+        <li><strong>Delete</strong> &mdash; Click the trash icon to remove a notification</li>
+        <li><strong>Bell icon</strong> &mdash; The bell icon in the dashboard header shows your unread count</li>
+      </ul>
+    </div>
+
+    <div class="section" id="recent-activity">
+      <h2>5. Recent Activity</h2>
+      <p>The bottom of the Overview tab shows your most recent activity:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/overview-recent-activity.png"
+             alt="Recent registrations and results on the dashboard" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: overview-recent-activity.png</span>'">
+        <p class="caption">Recent registrations and competition results</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> overview-recent-activity.png &bull;
+          <strong>Title:</strong> Recent Activity Section &bull;
+          <strong>Desc:</strong> Recent Registrations and Recent Results sections at the bottom of the Overview tab &bull;
+          <strong>Tags:</strong> faq, dashboard, overview, registrations, results, recent
+        </p>
+      </div>
+
+      <h3>Recent Registrations</h3>
+      <p>Your latest event registrations with status indicators (Confirmed, Pending, Cancelled). Click on any registration to see full event details.</p>
+
+      <h3>Recent Results</h3>
+      <p>Your most recent competition results showing event name, class, score, placement, and points earned. Placement badges (gold, silver, bronze) make it easy to spot your best finishes.</p>
+    </div>
+
+    <div class="section" id="special-roles">
+      <h2>6. Judge & Event Director Sections</h2>
+      <p>If you have special roles (Judge or Event Director), additional sections appear on your Overview tab:</p>
+
+      <h4>Judge Section</h4>
+      <ul>
+        <li>Your judge profile status and certification level</li>
+        <li>Upcoming judging assignments</li>
+        <li>Link to judge tools and resources</li>
+      </ul>
+
+      <h4>Event Director Section</h4>
+      <ul>
+        <li>Events you're directing</li>
+        <li>Upcoming event assignments</li>
+        <li>Quick links to event management tools</li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> These sections only appear if your account has been assigned judge or event director roles by a MECA administrator.
+      </div>
+    </div>
+
+    <div class="section" id="voting">
+      <h2>7. Finals Voting</h2>
+      <p>During voting periods (typically leading up to the MECA Finals), a special voting section appears on your dashboard:</p>
+
+      <ul>
+        <li>See the current voting status (open, closed, upcoming)</li>
+        <li>Cast your votes for Finals categories</li>
+        <li>View your submitted votes</li>
+      </ul>
+
+      <p>Voting is only available to members with active memberships during designated voting periods.</p>
+    </div>
+
+    <div class="footer-help">
+      <p style="color: #94a3b8;">Need more help? <a href="/member-support">Contact Member Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Performance Analytics Guide - MECA Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    h3 { color: #60a5fa; font-size: 1.1rem; margin: 16px 0 12px 0; }
+    h4 { color: #a78bfa; font-size: 1rem; margin: 12px 0 8px 0; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-left: 24px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    .highlight { background: #475569; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #f97316; }
+    .tip-box { background: #1e3a5f; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 12px; text-align: left; border: 1px solid #475569; }
+    th { background: #475569; color: #f97316; }
+    tr:nth-child(even) { background: #3d4f63; }
+    .toc { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 24px; }
+    .toc h3 { color: #f97316; margin-top: 0; }
+    .toc ul { list-style: none; margin-left: 0; }
+    .toc a { color: #60a5fa; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .footer-help { text-align: center; margin-top: 40px; padding: 24px; background: #334155; border-radius: 12px; }
+    .footer-help a { color: #f97316; text-decoration: none; }
+    .footer-help a:hover { text-decoration: underline; }
+    .screenshot-wrap { margin: 16px 0; text-align: center; }
+    .screenshot-wrap img { max-width: 100%; border-radius: 8px; border: 1px solid #475569; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .screenshot-wrap .caption { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+    .screenshot-wrap .missing { display: block; padding: 48px 24px; background: #1e293b; border-radius: 8px; border: 1px dashed #475569; color: #64748b; font-style: italic; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+      table { font-size: 0.85rem; }
+      th, td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Help Center</a>
+
+    <h1>&#128202; Performance Analytics Guide</h1>
+    <p class="subtitle">Charts, stats, trends, and tips to improve your competition performance</p>
+
+    <div class="toc">
+      <h3>Table of Contents</h3>
+      <ul>
+        <li><a href="#summary">1. Summary Stats</a></li>
+        <li><a href="#placements">2. Placement Breakdown</a></li>
+        <li><a href="#points-format">3. Points by Format</a></li>
+        <li><a href="#performance">4. Performance by Format</a></li>
+        <li><a href="#charts">5. Understanding the Charts</a></li>
+        <li><a href="#filters">6. Using Filters</a></li>
+        <li><a href="#tips">7. Tips for Improvement</a></li>
+      </ul>
+    </div>
+
+    <div class="section" id="summary">
+      <h2>1. Summary Stats</h2>
+      <p>At the top of the Analytics tab, four summary cards give you a high-level view of your competition history:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/analytics-summary-stats.png"
+             alt="Analytics summary stats cards" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: analytics-summary-stats.png</span>'">
+        <p class="caption">The four summary stat cards at the top of the Analytics tab</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> analytics-summary-stats.png &bull;
+          <strong>Title:</strong> Analytics Summary Stats &bull;
+          <strong>Desc:</strong> Four summary stat cards at the top of the Analytics tab — Total Results, Total Points, 1st Place Finishes, Best Placement &bull;
+          <strong>Tags:</strong> faq, analytics, stats, summary, cards
+        </p>
+      </div>
+
+      <table>
+        <tr><th>Stat</th><th>What It Measures</th></tr>
+        <tr><td><strong>Total Results</strong></td><td>The total number of competition results recorded for your account</td></tr>
+        <tr><td><strong>Total Points</strong></td><td>Cumulative competition points earned across all events and formats</td></tr>
+        <tr><td><strong>1st Place Finishes</strong></td><td>Number of times you placed 1st in any class and format</td></tr>
+        <tr><td><strong>Best Placement</strong></td><td>Your best ever placement (hopefully 1st!)</td></tr>
+      </table>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> These stats update automatically as new results are published. Check back after each event to see your numbers go up!
+      </div>
+    </div>
+
+    <div class="section" id="placements">
+      <h2>2. Placement Breakdown</h2>
+      <p>The placement breakdown shows how often you finish in each position:</p>
+
+      <table>
+        <tr><th>Category</th><th>Icon</th><th>Meaning</th></tr>
+        <tr><td><strong>1st Place</strong></td><td>&#129351;</td><td>Number of gold-medal finishes</td></tr>
+        <tr><td><strong>2nd Place</strong></td><td>&#129352;</td><td>Number of silver-medal finishes</td></tr>
+        <tr><td><strong>3rd Place</strong></td><td>&#129353;</td><td>Number of bronze-medal finishes</td></tr>
+        <tr><td><strong>Other</strong></td><td>&#127941;</td><td>Number of finishes outside the top 3</td></tr>
+      </table>
+
+      <p>This gives you a quick sense of how consistently you're finishing on the podium.</p>
+    </div>
+
+    <div class="section" id="points-format">
+      <h2>3. Points by Format</h2>
+      <p>This section breaks down your total points by competition format:</p>
+
+      <ul>
+        <li><strong>SPL (Sound Pressure Level)</strong> &mdash; Points from SPL competitions</li>
+        <li><strong>SQL (Sound Quality Level)</strong> &mdash; Points from SQL/SQ competitions</li>
+        <li><strong>Show &amp; Shine</strong> &mdash; Points from vehicle display/install quality competitions</li>
+        <li><strong>Ride the Light</strong> &mdash; Points from lighting competitions</li>
+      </ul>
+
+      <p>This helps you see which formats are contributing most to your overall point total.</p>
+    </div>
+
+    <div class="section" id="performance">
+      <h2>4. Performance by Format</h2>
+      <p>The detailed performance table shows format-level statistics:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/analytics-performance-table.png"
+             alt="Performance by format table showing competitions, scores, points, and win rates" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: analytics-performance-table.png</span>'">
+        <p class="caption">The performance by format breakdown table</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> analytics-performance-table.png &bull;
+          <strong>Title:</strong> Performance by Format Table &bull;
+          <strong>Desc:</strong> Performance breakdown table showing competitions count, average score, total points, and win rate per format (SPL, SQL, etc.) &bull;
+          <strong>Tags:</strong> faq, analytics, performance, format, table
+        </p>
+      </div>
+
+      <table>
+        <tr><th>Metric</th><th>Description</th></tr>
+        <tr><td><strong>Competitions</strong></td><td>Number of events competed in for that format</td></tr>
+        <tr><td><strong>Average Score</strong></td><td>Your average score across all events in that format</td></tr>
+        <tr><td><strong>Total Points</strong></td><td>Total points earned in that format</td></tr>
+        <tr><td><strong>Win Rate</strong></td><td>Percentage of events where you placed 1st in that format</td></tr>
+      </table>
+
+      <div class="highlight">
+        <strong>Win Rate</strong> is calculated as: (1st place finishes / total competitions in format) &times; 100%. A win rate above 50% means you're finishing 1st in more than half your competitions for that format.
+      </div>
+    </div>
+
+    <div class="section" id="charts">
+      <h2>5. Understanding the Charts</h2>
+
+      <div class="screenshot-wrap">
+        <img src="images/analytics-charts.png"
+             alt="Analytics charts showing placement pie chart, score trends, and format comparison" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: analytics-charts.png</span>'">
+        <p class="caption">The analytics charts: placement distribution, score trends, and points by format</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> analytics-charts.png &bull;
+          <strong>Title:</strong> Analytics Charts &bull;
+          <strong>Desc:</strong> Three analytics charts — placement distribution pie chart, score trends line chart, and points by format bar chart &bull;
+          <strong>Tags:</strong> faq, analytics, charts, pie, trends, bar
+        </p>
+      </div>
+
+      <h3>Placement Distribution (Pie Chart)</h3>
+      <p>The pie chart shows the proportion of your finishes at each position. A larger slice for "1st Place" means you're winning more often. This visual makes it easy to spot if you're consistently podium-finishing or if there's room to improve.</p>
+
+      <h3>Score Trends (Line Chart)</h3>
+      <p>The line chart plots your scores over time, showing whether you're improving, holding steady, or declining. Look for:</p>
+      <ul>
+        <li><strong>Upward trend</strong> &mdash; Your scores are improving over time</li>
+        <li><strong>Flat line</strong> &mdash; Consistent performance &mdash; you're reliable but may have hit a plateau</li>
+        <li><strong>Downward trend</strong> &mdash; Scores declining &mdash; might indicate equipment issues or increased competition</li>
+      </ul>
+
+      <h3>Points by Format (Bar Chart)</h3>
+      <p>The bar chart compares your total points across formats side by side. This makes it easy to see your strongest and weakest formats at a glance.</p>
+    </div>
+
+    <div class="section" id="filters">
+      <h2>6. Using Filters</h2>
+      <p>Use the season filter to compare your performance across different years:</p>
+
+      <ul>
+        <li>Select a specific season to see stats for just that year</li>
+        <li>Select "All Seasons" to see your career totals</li>
+        <li>Compare two seasons side by side by switching between them and noting the numbers</li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> Comparing season-over-season stats is a great way to measure your improvement. Are you earning more points this year than last? Is your win rate going up?
+      </div>
+    </div>
+
+    <div class="section" id="tips">
+      <h2>7. Tips for Improving Your Performance</h2>
+      <p>Use your analytics data to identify areas for growth:</p>
+
+      <h3>Analyze Your Score Trends</h3>
+      <ul>
+        <li>If scores are flat, consider upgrading equipment or fine-tuning your setup</li>
+        <li>If scores dropped after a change, you may want to revert and investigate</li>
+        <li>Note which events produce your best scores &mdash; what's different about those venues?</li>
+      </ul>
+
+      <h3>Focus on Your Best Format</h3>
+      <ul>
+        <li>Your highest win rate format is where you're strongest &mdash; lean into it for maximum points</li>
+        <li>Consider competing in more events for your best format</li>
+      </ul>
+
+      <h3>Diversify for More Points</h3>
+      <ul>
+        <li>Competing in multiple formats at each event multiplies your point-earning opportunities</li>
+        <li>Even a 4th or 5th place finish earns points that add up over a season</li>
+      </ul>
+
+      <h3>Track Consistency</h3>
+      <ul>
+        <li>A high placement rate (lots of top-3 finishes) is often more valuable than occasional 1st places</li>
+        <li>Consistent top-5 finishes accumulate more season points than alternating between 1st and 10th</li>
+      </ul>
+
+      <h3>Compare Against Past Seasons</h3>
+      <ul>
+        <li>Use the season filter to track your year-over-year improvement</li>
+        <li>Set personal goals based on last season's numbers (e.g., "beat my total points by 20%")</li>
+      </ul>
+
+      <div class="highlight">
+        <strong>Remember:</strong> The competition is with yourself first. Use analytics to track your personal growth, not just to compare with others. Every improvement in score, placement, or consistency is a win.
+      </div>
+    </div>
+
+    <div class="footer-help">
+      <p style="color: #94a3b8;">Need more help? <a href="/member-support">Contact Member Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

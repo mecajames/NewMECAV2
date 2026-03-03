@@ -69,16 +69,18 @@ export default function MemberSupportPage() {
               </p>
             </Link>
 
-            <div className="bg-slate-700 rounded-lg p-6">
-              <div className="text-orange-500 text-3xl mb-3">
+            <a
+              href="/faq-docs/index.html"
+              className="bg-slate-700 hover:bg-slate-600 rounded-lg p-6 transition-colors group block"
+            >
+              <div className="text-orange-500 group-hover:text-orange-400 text-3xl mb-3">
                 <HelpCircle className="w-8 h-8" />
               </div>
-              <h3 className="text-white font-semibold mb-2">FAQs</h3>
+              <h3 className="text-white font-semibold mb-2">FAQs &amp; Help Guides</h3>
               <p className="text-gray-400 text-sm">
-                Find answers to frequently asked questions
+                Step-by-step guides and answers to frequently asked questions
               </p>
-              <span className="inline-block mt-2 text-xs text-gray-500 bg-slate-600 px-2 py-1 rounded">Coming Soon</span>
-            </div>
+            </a>
 
             <Link
               to="/class-calculator"

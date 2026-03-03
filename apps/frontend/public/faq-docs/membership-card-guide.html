@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Membership Card Guide - MECA Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    h3 { color: #60a5fa; font-size: 1.1rem; margin: 16px 0 12px 0; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-left: 24px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    .highlight { background: #475569; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #f97316; }
+    .tip-box { background: #1e3a5f; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
+    .warning-box { background: #7c2d12; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #ef4444; }
+    .flow-diagram { background: #1e293b; padding: 20px; border-radius: 8px; margin: 16px 0; }
+    .flow-step { display: flex; align-items: flex-start; margin-bottom: 12px; }
+    .flow-number {
+      background: #f97316; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-weight: 600;
+      margin-right: 12px; flex-shrink: 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 12px; text-align: left; border: 1px solid #475569; }
+    th { background: #475569; color: #f97316; }
+    tr:nth-child(even) { background: #3d4f63; }
+    .footer-help { text-align: center; margin-top: 40px; padding: 24px; background: #334155; border-radius: 12px; }
+    .footer-help a { color: #f97316; text-decoration: none; }
+    .footer-help a:hover { text-decoration: underline; }
+    .screenshot-wrap { margin: 16px 0; text-align: center; }
+    .screenshot-wrap img { max-width: 100%; border-radius: 8px; border: 1px solid #475569; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .screenshot-wrap .caption { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+    .screenshot-wrap .missing { display: block; padding: 48px 24px; background: #1e293b; border-radius: 8px; border: 1px dashed #475569; color: #64748b; font-style: italic; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Help Center</a>
+
+    <h1>&#127380; Membership Card Guide</h1>
+    <p class="subtitle">Your digital MECA membership card &mdash; viewing, printing, and using at events</p>
+
+    <div class="section">
+      <h2>What's On Your Card</h2>
+      <p>Your digital MECA membership card displays:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/membership-card-display.png"
+             alt="Digital MECA membership card showing member details and QR code" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: membership-card-display.png</span>'">
+        <p class="caption">Your digital MECA membership card</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> membership-card-display.png &bull;
+          <strong>Title:</strong> Digital Membership Card &bull;
+          <strong>Desc:</strong> The digital MECA membership card showing member name, MECA ID, membership type, dates, profile photo, and QR code &bull;
+          <strong>Tags:</strong> faq, membership-card, digital, qr-code
+        </p>
+      </div>
+
+      <table>
+        <tr><th>Element</th><th>Description</th></tr>
+        <tr><td><strong>Member Name</strong></td><td>Your full name as it appears on your profile</td></tr>
+        <tr><td><strong>MECA ID</strong></td><td>Your unique member identification number</td></tr>
+        <tr><td><strong>Membership Type</strong></td><td>Your current membership tier (e.g., Competitor, Retailer)</td></tr>
+        <tr><td><strong>Member Since</strong></td><td>The date you first became a MECA member</td></tr>
+        <tr><td><strong>Expiration Date</strong></td><td>When your current membership period ends</td></tr>
+        <tr><td><strong>QR Code</strong></td><td>A scannable code that links to your member profile</td></tr>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Viewing Your Card</h2>
+      <p>To view your membership card:</p>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Go to <strong>My MECA</strong> dashboard.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Click the <strong>"Membership Card"</strong> tab in the navigation bar.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>Your card will be displayed with all your membership information.</div>
+        </div>
+      </div>
+
+      <div class="highlight">
+        <strong>No card showing?</strong> The Membership Card tab only displays a card if you have an active membership. If you see a prompt to get a membership, you'll need to purchase one first &mdash; see the <a href="profile-guide.html#membership" style="color: #60a5fa;">Membership section</a> of the Profile Guide.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Printing Your Card</h2>
+      <p>You can print your membership card to carry a physical copy to events:</p>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Navigate to the <strong>Membership Card</strong> tab.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Click the <strong>"Print Card"</strong> button below the card.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>Your browser's print dialog will open with the card formatted for printing.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>Select your printer and print. For best results, use card stock or thick paper.</div>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> For the best print quality, use the "Fit to page" or "Scale to 100%" option in your printer settings. Printing on card stock gives a more professional feel.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Using Your Card at Events</h2>
+      <p>You can present your membership card at MECA competitions for check-in. There are two ways:</p>
+
+      <h3>Option 1: Phone Display</h3>
+      <ul>
+        <li>Open the Membership Card tab on your phone's browser</li>
+        <li>Show the card to event staff at check-in</li>
+        <li>They can scan the QR code or verify your MECA ID manually</li>
+      </ul>
+
+      <h3>Option 2: Printed Copy</h3>
+      <ul>
+        <li>Bring your printed card to the event</li>
+        <li>Present it at the registration desk</li>
+        <li>The QR code and MECA ID work the same as the digital version</li>
+      </ul>
+
+      <div class="highlight">
+        <strong>Either method is accepted at all MECA events.</strong> Some competitors prefer the convenience of their phone, while others like having a physical card. Both are equally valid.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>About the QR Code</h2>
+      <p>The QR code on your membership card:</p>
+      <ul>
+        <li>Links directly to your public MECA member profile</li>
+        <li>Can be scanned by any standard QR code reader or phone camera</li>
+        <li>Allows event staff to quickly verify your membership status</li>
+        <li>Shows your membership type, status, and expiration date</li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> The QR code is unique to your account and updates automatically if your membership changes. You don't need to reprint your card unless you want the latest expiration date on the physical copy.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Troubleshooting</h2>
+
+      <h3>Card Not Showing</h3>
+      <p>If you don't see a membership card on the Membership Card tab:</p>
+      <ul>
+        <li><strong>No active membership</strong> &mdash; You need an active membership to generate a card. Visit <strong>Profile</strong> &rarr; <strong>Membership</strong> to purchase one.</li>
+        <li><strong>Membership expired</strong> &mdash; Your card disappears when your membership expires. Renew to get it back.</li>
+        <li><strong>Just purchased</strong> &mdash; If you just bought a membership, try refreshing the page. It should appear within a few seconds.</li>
+      </ul>
+
+      <h3>QR Code Not Scanning</h3>
+      <ul>
+        <li>Make sure your screen brightness is turned up</li>
+        <li>Hold the phone steady and ensure the full QR code is visible</li>
+        <li>If on a printed card, make sure the print is clear and not smudged</li>
+      </ul>
+    </div>
+
+    <div class="footer-help">
+      <p style="color: #94a3b8;">Need more help? <a href="/member-support">Contact Member Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

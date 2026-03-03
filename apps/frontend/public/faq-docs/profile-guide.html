@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile &amp; Account Guide - MECA Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    h3 { color: #60a5fa; font-size: 1.1rem; margin: 16px 0 12px 0; }
+    h4 { color: #a78bfa; font-size: 1rem; margin: 12px 0 8px 0; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-left: 24px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    .highlight { background: #475569; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #f97316; }
+    .tip-box { background: #1e3a5f; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
+    .warning-box { background: #7c2d12; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #ef4444; }
+    .flow-diagram { background: #1e293b; padding: 20px; border-radius: 8px; margin: 16px 0; }
+    .flow-step { display: flex; align-items: flex-start; margin-bottom: 12px; }
+    .flow-number {
+      background: #f97316; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-weight: 600;
+      margin-right: 12px; flex-shrink: 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 12px; text-align: left; border: 1px solid #475569; }
+    th { background: #475569; color: #f97316; }
+    tr:nth-child(even) { background: #3d4f63; }
+    .toc { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 24px; }
+    .toc h3 { color: #f97316; margin-top: 0; }
+    .toc ul { list-style: none; margin-left: 0; }
+    .toc a { color: #60a5fa; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .footer-help { text-align: center; margin-top: 40px; padding: 24px; background: #334155; border-radius: 12px; }
+    .footer-help a { color: #f97316; text-decoration: none; }
+    .footer-help a:hover { text-decoration: underline; }
+    .screenshot-wrap { margin: 16px 0; text-align: center; }
+    .screenshot-wrap img { max-width: 100%; border-radius: 8px; border: 1px solid #475569; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .screenshot-wrap .caption { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+    .screenshot-wrap .missing { display: block; padding: 48px 24px; background: #1e293b; border-radius: 8px; border: 1px dashed #475569; color: #64748b; font-style: italic; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+      table { font-size: 0.85rem; }
+      th, td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Help Center</a>
+
+    <h1>&#128100; Profile &amp; Account Management</h1>
+    <p class="subtitle">Managing your personal info, public profile, billing, membership, and support</p>
+
+    <div class="toc">
+      <h3>Table of Contents</h3>
+      <ul>
+        <li><a href="#hub">1. Profile Hub Overview</a></li>
+        <li><a href="#personal">2. Personal Profile</a></li>
+        <li><a href="#public">3. Public Profile</a></li>
+        <li><a href="#billing">4. Billing & Invoices</a></li>
+        <li><a href="#membership">5. Membership</a></li>
+        <li><a href="#tickets">6. Support Tickets</a></li>
+        <li><a href="#business">7. Business Listing</a></li>
+      </ul>
+    </div>
+
+    <div class="section" id="hub">
+      <h2>1. Profile Hub Overview</h2>
+      <p>When you click the <strong>Profile</strong> tab in My MECA, you'll see a hub with cards for each profile section. Click any card to dive into that area:</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/profile-hub-cards.png"
+             alt="Profile hub showing navigation cards for each profile section" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: profile-hub-cards.png</span>'">
+        <p class="caption">The Profile hub with cards for each section</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> profile-hub-cards.png &bull;
+          <strong>Title:</strong> Profile Hub Navigation Cards &bull;
+          <strong>Desc:</strong> The Profile tab hub showing navigation cards — Personal Profile, Public Profile, Billing, Membership, Tickets, Business Listing &bull;
+          <strong>Tags:</strong> faq, profile, hub, navigation, cards
+        </p>
+      </div>
+
+      <table>
+        <tr>
+          <th>Card</th>
+          <th>What It Contains</th>
+        </tr>
+        <tr>
+          <td><strong>Personal Profile</strong></td>
+          <td>Name, email, phone, vehicle info, and avatar</td>
+        </tr>
+        <tr>
+          <td><strong>Public Profile</strong></td>
+          <td>Bio, visibility settings, photo gallery, and what others see</td>
+        </tr>
+        <tr>
+          <td><strong>Billing &amp; Invoices</strong></td>
+          <td>Payment history, invoices, and payment method management</td>
+        </tr>
+        <tr>
+          <td><strong>Membership</strong></td>
+          <td>Current membership status, upgrade options, and renewal settings</td>
+        </tr>
+        <tr>
+          <td><strong>Support Tickets</strong></td>
+          <td>Create and track support requests</td>
+        </tr>
+        <tr>
+          <td><strong>Business Listing</strong></td>
+          <td>Retailer/manufacturer directory listing (only visible for business memberships)</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section" id="personal">
+      <h2>2. Personal Profile</h2>
+      <p>Your personal profile contains the core information tied to your MECA account.</p>
+
+      <h3>Editing Your Personal Info</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Go to <strong>My MECA</strong> &rarr; <strong>Profile</strong> tab &rarr; click <strong>"Personal Profile"</strong> card.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Click the <strong>"Edit"</strong> button (pencil icon) to enter edit mode.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>Update any of the fields listed below.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>Click <strong>"Save Changes"</strong> to save. Your changes take effect immediately.</div>
+        </div>
+      </div>
+
+      <div class="screenshot-wrap">
+        <img src="images/personal-profile-form.png"
+             alt="Personal profile edit form" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: personal-profile-form.png</span>'">
+        <p class="caption">Editing your personal profile information</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> personal-profile-form.png &bull;
+          <strong>Title:</strong> Personal Profile Edit Form &bull;
+          <strong>Desc:</strong> Personal Profile form showing editable fields — name, email, phone, city, state, country, vehicle info &bull;
+          <strong>Tags:</strong> faq, profile, personal, edit, form
+        </p>
+      </div>
+
+      <h3>Available Fields</h3>
+      <table>
+        <tr><th>Field</th><th>Description</th><th>Required?</th></tr>
+        <tr><td>First Name</td><td>Your first name</td><td>Yes</td></tr>
+        <tr><td>Last Name</td><td>Your last name</td><td>Yes</td></tr>
+        <tr><td>Email</td><td>Account email (also used for login)</td><td>Yes</td></tr>
+        <tr><td>Phone</td><td>Contact phone number</td><td>No</td></tr>
+        <tr><td>City</td><td>Your city</td><td>No</td></tr>
+        <tr><td>State</td><td>Your state/province</td><td>No</td></tr>
+        <tr><td>Country</td><td>Your country</td><td>No</td></tr>
+        <tr><td>Vehicle Year</td><td>Year of your competition vehicle</td><td>No</td></tr>
+        <tr><td>Vehicle Make</td><td>Make (e.g., Honda, Ford)</td><td>No</td></tr>
+        <tr><td>Vehicle Model</td><td>Model (e.g., Civic, F-150)</td><td>No</td></tr>
+      </table>
+
+      <h3>Updating Your Profile Photo</h3>
+      <p>Your profile photo is set from the <strong>Profile Images</strong> section on your <strong>Public Profile</strong> page. Upload images there (up to 5), then click on any image to set it as your profile picture. Supported formats: JPG, PNG, GIF, WebP. Max 5 MB per image. See the <a href="gallery-guide.html" style="color: #60a5fa;">Gallery Guide</a> for full details.</p>
+    </div>
+
+    <div class="section" id="public">
+      <h2>3. Public Profile</h2>
+      <p>Your public profile is what other MECA members see when they visit your profile page in the member directory.</p>
+
+      <h3>What's on Your Public Profile Page</h3>
+      <p>The Public Profile page has several sections you can manage:</p>
+      <ul>
+        <li><strong>Profile Visibility</strong> &mdash; Toggle whether your profile appears in the Member Directory</li>
+        <li><strong>Competitor Information</strong> &mdash; Your competitor name as it appears in results and standings</li>
+        <li><strong>Profile Images</strong> &mdash; Upload up to 5 photos and click one to set it as your profile picture</li>
+        <li><strong>Bio</strong> &mdash; A short description about yourself and your builds</li>
+        <li><strong>Vehicle info</strong> &mdash; Your competition vehicle details</li>
+      </ul>
+
+      <h3>Profile Images</h3>
+      <p>The Profile Images section lets you upload up to 5 photos. These images appear on your public profile in the member directory and in your Gallery tab. Click any uploaded image to set it as your profile picture. See the <a href="gallery-guide.html" style="color: #60a5fa;">Gallery Guide</a> for full upload instructions.</p>
+
+      <h3>Competitor Name</h3>
+      <p>Your <strong>Competitor Name</strong> is the name that appears in competition results, standings, and Top 10 lists. You can change it from the Public Profile page.</p>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> A complete public profile with a bio and photos helps you connect with other competitors and makes your profile stand out in the member directory.
+      </div>
+    </div>
+
+    <div class="section" id="billing">
+      <h2>4. Billing &amp; Invoices</h2>
+      <p>The Billing section lets you view your payment history and manage payment methods.</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/billing-page.png"
+             alt="Billing and invoices page showing payment history" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: billing-page.png</span>'">
+        <p class="caption">The Billing &amp; Invoices page with payment history</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> billing-page.png &bull;
+          <strong>Title:</strong> Billing and Invoices Page &bull;
+          <strong>Desc:</strong> Billing page showing payment history table with dates, amounts, status, and invoice download links &bull;
+          <strong>Tags:</strong> faq, profile, billing, invoices, payments
+        </p>
+      </div>
+
+      <h3>Viewing Payment History</h3>
+      <p>Your Billing page shows a list of all payments made through MECA, including:</p>
+      <ul>
+        <li>Membership purchases and renewals</li>
+        <li>Event registration fees</li>
+        <li>Date and amount for each transaction</li>
+        <li>Payment status (Paid, Pending, Refunded)</li>
+      </ul>
+
+      <h3>Viewing Invoices</h3>
+      <p>Click on any payment to view or download the invoice as a PDF. Invoices include:</p>
+      <ul>
+        <li>Transaction details (date, amount, description)</li>
+        <li>Payment method used</li>
+        <li>MECA billing information</li>
+      </ul>
+
+      <h3>Managing Payment Methods</h3>
+      <p>Click <strong>"Manage Billing"</strong> to open the Stripe billing portal where you can:</p>
+      <ul>
+        <li>Add or update your credit/debit card</li>
+        <li>View upcoming charges</li>
+        <li>Download invoices</li>
+        <li>Update your billing address</li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> The Stripe billing portal is a secure external page hosted by Stripe. Your payment information is never stored on MECA servers.
+      </div>
+    </div>
+
+    <div class="section" id="membership">
+      <h2>5. Membership</h2>
+      <p>The Membership section shows your current membership and allows you to manage it.</p>
+
+      <div class="screenshot-wrap">
+        <img src="images/membership-management.png"
+             alt="Membership management section showing current membership status" onerror="this.outerHTML='<span class=\'missing\'>Screenshot: membership-management.png</span>'">
+        <p class="caption">The Membership section showing your current membership details</p>
+        <p class="caption" style="color:#f97316; font-style:normal; margin-top:4px; font-size:0.8rem;">
+          <strong>Upload as:</strong> membership-management.png &bull;
+          <strong>Title:</strong> Membership Management Section &bull;
+          <strong>Desc:</strong> Membership section showing current membership type, status, expiration date, and auto-renewal toggle &bull;
+          <strong>Tags:</strong> faq, profile, membership, status, renewal
+        </p>
+      </div>
+
+      <h3>Viewing Your Membership</h3>
+      <p>Your membership card shows:</p>
+      <ul>
+        <li>Membership type and category (Competitor, Competitor w/Team, Retailer, Manufacturer)</li>
+        <li>Status (Active, Expired, Cancelled)</li>
+        <li>Start and expiration dates</li>
+        <li>Auto-renewal status</li>
+      </ul>
+
+      <h3>Upgrading Your Membership</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Go to <strong>Profile</strong> &rarr; <strong>"Membership"</strong>.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Click <strong>"Upgrade"</strong> or <strong>"Change Membership"</strong>.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>Select your new membership type.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>Complete payment. Your upgrade takes effect immediately.</div>
+        </div>
+      </div>
+
+      <h3>Auto-Renewal</h3>
+      <p>When auto-renewal is enabled, your membership will automatically renew before it expires using the payment method on file. You can toggle auto-renewal on/off from the Membership section.</p>
+
+      <h3>Cancelling Your Membership</h3>
+      <p>To cancel your membership:</p>
+      <ul>
+        <li>Go to <strong>Profile</strong> &rarr; <strong>"Membership"</strong></li>
+        <li>Click <strong>"Cancel Membership"</strong></li>
+        <li>Confirm the cancellation in the dialog</li>
+      </ul>
+
+      <div class="warning-box">
+        <strong>&#9888; Warning:</strong> Cancelling your membership means you won't be able to compete in MECA events or earn points. Your MECA ID and account data are preserved &mdash; you can always renew later.
+      </div>
+    </div>
+
+    <div class="section" id="tickets">
+      <h2>6. Support Tickets</h2>
+      <p>The Support Tickets section lets you create and track help requests.</p>
+
+      <h3>Creating a Ticket</h3>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>Go to <strong>Profile</strong> &rarr; <strong>"Support Tickets"</strong>, or visit <a href="/member-support" style="color: #60a5fa;">Member Support</a>.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>Click <strong>"New Ticket"</strong>.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>Select a category (Account, Membership, Event, Technical, etc.).</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>Write a detailed description of your issue. Include your MECA ID and any relevant screenshots.</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">5</div>
+          <div>Click <strong>"Submit"</strong>. You'll receive an email confirmation.</div>
+        </div>
+      </div>
+
+      <h3>Tracking Your Tickets</h3>
+      <p>Each ticket has a status:</p>
+      <table>
+        <tr><th>Status</th><th>Meaning</th></tr>
+        <tr><td><strong>Open</strong></td><td>Your ticket has been submitted and is waiting for a response</td></tr>
+        <tr><td><strong>In Progress</strong></td><td>A support team member is working on your request</td></tr>
+        <tr><td><strong>Resolved</strong></td><td>Your issue has been addressed</td></tr>
+        <tr><td><strong>Closed</strong></td><td>The ticket is complete</td></tr>
+      </table>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> Include as much detail as possible in your ticket &mdash; screenshots, error messages, steps to reproduce &mdash; for the fastest resolution.
+      </div>
+    </div>
+
+    <div class="section" id="business">
+      <h2>7. Business Listing (Retailers &amp; Manufacturers)</h2>
+      <p>If you have a Retailer or Manufacturer membership, you'll see an additional <strong>"Business Listing"</strong> card in your Profile hub.</p>
+
+      <h3>What's Included</h3>
+      <ul>
+        <li><strong>Business name and description</strong></li>
+        <li><strong>Contact information</strong> &mdash; Phone, email, website</li>
+        <li><strong>Address and location</strong> &mdash; For map display in the directory</li>
+        <li><strong>Logo and photos</strong></li>
+        <li><strong>Services offered</strong></li>
+      </ul>
+
+      <p>Your business listing appears in the appropriate directory (Retailer or Manufacturer) on the MECA website, helping customers find you.</p>
+
+      <h3>Editing Your Listing</h3>
+      <p>Click <strong>"Business Listing"</strong> in the Profile hub, then click <strong>"Edit"</strong> to update any of the fields. Changes are published immediately after saving.</p>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> A complete listing with logo, photos, and detailed description significantly increases visibility in the directory.
+      </div>
+    </div>
+
+    <div class="footer-help">
+      <p style="color: #94a3b8;">Need more help? <a href="/member-support">Contact Member Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

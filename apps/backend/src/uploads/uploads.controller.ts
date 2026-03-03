@@ -68,6 +68,7 @@ export class UploadsController {
    *   - file: The file to upload (required)
    *   - destination: Upload destination key (required) — e.g., 'product-images', 'profile-images'
    *   - entityId: Optional entity ID for scoping (e.g., team ID for team uploads)
+   *   - subfolder: Optional subfolder within the destination (e.g., 'faq-docs' → media/faq-docs/)
    *
    * Returns: { publicUrl, storagePath, bucket, fileSize, mimeType }
    */
@@ -82,6 +83,8 @@ export class UploadsController {
     @UploadedFile() file: Express.Multer.File,
     @Body('destination') destination: string,
     @Body('entityId') entityId?: string,
+    @Body('subfolder') subfolder?: string,
+    @Body('preserveFilename') preserveFilename?: string,
   ): Promise<UploadResult> {
     // Authenticate
     const profile = await this.requireAuth(authHeader);
@@ -98,7 +101,7 @@ export class UploadsController {
     }
 
     this.logger.log(
-      `Upload request from ${profile.email} (${profile.role}) to "${destination}" — ${file.originalname} (${file.size} bytes)`,
+      `Upload request from ${profile.email} (${profile.role}) to "${destination}" — ${file.originalname} (${file.size} bytes) subfolder="${subfolder || ''}" preserveFilename="${preserveFilename}"`,
     );
 
     // Delegate to service (handles auth checks, validation, and upload)
@@ -108,6 +111,8 @@ export class UploadsController {
       profile.id,
       profile.role || 'user',
       entityId,
+      subfolder,
+      preserveFilename === 'true',
     );
   }
 

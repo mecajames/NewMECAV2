@@ -52,12 +52,20 @@ export async function uploadFile(
   file: File,
   destination: UploadDestination,
   entityId?: string,
+  subfolder?: string,
+  preserveFilename?: boolean,
 ): Promise<UploadResult> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('destination', destination);
   if (entityId) {
     formData.append('entityId', entityId);
+  }
+  if (subfolder) {
+    formData.append('subfolder', subfolder);
+  }
+  if (preserveFilename) {
+    formData.append('preserveFilename', 'true');
   }
 
   const response = await axios.post('/api/uploads', formData, {
