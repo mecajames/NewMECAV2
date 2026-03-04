@@ -5,6 +5,38 @@ import DOMPurify from 'dompurify';
 import { championshipArchivesApi, ChampionshipArchive, ChampionshipAward } from '@/championship-archives';
 import { useAuth } from '@/auth';
 
+/**
+ * Fix mojibake characters from scraped HTML that was double-encoded
+ * through Windows-1252 → UTF-8 corruption.
+ */
+function fixMojibake(html: string): string {
+  return html
+    // En dash / Em dash variants
+    .replace(/ΓÇô/g, '–')
+    .replace(/ΓÇö/g, '—')
+    // Smart quotes
+    .replace(/ΓÇ£/g, '\u201C')  // left double quote "
+    .replace(/ΓÇ¥/g, '\u201D')  // right double quote "
+    .replace(/ΓÇÖ/g, '\u2019')  // right single quote / apostrophe '
+    .replace(/ΓÇÿ/g, '\u2018')  // left single quote '
+    // Ellipsis
+    .replace(/ΓÇª/g, '\u2026')  // …
+    // Bullet
+    .replace(/ΓÇó/g, '\u2022')  // •
+    // Trademark / special
+    .replace(/ΓäÇ/g, '\u2122')  // ™
+    // Registered
+    .replace(/┬«/g, '\u00AE')   // ®
+    // Copyright
+    .replace(/┬⌐/g, '\u00A9')   // ©
+    // Non-breaking space
+    .replace(/┬á/g, '\u00A0')   // &nbsp;
+    // Common Windows-1252 double-encoding: Â prefix artifacts
+    .replace(/Â /g, ' ')
+    .replace(/Â·/g, '\u00B7')   // middle dot
+    ;
+}
+
 // Add custom styles for archived HTML content
 const archiveContentStyles = `
   .championship-archive-content {
@@ -422,7 +454,7 @@ export default function ChampionshipArchiveYearPage() {
           <div className="bg-slate-800 rounded-xl p-8 mb-6">
             <div className="prose prose-invert prose-orange max-w-none">
               <div
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(archive.additional_content.html) }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(fixMojibake(archive.additional_content.html)) }}
                 className="championship-archive-content"
               />
             </div>

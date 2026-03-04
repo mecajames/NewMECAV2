@@ -280,6 +280,7 @@ export default function RatingsAdminPage() {
 
     return (
       <div className="bg-slate-800 rounded-xl overflow-hidden">
+       <div className="overflow-x-auto">
         {entities.length === 0 ? (
           <div className="p-12 text-center">
             <Icon className={`h-16 w-16 text-${color}-400/50 mx-auto mb-4`} />
@@ -325,6 +326,7 @@ export default function RatingsAdminPage() {
             </tbody>
           </table>
         )}
+       </div>
       </div>
     );
   };
@@ -353,6 +355,7 @@ export default function RatingsAdminPage() {
 
         {/* Ratings List */}
         <div className="bg-slate-800 rounded-xl overflow-hidden">
+         <div className="overflow-x-auto">
           {allRatings.length === 0 ? (
             <div className="p-12 text-center">
               <MessageSquare className="h-16 w-16 text-gray-600 mx-auto mb-4" />
@@ -431,6 +434,7 @@ export default function RatingsAdminPage() {
               </tbody>
             </table>
           )}
+         </div>
         </div>
       </div>
     );

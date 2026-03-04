@@ -412,7 +412,7 @@ export default function MembershipCardsAdminPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
                     <th className="p-3 w-10">

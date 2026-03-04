@@ -4286,7 +4286,7 @@ function TeamsTab({ member, businessMembershipData }: {
 // Only James Ryan and Mick Mahkool can use this feature
 const SUPER_ADMIN_EMAILS = [
   'james@mecacaraudio.com',
-  'mick@mecausa.com',
+  'mmakhool6@gmail.com',
 ];
 
 function isSuperAdmin(profile: Profile | null): boolean {

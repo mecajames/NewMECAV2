@@ -934,6 +934,7 @@ export default function BusinessListingsAdminPage() {
 
         {/* Listings Table */}
         <div className="bg-slate-800 rounded-xl overflow-hidden">
+         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-700/50">
               <tr>
@@ -965,6 +966,7 @@ export default function BusinessListingsAdminPage() {
               )}
             </tbody>
           </table>
+         </div>
         </div>
       </div>
 

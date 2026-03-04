@@ -904,8 +904,8 @@ export default function MembersPage() {
 
         {/* Members Table */}
         <div className="bg-slate-800 rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-hidden">
-            <table className="w-full divide-y divide-slate-700 table-fixed">
+          <div className="overflow-x-auto">
+            <table className="w-full divide-y divide-slate-700 table-fixed min-w-[1100px]">
               <thead className="bg-slate-700">
                 <tr>
                   <th className="w-8 px-1 py-3"></th>{/* Expand/collapse column */}

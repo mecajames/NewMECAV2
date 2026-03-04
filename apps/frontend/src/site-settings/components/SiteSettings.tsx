@@ -222,8 +222,8 @@ export default function SiteSettings() {
         // Staging Mode settings
         saveSetting('staging_mode_enabled', formData.staging_mode_enabled.toString(), 'boolean', 'Enable staging mode to redirect/block emails and payments'),
         saveSetting('staging_mode_test_email', formData.staging_mode_test_email, 'text', 'Redirect all emails to this test address'),
-        saveSetting('staging_mode_allowed_emails', JSON.stringify(formData.staging_mode_allowed_emails), 'json', 'Emails that receive real emails (whitelist)'),
-        saveSetting('staging_mode_allowed_domains', JSON.stringify(formData.staging_mode_allowed_domains), 'json', 'Domains that receive real emails'),
+        saveSetting('staging_mode_allowed_emails', JSON.stringify(formData.staging_mode_allowed_emails.map(s => s.trim()).filter(Boolean)), 'json', 'Emails that receive real emails (whitelist)'),
+        saveSetting('staging_mode_allowed_domains', JSON.stringify(formData.staging_mode_allowed_domains.map(s => s.trim()).filter(Boolean)), 'json', 'Domains that receive real emails'),
         saveSetting('staging_mode_block_payments', formData.staging_mode_block_payments.toString(), 'boolean', 'Block Stripe payment processing'),
         // Maintenance Mode settings
         saveSetting('maintenance_mode_enabled', formData.maintenance_mode_enabled.toString(), 'boolean', 'Enable maintenance mode to block non-admin users'),
@@ -1163,7 +1163,7 @@ export default function SiteSettings() {
                 value={formData.staging_mode_allowed_emails.join('\n')}
                 onChange={(e) => setFormData({
                   ...formData,
-                  staging_mode_allowed_emails: e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
+                  staging_mode_allowed_emails: e.target.value.split('\n')
                 })}
                 rows={4}
                 placeholder="admin@mecacaraudio.com&#10;tester@example.com"
@@ -1183,7 +1183,7 @@ export default function SiteSettings() {
                 value={formData.staging_mode_allowed_domains.join('\n')}
                 onChange={(e) => setFormData({
                   ...formData,
-                  staging_mode_allowed_domains: e.target.value.split('\n').map(s => s.trim()).filter(Boolean)
+                  staging_mode_allowed_domains: e.target.value.split('\n')
                 })}
                 rows={3}
                 placeholder="mecacaraudio.com&#10;meca-test.com"
