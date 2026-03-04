@@ -623,6 +623,7 @@ export class JudgesService {
       subject: `MECA Judge Application - ${application.status.charAt(0).toUpperCase() + application.status.slice(1)}`,
       html: `<p>Dear ${application.fullName},</p><p>${statusMessages[application.status]}</p><p>Thank you for your interest in MECA.</p><p>Best regards,<br/>MECA Team</p>`,
       text: `Dear ${application.fullName},\n\n${statusMessages[application.status]}\n\nThank you for your interest in MECA.\n\nBest regards,\nMECA Team`,
+      from: 'events@mecacaraudio.com',
     });
   }
 
@@ -876,6 +877,7 @@ export class JudgesService {
       subject: subjects[type],
       html: `<p>Dear ${judgeName},</p><p>${messages[type]}</p><p>Best regards,<br/>MECA Team</p>`,
       text: `Dear ${judgeName},\n\n${messages[type]}\n\nBest regards,\nMECA Team`,
+      from: 'events@mecacaraudio.com',
     });
   }
 }

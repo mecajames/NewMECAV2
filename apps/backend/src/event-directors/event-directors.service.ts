@@ -683,6 +683,7 @@ export class EventDirectorsService {
       subject: subjects[type],
       html: `<p>Dear ${edName},</p><p>${messages[type]}</p><p>Best regards,<br/>MECA Team</p>`,
       text: `Dear ${edName},\n\n${messages[type]}\n\nBest regards,\nMECA Team`,
+      from: 'events@mecacaraudio.com',
     });
   }
 }

@@ -1432,7 +1432,9 @@ export default function SiteSettings() {
             </div>
             <p className="text-sm text-gray-400">
               Send a test email to verify your email settings are working correctly.
-              Check <span className="text-green-400">http://localhost:54324</span> (Supabase Inbucket) for local emails.
+              {window.location.hostname === 'localhost' && (
+                <> Check <a href="http://localhost:54324" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">http://localhost:54324</a> (Mailpit) for local dev emails.</>
+              )}
             </p>
             <div className="flex gap-2">
               <input

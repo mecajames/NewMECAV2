@@ -8,6 +8,7 @@ export interface SendEmailDto {
   subject: string;
   html: string;
   text?: string;
+  from?: string; // Optional per-email "from" override
 }
 
 export interface SendPasswordEmailDto {
@@ -293,6 +294,16 @@ export class EmailService {
   private transporter: Transporter | null = null;
   private fromEmail: string = 'noreply@mecacaraudio.com';
 
+  // Department-specific "from" addresses
+  private readonly fromAddresses = {
+    noreply: 'noreply@mecacaraudio.com',
+    support: 'support@mecacaraudio.com',
+    memberships: 'memberships@mecacaraudio.com',
+    billing: 'billing@mecacaraudio.com',
+    events: 'events@mecacaraudio.com',
+    shop: 'shop@mecacaraudio.com',
+  };
+
   // Staging mode cache to avoid DB queries for every email
   private stagingModeCache: Map<string, { value: any; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 60000; // 1 minute
@@ -534,6 +545,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.noreply,
     });
   }
 
@@ -551,6 +563,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.support,
     });
   }
 
@@ -574,6 +587,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.billing,
     });
   }
 
@@ -598,6 +612,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.events,
     });
   }
 
@@ -626,6 +641,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.events,
     });
   }
 
@@ -650,6 +666,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.events,
     });
   }
 
@@ -674,6 +691,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.events,
     });
   }
 
@@ -696,6 +714,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.support,
     });
   }
 
@@ -714,6 +733,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.support,
     });
   }
 
@@ -734,6 +754,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.support,
     });
   }
 
@@ -752,6 +773,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.support,
     });
   }
 
@@ -771,6 +793,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.support,
     });
   }
 
@@ -798,6 +821,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.memberships,
     });
   }
 
@@ -821,6 +845,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.memberships,
     });
   }
 
@@ -845,6 +870,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.memberships,
     });
   }
 
@@ -868,6 +894,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.memberships,
     });
   }
 
@@ -890,6 +917,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.memberships,
     });
   }
 
@@ -913,6 +941,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.memberships,
     });
   }
 
@@ -935,6 +964,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.shop,
     });
   }
 
@@ -953,6 +983,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.billing,
     });
   }
 
@@ -971,6 +1002,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.shop,
     });
   }
 
@@ -989,6 +1021,7 @@ export class EmailService {
       subject,
       html,
       text,
+      from: this.fromAddresses.shop,
     });
   }
 
@@ -1001,7 +1034,7 @@ export class EmailService {
 
       await sgMail.default.send({
         to: dto.to,
-        from: this.fromEmail,
+        from: dto.from || this.fromEmail,
         subject: dto.subject,
         text: dto.text || '',
         html: dto.html,
@@ -1027,7 +1060,7 @@ export class EmailService {
       const resend = new Resend(process.env.RESEND_API_KEY);
 
       await resend.emails.send({
-        from: this.fromEmail,
+        from: dto.from || this.fromEmail,
         to: dto.to,
         subject: dto.subject,
         html: dto.html,
@@ -1053,7 +1086,7 @@ export class EmailService {
 
     try {
       await this.transporter.sendMail({
-        from: this.fromEmail,
+        from: dto.from || this.fromEmail,
         to: dto.to,
         subject: dto.subject,
         html: dto.html,

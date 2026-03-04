@@ -312,6 +312,7 @@ export class ScheduledTasksService {
       const result = await this.emailService.sendEmail({
         to: toEmail,
         subject: 'MECA Test Email',
+        from: 'noreply@mecacaraudio.com',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #ea580c;">Test Email from MECA</h1>
