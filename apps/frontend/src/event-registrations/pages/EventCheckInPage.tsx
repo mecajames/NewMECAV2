@@ -257,15 +257,15 @@ export default function EventCheckInPage() {
             </Link>
           </div>
 
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Event Check-In</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Event Check-In</h1>
               <p className="text-gray-400">{event.title}</p>
             </div>
 
             {/* Stats */}
             {stats && (
-              <div className="flex gap-4">
+              <div className="flex gap-4 shrink-0">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-white">{stats.checkedIn}</div>
                   <div className="text-sm text-gray-400">Checked In</div>
@@ -436,7 +436,7 @@ export default function EventCheckInPage() {
                   )}
 
                   {/* Competitor Info */}
-                  <div className="flex items-start justify-between mb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
                     <div>
                       <h3 className="text-2xl font-bold text-white mb-2">
                         {lookupResult.competitor.firstName} {lookupResult.competitor.lastName}

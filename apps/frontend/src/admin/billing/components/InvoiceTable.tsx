@@ -75,6 +75,7 @@ export function InvoiceTable({
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-700">
+     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-slate-700">
         <thead className="bg-slate-700/50">
           <tr>
@@ -266,6 +267,7 @@ export function InvoiceTable({
           ))}
         </tbody>
       </table>
+     </div>
     </div>
   );
 }

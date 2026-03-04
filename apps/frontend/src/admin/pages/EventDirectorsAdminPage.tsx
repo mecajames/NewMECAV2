@@ -211,7 +211,8 @@ export default function EventDirectorsAdminPage() {
           </div>
         ) : (
           <div className="bg-slate-800 rounded-xl overflow-hidden">
-            <table className="w-full">
+           <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
               <thead className="bg-slate-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Event Director</th>
@@ -275,6 +276,7 @@ export default function EventDirectorsAdminPage() {
                 ))}
               </tbody>
             </table>
+           </div>
           </div>
         )}
       </div>

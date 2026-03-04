@@ -13,8 +13,10 @@ export function TicketsPage() {
 
   const handleTicketCreated = (ticket: TicketType) => {
     setShowCreateForm(false);
-    // Navigate to the new ticket
-    navigate(`/tickets/${ticket.id}`);
+    // Navigate to the new ticket with success state
+    navigate(`/tickets/${ticket.id}`, {
+      state: { justCreated: true, ticketNumber: ticket.ticket_number },
+    });
   };
 
   // Redirect unauthenticated users to guest support (wait for auth to load first)

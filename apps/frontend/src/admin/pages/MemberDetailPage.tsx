@@ -522,18 +522,18 @@ export default function MemberDetailPage() {
       id: 'overview',
       label: 'Overview',
       icon: User,
-      tabs: [{ id: 'overview', label: 'Overview' }]
+      tabs: [{ id: 'overview', label: 'Overview', shortLabel: 'Overview' }]
     },
     {
       id: 'profile',
       label: 'Profile',
       icon: User,
       tabs: [
-        { id: 'personal', label: 'Personal Information' },
+        { id: 'personal', label: 'Personal Information', shortLabel: 'Personal' },
         // Business tab only shows for retailers/manufacturers
-        ...(businessMembershipData ? [{ id: 'business', label: 'Business Directory Listing' }] : []),
-        { id: 'media', label: 'Media & Gallery' },
-        { id: 'permissions', label: 'Permissions' },
+        ...(businessMembershipData ? [{ id: 'business', label: 'Business Directory Listing', shortLabel: 'Business' }] : []),
+        { id: 'media', label: 'Media & Gallery', shortLabel: 'Media' },
+        { id: 'permissions', label: 'Permissions', shortLabel: 'Permissions' },
       ]
     },
     {
@@ -541,9 +541,9 @@ export default function MemberDetailPage() {
       label: 'Membership',
       icon: CreditCard,
       tabs: [
-        { id: 'teams', label: 'Teams' },
-        { id: 'memberships', label: 'Memberships & Subscriptions' },
-        { id: 'orders', label: 'Orders & Invoices' },
+        { id: 'teams', label: 'Teams', shortLabel: 'Teams' },
+        { id: 'memberships', label: 'Memberships & Subscriptions', shortLabel: 'Memberships' },
+        { id: 'orders', label: 'Orders & Invoices', shortLabel: 'Orders' },
       ]
     },
     {
@@ -551,9 +551,9 @@ export default function MemberDetailPage() {
       label: 'Competition',
       icon: Trophy,
       tabs: [
-        { id: 'events', label: 'Event Registrations' },
-        { id: 'results', label: 'Competition Results' },
-        { id: 'communications', label: 'Communications' },
+        { id: 'events', label: 'Event Registrations', shortLabel: 'Registrations' },
+        { id: 'results', label: 'Competition Results', shortLabel: 'Results' },
+        { id: 'communications', label: 'Communications', shortLabel: 'Comms' },
       ]
     },
   ];
@@ -910,33 +910,33 @@ export default function MemberDetailPage() {
         </div>
 
         {/* Member Header Card */}
-        <div className="bg-slate-800 rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-6">
+        <div className="bg-slate-800 rounded-lg shadow-sm p-4 sm:p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="flex items-center gap-4 sm:gap-6 min-w-0">
               {/* Profile Picture */}
               <div className="flex-shrink-0">
                 {(member.profile_picture_url || (member.profile_images && member.profile_images.length > 0)) ? (
                   <img
                     src={member.profile_picture_url || member.profile_images?.[0]}
                     alt={member.full_name}
-                    className="h-24 w-24 rounded-full object-cover"
+                    className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="h-24 w-24 rounded-full bg-orange-500 flex items-center justify-center text-white text-3xl font-semibold">
+                  <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full bg-orange-500 flex items-center justify-center text-white text-2xl sm:text-3xl font-semibold">
                     {getInitials(member.first_name, member.last_name)}
                   </div>
                 )}
               </div>
 
               {/* Member Info */}
-              <div>
-                <h1 className="text-3xl font-bold text-white">
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-white truncate">
                   {member.first_name} {member.last_name}
                 </h1>
                 <div className="mt-2 space-y-1">
-                  <div className="flex items-center gap-2 text-gray-300">
-                    <Mail className="h-4 w-4" />
-                    {member.email}
+                  <div className="flex items-center gap-2 text-gray-300 min-w-0">
+                    <Mail className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{member.email}</span>
                   </div>
                   {member.phone && (
                     <div className="flex items-center gap-2 text-gray-300">
@@ -1005,7 +1005,7 @@ export default function MemberDetailPage() {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {hasPermission('manage_users') && (
                 <button
                   onClick={async () => {
@@ -1021,7 +1021,7 @@ export default function MemberDetailPage() {
                       setEmailServiceConfigured(false);
                     });
                   }}
-                  className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2 text-sm"
                 >
                   <Key className="h-4 w-4" />
                   Reset Password
@@ -1030,7 +1030,7 @@ export default function MemberDetailPage() {
               {hasPermission('send_emails') && (
                 <button
                   onClick={() => setShowMessageModal(true)}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2 text-sm"
                 >
                   <Send className="h-4 w-4" />
                   Send Message
@@ -1040,9 +1040,70 @@ export default function MemberDetailPage() {
           </div>
         </div>
 
-        {/* Tabs Navigation - Grouped Dropdowns */}
+        {/* Tabs Navigation */}
         <div className="bg-slate-800 rounded-lg shadow-sm mb-6">
-          <div className="border-b border-slate-700">
+          {/* ── Mobile: Two-tier segmented nav ── */}
+          <div className="md:hidden">
+            {/* Tier 1 — Group buttons as a segmented control */}
+            <div className="flex border-b border-slate-700">
+              {tabGroups.map((group) => {
+                const Icon = group.icon;
+                const isActive = group.tabs.some(tab => tab.id === activeTab);
+                return (
+                  <button
+                    key={group.id}
+                    onClick={() => {
+                      if (group.tabs.length === 1) {
+                        setActiveTab(group.tabs[0].id as TabType);
+                      } else {
+                        // Jump to the first sub-tab of this group (or stay if already in this group)
+                        if (!isActive) {
+                          setActiveTab(group.tabs[0].id as TabType);
+                        }
+                      }
+                    }}
+                    className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors relative ${
+                      isActive
+                        ? 'text-orange-400'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {group.label}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tier 2 — Sub-tabs for the active group (only if > 1 tab) */}
+            {(() => {
+              const activeGroup = tabGroups.find(g => g.tabs.some(t => t.id === activeTab));
+              if (!activeGroup || activeGroup.tabs.length <= 1) return null;
+              return (
+                <div className="flex border-b border-slate-700/50">
+                  {activeGroup.tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as TabType)}
+                      className={`flex-1 px-2 py-2.5 text-xs font-medium transition-colors whitespace-nowrap text-center ${
+                        activeTab === tab.id
+                          ? 'text-white bg-slate-700/60 border-b-2 border-orange-500'
+                          : 'text-gray-400 hover:text-gray-300'
+                      }`}
+                    >
+                      {tab.shortLabel}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* ── Desktop: Tab bar with hover dropdowns ── */}
+          <div className="hidden md:block border-b border-slate-700">
             <nav className="flex gap-2 px-4 py-2">
               {tabGroups.map((group) => {
                 const Icon = group.icon;
@@ -1050,12 +1111,11 @@ export default function MemberDetailPage() {
                 const isSingleTab = group.tabs.length === 1;
 
                 if (isSingleTab) {
-                  // For Overview - single tab, no dropdown
                   return (
                     <button
                       key={group.id}
                       onClick={() => setActiveTab(group.tabs[0].id as TabType)}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-colors ${
+                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-colors whitespace-nowrap ${
                         activeTab === group.tabs[0].id
                           ? 'bg-orange-500 text-white'
                           : 'text-gray-300 hover:bg-slate-700'
@@ -1067,13 +1127,15 @@ export default function MemberDetailPage() {
                   );
                 }
 
-                // For grouped tabs with dropdown
                 return (
                   <div key={group.id} className="relative">
                     <button
-                      onClick={() => setOpenDropdown(openDropdown === group.id ? null : group.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === group.id ? null : group.id);
+                      }}
                       onMouseEnter={() => setOpenDropdown(group.id)}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-colors ${
+                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-colors whitespace-nowrap ${
                         isActive
                           ? 'bg-orange-500 text-white'
                           : 'text-gray-300 hover:bg-slate-700'
@@ -1081,33 +1143,36 @@ export default function MemberDetailPage() {
                     >
                       <Icon className="h-4 w-4" />
                       {group.label}
-                      <ChevronDown className="h-4 w-4" />
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openDropdown === group.id ? 'rotate-180' : ''}`} />
                     </button>
 
                     {openDropdown === group.id && (
-                      <div
-                        className="absolute top-full left-0 mt-1 w-64 z-10"
-                        onMouseLeave={() => setOpenDropdown(null)}
-                      >
-                        <div className="bg-slate-700 rounded-lg shadow-xl border border-slate-600 py-2">
-                          {group.tabs.map((tab) => (
-                            <button
-                              key={tab.id}
-                              onClick={() => {
-                                setActiveTab(tab.id as TabType);
-                                setOpenDropdown(null);
-                              }}
-                              className={`block w-full text-left px-4 py-2 text-sm transition-colors ${
-                                activeTab === tab.id
-                                  ? 'bg-orange-500 text-white'
-                                  : 'text-gray-300 hover:bg-slate-600'
-                              }`}
-                            >
-                              {tab.label}
-                            </button>
-                          ))}
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
+                        <div
+                          className="absolute top-full left-0 mt-1 w-64 z-20"
+                          onMouseLeave={() => setOpenDropdown(null)}
+                        >
+                          <div className="bg-slate-700 rounded-lg shadow-xl border border-slate-600 py-1">
+                            {group.tabs.map((tab) => (
+                              <button
+                                key={tab.id}
+                                onClick={() => {
+                                  setActiveTab(tab.id as TabType);
+                                  setOpenDropdown(null);
+                                }}
+                                className={`block w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                                  activeTab === tab.id
+                                    ? 'bg-orange-500 text-white'
+                                    : 'text-gray-300 hover:bg-slate-600'
+                                }`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      </>
                     )}
                   </div>
                 );
@@ -3661,22 +3726,23 @@ function TeamsTab({ member, businessMembershipData }: {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="text-2xl font-bold text-white">Team Management</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate(`/teams/${team.id}`)}
-            className="px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors inline-flex items-center gap-2 text-sm"
+            className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors inline-flex items-center gap-1.5 text-xs sm:text-sm"
           >
-            <ExternalLink className="h-4 w-4" />
-            View Public Profile
+            <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">View Public Profile</span>
+            <span className="sm:hidden">Profile</span>
           </button>
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors inline-flex items-center gap-2 text-sm"
+            className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors inline-flex items-center gap-1.5 text-xs sm:text-sm"
           >
-            <Trash2 className="h-4 w-4" />
-            Delete Team
+            <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            Delete
           </button>
         </div>
       </div>
@@ -3694,7 +3760,7 @@ function TeamsTab({ member, businessMembershipData }: {
       )}
 
       {/* Team Details Section */}
-      <div className="bg-slate-700 rounded-lg p-6">
+      <div className="bg-slate-700 rounded-lg p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">Team Details</h3>
           {!isEditingDetails ? (
@@ -3729,25 +3795,25 @@ function TeamsTab({ member, businessMembershipData }: {
           <div className="space-y-4">
             <div className="flex items-start gap-4">
               {team.logoUrl ? (
-                <img src={team.logoUrl} alt={team.name} className="w-20 h-20 rounded-lg object-cover" />
+                <img src={team.logoUrl} alt={team.name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover flex-shrink-0" />
               ) : (
-                <div className="w-20 h-20 rounded-lg bg-slate-600 flex items-center justify-center">
-                  <UsersIcon className="h-10 w-10 text-gray-400" />
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-slate-600 flex items-center justify-center flex-shrink-0">
+                  <UsersIcon className="h-8 w-8 sm:h-10 sm:w-10 text-gray-400" />
                 </div>
               )}
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h4 className="text-xl font-semibold text-white">{team.name}</h4>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <h4 className="text-lg sm:text-xl font-semibold text-white">{team.name}</h4>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     team.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                   }`}>
                     {team.isActive ? 'Active' : 'Inactive'}
                   </span>
-                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 capitalize">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 capitalize">
                     {team.teamType?.replace('_', ' ')}
                   </span>
                 </div>
-                {team.description && <p className="text-gray-400">{team.description}</p>}
+                {team.description && <p className="text-gray-400 text-sm sm:text-base break-words">{team.description}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -3932,31 +3998,31 @@ function TeamsTab({ member, businessMembershipData }: {
             {activeMembers.map((teamMember) => (
               <div
                 key={teamMember.id}
-                className="flex items-center justify-between p-3 bg-slate-600/50 rounded-lg"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-600/50 rounded-lg"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   {teamMember.user?.profile_picture_url ? (
                     <img
                       src={teamMember.user.profile_picture_url}
                       alt={teamMember.user.first_name || 'Member'}
-                      className="w-10 h-10 rounded-full object-cover"
+                      className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-slate-500 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-slate-500 flex items-center justify-center flex-shrink-0">
                       <User className="h-5 w-5 text-gray-400" />
                     </div>
                   )}
-                  <div>
-                    <p className="text-white font-medium">
+                  <div className="min-w-0">
+                    <p className="text-white font-medium truncate">
                       {teamMember.user?.first_name} {teamMember.user?.last_name}
                       {teamMember.user?.meca_id && (
                         <span className="text-orange-400 ml-2">#{teamMember.user.meca_id}</span>
                       )}
                     </p>
-                    <p className="text-xs text-gray-400">{teamMember.user?.email}</p>
+                    <p className="text-xs text-gray-400 truncate">{teamMember.user?.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">
                   {changingRoleFor === teamMember.userId ? (
                     <select
                       value={teamMember.role}
@@ -4286,7 +4352,7 @@ function TeamsTab({ member, businessMembershipData }: {
 // Only James Ryan and Mick Mahkool can use this feature
 const SUPER_ADMIN_EMAILS = [
   'james@mecacaraudio.com',
-  'mick@mecausa.com',
+  'mmakhool6@gmail.com',
 ];
 
 function isSuperAdmin(profile: Profile | null): boolean {
@@ -4714,12 +4780,12 @@ function MembershipsTab({ member }: { member: Profile }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-white">Memberships & Subscriptions</h2>
         {canEdit && (
           <button
             onClick={() => setShowMembershipWizard(true)}
-            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2"
+            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2 self-start sm:self-auto"
           >
             <Plus className="h-4 w-4" />
             Assign Membership
@@ -4750,15 +4816,15 @@ function MembershipsTab({ member }: { member: Profile }) {
                 isExpired(membership.endDate || '') ? 'border-red-500' : 'border-green-500'
               }`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
                     <h3 className="text-lg font-semibold text-white">
                       {membership.membershipTypeConfig?.name || 'Membership'}
                     </h3>
                     {getStatusBadge(membership)}
                   </div>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
                     {/* MECA ID - prominently displayed with admin override option */}
                     {membership.mecaId && (
                       <div className="col-span-2 mb-2 flex items-center gap-2">
@@ -4900,7 +4966,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                   </div>
                 </div>
                 {canEdit && (
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex items-center gap-2 sm:ml-4 self-end sm:self-start">
                     {/* Add Secondary button - only for non-secondary memberships with paid status */}
                     {(membership as any).accountType !== 'secondary' && membership.paymentStatus === 'paid' && (
                       <button
@@ -5716,39 +5782,39 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
               <p>No orders found</p>
             </div>
           ) : (
-            <div className="bg-gray-800/50 rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-700">
+            <div className="bg-gray-800/50 rounded-lg overflow-x-auto">
+              <table className="min-w-[600px] w-full divide-y divide-gray-700">
                 <thead className="bg-gray-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Order</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase">Actions</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Order</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                    <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+                    <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
                   {orders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-700/50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {order.orderNumber}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {order.orderType?.replace('_', ' ')}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(order.status)}`}>
                           {order.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white text-right">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-white text-right">
                         {formatCurrency(order.total)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         {formatDate(order.createdAt)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-center">
                         <a
                           href={`/admin/billing/orders/${order.id}`}
                           className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-medium rounded-lg transition-colors"
@@ -5775,35 +5841,35 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
               <p>No invoices found</p>
             </div>
           ) : (
-            <div className="bg-gray-800/50 rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-700">
+            <div className="bg-gray-800/50 rounded-lg overflow-x-auto">
+              <table className="min-w-[500px] w-full divide-y divide-gray-700">
                 <thead className="bg-gray-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Invoice</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Due Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Invoice</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                    <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Due Date</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
                   {invoices.map((invoice) => (
                     <tr key={invoice.id} className="hover:bg-gray-700/50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {invoice.invoiceNumber}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(invoice.status)}`}>
                           {invoice.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white text-right">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-white text-right">
                         {formatCurrency(invoice.total)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         {formatDate(invoice.dueDate)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
                         <button
                           onClick={() => window.open(`/api/invoices/${invoice.id}/pdf`, '_blank')}
                           className="text-blue-400 hover:text-blue-300"
@@ -6143,17 +6209,17 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
       )}
 
       {/* Results Table */}
-      <div className="bg-slate-700 rounded-lg overflow-hidden">
-        <table className="w-full">
+      <div className="bg-slate-700 rounded-lg overflow-x-auto">
+        <table className="min-w-[700px] w-full">
           <thead className="bg-slate-600">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Event</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Class</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Format</th>
-              <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Score</th>
-              <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Place</th>
-              <th className="px-4 py-3 text-center text-sm font-medium text-gray-300">Points</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Date</th>
+              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Event</th>
+              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Class</th>
+              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Format</th>
+              <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Score</th>
+              <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Place</th>
+              <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Points</th>
+              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Date</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-600">
@@ -6166,19 +6232,19 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
             ) : (
               filteredResults.map((result) => (
                 <tr key={result.id} className="hover:bg-slate-600/50">
-                  <td className="px-4 py-3 text-white">
+                  <td className="px-3 sm:px-4 py-3 text-white whitespace-nowrap">
                     {result.event?.name || result.event?.title || eventMap[result.eventId || result.event_id || ''] || 'Unknown Event'}
                   </td>
-                  <td className="px-4 py-3 text-gray-300">
+                  <td className="px-3 sm:px-4 py-3 text-gray-300 whitespace-nowrap">
                     {result.competitionClass || result.competition_class}
                   </td>
-                  <td className="px-4 py-3 text-gray-300">
+                  <td className="px-3 sm:px-4 py-3 text-gray-300 whitespace-nowrap">
                     {result.format || '-'}
                   </td>
-                  <td className="px-4 py-3 text-center text-white font-medium">
+                  <td className="px-3 sm:px-4 py-3 text-center text-white font-medium whitespace-nowrap">
                     {result.score?.toFixed(2) || '-'}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-3 sm:px-4 py-3 text-center">
                     <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
                       result.placement === 1 ? 'bg-yellow-500 text-black' :
                       result.placement === 2 ? 'bg-gray-300 text-black' :
@@ -6188,10 +6254,10 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
                       {result.placement}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-center text-orange-400 font-medium">
+                  <td className="px-3 sm:px-4 py-3 text-center text-orange-400 font-medium whitespace-nowrap">
                     {result.pointsEarned || result.points_earned || 0}
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">
+                  <td className="px-3 sm:px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
                     {result.createdAt || result.created_at
                       ? new Date(result.createdAt || result.created_at!).toLocaleDateString()
                       : '-'}
