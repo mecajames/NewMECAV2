@@ -17,7 +17,7 @@
     "start:prod": "node dist/main",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
-    "mikro-orm": "mikro-orm --config ./dist/db/mikro-orm.config.js",
+    "mikro-orm": "mikro-orm",
     "migration:create": "mikro-orm migration:create --config ./dist/db/mikro-orm.config.js",
     "migration:up": "mikro-orm migration:up --config ./dist/db/mikro-orm.config.js",
     "migration:down": "mikro-orm migration:down --config ./dist/db/mikro-orm.config.js",
