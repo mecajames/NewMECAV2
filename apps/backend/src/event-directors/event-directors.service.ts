@@ -14,6 +14,7 @@ import {
   EventAssignmentStatus,
   AssignmentRequestType,
   UserRole,
+  VerificationPurpose,
 } from '@newmeca/shared';
 import { EventDirectorApplication } from './event-director-application.entity';
 import { EventDirectorApplicationReference } from './event-director-application-reference.entity';
@@ -203,7 +204,7 @@ export class EventDirectorsService {
     const token = new EmailVerificationToken();
     token.token = uuidv4();
     token.email = reference.email;
-    token.purpose = 'ed_application' as any; // ED application verification
+    token.purpose = VerificationPurpose.ED_APPLICATION;
     token.relatedEntityId = reference.id; // Link to the reference being verified
     token.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
     await this.em.persistAndFlush(token);
@@ -413,33 +414,71 @@ export class EventDirectorsService {
   // Reference Verification
   // =============================================================================
 
-  async verifyReference(tokenValue: string, response: string): Promise<void> {
-    // Find the verification token
+  async lookupReferenceToken(tokenValue: string): Promise<{
+    applicantName: string;
+    applicationType: 'Event Director';
+    referenceName: string;
+  }> {
     const token = await this.em.findOne(EmailVerificationToken, {
       token: tokenValue,
-      purpose: 'ed_application' as any,
+      purpose: VerificationPurpose.ED_APPLICATION,
     });
 
-    if (!token || token.expiresAt < new Date()) {
-      throw new BadRequestException('Invalid or expired verification token');
+    if (!token) {
+      throw new NotFoundException('Invalid verification token');
     }
 
-    // Find the reference by email
-    const reference = await this.em.findOne(EventDirectorApplicationReference, {
-      email: token.email,
-      referenceChecked: false,
+    if (token.isUsed) {
+      throw new BadRequestException('This verification link has already been used');
+    }
+
+    if (token.expiresAt < new Date()) {
+      throw new BadRequestException('This verification link has expired');
+    }
+
+    const reference = await this.em.findOne(EventDirectorApplicationReference, token.relatedEntityId, {
+      populate: ['application'],
     });
 
     if (!reference) {
-      throw new BadRequestException('Reference not found or already verified');
+      throw new NotFoundException('Reference not found');
     }
+
+    return {
+      applicantName: reference.application.fullName,
+      applicationType: 'Event Director',
+      referenceName: reference.fullName,
+    };
+  }
+
+  async verifyReference(tokenValue: string, response: string): Promise<void> {
+    const token = await this.em.findOne(EmailVerificationToken, {
+      token: tokenValue,
+      purpose: VerificationPurpose.ED_APPLICATION,
+    });
+
+    if (!token) {
+      throw new NotFoundException('Invalid verification token');
+    }
+
+    if (token.isUsed) {
+      throw new BadRequestException('This verification link has already been used');
+    }
+
+    if (token.expiresAt < new Date()) {
+      throw new BadRequestException('This verification link has expired');
+    }
+
+    // Mark token as used
+    token.isUsed = true;
+    token.usedAt = new Date();
+
+    // Find reference by relatedEntityId (consistent with judges)
+    const reference = await this.em.findOneOrFail(EventDirectorApplicationReference, token.relatedEntityId);
 
     reference.referenceChecked = true;
     reference.referenceNotes = response;
     reference.checkedDate = new Date();
-
-    // Mark token as used
-    token.usedAt = new Date();
 
     await this.em.flush();
   }
@@ -683,6 +722,7 @@ export class EventDirectorsService {
       subject: subjects[type],
       html: `<p>Dear ${edName},</p><p>${messages[type]}</p><p>Best regards,<br/>MECA Team</p>`,
       text: `Dear ${edName},\n\n${messages[type]}\n\nBest regards,\nMECA Team`,
+      from: 'events@mecacaraudio.com',
     });
   }
 }

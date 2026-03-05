@@ -1,3 +1,4 @@
+// Event registrations controller with interest endpoints
 import {
   Controller,
   Get,
@@ -7,12 +8,14 @@ import {
   Body,
   Param,
   Query,
+  Res,
   HttpCode,
   HttpStatus,
   Headers,
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { EventRegistrationsService, CreateRegistrationDto, AdminListFilters, CheckInResponse } from './event-registrations.service';
 import { EventRegistration } from './event-registrations.entity';
@@ -44,6 +47,73 @@ export class EventRegistrationsController {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };
+  }
+
+  // ========================
+  // Interest Endpoints (must be before :id routes)
+  // ========================
+
+  @Post('interest/toggle')
+  @HttpCode(HttpStatus.OK)
+  async toggleInterest(
+    @Headers('authorization') authHeader: string,
+    @Body('eventId') eventId: string,
+  ): Promise<{ interested: boolean }> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    return this.eventRegistrationsService.toggleInterest(eventId, user.id);
+  }
+
+  @Post('interest/guest')
+  @HttpCode(HttpStatus.OK)
+  async guestInterest(
+    @Body('eventId') eventId: string,
+    @Body('email') email: string,
+    @Body('firstName') firstName?: string,
+  ): Promise<{ interested: boolean; requiresVerification: boolean }> {
+    return this.eventRegistrationsService.addGuestInterest(eventId, email, firstName);
+  }
+
+  @Get('interest/verify')
+  async verifyGuestInterest(
+    @Query('token') token: string,
+    @Query('firstName') firstName: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    try {
+      const { eventId } = await this.eventRegistrationsService.verifyGuestInterest(token, firstName);
+      res.redirect(`${frontendUrl}/events/${eventId}?interest_verified=true`);
+    } catch (error: any) {
+      const errorType = error?.message || 'invalid';
+      // Try to extract eventId from the token for redirect even on error
+      let redirectPath = '/events';
+      try {
+        const em = this.em.fork();
+        const { EmailVerificationToken } = await import('../auth/email-verification-token.entity');
+        const tokenRecord = await em.findOne(EmailVerificationToken, { token });
+        if (tokenRecord) {
+          redirectPath = `/events/${tokenRecord.relatedEntityId}`;
+        }
+      } catch {
+        // Fall back to /events if we can't look up the token
+      }
+      res.redirect(`${frontendUrl}${redirectPath}?interest_error=${errorType}`);
+    }
+  }
+
+  @Get('interest/check')
+  async checkInterest(
+    @Query('eventId') eventId: string,
+    @Query('userId') userId: string,
+  ): Promise<{ interested: boolean }> {
+    return this.eventRegistrationsService.checkInterest(eventId, userId);
   }
 
   // ========================

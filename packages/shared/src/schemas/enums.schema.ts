@@ -48,6 +48,7 @@ export enum RegistrationStatus {
   PENDING = 'pending',
   CONFIRMED = 'confirmed',
   CANCELLED = 'cancelled',
+  INTERESTED = 'interested',
 }
 
 export enum EventHostingRequestStatus {
@@ -325,6 +326,7 @@ export enum ApplicationEntryMethod {
 export enum VerificationPurpose {
   JUDGE_APPLICATION = 'judge_application',
   ED_APPLICATION = 'ed_application',
+  GUEST_INTEREST = 'guest_interest',
   OTHER = 'other',
 }
 

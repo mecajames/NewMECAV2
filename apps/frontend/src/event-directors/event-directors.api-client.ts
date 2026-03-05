@@ -85,9 +85,10 @@ export interface EventDirectorApplicationReference {
   email: string;
   phone: string;
   company_name?: string;
-  email_verified: boolean;
-  verification_response?: string;
-  verified_at?: string;
+  reference_checked: boolean;
+  reference_notes?: string;
+  checked_date?: string;
+  created_at?: string;
 }
 
 export interface EventDirector {
@@ -158,6 +159,23 @@ export async function getPublicEventDirectorProfile(id: string): Promise<PublicE
     throw new Error('Failed to fetch event director profile');
   }
   return response.json();
+}
+
+export interface ReferenceTokenLookup {
+  applicantName: string;
+  applicationType: 'Judge' | 'Event Director';
+  referenceName: string;
+}
+
+export async function lookupReferenceToken(token: string): Promise<ReferenceTokenLookup> {
+  const res = await fetch(`${API_BASE}/verify-reference/${encodeURIComponent(token)}`);
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || 'Invalid or expired verification link');
+  }
+
+  return res.json();
 }
 
 export async function verifyReference(token: string, response: string): Promise<void> {

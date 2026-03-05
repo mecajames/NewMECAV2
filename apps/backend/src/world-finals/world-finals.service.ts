@@ -185,6 +185,7 @@ export class WorldFinalsService {
       await this.emailService.sendEmail({
         to: email,
         subject: `Congratulations! You've Qualified for MECA World Finals in ${competitionClass}!`,
+        from: 'events@mecacaraudio.com',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #1a1a2e;">Congratulations, ${firstName}!</h1>
@@ -388,6 +389,7 @@ export class WorldFinalsService {
       await this.emailService.sendEmail({
         to: email,
         subject: `Your Exclusive MECA World Finals Pre-Registration Invitation - ${qualification.competitionClass}`,
+        from: 'events@mecacaraudio.com',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #1a1a2e;">Your World Finals Invitation</h1>

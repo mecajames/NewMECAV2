@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2 } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { mediaFilesApi, MediaFile } from '@/media-files';
@@ -28,8 +28,11 @@ export default function SiteSettings() {
   const [triggeringMembershipEmails, setTriggeringMembershipEmails] = useState(false);
   const [triggeringEventReminders, setTriggeringEventReminders] = useState(false);
   const [updatingEventStatuses, setUpdatingEventStatuses] = useState(false);
+  const [triggeringMarkOverdue, setTriggeringMarkOverdue] = useState(false);
+  const [triggeringAutoCancel, setTriggeringAutoCancel] = useState(false);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [testEmailTemplate, setTestEmailTemplate] = useState('');
   const [taskResult, setTaskResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [formData, setFormData] = useState({
@@ -75,6 +78,8 @@ export default function SiteSettings() {
     // Maintenance Mode settings
     maintenance_mode_enabled: false,
     maintenance_mode_message: '',
+    // Invoice Auto-Cancel setting
+    invoice_auto_cancel_days: '0',
   });
 
   useEffect(() => {
@@ -159,6 +164,8 @@ export default function SiteSettings() {
         // Maintenance Mode settings
         maintenance_mode_enabled: settingsMap['maintenance_mode_enabled'] === 'true',
         maintenance_mode_message: settingsMap['maintenance_mode_message'] || '',
+        // Invoice Auto-Cancel setting
+        invoice_auto_cancel_days: settingsMap['invoice_auto_cancel_days'] || '0',
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -228,6 +235,8 @@ export default function SiteSettings() {
         // Maintenance Mode settings
         saveSetting('maintenance_mode_enabled', formData.maintenance_mode_enabled.toString(), 'boolean', 'Enable maintenance mode to block non-admin users'),
         saveSetting('maintenance_mode_message', formData.maintenance_mode_message, 'text', 'Custom maintenance message shown to users'),
+        // Invoice Auto-Cancel setting
+        saveSetting('invoice_auto_cancel_days', formData.invoice_auto_cancel_days, 'number', 'Days after due date before overdue invoices are auto-cancelled (0 = disabled)'),
       ]);
 
       alert('Settings saved successfully!');
@@ -401,7 +410,7 @@ export default function SiteSettings() {
     setSendingTestEmail(true);
     setTaskResult(null);
     try {
-      const result = await scheduledTasksApi.sendTestEmail(testEmailAddress);
+      const result = await scheduledTasksApi.sendTestEmail(testEmailAddress, testEmailTemplate || undefined);
       setTaskResult({
         type: result.success ? 'success' : 'error',
         message: result.message,
@@ -432,6 +441,47 @@ export default function SiteSettings() {
       });
     } finally {
       setUpdatingEventStatuses(false);
+    }
+  };
+
+  const handleTriggerMarkOverdue = async () => {
+    setTriggeringMarkOverdue(true);
+    setTaskResult(null);
+    try {
+      const result = await scheduledTasksApi.triggerMarkOverdue();
+      setTaskResult({
+        type: result.success ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (error: any) {
+      setTaskResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to mark overdue invoices',
+      });
+    } finally {
+      setTriggeringMarkOverdue(false);
+    }
+  };
+
+  const handleTriggerAutoCancel = async () => {
+    if (!confirm('This will cancel overdue invoices past the configured threshold and their associated memberships. Continue?')) {
+      return;
+    }
+    setTriggeringAutoCancel(true);
+    setTaskResult(null);
+    try {
+      const result = await scheduledTasksApi.triggerInvoiceAutoCancel();
+      setTaskResult({
+        type: result.success ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (error: any) {
+      setTaskResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to trigger invoice auto-cancel',
+      });
+    } finally {
+      setTriggeringAutoCancel(false);
     }
   };
 
@@ -1309,6 +1359,49 @@ export default function SiteSettings() {
         </button>
       </div>
 
+      {/* Invoice Auto-Cancel Setting */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
+          <XCircle className="h-6 w-6 text-red-500" />
+          <div>
+            <h3 className="text-xl font-semibold text-white">Auto-Cancel Unpaid Invoices</h3>
+            <p className="text-sm text-gray-400">
+              Automatically cancel overdue invoices and their associated memberships after a set number of days.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Days After Due Date
+          </label>
+          <input
+            type="number"
+            min="0"
+            max="365"
+            value={formData.invoice_auto_cancel_days}
+            onChange={(e) => setFormData({ ...formData, invoice_auto_cancel_days: e.target.value })}
+            className="w-full max-w-xs px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+          <p className="text-xs text-gray-400 mt-2">
+            Number of days after the due date before overdue invoices are automatically cancelled.
+            Set to <strong className="text-white">0</strong> to disable auto-cancellation.
+          </p>
+          <p className="text-xs text-yellow-400 mt-1">
+            When an invoice is auto-cancelled, the associated membership will also be cancelled and the user will receive an email notification.
+          </p>
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+        >
+          <Save className="h-5 w-5" />
+          {saving ? 'Saving...' : 'Save Auto-Cancel Setting'}
+        </button>
+      </div>
+
       {/* Scheduled Tasks & System Settings */}
       <div className="bg-slate-800 rounded-xl p-6 space-y-6">
         <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
@@ -1421,6 +1514,62 @@ export default function SiteSettings() {
               )}
             </button>
           </div>
+
+          {/* Mark Overdue Invoices */}
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <h4 className="font-semibold text-white">Mark Overdue Invoices</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Marks SENT invoices past their due date as OVERDUE. Runs hourly automatically.
+            </p>
+            <button
+              onClick={handleTriggerMarkOverdue}
+              disabled={triggeringMarkOverdue}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {triggeringMarkOverdue ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-4 w-4" />
+                  Trigger Now
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Invoice Auto-Cancel */}
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-500" />
+              <h4 className="font-semibold text-white">Invoice Auto-Cancel</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Cancels overdue invoices past the configured threshold + associated memberships.
+            </p>
+            <button
+              onClick={handleTriggerAutoCancel}
+              disabled={triggeringAutoCancel}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {triggeringAutoCancel ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Cancelling...
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4" />
+                  Trigger Now
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Test Email */}
@@ -1428,37 +1577,86 @@ export default function SiteSettings() {
           <div className="bg-slate-700 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Mail className="h-5 w-5 text-green-500" />
-              <h4 className="font-semibold text-white">Test Email Configuration</h4>
+              <h4 className="font-semibold text-white">Test Email Templates</h4>
             </div>
             <p className="text-sm text-gray-400">
-              Send a test email to verify your email settings are working correctly.
-              Check <span className="text-green-400">http://localhost:54324</span> (Supabase Inbucket) for local emails.
+              Send any email template with sample data to verify branding and layout.
+              {window.location.hostname === 'localhost' && (
+                <> Check <a href="http://localhost:54324" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">http://localhost:54324</a> (Mailpit) for local dev emails.</>
+              )}
             </p>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                value={testEmailAddress}
-                onChange={(e) => setTestEmailAddress(e.target.value)}
-                placeholder="Enter email address"
-                className="flex-1 px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-              <button
-                onClick={handleSendTestEmail}
-                disabled={sendingTestEmail}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            <div className="space-y-2">
+              <select
+                value={testEmailTemplate}
+                onChange={(e) => setTestEmailTemplate(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
               >
-                {sendingTestEmail ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-4 w-4" />
-                    Send Test
-                  </>
-                )}
-              </button>
+                <optgroup label="System">
+                  <option value="">Generic Test Email</option>
+                  <option value="password_new">Password (New User)</option>
+                  <option value="password_reset">Password (Reset)</option>
+                </optgroup>
+                <optgroup label="Membership">
+                  <option value="membership_welcome">Membership Welcome</option>
+                  <option value="membership_renewal">Membership Renewal</option>
+                  <option value="membership_expiring">Membership Expiring</option>
+                  <option value="membership_expired">Membership Expired</option>
+                  <option value="secondary_member_welcome">Secondary Member Welcome</option>
+                  <option value="membership_cancelled">Membership Cancelled/Refunded</option>
+                </optgroup>
+                <optgroup label="Billing">
+                  <option value="invoice">Invoice</option>
+                  <option value="invoice_auto_cancelled">Invoice Auto-Cancelled</option>
+                </optgroup>
+                <optgroup label="Events">
+                  <option value="event_registration_confirmation">Event Registration Confirmation</option>
+                  <option value="event_registration_cancelled">Event Registration Cancelled</option>
+                  <option value="event_reminder">Event Reminder</option>
+                  <option value="event_rating_request">Event Rating Request</option>
+                </optgroup>
+                <optgroup label="Support Tickets">
+                  <option value="ticket_created">Ticket Created</option>
+                  <option value="ticket_staff_alert">Ticket Staff Alert</option>
+                  <option value="ticket_reply">Ticket Reply</option>
+                  <option value="ticket_status">Ticket Status Change</option>
+                  <option value="ticket_guest_verification">Guest Verification</option>
+                </optgroup>
+                <optgroup label="Applications">
+                  <option value="reference_verification">Reference Verification</option>
+                </optgroup>
+                <optgroup label="Shop">
+                  <option value="shop_order_confirmation">Order Confirmation</option>
+                  <option value="shop_payment_receipt">Payment Receipt</option>
+                  <option value="shop_shipping_notification">Shipping Notification</option>
+                  <option value="shop_delivery_confirmation">Delivery Confirmation</option>
+                </optgroup>
+              </select>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={testEmailAddress}
+                  onChange={(e) => setTestEmailAddress(e.target.value)}
+                  placeholder="Enter email address"
+                  className="flex-1 px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+                <button
+                  onClick={handleSendTestEmail}
+                  disabled={sendingTestEmail}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                >
+                  {sendingTestEmail ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-4 w-4" />
+                      Send Test
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1487,8 +1685,8 @@ export default function SiteSettings() {
 
 # For Production - Use Mailgun
 MAILGUN_API_KEY=your-mailgun-api-key
-MAILGUN_DOMAIN=mg.yourdomain.com
-EMAIL_FROM=noreply@yourdomain.com
+MAILGUN_DOMAIN=mg.mecacaraudio.com
+EMAIL_FROM=noreply@mecacaraudio.com
 
 # ===========================================
 # APPLICATION URLs
@@ -1538,7 +1736,7 @@ QUICKBOOKS_ENVIRONMENT=production`}
               <p className="text-blue-300 font-medium">Mailgun Setup Instructions</p>
               <ol className="text-sm text-blue-200/80 list-decimal list-inside space-y-1">
                 <li>Create a Mailgun account at <span className="text-blue-400">mailgun.com</span></li>
-                <li>Add and verify your domain (e.g., mg.maborc.com)</li>
+                <li>Add and verify your domain (e.g., mg.mecacaraudio.com)</li>
                 <li>Get your API key from API Security settings</li>
                 <li>Set <code className="bg-slate-700 px-1 rounded">MAILGUN_API_KEY</code> and <code className="bg-slate-700 px-1 rounded">MAILGUN_DOMAIN</code></li>
               </ol>

@@ -1,11 +1,13 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
+import { randomBytes } from 'crypto';
 import { EventRegistration } from './event-registrations.entity';
 import { EventRegistrationClass } from './event-registration-classes.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Membership } from '../memberships/memberships.entity';
-import { RegistrationStatus, PaymentStatus } from '@newmeca/shared';
+import { EmailVerificationToken } from '../auth/email-verification-token.entity';
+import { RegistrationStatus, PaymentStatus, VerificationPurpose } from '@newmeca/shared';
 import { QrCodeService } from './qr-code.service';
 import { EmailService } from '../email/email.service';
 
@@ -677,14 +679,211 @@ export class EventRegistrationsService {
 
   async getStats(): Promise<{ totalRegistrations: number }> {
     const em = this.em.fork();
-    const totalRegistrations = await em.count(EventRegistration, {});
+    const totalRegistrations = await em.count(EventRegistration, {
+      registrationStatus: { $ne: RegistrationStatus.INTERESTED },
+    });
     return { totalRegistrations };
   }
 
   async getCountByEvent(eventId: string): Promise<{ count: number }> {
     const em = this.em.fork();
-    const count = await em.count(EventRegistration, { event: eventId });
+    const count = await em.count(EventRegistration, {
+      event: eventId,
+      registrationStatus: { $ne: RegistrationStatus.INTERESTED },
+    });
     return { count };
+  }
+
+  /**
+   * Toggle interest in an event. Creates an interested registration if none exists,
+   * or deletes the existing one (toggle off).
+   */
+  async toggleInterest(eventId: string, userId: string): Promise<{ interested: boolean }> {
+    const em = this.em.fork();
+
+    // Verify event exists
+    const event = await em.findOne(Event, { id: eventId });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Check if an interested registration already exists
+    const existing = await em.findOne(EventRegistration, {
+      event: eventId,
+      user: userId,
+      registrationStatus: RegistrationStatus.INTERESTED,
+    });
+
+    if (existing) {
+      // Toggle off — remove the interested registration
+      await em.removeAndFlush(existing);
+      return { interested: false };
+    }
+
+    // Get user profile for required email field
+    const userProfile = await em.findOne(Profile, { id: userId });
+
+    // Toggle on — create a minimal interested registration
+    const registration = new EventRegistration();
+    registration.event = Reference.createFromPK(Event, eventId) as any;
+    registration.user = Reference.createFromPK(Profile, userId) as any;
+    registration.email = userProfile?.email || '';
+    registration.registrationStatus = RegistrationStatus.INTERESTED;
+    registration.paymentStatus = PaymentStatus.PENDING;
+    await em.persistAndFlush(registration);
+
+    return { interested: true };
+  }
+
+  /**
+   * Add guest interest (non-logged-in visitor).
+   * Requires email verification unless the email was verified within the last 30 days.
+   */
+  async addGuestInterest(eventId: string, email: string, firstName?: string): Promise<{ interested: boolean; requiresVerification: boolean }> {
+    const em = this.em.fork();
+    const normalizedEmail = email.toLowerCase();
+
+    // Verify event exists
+    const event = await em.findOne(Event, { id: eventId });
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // 1. Check if already interested in this specific event
+    const existing = await em.findOne(EventRegistration, {
+      event: eventId,
+      email: normalizedEmail,
+      registrationStatus: RegistrationStatus.INTERESTED,
+    });
+
+    if (existing) {
+      return { interested: true, requiresVerification: false };
+    }
+
+    // 2. Check if email was verified within the last 30 days (any GUEST_INTEREST token)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentVerification = await em.findOne(EmailVerificationToken, {
+      email: normalizedEmail,
+      purpose: VerificationPurpose.GUEST_INTEREST,
+      isUsed: true,
+      usedAt: { $gte: thirtyDaysAgo },
+    });
+
+    if (recentVerification) {
+      // Recently verified — create registration directly
+      const registration = new EventRegistration();
+      registration.event = Reference.createFromPK(Event, eventId) as any;
+      registration.email = normalizedEmail;
+      if (firstName) {
+        registration.firstName = firstName;
+      }
+      registration.registrationStatus = RegistrationStatus.INTERESTED;
+      registration.paymentStatus = PaymentStatus.PENDING;
+      await em.persistAndFlush(registration);
+
+      return { interested: true, requiresVerification: false };
+    }
+
+    // 3. Needs verification — generate token and send email
+    const tokenValue = randomBytes(32).toString('hex');
+    const token = new EmailVerificationToken();
+    token.token = tokenValue;
+    token.email = normalizedEmail;
+    token.purpose = VerificationPurpose.GUEST_INTEREST;
+    token.relatedEntityId = eventId;
+    token.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await em.persistAndFlush(token);
+
+    // Build verification URL
+    const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3001';
+    const params = new URLSearchParams({ token: tokenValue });
+    if (firstName) {
+      params.append('firstName', firstName);
+    }
+    const verificationUrl = `${backendUrl}/api/event-registrations/interest/verify?${params.toString()}`;
+
+    // Send verification email
+    try {
+      await this.emailService.sendGuestInterestVerificationEmail({
+        to: normalizedEmail,
+        firstName,
+        eventName: event.title,
+        verificationUrl,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send guest interest verification email: ${error}`, error instanceof Error ? error.stack : undefined);
+    }
+
+    return { interested: false, requiresVerification: true };
+  }
+
+  /**
+   * Verify a guest interest token and create the registration.
+   */
+  async verifyGuestInterest(tokenValue: string, firstName?: string): Promise<{ eventId: string }> {
+    const em = this.em.fork();
+
+    const token = await em.findOne(EmailVerificationToken, {
+      token: tokenValue,
+      purpose: VerificationPurpose.GUEST_INTEREST,
+    });
+
+    if (!token) {
+      throw new BadRequestException('invalid');
+    }
+
+    if (token.isUsed) {
+      // Token already used — but registration may exist, so redirect gracefully
+      throw new BadRequestException('used');
+    }
+
+    if (token.expiresAt < new Date()) {
+      throw new BadRequestException('expired');
+    }
+
+    // Mark token as used
+    token.isUsed = true;
+    token.usedAt = new Date();
+
+    // Check if registration already exists (e.g. verified via another method)
+    const existing = await em.findOne(EventRegistration, {
+      event: token.relatedEntityId,
+      email: token.email,
+      registrationStatus: RegistrationStatus.INTERESTED,
+    });
+
+    if (!existing) {
+      // Create the interested registration
+      const registration = new EventRegistration();
+      registration.event = Reference.createFromPK(Event, token.relatedEntityId) as any;
+      registration.email = token.email;
+      if (firstName) {
+        registration.firstName = firstName;
+      }
+      registration.registrationStatus = RegistrationStatus.INTERESTED;
+      registration.paymentStatus = PaymentStatus.PENDING;
+      em.persist(registration);
+    }
+
+    await em.flush();
+
+    return { eventId: token.relatedEntityId };
+  }
+
+  /**
+   * Check if a user is interested in an event.
+   */
+  async checkInterest(eventId: string, userId: string): Promise<{ interested: boolean }> {
+    const em = this.em.fork();
+    const count = await em.count(EventRegistration, {
+      event: eventId,
+      user: userId,
+      registrationStatus: RegistrationStatus.INTERESTED,
+    });
+    return { interested: count > 0 };
   }
 
   // Legacy methods for backwards compatibility

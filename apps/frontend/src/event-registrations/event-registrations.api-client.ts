@@ -274,4 +274,20 @@ export const eventRegistrationsApi = {
     const response = await axios.post('/api/event-registrations/link-to-user', { email, userId });
     return response.data;
   },
+
+  // Interest methods
+  toggleInterest: async (eventId: string): Promise<{ interested: boolean }> => {
+    const response = await axios.post('/api/event-registrations/interest/toggle', { eventId });
+    return response.data;
+  },
+
+  guestInterest: async (eventId: string, email: string, firstName?: string): Promise<{ interested: boolean; requiresVerification: boolean }> => {
+    const response = await axios.post('/api/event-registrations/interest/guest', { eventId, email, firstName });
+    return response.data;
+  },
+
+  checkInterest: async (eventId: string, userId: string): Promise<{ interested: boolean }> => {
+    const response = await axios.get(`/api/event-registrations/interest/check?eventId=${eventId}&userId=${userId}`);
+    return response.data;
+  },
 };

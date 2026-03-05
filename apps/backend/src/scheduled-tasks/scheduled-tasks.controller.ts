@@ -61,15 +61,20 @@ export class ScheduledTasksController {
 
   /**
    * Send a test email to verify configuration (admin only)
+   * Optionally specify a template key to test a specific branded template
    */
   @Post('send-test-email')
   async sendTestEmail(
     @Headers('authorization') authHeader: string,
     @Body('email') email: string,
+    @Body('template') template?: string,
   ) {
     await this.requireAdmin(authHeader);
     if (!email) {
       return { success: false, message: 'Email address is required' };
+    }
+    if (template) {
+      return this.scheduledTasksService.sendTestTemplateEmail(template, email);
     }
     return this.scheduledTasksService.sendTestEmail(email);
   }
@@ -82,5 +87,25 @@ export class ScheduledTasksController {
   async triggerEventStatusUpdates(@Headers('authorization') authHeader: string) {
     await this.requireAdmin(authHeader);
     return this.scheduledTasksService.triggerEventStatusUpdates();
+  }
+
+  /**
+   * Manually trigger marking overdue invoices (admin only)
+   * Transitions SENT invoices past due date to OVERDUE
+   */
+  @Post('trigger-mark-overdue')
+  async triggerMarkOverdue(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.scheduledTasksService.triggerMarkOverdue();
+  }
+
+  /**
+   * Manually trigger invoice auto-cancellation (admin only)
+   * Cancels overdue invoices past the configured threshold + associated memberships
+   */
+  @Post('trigger-invoice-auto-cancel')
+  async triggerInvoiceAutoCancel(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.scheduledTasksService.triggerInvoiceAutoCancel();
   }
 }

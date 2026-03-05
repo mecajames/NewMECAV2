@@ -1,11 +1,11 @@
 import { Entity, PrimaryKey, Property, Enum, ManyToOne, OneToMany, Collection, Index } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { BannerPosition, BannerStatus, BannerSize } from '@newmeca/shared';
+import { BannerStatus, BannerSize } from '@newmeca/shared';
 import { Advertiser } from './advertiser.entity';
 import { BannerEngagement } from './banner-engagement.entity';
 
 @Entity({ tableName: 'banners', schema: 'public' })
-@Index({ properties: ['position', 'status', 'startDate', 'endDate'] })
+@Index({ properties: ['status', 'startDate', 'endDate'] })
 export class Banner {
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -19,9 +19,8 @@ export class Banner {
   @Property({ type: 'text', nullable: true, fieldName: 'click_url' })
   clickUrl?: string;
 
-  @Enum(() => BannerPosition)
-  @Property({ fieldName: 'position' })
-  position!: BannerPosition;
+  @Property({ type: 'text[]', fieldName: 'positions', default: '{}' })
+  positions: string[] = [];
 
   @Enum(() => BannerStatus)
   @Property({ fieldName: 'status' })

@@ -78,6 +78,23 @@ export async function getPublicJudgeProfile(id: string): Promise<PublicJudgeProf
   return response.json();
 }
 
+export interface ReferenceTokenLookup {
+  applicantName: string;
+  applicationType: 'Judge' | 'Event Director';
+  referenceName: string;
+}
+
+export async function lookupReferenceToken(token: string): Promise<ReferenceTokenLookup> {
+  const res = await fetch(`${API_BASE}/verify-reference/${encodeURIComponent(token)}`);
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || 'Invalid or expired verification link');
+  }
+
+  return res.json();
+}
+
 export async function verifyReference(token: string, response: string): Promise<void> {
   const res = await fetch(`${API_BASE}/verify-reference`, {
     method: 'POST',

@@ -5,6 +5,8 @@ import { competitionResultsApi, TeamStandingsEntry } from '@/competition-results
 import { SeasonSelector } from '@/seasons';
 import { SEOHead } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 type SortColumn = 'rank' | 'team' | 'points' | 'members' | 'events';
 type SortDirection = 'asc' | 'desc';
@@ -17,6 +19,7 @@ export default function TeamStandingsPage() {
   const [sortColumn, setSortColumn] = useState<SortColumn>('rank');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [loading, setLoading] = useState(true);
+  const { banners: teamStandingsBanners } = useBanners(BannerPosition.TEAMS_STANDINGS_TOP);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -137,6 +140,8 @@ export default function TeamStandingsPage() {
               Point standings aggregated by team from competition results
             </p>
           </div>
+
+          {teamStandingsBanners.length > 0 && <BannerDisplay banner={teamStandingsBanners[0]} />}
 
           {/* Filters */}
           <div className="mb-8 bg-slate-800 rounded-xl p-6">

@@ -4,6 +4,8 @@ import { competitionResultsApi, StandingsEntry, ClassStandingsEntry } from '@/co
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useStandingsSEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 type ViewMode = 'overall' | 'byFormat' | 'byClass';
 type SortColumn = 'rank' | 'competitor' | 'mecaId' | 'points' | 'events' | 'placements';
@@ -24,6 +26,7 @@ export default function StandingsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [loading, setLoading] = useState(true);
   const seoProps = useStandingsSEO();
+  const { banners: standingsBanners } = useBanners(BannerPosition.TEAMS_STANDINGS_TOP);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -186,6 +189,8 @@ export default function StandingsPage() {
             Point standings aggregated from competition results
           </p>
         </div>
+
+        {standingsBanners.length > 0 && <BannerDisplay banner={standingsBanners[0]} />}
 
         {/* View Mode Tabs */}
         <div className="mb-4 sm:mb-6 flex flex-wrap gap-2">

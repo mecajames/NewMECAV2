@@ -57,7 +57,7 @@ export class BannersService {
       name: dto.name,
       imageUrl: dto.imageUrl,
       clickUrl: dto.clickUrl || undefined,
-      position: dto.position,
+      positions: dto.positions,
       status: dto.status ?? BannerStatus.DRAFT,
       startDate: new Date(dto.startDate),
       endDate: new Date(dto.endDate),
@@ -96,7 +96,7 @@ export class BannersService {
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
       ...(dto.clickUrl !== undefined && { clickUrl: dto.clickUrl || undefined }),
-      ...(dto.position !== undefined && { position: dto.position }),
+      ...(dto.positions !== undefined && { positions: dto.positions }),
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.startDate !== undefined && { startDate: new Date(dto.startDate) }),
       ...(dto.endDate !== undefined && { endDate: new Date(dto.endDate) }),
@@ -165,9 +165,9 @@ export class BannersService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Get all eligible banners for this position
+    // Get all eligible banners whose positions array contains the requested position
     const banners = await em.find(Banner, {
-      position,
+      positions: { $contains: [position] },
       status: BannerStatus.ACTIVE,
       startDate: { $lte: today },
       endDate: { $gte: today },

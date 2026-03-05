@@ -122,6 +122,19 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleResendInvoice = async (invoice: Invoice) => {
+    if (!confirm(`Resend invoice ${invoice.invoiceNumber} to ${invoice.user?.email || 'customer'}?`)) {
+      return;
+    }
+    try {
+      await invoicesApi.resend(invoice.id);
+      fetchInvoices();
+    } catch (err) {
+      console.error('Error resending invoice:', err);
+      alert('Failed to resend invoice');
+    }
+  };
+
   const handleMarkPaid = async (invoice: Invoice) => {
     if (!confirm(`Mark invoice ${invoice.invoiceNumber} as paid?`)) {
       return;
@@ -361,6 +374,7 @@ export default function InvoicesPage() {
           invoices={invoices}
           loading={loading}
           onSendInvoice={handleSendInvoice}
+          onResendInvoice={handleResendInvoice}
           onMarkPaid={handleMarkPaid}
           onCancelInvoice={handleCancelInvoice}
         />

@@ -111,6 +111,52 @@ export class EventsController {
     return this.eventsService.findByMultiDayGroup(groupId);
   }
 
+  // --- Admin Geocode Backfill (must be before :id routes) ---
+
+  @Get('admin/backfill-geocode/count')
+  async getBackfillGeocodeCount(
+    @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ): Promise<{ count: number }> {
+    const { profile } = await this.requireAdminOrEventDirector(authHeader);
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    const count = await this.eventsService.countEventsNeedingGeocode(startDate, endDate);
+    return { count };
+  }
+
+  @Post('admin/backfill-geocode')
+  async startBackfillGeocode(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { startDate?: string; endDate?: string },
+  ): Promise<{ jobId: string; total: number }> {
+    const { profile } = await this.requireAdminOrEventDirector(authHeader);
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return this.eventsService.startBackfillGeocode(body.startDate, body.endDate);
+  }
+
+  @Get('admin/backfill-geocode/:jobId')
+  async getBackfillProgress(
+    @Headers('authorization') authHeader: string,
+    @Param('jobId') jobId: string,
+  ) {
+    const { profile } = await this.requireAdminOrEventDirector(authHeader);
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    const progress = this.eventsService.getBackfillProgress(jobId);
+    if (!progress) {
+      return { error: 'Job not found' };
+    }
+    return progress;
+  }
+
+  // --- Wildcard :id routes (must be after specific routes) ---
+
   @Get(':id')
   async getEvent(@Param('id') id: string): Promise<Event> {
     return this.eventsService.findById(id);

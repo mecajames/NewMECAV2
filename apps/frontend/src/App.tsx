@@ -61,6 +61,9 @@ const OrderConfirmationPage = lazy(() => import('@/shop/pages/OrderConfirmationP
 const OrderHistoryPage = lazy(() => import('@/shop/pages/OrderHistoryPage'));
 const ShopOrderDetailPage = lazy(() => import('@/shop/pages/OrderDetailPage'));
 
+// Lazy-loaded pages - Reference Verification
+const VerifyReferencePage = lazy(() => import('@/verification/pages/VerifyReferencePage'));
+
 // Lazy-loaded pages - Judge & Event Director applications
 const JudgeApplicationPage = lazy(() => import('@/judges/pages/JudgeApplicationPage'));
 const JudgeAssignmentsPage = lazy(() => import('@/judges/pages/JudgeAssignmentsPage'));
@@ -189,6 +192,9 @@ function App() {
               <Route path="/knowledge-base" element={<Navigate to="/member-support" replace />} />
               <Route path="/competition-guides" element={<CompetitionGuidesPage />} />
               <Route path="/competition-guides/quick-start" element={<MECAQuickStartGuidePage />} />
+
+              {/* Reference Verification (public, tokenized) */}
+              <Route path="/verify-reference" element={<L><VerifyReferencePage /></L>} />
 
               {/* Public Invoice Payment Route */}
               <Route path="/pay/invoice/:invoiceId" element={<L><InvoicePaymentPage /></L>} />

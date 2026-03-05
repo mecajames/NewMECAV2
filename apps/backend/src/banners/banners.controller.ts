@@ -215,6 +215,7 @@ export class BannersController {
       to: advertiser.contactEmail,
       subject: `MECA Banner Analytics Report — ${formatDate(dto.startDate)} to ${formatDate(dto.endDate)}`,
       html,
+      from: 'noreply@mecacaraudio.com',
     });
 
     if (!result.success) {

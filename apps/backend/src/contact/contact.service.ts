@@ -126,6 +126,7 @@ IP Address: ${submission.ipAddress || 'Unknown'}
       subject: `[MECA Contact] ${submission.subject}`,
       html,
       text,
+      from: 'support@mecacaraudio.com',
     });
 
     if (!result.success) {
@@ -201,6 +202,7 @@ This is an automated confirmation. Please do not reply to this email.
       subject: 'We Received Your Message - MECA',
       html,
       text,
+      from: 'support@mecacaraudio.com',
     });
 
     if (!result.success) {

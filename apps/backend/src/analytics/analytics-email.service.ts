@@ -72,6 +72,7 @@ export class AnalyticsEmailService {
           to: email,
           subject: `MECA Weekly Analytics Report - ${dateRange}`,
           html,
+          from: 'noreply@mecacaraudio.com',
         });
       }
 

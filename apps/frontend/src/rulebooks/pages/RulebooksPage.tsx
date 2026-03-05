@@ -3,12 +3,15 @@ import { BookOpen, FileText, Archive as ArchiveIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { SEOHead, useRulebooksSEO } from '@/shared/seo';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 export default function RulebooksPage() {
   const navigate = useNavigate();
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [loading, setLoading] = useState(true);
   const seoProps = useRulebooksSEO();
+  const { banners: rulebooksBanners } = useBanners(BannerPosition.RULEBOOKS_TOP);
 
   useEffect(() => {
     fetchActiveRulebooks();
@@ -77,6 +80,8 @@ export default function RulebooksPage() {
             View Archive
           </button>
         </div>
+
+        {rulebooksBanners.length > 0 && <BannerDisplay banner={rulebooksBanners[0]} />}
 
         {Object.keys(groupedRulebooks).length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
