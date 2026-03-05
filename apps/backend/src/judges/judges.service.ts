@@ -418,6 +418,41 @@ export class JudgesService {
     await em.flush();
   }
 
+  async lookupReferenceToken(token: string): Promise<{
+    applicantName: string;
+    applicationType: 'Judge';
+    referenceName: string;
+  }> {
+    const em = this.em.fork();
+    const verificationToken = await em.findOne(EmailVerificationToken, { token });
+
+    if (!verificationToken) {
+      throw new NotFoundException('Invalid verification token');
+    }
+
+    if (verificationToken.isUsed) {
+      throw new BadRequestException('This verification link has already been used');
+    }
+
+    if (verificationToken.expiresAt < new Date()) {
+      throw new BadRequestException('This verification link has expired');
+    }
+
+    const reference = await em.findOne(JudgeApplicationReference, verificationToken.relatedEntityId, {
+      populate: ['application'],
+    });
+
+    if (!reference) {
+      throw new NotFoundException('Reference not found');
+    }
+
+    return {
+      applicantName: reference.application.fullName,
+      applicationType: 'Judge',
+      referenceName: reference.fullName,
+    };
+  }
+
   async verifyReference(token: string, response: string): Promise<void> {
     const em = this.em.fork();
     const verificationToken = await em.findOne(EmailVerificationToken, { token });

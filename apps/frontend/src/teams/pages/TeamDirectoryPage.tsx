@@ -4,6 +4,8 @@ import { Users, Search, MapPin, User, Globe, Shield, Clock, UserPlus, Loader2, C
 import { teamsApi, Team, PendingRequest } from '../teams.api-client';
 import { SEOHead, useTeamDirectorySEO } from '@/shared/seo';
 import { useAuth } from '@/auth';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 const TEAM_TYPE_LABELS: Record<string, string> = {
   competitive: 'Competitive',
@@ -37,6 +39,7 @@ export default function TeamDirectoryPage() {
   const [teamTypeFilter, setTeamTypeFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
   const seoProps = useTeamDirectorySEO();
+  const { banners: teamDirBanners } = useBanners(BannerPosition.TEAM_DIRECTORY_TOP);
 
   // Join request state
   const [myTeamIds, setMyTeamIds] = useState<Set<string>>(new Set());
@@ -186,6 +189,8 @@ export default function TeamDirectoryPage() {
             </div>
             <p className="text-gray-400">Browse MECA competition teams</p>
           </div>
+
+        {teamDirBanners.length > 0 && <BannerDisplay banner={teamDirBanners[0]} />}
 
         {error && (
           <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4">

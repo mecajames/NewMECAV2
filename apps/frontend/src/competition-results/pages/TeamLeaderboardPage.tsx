@@ -4,12 +4,15 @@ import { Trophy, Shield, Users, Calendar, Medal } from 'lucide-react';
 import { competitionResultsApi, TeamStandingsEntry } from '@/competition-results';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead } from '@/shared/seo';
+import { BannerDisplay, useBanners } from '@/banners';
+import { BannerPosition } from '@newmeca/shared';
 
 export default function TeamLeaderboardPage() {
   const navigate = useNavigate();
   const [leaderboard, setLeaderboard] = useState<TeamStandingsEntry[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const { banners: teamTop10Banners } = useBanners(BannerPosition.TEAMS_TOP_10_PAGE_TOP);
 
   useEffect(() => {
     fetchLeaderboard();
@@ -55,6 +58,8 @@ export default function TeamLeaderboardPage() {
             The best teams based on total points earned by their members
           </p>
         </div>
+
+        {teamTop10Banners.length > 0 && <BannerDisplay banner={teamTop10Banners[0]} />}
 
         {/* Filters */}
         <div className="mb-16 bg-slate-800 rounded-xl p-6">

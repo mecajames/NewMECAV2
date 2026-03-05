@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn, ArrowLeft, Star } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn, ArrowLeft, Star, Heart } from 'lucide-react';
 import { eventsApi, Event, EventAssignmentManager } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { useAuth, usePermissions } from '@/auth';
@@ -8,10 +8,12 @@ import { EventRatingsPanel } from '@/ratings';
 import { ratingsApi } from '@/api-client/ratings.api-client';
 import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useEventDetailSEO } from '@/shared/seo';
+import { SocialShareButtons, GoogleMapsProvider, EventLocationMap } from '@/shared/components';
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [event, setEvent] = useState<Event | null>(null);
   const [multiDayEvents, setMultiDayEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,21 @@ export default function EventDetailPage() {
 
   // Track if user participated in this event (for ratings)
   const [userParticipated, setUserParticipated] = useState(false);
+
+  // Interest state
+  const [isInterested, setIsInterested] = useState(false);
+  const [interestLoading, setInterestLoading] = useState(false);
+
+  // Guest interest form state
+  const [showGuestEmailForm, setShowGuestEmailForm] = useState(false);
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestFirstName, setGuestFirstName] = useState('');
+  const [guestSubmitting, setGuestSubmitting] = useState(false);
+  const [guestSubmitted, setGuestSubmitted] = useState(false);
+  const [guestVerificationPending, setGuestVerificationPending] = useState(false);
+
+  // Verification query param banners
+  const [verificationBanner, setVerificationBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // SEO - must be called unconditionally at the top level
   const seoData = useEventDetailSEO(
@@ -88,6 +105,45 @@ export default function EventDetailPage() {
     };
     checkCompetition();
   }, [user, eventId]);
+
+  // Check if user is interested in this event
+  useEffect(() => {
+    const checkInterest = async () => {
+      if (!user || !eventId) return;
+      try {
+        const result = await eventRegistrationsApi.checkInterest(eventId, user.id);
+        setIsInterested(result.interested);
+      } catch (err) {
+        console.error('Error checking interest:', err);
+      }
+    };
+    checkInterest();
+  }, [user, eventId]);
+
+  // Handle verification query params
+  useEffect(() => {
+    const verified = searchParams.get('interest_verified');
+    const error = searchParams.get('interest_error');
+
+    if (verified === 'true') {
+      setVerificationBanner({ type: 'success', message: 'Your interest has been confirmed! You\'re on the list.' });
+      setIsInterested(true);
+      setGuestSubmitted(true);
+      // Clean up query params
+      searchParams.delete('interest_verified');
+      setSearchParams(searchParams, { replace: true });
+    } else if (error) {
+      const messages: Record<string, string> = {
+        expired: 'This verification link has expired. Please try again.',
+        used: 'This verification link has already been used.',
+        invalid: 'This verification link is invalid. Please try again.',
+      };
+      setVerificationBanner({ type: 'error', message: messages[error] || 'Verification failed. Please try again.' });
+      // Clean up query params
+      searchParams.delete('interest_error');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     if (profile && showRegistrationModal) {
@@ -198,6 +254,47 @@ export default function EventDetailPage() {
     setIsEditingPosition(false);
   };
 
+  const handleToggleInterest = async () => {
+    if (!eventId) return;
+
+    // If not logged in, show the guest email form
+    if (!user) {
+      setShowGuestEmailForm(true);
+      return;
+    }
+
+    setInterestLoading(true);
+    try {
+      const result = await eventRegistrationsApi.toggleInterest(eventId);
+      setIsInterested(result.interested);
+    } catch (err) {
+      console.error('Error toggling interest:', err);
+    } finally {
+      setInterestLoading(false);
+    }
+  };
+
+  const handleGuestInterestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventId || !guestEmail) return;
+    setGuestSubmitting(true);
+    try {
+      const result = await eventRegistrationsApi.guestInterest(eventId, guestEmail, guestFirstName || undefined);
+      if (result.requiresVerification) {
+        // Email verification required
+        setGuestVerificationPending(true);
+      } else {
+        // Already verified or duplicate — added directly
+        setGuestSubmitted(true);
+        setIsInterested(true);
+      }
+    } catch (err) {
+      console.error('Error submitting guest interest:', err);
+    } finally {
+      setGuestSubmitting(false);
+    }
+  };
+
   const getFormatColor = (format: string) => {
     switch (format) {
       case 'SPL':
@@ -296,6 +393,27 @@ export default function EventDetailPage() {
             Back to Events
           </button>
         </div>
+
+        {/* Verification banner from email confirmation */}
+        {verificationBanner && (
+          <div className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+            verificationBanner.type === 'success'
+              ? 'bg-green-600/20 border border-green-500 text-green-400'
+              : 'bg-red-600/20 border border-red-500 text-red-400'
+          }`}>
+            <div className="flex items-center gap-2">
+              {verificationBanner.type === 'success' ? (
+                <Heart className="h-5 w-5 fill-current" />
+              ) : (
+                <X className="h-5 w-5" />
+              )}
+              <span className="font-semibold">{verificationBanner.message}</span>
+            </div>
+            <button onClick={() => setVerificationBanner(null)} className="hover:opacity-75">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {event.flyer_url && (
           <div
@@ -557,6 +675,74 @@ export default function EventDetailPage() {
               </button>
             )}
 
+            {/* I'm Interested Button - for all visitors on upcoming events */}
+            {event.status === 'upcoming' && (
+              <>
+                {!guestSubmitted ? (
+                  <button
+                    onClick={handleToggleInterest}
+                    disabled={interestLoading || guestSubmitting}
+                    className={`w-full py-3 font-semibold rounded-lg text-lg transition-colors flex items-center justify-center gap-2 ${
+                      isInterested
+                        ? 'bg-pink-600 hover:bg-pink-700 text-white'
+                        : 'bg-slate-700 hover:bg-slate-600 text-gray-300 border border-slate-600'
+                    } disabled:opacity-50`}
+                  >
+                    <Heart className={`h-5 w-5 ${isInterested ? 'fill-current' : ''}`} />
+                    {interestLoading ? 'Updating...' : isInterested ? "I'm Interested" : "I'm Interested"}
+                  </button>
+                ) : (
+                  <div className="w-full py-3 bg-green-600/20 border border-green-500 text-green-400 font-semibold rounded-lg text-lg flex items-center justify-center gap-2">
+                    <Heart className="h-5 w-5 fill-current" />
+                    You're on the list!
+                  </div>
+                )}
+
+                {/* Guest email form (shown when non-logged-in visitor clicks I'm Interested) */}
+                {!user && showGuestEmailForm && !guestSubmitted && !guestVerificationPending && (
+                  <form onSubmit={handleGuestInterestSubmit} className="mt-3 p-4 bg-slate-700 rounded-lg space-y-3">
+                    <p className="text-sm text-gray-300">Enter your email to be added to the interested list:</p>
+                    <div>
+                      <input
+                        type="email"
+                        placeholder="Email address *"
+                        value={guestEmail}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                        required
+                        className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="First name (optional)"
+                        value={guestFirstName}
+                        onChange={(e) => setGuestFirstName(e.target.value)}
+                        className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={guestSubmitting}
+                      className="w-full py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {guestSubmitting ? 'Submitting...' : 'Count Me In!'}
+                    </button>
+                  </form>
+                )}
+
+                {/* Verification pending message */}
+                {guestVerificationPending && (
+                  <div className="mt-3 p-4 bg-blue-600/20 border border-blue-500 rounded-lg flex items-center gap-3">
+                    <Mail className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                    <p className="text-blue-300 text-sm">
+                      Check your email to confirm your interest! We sent a verification link to <strong>{guestEmail}</strong>.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Check-In Button for Event Directors/Admins Only */}
             {(profile?.role === 'admin' || profile?.role === 'event_director') && (event.status === 'upcoming' || event.status === 'ongoing') && (
               <button
@@ -578,6 +764,15 @@ export default function EventDetailPage() {
               View Event Results
             </button>
           )}
+
+          {/* Share This Event */}
+          <div className="mt-6 pt-6 border-t border-slate-700">
+            <h3 className="text-sm font-semibold text-gray-400 mb-3">Share This Event</h3>
+            <SocialShareButtons
+              url={`${window.location.origin}/events/${event.id}`}
+              title={`I'm interested in ${event.title} — ${new Date(event.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}${event.venue_city ? ` in ${event.venue_city}` : ''}${event.venue_state ? `, ${event.venue_state}` : ''}! Are you going? #MECA #CarAudio`}
+            />
+          </div>
         </div>
 
         {/* Ratings Section - Show for completed events where user has competition results */}
@@ -602,16 +797,16 @@ export default function EventDetailPage() {
             <MapPin className="h-6 w-6 text-orange-500" />
             Event Location
           </h2>
-          <div className="aspect-video rounded-lg overflow-hidden bg-slate-700">
-            <iframe
-              width="100%"
-              height="100%"
-              frameBorder="0"
-              style={{ border: 0 }}
-              src={`https://www.google.com/maps?q=${encodeURIComponent(event.venue_address)}&output=embed`}
-              allowFullScreen
-            ></iframe>
-          </div>
+          <GoogleMapsProvider>
+            <EventLocationMap
+              latitude={event.latitude}
+              longitude={event.longitude}
+              venueName={event.venue_name}
+              venueAddress={event.venue_address}
+              venueCity={event.venue_city}
+              venueState={event.venue_state}
+            />
+          </GoogleMapsProvider>
         </div>
       </div>
 

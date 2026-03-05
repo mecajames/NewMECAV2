@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle,
   Eye, MessageSquare, Settings, Users, FileText, Image, BarChart3, UserPlus, Crown, LogOut, Trash2, Plus, X, Loader2,
-  TrendingUp, TrendingDown, Minus, Star, Bell, Check
+  TrendingUp, TrendingDown, Minus, Star, Bell, Check, Heart
 } from 'lucide-react';
 import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth';
@@ -24,6 +24,7 @@ import { EventRatingsPanel } from '@/ratings';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries as isoCountries, getStatesForCountry } from '@/utils/countries';
 import { AchievementsGallery } from '@/achievements';
+import { SocialShareButtons } from '@/shared/components';
 import { membershipsApi, Membership, MemberCancelMembershipModal, MembershipCard } from '@/memberships';
 import type { CardData } from '@/memberships';
 import { Vote } from 'lucide-react';
@@ -1589,9 +1590,9 @@ export default function MyMecaDashboardPage() {
             <div className="text-center py-8">
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
             </div>
-          ) : registrations.length > 0 ? (
+          ) : registrations.filter(r => r.status !== 'interested').length > 0 ? (
             <div className="space-y-3">
-              {registrations.slice(0, 3).map((reg) => (
+              {registrations.filter(r => r.status !== 'interested').slice(0, 3).map((reg) => (
                 <div
                   key={reg.id}
                   className="bg-slate-700 rounded-lg p-3 hover:bg-slate-600 transition-colors cursor-pointer"
@@ -3390,8 +3391,12 @@ export default function MyMecaDashboardPage() {
           return { code: code as string, name: code as string };
         });
 
+    // Split registrations into paid/regular and interested
+    const paidRegistrations = registrations.filter(reg => reg.status !== 'interested');
+    const interestedRegistrations = registrations.filter(reg => reg.status === 'interested');
+
     // Filter registrations based on current filters
-    const filteredRegistrations = registrations.filter(reg => {
+    const applyFilters = (regs: any[]) => regs.filter(reg => {
       const event = reg.event;
       if (!event) return false;
 
@@ -3422,6 +3427,9 @@ export default function MyMecaDashboardPage() {
 
       return true;
     });
+
+    const filteredRegistrations = applyFilters(paidRegistrations);
+    const filteredInterestedRegistrations = applyFilters(interestedRegistrations);
 
     const clearFilters = () => {
       setRegistrationFilters({
@@ -3517,9 +3525,9 @@ export default function MyMecaDashboardPage() {
         </div>
 
         {/* Results count */}
-        {registrations.length > 0 && (
+        {paidRegistrations.length > 0 && (
           <div className="text-sm text-gray-400 mb-4">
-            Showing {filteredRegistrations.length} of {registrations.length} registration{registrations.length !== 1 ? 's' : ''}
+            Showing {filteredRegistrations.length} of {paidRegistrations.length} registration{paidRegistrations.length !== 1 ? 's' : ''}
           </div>
         )}
 
@@ -3579,7 +3587,7 @@ export default function MyMecaDashboardPage() {
               </div>
             ))}
           </div>
-        ) : registrations.length > 0 ? (
+        ) : paidRegistrations.length > 0 ? (
           <div className="text-center py-12">
             <Search className="h-16 w-16 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400 mb-4">No registrations match your filters</p>
@@ -3590,7 +3598,7 @@ export default function MyMecaDashboardPage() {
               Clear Filters
             </button>
           </div>
-        ) : (
+        ) : interestedRegistrations.length === 0 ? (
           <div className="text-center py-12">
             <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400 mb-4">No event registrations yet</p>
@@ -3600,6 +3608,54 @@ export default function MyMecaDashboardPage() {
             >
               Browse Events
             </button>
+          </div>
+        ) : null}
+
+        {/* Events I'm Interested In */}
+        {filteredInterestedRegistrations.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Heart className="h-5 w-5 text-pink-500" />
+              Events I'm Interested In
+            </h3>
+            <div className="space-y-3">
+              {filteredInterestedRegistrations.map((reg) => (
+                <div
+                  key={reg.id}
+                  className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer flex items-center justify-between"
+                  onClick={() => reg.event && navigate(`/events/${reg.event.id}`)}
+                >
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-white mb-1">
+                      {reg.event?.title}
+                    </h4>
+                    <div className="space-y-1 text-sm text-gray-400">
+                      <p className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {reg.event?.venue_name}
+                        {reg.event?.venue_city && `, ${reg.event.venue_city}`}
+                        {reg.event?.venue_state && `, ${getStatesForCountry(reg.event?.venue_country || 'US').find(s => s.code === reg.event?.venue_state)?.name || reg.event.venue_state}`}
+                      </p>
+                      <p className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {reg.event && new Date(reg.event.event_date).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-pink-500/10 text-pink-400 flex items-center gap-1">
+                      <Heart className="h-3 w-3 fill-current" />
+                      Interested
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -3697,6 +3753,7 @@ export default function MyMecaDashboardPage() {
                   <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Place</th>
                   <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">Points</th>
                   <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Rate Staff</th>
+                  <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Share</th>
                 </tr>
               </thead>
               <tbody>
@@ -3741,11 +3798,19 @@ export default function MyMecaDashboardPage() {
                           </button>
                         )}
                       </td>
+                      <td className="py-3 px-4 text-center">
+                        <SocialShareButtons
+                          url={`${window.location.origin}/results/member/${profile?.meca_id || ''}`}
+                          title={`I placed ${result.placement}${result.placement === 1 ? 'st' : result.placement === 2 ? 'nd' : result.placement === 3 ? 'rd' : 'th'} in ${result.competition_class} at ${result.event?.title}! #MECA #CarAudio`}
+                          variant="inline"
+                          platforms={['facebook']}
+                        />
+                      </td>
                     </tr>
                     {/* Expanded Rating Panel */}
                     {expandedRatingEventId === result.event?.id && result.event && (
                       <tr>
-                        <td colSpan={6} className="p-0">
+                        <td colSpan={7} className="p-0">
                           <div className="bg-slate-700/50 p-4 border-b border-slate-600">
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="text-white font-semibold flex items-center gap-2">

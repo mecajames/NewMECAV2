@@ -365,7 +365,7 @@ export default function EventDirectorApplicationDetailPage() {
                           <p className="text-slate-400 text-sm">{ref.relationship}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {ref.email_verified ? (
+                          {ref.reference_checked ? (
                             <span className="px-2 py-1 rounded text-xs bg-green-500/20 text-green-400 flex items-center gap-1">
                               <CheckCircle className="h-3 w-3" />
                               VERIFIED
@@ -377,15 +377,15 @@ export default function EventDirectorApplicationDetailPage() {
                             </span>
                           )}
                           <button
-                            onClick={() => handleMarkReferenceChecked(index, !ref.email_verified)}
+                            onClick={() => handleMarkReferenceChecked(index, !ref.reference_checked)}
                             disabled={submitting}
                             className={`px-2 py-1 rounded text-xs ${
-                              ref.email_verified
+                              ref.reference_checked
                                 ? 'bg-yellow-600 hover:bg-yellow-700'
                                 : 'bg-green-600 hover:bg-green-700'
                             } text-white disabled:opacity-50`}
                           >
-                            {ref.email_verified ? 'Mark Pending' : 'Mark Verified'}
+                            {ref.reference_checked ? 'Mark Pending' : 'Mark Verified'}
                           </button>
                         </div>
                       </div>
@@ -407,10 +407,24 @@ export default function EventDirectorApplicationDetailPage() {
                           </div>
                         )}
                       </div>
-                      {ref.verification_response && (
+                      {ref.reference_notes && (
                         <div className="mt-3 pt-3 border-t border-slate-600">
                           <p className="text-slate-400 text-sm mb-1">Reference Response:</p>
-                          <p className="text-white text-sm">{ref.verification_response}</p>
+                          <p className="text-white text-sm whitespace-pre-wrap">{ref.reference_notes}</p>
+                          {ref.checked_date && (
+                            <p className="text-slate-500 text-xs mt-2">
+                              Received: {new Date(ref.checked_date).toLocaleString('en-US', {
+                                timeZone: 'America/New_York',
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                                timeZoneName: 'short',
+                              })}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

@@ -14,6 +14,11 @@ export enum BannerPosition {
   LEADERBOARD_TOP = 'leaderboard_top',
   MEMBERS_TOP = 'members_top',
   SIDEBAR = 'sidebar',
+  TEAM_DIRECTORY_TOP = 'team_directory_top',
+  TOP_10_PAGE_TOP = 'top_10_page_top',
+  TEAMS_STANDINGS_TOP = 'teams_standings_top',
+  TEAMS_TOP_10_PAGE_TOP = 'teams_top_10_page_top',
+  RULEBOOKS_TOP = 'rulebooks_top',
 }
 
 export enum BannerStatus {
@@ -62,6 +67,11 @@ export const BannerPositionLabels: Record<BannerPosition, string> = {
   [BannerPosition.LEADERBOARD_TOP]: 'Leaderboard - Top',
   [BannerPosition.MEMBERS_TOP]: 'Members - Top',
   [BannerPosition.SIDEBAR]: 'Sidebar',
+  [BannerPosition.TEAM_DIRECTORY_TOP]: 'Team Directory - Top',
+  [BannerPosition.TOP_10_PAGE_TOP]: 'Top 10 Page - Top',
+  [BannerPosition.TEAMS_STANDINGS_TOP]: 'Teams Standings - Top',
+  [BannerPosition.TEAMS_TOP_10_PAGE_TOP]: 'Teams Top 10 Page - Top',
+  [BannerPosition.RULEBOOKS_TOP]: 'Rulebooks - Top',
 };
 
 // =============================================================================
@@ -104,7 +114,7 @@ export const CreateBannerSchema = z.object({
   name: z.string().min(1, 'Banner name is required'),
   imageUrl: z.string().min(1, 'Image is required'),
   clickUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
-  position: BannerPositionSchema,
+  positions: z.array(BannerPositionSchema).min(1, 'At least one position is required'),
   status: BannerStatusSchema.optional().default(BannerStatus.DRAFT),
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
@@ -126,7 +136,7 @@ export const UpdateBannerSchema = z.object({
   name: z.string().min(1, 'Banner name is required').optional(),
   imageUrl: z.string().min(1).optional(),
   clickUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
-  position: BannerPositionSchema.optional(),
+  positions: z.array(BannerPositionSchema).min(1, 'At least one position is required').optional(),
   status: BannerStatusSchema.optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
@@ -146,7 +156,7 @@ export const BannerSchema = z.object({
   name: z.string(),
   imageUrl: z.string(),
   clickUrl: z.string().nullable(),
-  position: BannerPositionSchema,
+  positions: z.array(BannerPositionSchema),
   status: BannerStatusSchema,
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),

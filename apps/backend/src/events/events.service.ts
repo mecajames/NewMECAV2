@@ -7,6 +7,7 @@ import { EventRegistration } from '../event-registrations/event-registrations.en
 import { EventStatus, RegistrationStatus, MultiDayResultsMode } from '@newmeca/shared';
 import { randomUUID } from 'crypto';
 import { EmailService } from '../email/email.service';
+import { GeocodingService } from '../geocoding/geocoding.service';
 
 @Injectable()
 export class EventsService {
@@ -16,6 +17,7 @@ export class EventsService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
+    private readonly geocodingService: GeocodingService,
   ) {}
 
   async findAll(page: number = 1, limit: number = 10): Promise<Event[]> {
@@ -277,6 +279,25 @@ export class EventsService {
         transformedData.status = this.detectStatusFromDate(new Date(transformedData.eventDate));
       }
 
+      // Auto-geocode if lat/long not provided but address fields exist
+      if (transformedData.latitude == null && transformedData.longitude == null && transformedData.venueAddress) {
+        try {
+          const coords = await this.geocodingService.geocodeAddress(
+            transformedData.venueAddress,
+            transformedData.venueCity,
+            transformedData.venueState,
+            transformedData.venuePostalCode,
+            transformedData.venueCountry,
+          );
+          if (coords) {
+            transformedData.latitude = coords.latitude;
+            transformedData.longitude = coords.longitude;
+          }
+        } catch (err) {
+          this.logger.warn('Geocoding failed during event creation, continuing without coordinates', err);
+        }
+      }
+
       console.log('📝 CREATE EVENT - Transformed data:', JSON.stringify(transformedData, null, 2));
 
       const event = em.create(Event, transformedData);
@@ -316,6 +337,22 @@ export class EventsService {
 
       // Generate a shared group ID for all days of this event
       const multiDayGroupId = randomUUID();
+
+      // Auto-geocode once for all days if lat/long not provided
+      let geocodedCoords: { latitude: number; longitude: number } | null = null;
+      if (data.latitude == null && data.longitude == null && (data as any).venue_address) {
+        try {
+          geocodedCoords = await this.geocodingService.geocodeAddress(
+            (data as any).venue_address,
+            (data as any).venue_city,
+            (data as any).venue_state,
+            (data as any).venue_postal_code,
+            (data as any).venue_country,
+          );
+        } catch (err) {
+          this.logger.warn('Geocoding failed during multi-day event creation, continuing without coordinates', err);
+        }
+      }
 
       const createdEvents: Event[] = [];
 
@@ -361,6 +398,12 @@ export class EventsService {
         if (data.status !== undefined) transformedData.status = data.status;
         if (data.formats !== undefined) transformedData.formats = data.formats;
         if ((data as any).event_type !== undefined) transformedData.eventType = (data as any).event_type;
+
+        // Apply geocoded coordinates if available and not manually set
+        if (geocodedCoords && transformedData.latitude == null && transformedData.longitude == null) {
+          transformedData.latitude = geocodedCoords.latitude;
+          transformedData.longitude = geocodedCoords.longitude;
+        }
 
         // Set points multiplier - use per-day multiplier if provided, otherwise use base multiplier
         if (dayMultipliers && dayMultipliers[dayNum - 1] !== undefined) {
@@ -501,6 +544,30 @@ export class EventsService {
       transformedData.status = this.detectStatusFromDate(new Date(transformedData.eventDate));
     }
 
+    // Auto-geocode if address fields changed and lat/long weren't explicitly provided
+    const addressChanged = transformedData.venueAddress !== undefined ||
+      transformedData.venueCity !== undefined ||
+      transformedData.venueState !== undefined ||
+      transformedData.venuePostalCode !== undefined;
+
+    if (addressChanged && transformedData.latitude == null && transformedData.longitude == null) {
+      try {
+        const address = transformedData.venueAddress ?? event.venueAddress;
+        const city = transformedData.venueCity ?? event.venueCity;
+        const state = transformedData.venueState ?? event.venueState;
+        const postalCode = transformedData.venuePostalCode ?? event.venuePostalCode;
+        const country = transformedData.venueCountry ?? event.venueCountry;
+
+        const coords = await this.geocodingService.geocodeAddress(address, city, state, postalCode, country);
+        if (coords) {
+          transformedData.latitude = coords.latitude;
+          transformedData.longitude = coords.longitude;
+        }
+      } catch (err) {
+        this.logger.warn('Geocoding failed during event update, continuing without coordinates', err);
+      }
+    }
+
     em.assign(event, transformedData);
     console.log('🔍 UPDATE EVENT - After em.assign, event date:', event.eventDate);
 
@@ -523,6 +590,120 @@ export class EventsService {
     const em = this.em.fork();
     const totalEvents = await em.count(Event, {});
     return { totalEvents };
+  }
+
+  // In-memory progress tracking for backfill jobs
+  private backfillJobs = new Map<string, {
+    total: number;
+    completed: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    done: boolean;
+    currentEvent?: string;
+  }>();
+
+  /**
+   * Count events that need geocoding within a date range
+   */
+  async countEventsNeedingGeocode(startDate?: string, endDate?: string): Promise<number> {
+    const em = this.em.fork();
+    const filter: any = {
+      venueAddress: { $ne: null },
+      $or: [
+        { latitude: null },
+        { longitude: null },
+      ],
+    };
+    if (startDate) filter.eventDate = { ...filter.eventDate, $gte: new Date(startDate) };
+    if (endDate) filter.eventDate = { ...filter.eventDate, $lte: new Date(endDate) };
+    return em.count(Event, filter);
+  }
+
+  /**
+   * Start a backfill geocode job. Returns a jobId for progress tracking.
+   */
+  async startBackfillGeocode(startDate?: string, endDate?: string): Promise<{ jobId: string; total: number }> {
+    const em = this.em.fork();
+
+    const filter: any = {
+      venueAddress: { $ne: null },
+      $or: [
+        { latitude: null },
+        { longitude: null },
+      ],
+    };
+    if (startDate) filter.eventDate = { ...filter.eventDate, $gte: new Date(startDate) };
+    if (endDate) filter.eventDate = { ...filter.eventDate, $lte: new Date(endDate) };
+
+    const events = await em.find(Event, filter, { orderBy: { eventDate: 'ASC' } });
+    const jobId = randomUUID();
+
+    const progress = {
+      total: events.length,
+      completed: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      done: false,
+    };
+    this.backfillJobs.set(jobId, progress);
+
+    // Run in background (don't await)
+    this.runBackfillJob(jobId, events, em).catch(err => {
+      this.logger.error(`Backfill job ${jobId} crashed:`, err);
+      const job = this.backfillJobs.get(jobId);
+      if (job) job.done = true;
+    });
+
+    return { jobId, total: events.length };
+  }
+
+  private async runBackfillJob(jobId: string, events: Event[], em: EntityManager): Promise<void> {
+    const progress = this.backfillJobs.get(jobId)!;
+
+    for (const event of events) {
+      progress.currentEvent = event.title;
+      try {
+        const coords = await this.geocodingService.geocodeAddress(
+          event.venueAddress,
+          event.venueCity,
+          event.venueState,
+          event.venuePostalCode,
+          event.venueCountry,
+        );
+
+        if (coords) {
+          event.latitude = coords.latitude;
+          event.longitude = coords.longitude;
+          progress.updated++;
+        } else {
+          progress.skipped++;
+        }
+
+        // Small delay to respect Google rate limits
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (err) {
+        this.logger.warn(`Backfill geocode failed for event ${event.id}:`, err);
+        progress.failed++;
+      }
+      progress.completed++;
+    }
+
+    await em.flush();
+    progress.done = true;
+    progress.currentEvent = undefined;
+    this.logger.log(`Backfill job ${jobId} complete: ${progress.updated} updated, ${progress.skipped} skipped, ${progress.failed} failed`);
+
+    // Clean up after 5 minutes
+    setTimeout(() => this.backfillJobs.delete(jobId), 5 * 60 * 1000);
+  }
+
+  /**
+   * Get progress for a backfill job
+   */
+  getBackfillProgress(jobId: string) {
+    return this.backfillJobs.get(jobId) || null;
   }
 
   /**

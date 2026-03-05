@@ -216,6 +216,11 @@ export class EventDirectorsController {
     };
   }
 
+  @Get('verify-reference/:token')
+  async lookupReferenceToken(@Param('token') token: string) {
+    return this.eventDirectorsService.lookupReferenceToken(token);
+  }
+
   @Post('verify-reference')
   async verifyReference(
     @Body('token') token: string,

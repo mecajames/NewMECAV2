@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, MoreVertical, Send, Download, XCircle, CheckCircle } from 'lucide-react';
+import { Eye, MoreVertical, Send, Download, XCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { Invoice, billingApi } from '../../../api-client/billing.api-client';
 import { InvoiceStatusBadge } from './BillingStatusBadge';
 import { InvoiceStatus } from '../billing.types';
@@ -10,6 +10,7 @@ interface InvoiceTableProps {
   loading?: boolean;
   onViewInvoice?: (invoice: Invoice) => void;
   onSendInvoice?: (invoice: Invoice) => void;
+  onResendInvoice?: (invoice: Invoice) => void;
   onMarkPaid?: (invoice: Invoice) => void;
   onCancelInvoice?: (invoice: Invoice) => void;
   compact?: boolean;
@@ -20,6 +21,7 @@ export function InvoiceTable({
   loading = false,
   onViewInvoice,
   onSendInvoice,
+  onResendInvoice,
   onMarkPaid,
   onCancelInvoice,
   compact = false,
@@ -229,6 +231,21 @@ export function InvoiceTable({
                           Send Invoice
                         </button>
                       )}
+                      {onResendInvoice &&
+                        (invoice.status === InvoiceStatus.SENT ||
+                          invoice.status === InvoiceStatus.OVERDUE) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onResendInvoice(invoice);
+                              setOpenMenuId(null);
+                            }}
+                            className="flex w-full items-center px-4 py-2 text-sm text-gray-200 hover:bg-slate-600"
+                          >
+                            <RefreshCw className="mr-3 h-4 w-4" />
+                            Resend Invoice
+                          </button>
+                        )}
                       {onMarkPaid &&
                         (invoice.status === InvoiceStatus.SENT ||
                           invoice.status === InvoiceStatus.OVERDUE) && (

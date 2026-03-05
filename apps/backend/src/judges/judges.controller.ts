@@ -247,6 +247,11 @@ export class JudgesController {
     };
   }
 
+  @Get('verify-reference/:token')
+  async lookupReferenceToken(@Param('token') token: string) {
+    return this.judgesService.lookupReferenceToken(token);
+  }
+
   @Post('verify-reference')
   async verifyReference(
     @Body('token') token: string,

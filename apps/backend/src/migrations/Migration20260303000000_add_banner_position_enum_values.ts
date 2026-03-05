@@ -6,14 +6,21 @@ export class Migration20260303000000_add_banner_position_enum_values extends Mig
     // The TypeScript BannerPosition enum has 9 values. Add the missing 8 values.
     // Note: ALTER TYPE ... ADD VALUE cannot run inside a transaction in PostgreSQL,
     // so we use individual addSql calls for each value.
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'homepage_top';`);
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'homepage_mid';`);
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'homepage_bottom';`);
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'shop_top';`);
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'results_top';`);
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'leaderboard_top';`);
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'members_top';`);
-    this.addSql(`ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'sidebar';`);
+    // Wrapped in DO block so it's safe if the type was already dropped.
+    this.addSql(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'banner_position') THEN
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'homepage_top';
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'homepage_mid';
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'homepage_bottom';
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'shop_top';
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'results_top';
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'leaderboard_top';
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'members_top';
+          ALTER TYPE banner_position ADD VALUE IF NOT EXISTS 'sidebar';
+        END IF;
+      END $$;
+    `);
   }
 
   async down(): Promise<void> {

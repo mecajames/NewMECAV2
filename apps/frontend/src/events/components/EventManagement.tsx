@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
+import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight, Upload, MapPin } from 'lucide-react';
 import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
@@ -70,6 +70,17 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   const [flyerFile, setFlyerFile] = useState<File | null>(null);
   const [flyerPreview, setFlyerPreview] = useState<string | null>(null);
   const [uploadingFlyer, setUploadingFlyer] = useState(false);
+
+  // Geocode backfill state
+  const [showGeocodePanel, setShowGeocodePanel] = useState(false);
+  const [geocodeStartDate, setGeocodeStartDate] = useState('2026-01-01');
+  const [geocodeEndDate, setGeocodeEndDate] = useState('2026-12-31');
+  const [geocodeCount, setGeocodeCount] = useState<number | null>(null);
+  const [geocodeCountLoading, setGeocodeCountLoading] = useState(false);
+  const [geocodeJobId, setGeocodeJobId] = useState<string | null>(null);
+  const [geocodeProgress, setGeocodeProgress] = useState<{
+    total: number; completed: number; updated: number; skipped: number; failed: number; done: boolean; currentEvent?: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchEvents();
@@ -462,24 +473,190 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     }
   };
 
+  const handleGeocodeCheckCount = async () => {
+    setGeocodeCountLoading(true);
+    try {
+      const result = await eventsApi.getBackfillGeocodeCount(geocodeStartDate, geocodeEndDate);
+      setGeocodeCount(result.count);
+    } catch (error) {
+      console.error('Error checking geocode count:', error);
+    } finally {
+      setGeocodeCountLoading(false);
+    }
+  };
+
+  const handleGeocodeStart = async () => {
+    try {
+      const result = await eventsApi.startBackfillGeocode(geocodeStartDate, geocodeEndDate);
+      setGeocodeJobId(result.jobId);
+      setGeocodeProgress({ total: result.total, completed: 0, updated: 0, skipped: 0, failed: 0, done: false });
+
+      // Start polling
+      const pollInterval = setInterval(async () => {
+        try {
+          const progress = await eventsApi.getBackfillProgress(result.jobId);
+          setGeocodeProgress(progress);
+          if (progress.done) {
+            clearInterval(pollInterval);
+          }
+        } catch (err) {
+          console.error('Error polling geocode progress:', err);
+          clearInterval(pollInterval);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error starting geocode backfill:', error);
+      alert('Failed to start geocode backfill');
+    }
+  };
+
+  const handleGeocodeReset = () => {
+    setGeocodeJobId(null);
+    setGeocodeProgress(null);
+    setGeocodeCount(null);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-white">Event Management</h2>
-        <button
-          onClick={() => {
-            setEditingEvent(null);
-            resetForm();
-            setFlyerFile(null);
-            setFlyerPreview(null);
-            setShowModal(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
-        >
-          <Plus className="h-5 w-5" />
-          Create Event
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowGeocodePanel(!showGeocodePanel)}
+            className={`flex items-center gap-2 px-4 py-2 font-semibold rounded-lg transition-colors ${
+              showGeocodePanel ? 'bg-blue-700 hover:bg-blue-800 text-white' : 'bg-slate-600 hover:bg-slate-500 text-gray-200'
+            }`}
+          >
+            <MapPin className="h-5 w-5" />
+            Geocode Events
+          </button>
+          <button
+            onClick={() => {
+              setEditingEvent(null);
+              resetForm();
+              setFlyerFile(null);
+              setFlyerPreview(null);
+              setShowModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+          >
+            <Plus className="h-5 w-5" />
+            Create Event
+          </button>
+        </div>
       </div>
+
+      {/* Geocode Backfill Panel */}
+      {showGeocodePanel && (
+        <div className="bg-slate-700 rounded-lg p-5 mb-6 border border-blue-500/30">
+          <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-blue-400" />
+            Backfill Geocode Coordinates
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Auto-fill latitude/longitude for events that have an address but are missing coordinates.
+          </p>
+
+          {!geocodeProgress ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-300 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={geocodeStartDate}
+                    onChange={(e) => { setGeocodeStartDate(e.target.value); setGeocodeCount(null); }}
+                    className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-300 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={geocodeEndDate}
+                    onChange={(e) => { setGeocodeEndDate(e.target.value); setGeocodeCount(null); }}
+                    className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <button
+                    onClick={handleGeocodeCheckCount}
+                    disabled={geocodeCountLoading}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {geocodeCountLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    Check Count
+                  </button>
+                </div>
+              </div>
+
+              {geocodeCount !== null && (
+                <div className="flex items-center justify-between bg-slate-600 rounded-lg p-3">
+                  <span className="text-gray-200">
+                    <span className="font-bold text-white">{geocodeCount}</span> event{geocodeCount !== 1 ? 's' : ''} need geocoding in this date range
+                  </span>
+                  {geocodeCount > 0 && (
+                    <button
+                      onClick={handleGeocodeStart}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                    >
+                      Start Geocoding
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div>
+              {/* Progress bar */}
+              <div className="mb-3">
+                <div className="flex justify-between text-sm text-gray-300 mb-1">
+                  <span>{geocodeProgress.done ? 'Complete!' : `Processing: ${geocodeProgress.currentEvent || '...'}`}</span>
+                  <span className="font-mono">{geocodeProgress.completed} / {geocodeProgress.total}</span>
+                </div>
+                <div className="w-full bg-slate-600 rounded-full h-3 overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-300 ${geocodeProgress.done ? 'bg-green-500' : 'bg-blue-500'}`}
+                    style={{ width: `${geocodeProgress.total > 0 ? (geocodeProgress.completed / geocodeProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="bg-slate-600 rounded-lg p-3 text-center">
+                  <div className="text-green-400 text-xl font-bold">{geocodeProgress.updated}</div>
+                  <div className="text-gray-400 text-xs">Updated</div>
+                </div>
+                <div className="bg-slate-600 rounded-lg p-3 text-center">
+                  <div className="text-yellow-400 text-xl font-bold">{geocodeProgress.skipped}</div>
+                  <div className="text-gray-400 text-xs">Skipped</div>
+                </div>
+                <div className="bg-slate-600 rounded-lg p-3 text-center">
+                  <div className="text-red-400 text-xl font-bold">{geocodeProgress.failed}</div>
+                  <div className="text-gray-400 text-xs">Failed</div>
+                </div>
+              </div>
+
+              {geocodeProgress.done && (
+                <button
+                  onClick={handleGeocodeReset}
+                  className="w-full px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg text-sm transition-colors"
+                >
+                  Done - Run Again
+                </button>
+              )}
+
+              {!geocodeProgress.done && (
+                <div className="flex items-center gap-2 text-blue-400 text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing... please wait
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search and Filter Section */}
       <div className="bg-slate-700 rounded-lg p-4 mb-6">

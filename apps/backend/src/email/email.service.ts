@@ -98,6 +98,25 @@ export interface SendEventReminderEmailDto {
   qrCodeData?: string;
 }
 
+export interface SendEventInterestReminderEmailDto {
+  to: string;
+  firstName?: string;
+  eventName: string;
+  eventDate: Date;
+  venueName: string;
+  venueAddress: string;
+  venueCity?: string;
+  venueState?: string;
+  eventId: string;
+}
+
+export interface SendGuestInterestVerificationEmailDto {
+  to: string;
+  firstName?: string;
+  eventName: string;
+  verificationUrl: string;
+}
+
 // Membership email DTOs
 export interface SendMembershipWelcomeEmailDto {
   to: string;
@@ -156,6 +175,14 @@ export interface SendMembershipCancelledRefundedEmailDto {
   membershipType: string;
   cancellationDate: Date;
   refundAmount?: number;
+  reason: string;
+}
+
+export interface SendInvoiceAutoCancelledEmailDto {
+  to: string;
+  firstName?: string;
+  invoiceNumber: string;
+  membershipCancelled: boolean;
   reason: string;
 }
 
@@ -290,18 +317,21 @@ export interface SendShopDeliveryConfirmationEmailDto {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private isConfigured = false;
-  private provider: 'sendgrid' | 'resend' | 'mailgun' | 'smtp' | null = null;
+  private provider: 'sendgrid' | 'resend' | 'mailgun' | 'mailgun-api' | 'smtp' | null = null;
   private transporter: Transporter | null = null;
   private fromEmail: string = 'noreply@mecacaraudio.com';
+  private mailgunDomain: string | null = null;
+  private mailgunApiKey: string | null = null;
+  private mailgunApiUrl: string = 'https://api.mailgun.net'; // US region default
 
   // Department-specific "from" addresses
   private readonly fromAddresses = {
-    noreply: 'noreply@mecacaraudio.com',
-    support: 'support@mecacaraudio.com',
-    memberships: 'memberships@mecacaraudio.com',
-    billing: 'billing@mecacaraudio.com',
-    events: 'events@mecacaraudio.com',
-    shop: 'shop@mecacaraudio.com',
+    noreply: '"MECA" <noreply@mecacaraudio.com>',
+    support: '"MECA Support" <support@mecacaraudio.com>',
+    memberships: '"MECA Memberships" <memberships@mecacaraudio.com>',
+    billing: '"MECA Billing" <billing@mecacaraudio.com>',
+    events: '"MECA Events" <events@mecacaraudio.com>',
+    shop: '"MECA Shop" <shop@mecacaraudio.com>',
   };
 
   // Staging mode cache to avoid DB queries for every email
@@ -616,6 +646,25 @@ export class EmailService {
     });
   }
 
+  /**
+   * Send guest interest verification email
+   */
+  async sendGuestInterestVerificationEmail(dto: SendGuestInterestVerificationEmailDto): Promise<{ success: boolean; error?: string }> {
+    const subject = `Confirm your interest in ${dto.eventName}`;
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+
+    const html = this.getGuestInterestVerificationEmailTemplate(greeting, dto.eventName, dto.verificationUrl);
+    const text = this.getGuestInterestVerificationEmailText(greeting, dto.eventName, dto.verificationUrl);
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.events,
+    });
+  }
+
   // ==========================================================================
   // Event Registration Email Methods
   // ==========================================================================
@@ -685,6 +734,31 @@ export class EmailService {
 
     const html = this.getEventReminderTemplate(greeting, dto, eventDateStr);
     const text = this.getEventReminderText(greeting, dto, eventDateStr);
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.events,
+    });
+  }
+
+  /**
+   * Send event interest reminder email (lighter nudge for interested-but-not-registered users)
+   */
+  async sendEventInterestReminderEmail(dto: SendEventInterestReminderEmailDto): Promise<{ success: boolean; error?: string }> {
+    const subject = `Reminder: ${dto.eventName} is Tomorrow — Register Now!`;
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+    const eventDateStr = dto.eventDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const html = this.getEventInterestReminderTemplate(greeting, dto, eventDateStr);
+    const text = this.getEventInterestReminderText(greeting, dto, eventDateStr);
 
     return this.sendEmail({
       to: dto.to,
@@ -946,6 +1020,29 @@ export class EmailService {
   }
 
   // ==========================================================================
+  // Invoice Auto-Cancel Email Methods
+  // ==========================================================================
+
+  /**
+   * Send notification when an invoice is auto-cancelled due to non-payment
+   */
+  async sendInvoiceAutoCancelledEmail(dto: SendInvoiceAutoCancelledEmailDto): Promise<{ success: boolean; error?: string }> {
+    const subject = `MECA Invoice ${dto.invoiceNumber} - Automatically Cancelled`;
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+
+    const html = this.getInvoiceAutoCancelledEmailTemplate(greeting, dto);
+    const text = this.getInvoiceAutoCancelledEmailText(greeting, dto);
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.billing,
+    });
+  }
+
+  // ==========================================================================
   // Shop Order Email Methods
   // ==========================================================================
 
@@ -1025,6 +1122,373 @@ export class EmailService {
     });
   }
 
+  // ==========================================================================
+  // Test Template Email Method (Admin Panel)
+  // ==========================================================================
+
+  /**
+   * Send a specific email template with sample data for testing purposes.
+   * Used by the admin panel to preview/test all branded email templates.
+   */
+  async sendTestTemplateEmail(templateKey: string, toEmail: string): Promise<{ success: boolean; message: string }> {
+    const frontendUrl = process.env.FRONTEND_URL || 'https://www.maborc.com';
+    const sampleDate = new Date('2025-12-31');
+    const sampleShippedDate = new Date('2025-12-28');
+    const sampleDeliveryDate = new Date('2026-01-02');
+    const sampleOrderDate = new Date('2025-12-25');
+    const samplePaymentDate = new Date('2025-12-25');
+
+    const sampleItems = [
+      { description: 'Pro Competitor Membership', quantity: 1, unitPrice: '$99.00', total: '$99.00' },
+      { description: 'Event Registration - SQ Finals', quantity: 1, unitPrice: '$45.00', total: '$45.00' },
+    ];
+
+    const sampleClasses = [
+      { format: 'SQ', className: 'Modified 1', feeCharged: 25 },
+      { format: 'SPL', className: 'Street A', feeCharged: 20 },
+    ];
+
+    const sampleClassesSimple = [
+      { format: 'SQ', className: 'Modified 1' },
+      { format: 'SPL', className: 'Street A' },
+    ];
+
+    const sampleShopItems = [
+      { productName: 'MECA T-Shirt (Large)', productSku: 'MECA-TSH-L', quantity: 2, unitPrice: 24.99, totalPrice: 49.98 },
+      { productName: 'MECA Decal Pack', productSku: 'MECA-DCL-01', quantity: 1, unitPrice: 9.99, totalPrice: 9.99 },
+    ];
+
+    const sampleAddress = {
+      name: 'Test User',
+      line1: '123 Main Street',
+      line2: 'Suite 100',
+      city: 'Tampa',
+      state: 'FL',
+      postalCode: '33601',
+      country: 'US',
+    };
+
+    const sampleBenefits = [
+      'Compete in all MECA-sanctioned events',
+      'Access to member-only forums and resources',
+      'Exclusive discounts on MECA merchandise',
+      'Annual competition points tracking',
+    ];
+
+    try {
+      let result: { success: boolean; error?: string };
+
+      switch (templateKey) {
+        case 'password_new':
+          result = await this.sendPasswordEmail({
+            to: toEmail,
+            firstName: 'Test',
+            password: 'TempPass123!',
+            isNewUser: true,
+            forceChange: false,
+          });
+          break;
+
+        case 'password_reset':
+          result = await this.sendPasswordEmail({
+            to: toEmail,
+            firstName: 'Test',
+            password: 'TempPass123!',
+            isNewUser: false,
+            forceChange: true,
+          });
+          break;
+
+        case 'reference_verification':
+          result = await this.sendReferenceVerificationEmail({
+            referenceEmail: toEmail,
+            referenceName: 'Test Reference',
+            applicantName: 'John Smith',
+            verificationUrl: `${frontendUrl}/verify-reference?token=test-token-12345`,
+            applicationType: 'Judge',
+          });
+          break;
+
+        case 'invoice':
+          result = await this.sendInvoiceEmail({
+            to: toEmail,
+            firstName: 'Test',
+            invoiceNumber: 'MECA-00001',
+            invoiceTotal: '$144.00',
+            dueDate: sampleDate,
+            paymentUrl: `${frontendUrl}/invoices/test-invoice-id/pay`,
+            items: sampleItems,
+          });
+          break;
+
+        case 'event_rating_request':
+          result = await this.sendEventRatingRequestEmail({
+            to: toEmail,
+            firstName: 'Test',
+            eventName: 'MECA SQ Finals 2025',
+            eventDate: sampleDate,
+            ratingUrl: `${frontendUrl}/events/test-event-id/rate`,
+          });
+          break;
+
+        case 'event_registration_confirmation':
+          result = await this.sendEventRegistrationConfirmationEmail({
+            to: toEmail,
+            firstName: 'Test',
+            lastName: 'User',
+            eventName: 'MECA SQ Finals 2025',
+            eventDate: sampleDate,
+            venueName: 'Tampa Convention Center',
+            venueAddress: '333 S Franklin St',
+            venueCity: 'Tampa',
+            venueState: 'FL',
+            registrationId: 'REG-TEST-001',
+            checkInCode: 'CHK-12345',
+            classes: sampleClasses,
+            amountPaid: 45,
+          });
+          break;
+
+        case 'event_registration_cancelled':
+          result = await this.sendEventRegistrationCancelledEmail({
+            to: toEmail,
+            firstName: 'Test',
+            eventName: 'MECA SQ Finals 2025',
+            eventDate: sampleDate,
+            registrationId: 'REG-TEST-001',
+            checkInCode: 'CHK-12345',
+            refundAmount: 45,
+          });
+          break;
+
+        case 'event_reminder':
+          result = await this.sendEventReminderEmail({
+            to: toEmail,
+            firstName: 'Test',
+            eventName: 'MECA SQ Finals 2025',
+            eventDate: sampleDate,
+            venueName: 'Tampa Convention Center',
+            venueAddress: '333 S Franklin St',
+            venueCity: 'Tampa',
+            venueState: 'FL',
+            checkInCode: 'CHK-12345',
+            classes: sampleClassesSimple,
+          });
+          break;
+
+        case 'ticket_created':
+          result = await this.sendTicketCreatedEmail({
+            to: toEmail,
+            firstName: 'Test',
+            ticketNumber: 'TKT-00001',
+            ticketTitle: 'Test Support Request',
+            ticketDescription: 'This is a test support ticket to verify the email template is rendering correctly with the new MECA branding.',
+            category: 'General Support',
+            viewTicketUrl: `${frontendUrl}/support/tickets/test-ticket-id`,
+          });
+          break;
+
+        case 'ticket_staff_alert':
+          result = await this.sendTicketStaffAlertEmail({
+            to: toEmail,
+            staffName: 'Admin',
+            ticketNumber: 'TKT-00001',
+            ticketTitle: 'Test Support Request',
+            ticketDescription: 'This is a test support ticket to verify the staff alert email template.',
+            category: 'General Support',
+            priority: 'high',
+            departmentName: 'Technical Support',
+            reporterName: 'John Smith',
+            reporterEmail: 'john.smith@example.com',
+            viewTicketUrl: `${frontendUrl}/admin/support/tickets/test-ticket-id`,
+          });
+          break;
+
+        case 'ticket_reply':
+          result = await this.sendTicketReplyEmail({
+            to: toEmail,
+            recipientName: 'Test',
+            ticketNumber: 'TKT-00001',
+            ticketTitle: 'Test Support Request',
+            replyContent: 'Thank you for reaching out! This is a sample reply to test the email template. We are looking into your issue and will get back to you shortly.',
+            replierName: 'MECA Support Team',
+            isStaffReply: true,
+            viewTicketUrl: `${frontendUrl}/support/tickets/test-ticket-id`,
+          });
+          break;
+
+        case 'ticket_status':
+          result = await this.sendTicketStatusEmail({
+            to: toEmail,
+            firstName: 'Test',
+            ticketNumber: 'TKT-00001',
+            ticketTitle: 'Test Support Request',
+            oldStatus: 'open',
+            newStatus: 'in_progress',
+            viewTicketUrl: `${frontendUrl}/support/tickets/test-ticket-id`,
+          });
+          break;
+
+        case 'ticket_guest_verification':
+          result = await this.sendTicketGuestVerificationEmail({
+            to: toEmail,
+            magicLinkUrl: `${frontendUrl}/support/verify?token=test-magic-link-token`,
+            expiresInHours: 24,
+            isNewTicket: true,
+            ticketNumber: 'TKT-00001',
+          });
+          break;
+
+        case 'membership_welcome':
+          result = await this.sendMembershipWelcomeEmail({
+            to: toEmail,
+            firstName: 'Test',
+            mecaId: 10001,
+            membershipType: 'Pro Competitor',
+            membershipCategory: 'Competitor',
+            expiryDate: sampleDate,
+            benefits: sampleBenefits,
+          });
+          break;
+
+        case 'membership_renewal':
+          result = await this.sendMembershipRenewalEmail({
+            to: toEmail,
+            firstName: 'Test',
+            mecaId: 10001,
+            membershipType: 'Pro Competitor',
+            expiryDate: sampleDate,
+            benefits: sampleBenefits,
+          });
+          break;
+
+        case 'membership_expiring':
+          result = await this.sendMembershipExpiringEmail({
+            to: toEmail,
+            firstName: 'Test',
+            mecaId: 10001,
+            membershipType: 'Pro Competitor',
+            expiryDate: sampleDate,
+            daysRemaining: 7,
+            renewalUrl: `${frontendUrl}/membership/renew`,
+          });
+          break;
+
+        case 'membership_expired':
+          result = await this.sendMembershipExpiredEmail({
+            to: toEmail,
+            firstName: 'Test',
+            mecaId: 10001,
+            membershipType: 'Pro Competitor',
+            expiredDate: sampleDate,
+            renewalUrl: `${frontendUrl}/membership/renew`,
+          });
+          break;
+
+        case 'secondary_member_welcome':
+          result = await this.sendSecondaryMemberWelcomeEmail({
+            to: toEmail,
+            secondaryMemberName: 'Test Secondary',
+            mecaId: 10002,
+            membershipType: 'Team Membership',
+            masterMemberName: 'John Smith',
+            expiryDate: sampleDate,
+            benefits: sampleBenefits,
+          });
+          break;
+
+        case 'membership_cancelled':
+          result = await this.sendMembershipCancelledRefundedEmail({
+            to: toEmail,
+            firstName: 'Test',
+            mecaId: 10001,
+            membershipType: 'Pro Competitor',
+            cancellationDate: new Date(),
+            refundAmount: 99.00,
+            reason: 'Requested by member (test)',
+          });
+          break;
+
+        case 'invoice_auto_cancelled':
+          result = await this.sendInvoiceAutoCancelledEmail({
+            to: toEmail,
+            firstName: 'Test',
+            invoiceNumber: 'MECA-00001',
+            membershipCancelled: true,
+            reason: 'Auto-cancelled: unpaid for 30+ days past due date (test)',
+          });
+          break;
+
+        case 'shop_order_confirmation':
+          result = await this.sendShopOrderConfirmationEmail({
+            to: toEmail,
+            customerName: 'Test',
+            orderNumber: 'ORD-00001',
+            items: sampleShopItems,
+            subtotal: 59.97,
+            shippingAmount: 5.99,
+            taxAmount: 4.20,
+            totalAmount: 70.16,
+            shippingAddress: sampleAddress,
+            shippingMethod: 'USPS Priority Mail',
+            orderDate: sampleOrderDate,
+          });
+          break;
+
+        case 'shop_payment_receipt':
+          result = await this.sendShopPaymentReceiptEmail({
+            to: toEmail,
+            customerName: 'Test',
+            orderNumber: 'ORD-00001',
+            items: sampleShopItems,
+            subtotal: 59.97,
+            shippingAmount: 5.99,
+            taxAmount: 4.20,
+            totalAmount: 70.16,
+            paymentDate: samplePaymentDate,
+            last4: '4242',
+          });
+          break;
+
+        case 'shop_shipping_notification':
+          result = await this.sendShopShippingNotificationEmail({
+            to: toEmail,
+            customerName: 'Test',
+            orderNumber: 'ORD-00001',
+            items: sampleShopItems,
+            trackingNumber: '9400111899223456789012',
+            trackingUrl: 'https://tools.usps.com/go/TrackConfirmAction?tLabels=9400111899223456789012',
+            carrier: 'USPS',
+            shippingAddress: sampleAddress,
+            estimatedDelivery: 'January 2, 2026',
+            shippedDate: sampleShippedDate,
+          });
+          break;
+
+        case 'shop_delivery_confirmation':
+          result = await this.sendShopDeliveryConfirmationEmail({
+            to: toEmail,
+            customerName: 'Test',
+            orderNumber: 'ORD-00001',
+            items: sampleShopItems,
+            deliveryDate: sampleDeliveryDate,
+          });
+          break;
+
+        default:
+          return { success: false, message: `Unknown template key: ${templateKey}` };
+      }
+
+      if (result.success) {
+        return { success: true, message: `Test email "${templateKey}" sent successfully to ${toEmail}` };
+      } else {
+        return { success: false, message: `Failed to send "${templateKey}": ${result.error}` };
+      }
+    } catch (error: any) {
+      return { success: false, message: `Error sending "${templateKey}": ${error.message}` };
+    }
+  }
+
   private async sendViaSendGrid(dto: SendEmailDto): Promise<{ success: boolean; error?: string }> {
     // Dynamic import to avoid requiring the package if not used
     try {
@@ -1101,21 +1565,79 @@ export class EmailService {
     }
   }
 
-  private getNewUserEmailTemplate(greeting: string, email: string, password: string, forceChange: boolean): string {
-    return `
-<!DOCTYPE html>
+  // ==========================================================================
+  // Shared Email Template Helpers
+  // ==========================================================================
+
+  private get logoUrl(): string {
+    return `${process.env.FRONTEND_URL || 'https://www.mecacaraudio.com'}/meca-logo-transparent.png`;
+  }
+
+  private get supportDeskUrl(): string {
+    return `${process.env.FRONTEND_URL || 'https://www.mecacaraudio.com'}/support`;
+  }
+
+  /**
+   * Returns the standard MECA email header with logo, title, and optional subtitle
+   */
+  private getEmailHeaderHtml(title: string, subtitle?: string): string {
+    const subtitleHtml = subtitle
+      ? `<p style="color: #ffffff; margin: 10px 0 0 0; font-size: 14px;">${subtitle}</p>`
+      : '';
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to MECA</title>
+  <title>${title} - MECA</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Welcome to MECA!</h1>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f1f5f9;">
+  <!-- MECA Logo Banner -->
+  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 30px; border-radius: 10px 10px 0 0; text-align: center;">
+    <img src="${this.logoUrl}" alt="MECA - Mobile Electronics Competition Association" style="max-width: 280px; height: auto;" />
   </div>
 
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+  <!-- Title Bar -->
+  <div style="background: #c41e1e; padding: 15px 30px;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 24px;">${title}</h1>
+    ${subtitleHtml}
+  </div>
+
+  <!-- Content -->
+  <div style="background: #ffffff; padding: 30px;">`;
+  }
+
+  /**
+   * Returns the standard MECA email footer with support link, slogan banner, and copyright
+   */
+  private getEmailFooterHtml(): string {
+    return `
+    <p style="color: #64748b; font-size: 13px; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+      Need help? <a href="${this.supportDeskUrl}" style="color: #f97316; text-decoration: none; font-weight: bold;">Visit our Support Desk</a>
+    </p>
+  </div>
+
+  <!-- Fun, Fair, Loud and Clear! Banner -->
+  <div style="background: #c41e1e; padding: 20px 30px; text-align: center;">
+    <p style="color: #ffffff; margin: 0; font-size: 22px; font-weight: bold; font-style: italic;">Fun, Fair, Loud and Clear!</p>
+  </div>
+
+  <!-- Copyright Footer -->
+  <div style="text-align: center; padding: 15px 20px; color: #94a3b8; font-size: 12px; background: #1e293b; border-radius: 0 0 10px 10px;">
+    <p style="margin: 0;">MECA - Mobile Electronics Competition Association</p>
+    <p style="margin: 5px 0 0 0;">&copy; 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.</p>
+  </div>
+</body>
+</html>`;
+  }
+
+  // ==========================================================================
+  // Individual Email Templates
+  // ==========================================================================
+
+  private getNewUserEmailTemplate(greeting: string, email: string, password: string, forceChange: boolean): string {
+    return `
+${this.getEmailHeaderHtml('Welcome to MECA!')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your MECA account has been created. Here are your login details:</p>
@@ -1131,36 +1653,18 @@ export class EmailService {
     </div>
     ` : ''}
 
-    <p>You can log in at: <a href="https://meca.com/login" style="color: #f97316;">https://meca.com/login</a></p>
+    <p>You can log in at: <a href="https://mecacaraudio.com/login" style="color: #f97316;">https://mecacaraudio.com/login</a></p>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       For security reasons, please do not share your password with anyone. If you did not request this account, please contact support.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
   private getPasswordResetEmailTemplate(greeting: string, password: string, forceChange: boolean): string {
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Password Reset - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Password Reset</h1>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Password Reset')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your MECA account password has been reset by an administrator. Here is your new password:</p>
@@ -1176,18 +1680,12 @@ export class EmailService {
     </div>
     ` : ''}
 
-    <p>You can log in at: <a href="https://meca.com/login" style="color: #f97316;">https://meca.com/login</a></p>
+    <p>You can log in at: <a href="https://mecacaraudio.com/login" style="color: #f97316;">https://mecacaraudio.com/login</a></p>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       If you did not request this password reset, please contact support immediately.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1201,11 +1699,14 @@ Email: ${email}
 Password: ${password}
 
 ${forceChange ? 'IMPORTANT: You will be required to change your password when you first log in.\n' : ''}
-You can log in at: https://meca.com/login
+You can log in at: https://mecacaraudio.com/login
 
 For security reasons, please do not share your password with anyone. If you did not request this account, please contact support.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1218,11 +1719,14 @@ Your MECA account password has been reset by an administrator.
 New Password: ${password}
 
 ${forceChange ? 'IMPORTANT: You will be required to change your password when you next log in.\n' : ''}
-You can log in at: https://meca.com/login
+You can log in at: https://mecacaraudio.com/login
 
 If you did not request this password reset, please contact support immediately.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1244,19 +1748,7 @@ If you did not request this password reset, please contact support immediately.
     `).join('');
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice ${invoiceNumber} - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Invoice ${invoiceNumber}</h1>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Invoice ' + invoiceNumber)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>A new invoice has been generated for your MECA membership. Please review the details below and make payment by the due date.</p>
@@ -1290,17 +1782,7 @@ If you did not request this password reset, please contact support immediately.
     <div style="text-align: center; margin: 30px 0;">
       <a href="${paymentUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Pay Invoice Now</a>
     </div>
-
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      If you have any questions about this invoice, please contact us at billing@mecacaraudio.com.
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1330,28 +1812,16 @@ Due Date: ${dueDate}
 
 Pay your invoice here: ${paymentUrl}
 
-If you have any questions about this invoice, please contact us at billing@mecacaraudio.com.
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
   private getReferenceVerificationEmailTemplate(dto: SendReferenceVerificationEmailDto): string {
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MECA ${dto.applicationType} Application - Reference Verification</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">${dto.applicationType} Application</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Reference Verification Request</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml(dto.applicationType + ' Application', 'Reference Verification Request')}
     <p style="font-size: 16px;">Hello ${dto.referenceName},</p>
 
     <p><strong>${dto.applicantName}</strong> has applied to become a MECA ${dto.applicationType} and has listed you as a professional reference.</p>
@@ -1362,18 +1832,12 @@ If you have any questions about this invoice, please contact us at billing@mecac
       <a href="${dto.verificationUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Verify Reference</a>
     </div>
 
-    <p style="color: #64748b; font-size: 14px;">This link will expire in 14 days. If you have any questions, please contact us at support@mecacaraudio.com.</p>
+    <p style="color: #64748b; font-size: 14px;">This link will expire in 14 days.</p>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       If you did not expect this email or do not know the applicant, you can safely ignore this message.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1387,30 +1851,20 @@ We would greatly appreciate it if you could take a few minutes to verify that yo
 
 Click here to verify: ${dto.verificationUrl}
 
-This link will expire in 14 days. If you have any questions, please contact us at support@mecacaraudio.com.
+This link will expire in 14 days.
 
 If you did not expect this email or do not know the applicant, you can safely ignore this message.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
   private getEventRatingEmailTemplate(greeting: string, eventName: string, eventDate: string, ratingUrl: string): string {
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rate Your Experience - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">How Was Your Experience?</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">We'd love to hear your feedback</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('How Was Your Experience?', "We'd love to hear your feedback")}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Thank you for participating in <strong>${eventName}</strong> on ${eventDate}!</p>
@@ -1435,13 +1889,7 @@ If you did not expect this email or do not know the applicant, you can safely ig
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Your ratings can be anonymous if you prefer. All feedback is valuable and helps us maintain the highest standards at MECA events.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1457,7 +1905,10 @@ Rate Event Staff Now: ${ratingUrl}
 
 Your ratings can be anonymous if you prefer. All feedback is valuable and helps us maintain the highest standards at MECA events.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1496,20 +1947,7 @@ Your ratings can be anonymous if you prefer. All feedback is valuable and helps 
       : dto.ticketDescription;
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Support Ticket ${dto.ticketNumber} - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Support Request Received</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Ticket ${dto.ticketNumber}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Support Request Received', 'Ticket ' + dto.ticketNumber)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Thank you for contacting MECA Support. We have received your request and our team will review it shortly.</p>
@@ -1529,13 +1967,7 @@ Your ratings can be anonymous if you prefer. All feedback is valuable and helps 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       We typically respond within 24-48 hours. You will receive an email notification when our team responds to your request.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1556,7 +1988,10 @@ View your ticket: ${dto.viewTicketUrl}
 
 We typically respond within 24-48 hours. You will receive an email notification when our team responds to your request.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1566,20 +2001,7 @@ We typically respond within 24-48 hours. You will receive an email notification 
       : dto.ticketDescription;
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Support Ticket ${dto.ticketNumber} - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">New Support Ticket</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">${dto.departmentName} Department</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('New Support Ticket', dto.departmentName + ' Department')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>A new support ticket has been submitted that requires your attention.</p>
@@ -1600,13 +2022,7 @@ We typically respond within 24-48 hours. You will receive an email notification 
     <div style="text-align: center; margin: 30px 0;">
       <a href="${dto.viewTicketUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">View & Respond</a>
     </div>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1630,7 +2046,8 @@ ${dto.ticketDescription}
 
 View and respond to this ticket: ${dto.viewTicketUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1638,20 +2055,7 @@ View and respond to this ticket: ${dto.viewTicketUrl}
     const replyLabel = dto.isStaffReply ? 'MECA Support' : 'Customer';
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Support Ticket ${dto.ticketNumber} - New Reply</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">New Reply on Your Ticket</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Ticket ${dto.ticketNumber}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumber)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>There is a new reply on your support ticket <strong>"${dto.ticketTitle}"</strong>.</p>
@@ -1674,13 +2078,7 @@ View and respond to this ticket: ${dto.viewTicketUrl}
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       You can reply directly to continue the conversation.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1701,7 +2099,10 @@ View the full conversation: ${dto.viewTicketUrl}
 
 You can reply directly to continue the conversation.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1710,20 +2111,7 @@ You can reply directly to continue the conversation.
     const statusColor = dto.newStatus === 'resolved' || dto.newStatus === 'closed' ? '#22c55e' : '#3b82f6';
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Support Ticket ${dto.ticketNumber} - Status Update</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Ticket Status Update</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Ticket ${dto.ticketNumber}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Ticket Status Update', `Ticket ${dto.ticketNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>The status of your support ticket has been updated.</p>
@@ -1747,13 +2135,7 @@ You can reply directly to continue the conversation.
       <p style="margin: 0; color: #166534;">If you need further assistance or the issue persists, you can reopen this ticket by replying.</p>
     </div>
     ` : ''}
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1773,7 +2155,10 @@ ${statusMessage}
 View your ticket: ${dto.viewTicketUrl}
 
 ${dto.newStatus === 'resolved' ? 'If you need further assistance or the issue persists, you can reopen this ticket by replying.\n' : ''}
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1795,20 +2180,7 @@ ${dto.newStatus === 'resolved' ? 'If you need further assistance or the issue pe
       : `Click the button below to access your support ticket ${dto.ticketNumber}.`;
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - MECA Support</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">${title}</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">MECA Support System</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml(title, 'MECA Support System')}
     <p style="font-size: 16px;">Hello,</p>
 
     <p>${description}</p>
@@ -1824,13 +2196,7 @@ ${dto.newStatus === 'resolved' ? 'If you need further assistance or the issue pe
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       If you did not request this email, you can safely ignore it. For security reasons, do not share this link with anyone.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1850,7 +2216,10 @@ IMPORTANT: This link will expire in ${dto.expiresInHours} hour${dto.expiresInHou
 
 If you did not request this email, you can safely ignore it. For security reasons, do not share this link with anyone.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1873,20 +2242,7 @@ If you did not request this email, you can safely ignore it. For security reason
     `).join('');
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registration Confirmed - ${dto.eventName}</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Registration Confirmed!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">You're all set for ${dto.eventName}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Registration Confirmed!', `You're all set for ${dto.eventName}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your registration for <strong>${dto.eventName}</strong> has been confirmed. We look forward to seeing you there!</p>
@@ -1906,7 +2262,7 @@ If you did not request this email, you can safely ignore it. For security reason
         <thead>
           <tr style="background: #f1f5f9;">
             <th style="padding: 8px 12px; text-align: left; border-bottom: 2px solid #e2e8f0;">Format</th>
-            <th style="padding: 8px 12px; text-align: left; border-bottom: 2px solid #e2e8f0;">Class</th>
+            <th style="padding: 8px 12px; text-align: left; border-bottom: 2px solid #e2e8f0;">Competition Class</th>
             <th style="padding: 8px 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Fee</th>
           </tr>
         </thead>
@@ -1931,19 +2287,10 @@ If you did not request this email, you can safely ignore it. For security reason
     ` : ''}
 
     <div style="background: #dbeafe; border: 1px solid #3b82f6; border-radius: 8px; padding: 15px; margin: 20px 0;">
-      <p style="margin: 0; color: #1e40af;"><strong>Important:</strong> Please bring a valid ID and arrive at least 30 minutes before your scheduled class time.</p>
+      <p style="margin: 0; color: #1e40af;"><strong>Important:</strong> Please bring your MECA Membership card or log in to your <strong>MY MECA</strong> account and have your QR code ready for the event team to scan at check-in. Arrive at least 30 minutes early.</p>
     </div>
 
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      If you have any questions or need to modify your registration, please contact us at events@mecacaraudio.com.
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -1975,11 +2322,12 @@ ${classesText}
 
 Total Paid: $${dto.amountPaid.toFixed(2)}
 
-IMPORTANT: Please bring a valid ID and arrive at least 30 minutes before your scheduled class time.
+IMPORTANT: Please bring your MECA Membership card or log in to your MY MECA account and have your QR code ready for the event team to scan at check-in. Arrive at least 30 minutes early.
 
-If you have any questions or need to modify your registration, please contact us at events@mecacaraudio.com.
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -1989,20 +2337,7 @@ If you have any questions or need to modify your registration, please contact us
     eventDateStr: string,
   ): string {
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registration Cancelled - ${dto.eventName}</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Registration Cancelled</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">${dto.eventName}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Registration Cancelled', dto.eventName)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your registration for <strong>${dto.eventName}</strong> scheduled for ${eventDateStr} has been cancelled.</p>
@@ -2022,16 +2357,7 @@ If you have any questions or need to modify your registration, please contact us
 
     <p>We're sorry you won't be joining us at this event. We hope to see you at a future MECA competition!</p>
 
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      If you did not request this cancellation or have any questions, please contact us at events@mecacaraudio.com.
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2058,9 +2384,10 @@ Your refund will be processed within 5-10 business days.
 ` : ''}
 We're sorry you won't be joining us at this event. We hope to see you at a future MECA competition!
 
-If you did not request this cancellation or have any questions, please contact us at events@mecacaraudio.com.
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -2075,20 +2402,7 @@ If you did not request this cancellation or have any questions, please contact u
     `).join('');
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Event Reminder - ${dto.eventName}</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">See You Tomorrow!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">${dto.eventName} is coming up</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('See You Tomorrow!', `${dto.eventName} is coming up`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>This is a friendly reminder that <strong>${dto.eventName}</strong> is tomorrow! Here's everything you need to know:</p>
@@ -2103,7 +2417,7 @@ If you did not request this cancellation or have any questions, please contact u
     </div>
 
     <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <h3 style="margin: 0 0 10px 0; color: #1e293b;">Your Classes</h3>
+      <h3 style="margin: 0 0 10px 0; color: #1e293b;">Your Competition Classes</h3>
       <ul style="margin: 0; padding-left: 20px;">
         ${classesHtml}
       </ul>
@@ -2120,25 +2434,16 @@ If you did not request this cancellation or have any questions, please contact u
     <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
       <p style="margin: 0; color: #92400e;"><strong>Checklist for Tomorrow:</strong></p>
       <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400e;">
-        <li>Bring a valid ID</li>
+        <li>Bring your MECA Membership card or log in to MY MECA</li>
+        <li>Have your QR code ready for the event team to scan</li>
         <li>Arrive 30 minutes early</li>
-        <li>Have your check-in code or QR ready</li>
         <li>Ensure your vehicle is ready for competition</li>
       </ul>
     </div>
 
     <p>Good luck, and we'll see you at the competition!</p>
 
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      If you have any last-minute questions, contact us at events@mecacaraudio.com.
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2163,22 +2468,128 @@ Address: ${dto.venueAddress}${venueLocation ? `, ${venueLocation}` : ''}
 
 Your Check-In Code: ${dto.checkInCode}
 
-YOUR CLASSES
--------------
+YOUR COMPETITION CLASSES
+------------------------
 ${classesText}
 
 CHECKLIST FOR TOMORROW
 ----------------------
-- Bring a valid ID
+- Bring your MECA Membership card or log in to MY MECA
+- Have your QR code ready for the event team to scan
 - Arrive 30 minutes early
-- Have your check-in code ready
 - Ensure your vehicle is ready for competition
 
 Good luck, and we'll see you at the competition!
 
-If you have any last-minute questions, contact us at events@mecacaraudio.com.
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+  }
+
+  // =========================================================================
+  // Event Interest Reminder Templates
+  // =========================================================================
+
+  private getEventInterestReminderTemplate(
+    greeting: string,
+    dto: SendEventInterestReminderEmailDto,
+    eventDateStr: string,
+  ): string {
+    const venueLocation = [dto.venueCity, dto.venueState].filter(Boolean).join(', ');
+    const frontendUrl = process.env.FRONTEND_URL || 'https://www.mecacaraudio.com';
+    const registerUrl = `${frontendUrl}/events/${dto.eventId}/register`;
+
+    return `
+${this.getEmailHeaderHtml('Still Interested?', `${dto.eventName} is tomorrow!`)}
+    <p style="font-size: 16px;">${greeting},</p>
+
+    <p>You expressed interest in <strong>${dto.eventName}</strong>, and it's happening <strong>tomorrow</strong>! There's still time to register and secure your spot.</p>
+
+    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <h3 style="margin: 0 0 15px 0; color: #1e293b;">Event Details</h3>
+      <p style="margin: 5px 0;"><strong>Date:</strong> ${eventDateStr}</p>
+      <p style="margin: 5px 0;"><strong>Venue:</strong> ${dto.venueName}</p>
+      <p style="margin: 5px 0;"><strong>Address:</strong> ${dto.venueAddress}${venueLocation ? `, ${venueLocation}` : ''}</p>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${registerUrl}" style="display: inline-block; background: #ea580c; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Register Now</a>
+    </div>
+
+    <p style="color: #64748b; font-size: 14px;">Don't miss out — spots may be limited. We'd love to see you there!</p>
+
+${this.getEmailFooterHtml()}
+    `.trim();
+  }
+
+  private getEventInterestReminderText(
+    greeting: string,
+    dto: SendEventInterestReminderEmailDto,
+    eventDateStr: string,
+  ): string {
+    const venueLocation = [dto.venueCity, dto.venueState].filter(Boolean).join(', ');
+    const frontendUrl = process.env.FRONTEND_URL || 'https://www.mecacaraudio.com';
+    const registerUrl = `${frontendUrl}/events/${dto.eventId}/register`;
+
+    return `
+${greeting},
+
+You expressed interest in ${dto.eventName}, and it's happening TOMORROW! There's still time to register and secure your spot.
+
+EVENT DETAILS
+--------------
+Date: ${eventDateStr}
+Venue: ${dto.venueName}
+Address: ${dto.venueAddress}${venueLocation ? `, ${venueLocation}` : ''}
+
+Register now: ${registerUrl}
+
+Don't miss out — spots may be limited. We'd love to see you there!
+
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+  }
+
+  // =========================================================================
+  // Guest Interest Verification Email Templates
+  // =========================================================================
+
+  private getGuestInterestVerificationEmailTemplate(greeting: string, eventName: string, verificationUrl: string): string {
+    return `
+${this.getEmailHeaderHtml('Confirm Your Interest', eventName)}
+    <p style="font-size: 16px;">${greeting},</p>
+
+    <p>Thanks for your interest in <strong>${eventName}</strong>! To keep our event lists accurate, please click the button below to confirm.</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${verificationUrl}" style="display: inline-block; background: #ea580c; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Confirm Interest</a>
+    </div>
+
+    <p style="color: #64748b; font-size: 14px;">This link will expire in 24 hours. If you didn't request this, you can safely ignore this email.</p>
+
+${this.getEmailFooterHtml()}
+    `.trim();
+  }
+
+  private getGuestInterestVerificationEmailText(greeting: string, eventName: string, verificationUrl: string): string {
+    return `
+${greeting},
+
+Thanks for your interest in ${eventName}! To keep our event lists accurate, please confirm by visiting the link below:
+
+${verificationUrl}
+
+This link will expire in 24 hours. If you didn't request this, you can safely ignore this email.
+
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -2218,20 +2629,7 @@ If you have any last-minute questions, contact us at events@mecacaraudio.com.
         : '';
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Welcome to MECA!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Your ${dto.membershipType} Membership is Active</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Welcome to MECA!', `Your ${dto.membershipType} Membership is Active`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Congratulations! Your MECA ${dto.membershipType} membership has been successfully activated. Welcome to the Mobile Electronics Competition Association family!</p>
@@ -2252,19 +2650,13 @@ If you have any last-minute questions, contact us at events@mecacaraudio.com.
     </div>
 
     <div style="text-align: center; margin: 30px 0;">
-      <a href="https://meca.com/dashboard" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Go to Your Dashboard</a>
+      <a href="https://mecacaraudio.com/dashboard" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Go to Your Dashboard</a>
     </div>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      Keep your MECA ID handy - you'll need it when registering for events and competitions. If you have any questions, contact us at support@mecacaraudio.com.
+      Keep your MECA ID handy - you'll need it when registering for events and competitions.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2291,30 +2683,20 @@ YOUR MEMBER BENEFITS
 --------------------
 ${this.getMembershipBenefitsText(dto.benefits)}
 
-Go to your dashboard: https://meca.com/dashboard
+Go to your dashboard: https://mecacaraudio.com/dashboard
 
-Keep your MECA ID handy - you'll need it when registering for events and competitions. If you have any questions, contact us at support@mecacaraudio.com.
+Keep your MECA ID handy - you'll need it when registering for events and competitions.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
   private getMembershipRenewalEmailTemplate(greeting: string, dto: SendMembershipRenewalEmailDto, expiryDateStr: string): string {
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Membership Renewed - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Membership Renewed!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Thank you for your continued support</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Membership Renewed!', 'Thank you for your continued support')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Great news! Your MECA membership has been successfully renewed. We're thrilled to have you continue as part of the MECA community!</p>
@@ -2334,19 +2716,13 @@ Keep your MECA ID handy - you'll need it when registering for events and competi
     </div>
 
     <div style="text-align: center; margin: 30px 0;">
-      <a href="https://meca.com/events" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Find Upcoming Events</a>
+      <a href="https://mecacaraudio.com/events" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Find Upcoming Events</a>
     </div>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Thank you for being a valued member of MECA. We look forward to seeing you at upcoming events!
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2366,11 +2742,14 @@ YOUR MEMBER BENEFITS CONTINUE
 -----------------------------
 ${this.getMembershipBenefitsText(dto.benefits)}
 
-Find upcoming events: https://meca.com/events
+Find upcoming events: https://mecacaraudio.com/events
 
 Thank you for being a valued member of MECA. We look forward to seeing you at upcoming events!
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -2383,20 +2762,7 @@ Thank you for being a valued member of MECA. We look forward to seeing you at up
     const warningTextColor = isUrgent ? '#991b1b' : '#92400e';
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Membership Expiring - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: ${headerColor}; margin: 0; font-size: 28px;">${headerText}</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Don't lose your membership benefits</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml(headerText, "Don't lose your membership benefits")}
     <p style="font-size: 16px;">${greeting},</p>
 
     <div style="background: ${warningBgColor}; border: 2px solid ${warningBorderColor}; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -2425,16 +2791,7 @@ Thank you for being a valued member of MECA. We look forward to seeing you at up
       <a href="${dto.renewalUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Renew Membership Now</a>
     </div>
 
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      Questions? Contact us at support@mecacaraudio.com
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2459,28 +2816,16 @@ Renew now to maintain uninterrupted access to:
 
 Renew your membership here: ${dto.renewalUrl}
 
-Questions? Contact us at support@mecacaraudio.com
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
   private getMembershipExpiredEmailTemplate(greeting: string, dto: SendMembershipExpiredEmailDto, expiredDateStr: string): string {
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Membership Expired - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #dc2626; margin: 0; font-size: 28px;">Your Membership Has Expired</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">We miss you at MECA!</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Your Membership Has Expired', 'We miss you at MECA!')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -2509,17 +2854,7 @@ Questions? Contact us at support@mecacaraudio.com
     <div style="text-align: center; margin: 30px 0;">
       <a href="${dto.renewalUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Renew Membership Now</a>
     </div>
-
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      We'd love to have you back! If you have any questions about renewing, contact us at support@mecacaraudio.com
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2544,28 +2879,18 @@ GOOD NEWS: If you renew within 90 days, you can keep your same MECA ID number!
 
 Renew your membership here: ${dto.renewalUrl}
 
-We'd love to have you back! If you have any questions about renewing, contact us at support@mecacaraudio.com
+We'd love to have you back!
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
   private getSecondaryMemberWelcomeEmailTemplate(dto: SendSecondaryMemberWelcomeEmailDto, expiryDateStr: string): string {
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to MECA - Secondary Member</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Welcome to MECA!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">You've been added as a secondary member</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Welcome to MECA!', "You've been added as a secondary member")}
     <p style="font-size: 16px;">Hello ${dto.secondaryMemberName},</p>
 
     <p><strong>${dto.masterMemberName}</strong> has added you as a secondary member to their MECA account. You now have your own MECA membership and can compete at MECA events!</p>
@@ -2592,19 +2917,9 @@ We'd love to have you back! If you have any questions about renewing, contact us
     </div>
 
     <div style="text-align: center; margin: 30px 0;">
-      <a href="https://meca.com/events" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Find Upcoming Events</a>
+      <a href="https://mecacaraudio.com/events" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Find Upcoming Events</a>
     </div>
-
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      Questions? Contact us at support@mecacaraudio.com
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2627,11 +2942,12 @@ ${this.getMembershipBenefitsText(dto.benefits)}
 
 NOTE: As a secondary member, your membership is managed by ${dto.masterMemberName}. Contact them for any account changes or renewals.
 
-Find upcoming events: https://meca.com/events
+Find upcoming events: https://mecacaraudio.com/events
 
-Questions? Contact us at support@mecacaraudio.com
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -2654,20 +2970,7 @@ Questions? Contact us at support@mecacaraudio.com
       : '';
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Membership Cancelled - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Membership Cancelled</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Your MECA membership has been cancelled</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Membership Cancelled', 'Your MECA membership has been cancelled')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>We're writing to confirm that your MECA membership has been cancelled as requested.</p>
@@ -2696,19 +2999,9 @@ Questions? Contact us at support@mecacaraudio.com
     <p>If you change your mind, you can rejoin MECA at any time by visiting our website.</p>
 
     <div style="text-align: center; margin: 30px 0;">
-      <a href="https://meca.com/memberships" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Rejoin MECA</a>
+      <a href="https://mecacaraudio.com/memberships" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Rejoin MECA</a>
     </div>
-
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      If you have any questions, contact us at support@mecacaraudio.com
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2744,11 +3037,85 @@ IMPORTANT: Your membership is now inactive. You will no longer be able to:
 - Access member-only benefits
 - Maintain your competition standings
 
-If you change your mind, you can rejoin MECA at any time by visiting: https://meca.com/memberships
+If you change your mind, you can rejoin MECA at any time by visiting: https://mecacaraudio.com/memberships
 
-If you have any questions, contact us at support@mecacaraudio.com
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+  }
+
+  // ==========================================================================
+  // Invoice Auto-Cancel Email Templates
+  // ==========================================================================
+
+  private getInvoiceAutoCancelledEmailTemplate(
+    greeting: string,
+    dto: SendInvoiceAutoCancelledEmailDto
+  ): string {
+    const membershipSection = dto.membershipCancelled
+      ? `
+      <div style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <h3 style="margin: 0 0 10px 0; color: #991b1b;">Membership Also Cancelled</h3>
+        <p style="margin: 0; color: #991b1b; font-size: 14px;">
+          The membership associated with this invoice has also been cancelled due to non-payment.
+          You will no longer be able to register for MECA events or access member-only benefits.
+        </p>
+      </div>`
+      : '';
+
+    return `
+${this.getEmailHeaderHtml('Invoice Cancelled', 'Your invoice has been automatically cancelled due to non-payment')}
+    <p style="font-size: 16px;">${greeting},</p>
+
+    <p>We're writing to inform you that your invoice has been automatically cancelled because payment was not received within the required timeframe.</p>
+
+    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <h3 style="margin: 0 0 15px 0; color: #1e293b;">Cancellation Details</h3>
+      <p style="margin: 5px 0;"><strong>Invoice:</strong> ${dto.invoiceNumber}</p>
+      <p style="margin: 5px 0;"><strong>Reason:</strong> ${dto.reason}</p>
+    </div>
+
+    ${membershipSection}
+
+    <p>If you believe this was a mistake or would like to reinstate your membership, please contact us.</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="mailto:support@mecacaraudio.com" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Contact Support</a>
+    </div>
+${this.getEmailFooterHtml()}
+    `.trim();
+  }
+
+  private getInvoiceAutoCancelledEmailText(
+    greeting: string,
+    dto: SendInvoiceAutoCancelledEmailDto
+  ): string {
+    const membershipSection = dto.membershipCancelled
+      ? `
+MEMBERSHIP ALSO CANCELLED
+--------------------------
+The membership associated with this invoice has also been cancelled due to non-payment.
+You will no longer be able to register for MECA events or access member-only benefits.
+`
+      : '';
+
+    return `
+${greeting},
+
+We're writing to inform you that your invoice has been automatically cancelled because payment was not received within the required timeframe.
+
+CANCELLATION DETAILS
+--------------------
+Invoice: ${dto.invoiceNumber}
+Reason: ${dto.reason}
+
+${membershipSection}
+If you believe this was a mistake or would like to reinstate your membership, visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -2807,20 +3174,7 @@ If you have any questions, contact us at support@mecacaraudio.com
     });
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Order Confirmation - MECA Shop</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Order Confirmed!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Order #${dto.orderNumber}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Order Confirmed!', `Order #${dto.orderNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Thank you for your order from the MECA Shop! We've received your order and are getting it ready.</p>
@@ -2878,15 +3232,9 @@ If you have any questions, contact us at support@mecacaraudio.com
     ` : ''}
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      We'll send you another email when your order ships with tracking information. If you have any questions, please contact us at shop@mecacaraudio.com.
+      We'll send you another email when your order ships with tracking information.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -2923,9 +3271,12 @@ SHIPPING ADDRESS
 ${dto.shippingAddress.name ? dto.shippingAddress.name + '\n' : ''}${this.formatShopAddressText(dto.shippingAddress)}
 ` : ''}
 
-We'll send you another email when your order ships with tracking information. If you have any questions, please contact us at shop@mecacaraudio.com.
+We'll send you another email when your order ships with tracking information.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -2937,20 +3288,7 @@ We'll send you another email when your order ships with tracking information. If
     });
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Receipt - MECA Shop</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #22c55e; margin: 0; font-size: 28px;">Payment Received!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Order #${dto.orderNumber}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Payment Received!', `Order #${dto.orderNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>We've received your payment. Thank you for shopping with MECA!</p>
@@ -3000,13 +3338,7 @@ We'll send you another email when your order ships with tracking information. If
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       This email serves as your payment receipt. Your order is now being processed and we'll notify you when it ships.
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -3040,7 +3372,10 @@ Total Paid: ${this.formatCurrency(dto.totalAmount)}
 
 This email serves as your payment receipt. Your order is now being processed and we'll notify you when it ships.
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -3052,20 +3387,7 @@ This email serves as your payment receipt. Your order is now being processed and
     });
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Order Has Shipped - MECA Shop</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Your Order Has Shipped!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Order #${dto.orderNumber}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Your Order Has Shipped!', `Order #${dto.orderNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Great news! Your order is on its way. Here are the shipping details:</p>
@@ -3108,16 +3430,7 @@ This email serves as your payment receipt. Your order is now being processed and
       `).join('')}
     </div>
 
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      If you have any questions about your shipment, please contact us at shop@mecacaraudio.com.
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -3152,9 +3465,10 @@ ITEMS SHIPPED
 -------------
 ${this.getShopOrderItemsText(dto.items)}
 
-If you have any questions about your shipment, please contact us at shop@mecacaraudio.com.
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 
@@ -3166,20 +3480,7 @@ If you have any questions about your shipment, please contact us at shop@mecacar
     });
 
     return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Order Delivered - MECA Shop</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #22c55e; margin: 0; font-size: 28px;">Order Delivered!</h1>
-    <p style="color: #94a3b8; margin: 10px 0 0 0;">Order #${dto.orderNumber}</p>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+${this.getEmailHeaderHtml('Order Delivered!', `Order #${dto.orderNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your order has been delivered! We hope you enjoy your MECA merchandise.</p>
@@ -3199,15 +3500,9 @@ If you have any questions about your shipment, please contact us at shop@mecacar
     </div>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      Thank you for shopping with MECA! If you have any issues with your order or would like to provide feedback, please contact us at shop@mecacaraudio.com.
+      Thank you for shopping with MECA!
     </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
+${this.getEmailFooterHtml()}
     `.trim();
   }
 
@@ -3232,9 +3527,12 @@ ITEMS DELIVERED
 ---------------
 ${this.getShopOrderItemsText(dto.items)}
 
-Thank you for shopping with MECA! If you have any issues with your order or would like to provide feedback, please contact us at shop@mecacaraudio.com.
+Thank you for shopping with MECA!
 
-© ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
 }

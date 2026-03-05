@@ -167,6 +167,34 @@ export const eventsApi = {
     }
   },
 
+  // --- Geocode Backfill ---
+
+  getBackfillGeocodeCount: async (startDate?: string, endDate?: string): Promise<{ count: number }> => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const response = await axios.get(`/api/events/admin/backfill-geocode/count?${params.toString()}`);
+    return response.data;
+  },
+
+  startBackfillGeocode: async (startDate?: string, endDate?: string): Promise<{ jobId: string; total: number }> => {
+    const response = await axios.post(`/api/events/admin/backfill-geocode`, { startDate, endDate });
+    return response.data;
+  },
+
+  getBackfillProgress: async (jobId: string): Promise<{
+    total: number;
+    completed: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    done: boolean;
+    currentEvent?: string;
+  }> => {
+    const response = await axios.get(`/api/events/admin/backfill-geocode/${jobId}`);
+    return response.data;
+  },
+
   /**
    * Upload an event flyer image through the backend
    * Returns the public URL of the uploaded image

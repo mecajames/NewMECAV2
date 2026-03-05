@@ -41,6 +41,8 @@ export default defineConfig({
           'data-vendor': ['axios'],
           // UI icons
           'icons-vendor': ['lucide-react'],
+          // Google Maps (loaded on event detail pages)
+          'maps-vendor': ['@react-google-maps/api'],
         },
       },
     },

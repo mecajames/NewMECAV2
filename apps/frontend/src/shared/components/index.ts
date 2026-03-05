@@ -5,3 +5,5 @@ export { default as ImpersonationBanner } from './ImpersonationBanner';
 export { MecaIdSwitcher } from './MecaIdSwitcher';
 export { default as Pagination } from './Pagination';
 export { StagingNoIndex } from './StagingNoIndex';
+export { default as SocialShareButtons } from './SocialShareButtons';
+export { GoogleMapsProvider, EventLocationMap } from '../maps';

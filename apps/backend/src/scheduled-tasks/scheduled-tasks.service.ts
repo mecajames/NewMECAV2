@@ -1,11 +1,16 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, wrap } from '@mikro-orm/core';
 import { EmailService } from '../email/email.service';
+import { InvoicesService } from '../invoices/invoices.service';
+import { MembershipsService } from '../memberships/memberships.service';
+import { SiteSettingsService } from '../site-settings/site-settings.service';
 import { Membership } from '../memberships/memberships.entity';
+import { Invoice } from '../invoices/invoices.entity';
+import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { Event } from '../events/events.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
-import { PaymentStatus, RegistrationStatus, EventStatus } from '@newmeca/shared';
+import { PaymentStatus, RegistrationStatus, EventStatus, InvoiceStatus, InvoiceItemType } from '@newmeca/shared';
 
 @Injectable()
 export class ScheduledTasksService {
@@ -15,6 +20,9 @@ export class ScheduledTasksService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
+    private readonly invoicesService: InvoicesService,
+    private readonly membershipsService: MembershipsService,
+    private readonly siteSettingsService: SiteSettingsService,
   ) {}
 
   // =============================================================================
@@ -235,6 +243,52 @@ export class ScheduledTasksService {
         this.logger.error(`Failed to send event reminder to ${email}:`, error);
       }
     }
+
+    // Send lighter nudge reminders to interested (not yet registered) users
+    const interestedRegistrations = await em.find(
+      EventRegistration,
+      {
+        event: { id: event.id },
+        registrationStatus: RegistrationStatus.INTERESTED,
+      },
+      {
+        populate: ['user'],
+      }
+    );
+
+    this.logger.log(`Sending interest nudge reminders for event "${event.title}" to ${interestedRegistrations.length} interested users`);
+
+    let sentInterest = 0;
+    let failedInterest = 0;
+
+    for (const registration of interestedRegistrations) {
+      const email = registration.email || registration.user?.email;
+      if (!email) {
+        this.logger.warn(`Skipping interested registration ${registration.id} - no email address`);
+        continue;
+      }
+
+      try {
+        await this.emailService.sendEventInterestReminderEmail({
+          to: email,
+          firstName: registration.firstName || registration.user?.first_name || undefined,
+          eventName: event.title,
+          eventDate: event.eventDate,
+          venueName: event.venueName,
+          venueAddress: event.venueAddress,
+          venueCity: event.venueCity || undefined,
+          venueState: event.venueState || undefined,
+          eventId: event.id,
+        });
+        sentInterest++;
+        this.logger.log(`Sent interest nudge reminder to ${email}`);
+      } catch (error) {
+        failedInterest++;
+        this.logger.error(`Failed to send interest nudge reminder to ${email}:`, error);
+      }
+    }
+
+    this.logger.log(`Interest nudge reminders for event "${event.title}": ${sentInterest} sent, ${failedInterest} failed`);
   }
 
   // =============================================================================
@@ -289,6 +343,146 @@ export class ScheduledTasksService {
   }
 
   // =============================================================================
+  // MARK OVERDUE INVOICES
+  // Runs every hour to transition SENT invoices past due date to OVERDUE
+  // =============================================================================
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleMarkOverdueInvoices() {
+    this.logger.log('Running mark overdue invoices job...');
+
+    try {
+      const count = await this.invoicesService.markOverdueInvoices();
+      this.logger.log(`Mark overdue invoices job completed. Marked ${count} invoices as overdue.`);
+    } catch (error) {
+      this.logger.error('Error running mark overdue invoices job:', error);
+    }
+  }
+
+  // =============================================================================
+  // AUTO-CANCEL EXPIRED INVOICES
+  // Runs daily at 8:00 AM to cancel overdue invoices past the configured threshold
+  // =============================================================================
+
+  @Cron(CronExpression.EVERY_DAY_AT_8AM)
+  async handleAutoCancel() {
+    this.logger.log('Running invoice auto-cancel job...');
+
+    try {
+      const result = await this.runAutoCancel();
+      this.logger.log(`Invoice auto-cancel job completed. ${result.message}`);
+    } catch (error) {
+      this.logger.error('Error running invoice auto-cancel job:', error);
+    }
+  }
+
+  private async runAutoCancel(): Promise<{ success: boolean; message: string; cancelled: number }> {
+    // Read setting
+    const setting = await this.siteSettingsService.findByKey('invoice_auto_cancel_days');
+    const autoCancelDays = setting ? parseInt(setting.setting_value, 10) : 0;
+
+    if (!autoCancelDays || autoCancelDays <= 0) {
+      return { success: true, message: 'Auto-cancel disabled (setting is 0 or not set)', cancelled: 0 };
+    }
+
+    const em = this.em.fork();
+    const now = new Date();
+    const cutoffDate = new Date(now);
+    cutoffDate.setDate(cutoffDate.getDate() - autoCancelDays);
+
+    // Find all OVERDUE invoices where dueDate + autoCancelDays < now
+    const overdueInvoices = await em.find(
+      Invoice,
+      {
+        status: InvoiceStatus.OVERDUE,
+        dueDate: { $lt: cutoffDate },
+      },
+      {
+        populate: ['user', 'masterMembership', 'items'],
+      }
+    );
+
+    this.logger.log(`Found ${overdueInvoices.length} overdue invoices past ${autoCancelDays}-day threshold`);
+
+    let cancelledCount = 0;
+
+    for (const invoice of overdueInvoices) {
+      try {
+        const reason = `Auto-cancelled: unpaid for ${autoCancelDays}+ days past due date`;
+
+        // Cancel the invoice
+        await this.invoicesService.cancel(invoice.id, reason);
+        cancelledCount++;
+
+        // Find associated membership
+        let membershipId: string | undefined;
+        let membershipCancelled = false;
+
+        // Check masterMembership relation first
+        if (invoice.masterMembership) {
+          membershipId = invoice.masterMembership.id;
+        } else {
+          // Look for invoice items with itemType = MEMBERSHIP
+          const items = invoice.items.getItems();
+          const membershipItem = items.find(
+            (item: InvoiceItem) => item.itemType === InvoiceItemType.MEMBERSHIP && item.referenceId
+          );
+          if (membershipItem) {
+            membershipId = membershipItem.referenceId;
+          }
+        }
+
+        // Cancel associated membership if found and still active
+        if (membershipId) {
+          try {
+            const membershipReason = `Auto-cancelled: associated invoice ${invoice.invoiceNumber} unpaid for ${autoCancelDays}+ days`;
+            await this.membershipsService.cancelMembershipImmediately(
+              membershipId,
+              membershipReason,
+              'system', // adminId for auto-cancel
+            );
+            membershipCancelled = true;
+            this.logger.log(`Cancelled membership ${membershipId} associated with invoice ${invoice.invoiceNumber}`);
+          } catch (membershipError: any) {
+            // Membership may already be cancelled or not in PAID status - that's OK
+            this.logger.warn(
+              `Could not cancel membership ${membershipId} for invoice ${invoice.invoiceNumber}: ${membershipError.message}`
+            );
+          }
+        }
+
+        // Send notification email
+        if (invoice.user?.email) {
+          try {
+            await this.emailService.sendInvoiceAutoCancelledEmail({
+              to: invoice.user.email,
+              firstName: invoice.user.first_name || undefined,
+              invoiceNumber: invoice.invoiceNumber,
+              membershipCancelled,
+              reason,
+            });
+            this.logger.log(`Sent auto-cancel notification to ${invoice.user.email} for invoice ${invoice.invoiceNumber}`);
+          } catch (emailError) {
+            this.logger.error(`Failed to send auto-cancel email for invoice ${invoice.invoiceNumber}:`, emailError);
+          }
+        }
+
+        this.logger.log(
+          `Auto-cancelled invoice ${invoice.invoiceNumber}${membershipCancelled ? ' + membership' : ''}`
+        );
+      } catch (error) {
+        this.logger.error(`Failed to auto-cancel invoice ${invoice.invoiceNumber}:`, error);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Cancelled ${cancelledCount} of ${overdueInvoices.length} overdue invoices`,
+      cancelled: cancelledCount,
+    };
+  }
+
+  // =============================================================================
   // MANUAL TRIGGER METHODS (for testing or admin use)
   // =============================================================================
 
@@ -339,6 +533,13 @@ export class ScheduledTasksService {
   }
 
   /**
+   * Send a specific branded email template with sample data (for testing)
+   */
+  async sendTestTemplateEmail(templateKey: string, toEmail: string): Promise<{ success: boolean; message: string }> {
+    return this.emailService.sendTestTemplateEmail(templateKey, toEmail);
+  }
+
+  /**
    * Manually trigger event reminder emails (for testing)
    */
   async triggerEventReminderEmails(): Promise<{ success: boolean; message: string }> {
@@ -347,6 +548,29 @@ export class ScheduledTasksService {
       return { success: true, message: 'Event reminder emails sent successfully' };
     } catch (error) {
       return { success: false, message: `Error: ${error}` };
+    }
+  }
+
+  /**
+   * Manually trigger marking overdue invoices
+   */
+  async triggerMarkOverdue(): Promise<{ success: boolean; message: string }> {
+    try {
+      const count = await this.invoicesService.markOverdueInvoices();
+      return { success: true, message: `Marked ${count} invoices as overdue` };
+    } catch (error) {
+      return { success: false, message: `Error: ${error}` };
+    }
+  }
+
+  /**
+   * Manually trigger invoice auto-cancellation
+   */
+  async triggerInvoiceAutoCancel(): Promise<{ success: boolean; message: string; cancelled: number }> {
+    try {
+      return await this.runAutoCancel();
+    } catch (error) {
+      return { success: false, message: `Error: ${error}`, cancelled: 0 };
     }
   }
 

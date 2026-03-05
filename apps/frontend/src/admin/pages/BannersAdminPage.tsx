@@ -16,7 +16,7 @@ interface FormData {
   name: string;
   imageUrl: string;
   clickUrl: string;
-  position: BannerPosition;
+  positions: BannerPosition[];
   status: BannerStatus;
   startDate: string;
   endDate: string;
@@ -34,7 +34,7 @@ const initialFormData: FormData = {
   name: '',
   imageUrl: '',
   clickUrl: '',
-  position: BannerPosition.EVENTS_PAGE_TOP,
+  positions: [],
   status: BannerStatus.DRAFT,
   startDate: new Date().toISOString().split('T')[0],
   endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -168,7 +168,7 @@ export default function BannersAdminPage() {
       name: banner.name,
       imageUrl: banner.imageUrl,
       clickUrl: banner.clickUrl || '',
-      position: banner.position,
+      positions: banner.positions || [],
       status: banner.status,
       startDate: new Date(banner.startDate).toISOString().split('T')[0],
       endDate: new Date(banner.endDate).toISOString().split('T')[0],
@@ -283,6 +283,11 @@ export default function BannersAdminPage() {
       return;
     }
 
+    if (formData.positions.length === 0) {
+      setError('Please select at least one position.');
+      return;
+    }
+
     // Final dimension check before submit
     if (formData.imageUrl && formData.size) {
       const valid = await validateImageDimensions(formData.imageUrl, formData.size);
@@ -298,7 +303,7 @@ export default function BannersAdminPage() {
           name: formData.name,
           imageUrl: formData.imageUrl,
           clickUrl: formData.clickUrl || undefined,
-          position: formData.position,
+          positions: formData.positions,
           status: formData.status,
           startDate: new Date(formData.startDate),
           endDate: new Date(formData.endDate),
@@ -316,7 +321,7 @@ export default function BannersAdminPage() {
           name: formData.name,
           imageUrl: formData.imageUrl,
           clickUrl: formData.clickUrl || undefined,
-          position: formData.position,
+          positions: formData.positions,
           status: formData.status,
           startDate: new Date(formData.startDate),
           endDate: new Date(formData.endDate),
@@ -464,6 +469,7 @@ export default function BannersAdminPage() {
                 <tr className="border-b border-slate-700">
                   <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Banner</th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Advertiser</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Positions</th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Size</th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Dates</th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Status</th>
@@ -473,7 +479,7 @@ export default function BannersAdminPage() {
               <tbody>
                 {banners.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       No banners found. Create your first banner to get started.
                     </td>
                   </tr>
@@ -510,6 +516,18 @@ export default function BannersAdminPage() {
                       </td>
                       <td className="py-4 px-6 text-white">
                         {banner.advertiser?.companyName || 'Unknown'}
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {(banner.positions || []).map((pos) => (
+                            <span
+                              key={pos}
+                              className="inline-block px-2 py-0.5 text-xs rounded-full bg-orange-500/20 text-orange-300 whitespace-nowrap"
+                            >
+                              {BannerPositionLabels[pos as BannerPosition] || pos}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="py-4 px-6">
                         <span className={`text-sm ${banner.size ? 'text-white' : 'text-slate-500'}`}>
@@ -708,24 +726,56 @@ export default function BannersAdminPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Position
-                  </label>
-                  <select
-                    value={formData.position}
-                    onChange={(e) => setFormData({ ...formData, position: e.target.value as BannerPosition })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    {positionOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
+              {/* Positions - checkbox grid */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Positions * <span className="text-slate-400 font-normal">(select one or more)</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                  {positionOptions.map((opt) => {
+                    const checked = formData.positions.includes(opt.value);
+                    return (
+                      <label
+                        key={opt.value}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                          checked
+                            ? 'bg-orange-500/20 border border-orange-500/50 text-orange-300'
+                            : 'bg-slate-700 border border-slate-600 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              positions: checked
+                                ? prev.positions.filter(p => p !== opt.value)
+                                : [...prev.positions, opt.value],
+                            }));
+                          }}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                          checked ? 'bg-orange-500 border-orange-500' : 'border-slate-500'
+                        }`}>
+                          {checked && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
                         {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                      </label>
+                    );
+                  })}
                 </div>
+                {formData.positions.length === 0 && (
+                  <p className="text-xs text-red-400 mt-1">Select at least one position</p>
+                )}
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Status
@@ -860,7 +910,7 @@ export default function BannersAdminPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || uploading || !!imageError}
+                  disabled={saving || uploading || !!imageError || formData.positions.length === 0}
                   className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : editingBanner ? 'Update' : 'Create'}

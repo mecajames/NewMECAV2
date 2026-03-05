@@ -19,9 +19,10 @@ export const scheduledTasksApi = {
 
   /**
    * Send a test email to verify configuration (admin only)
+   * Optionally specify a template key to test a specific branded template
    */
-  sendTestEmail: async (email: string): Promise<{ success: boolean; message: string }> => {
-    const response = await axios.post('/api/scheduled-tasks/send-test-email', { email });
+  sendTestEmail: async (email: string, template?: string): Promise<{ success: boolean; message: string }> => {
+    const response = await axios.post('/api/scheduled-tasks/send-test-email', { email, template });
     return response.data;
   },
 
@@ -30,6 +31,22 @@ export const scheduledTasksApi = {
    */
   triggerEventStatusUpdates: async (): Promise<{ success: boolean; message: string; updated: number }> => {
     const response = await axios.post('/api/scheduled-tasks/trigger-event-status-updates');
+    return response.data;
+  },
+
+  /**
+   * Manually trigger marking overdue invoices (admin only)
+   */
+  triggerMarkOverdue: async (): Promise<{ success: boolean; message: string }> => {
+    const response = await axios.post('/api/scheduled-tasks/trigger-mark-overdue');
+    return response.data;
+  },
+
+  /**
+   * Manually trigger invoice auto-cancellation (admin only)
+   */
+  triggerInvoiceAutoCancel: async (): Promise<{ success: boolean; message: string; cancelled: number }> => {
+    const response = await axios.post('/api/scheduled-tasks/trigger-invoice-auto-cancel');
     return response.data;
   },
 };
