@@ -19,6 +19,7 @@ import {
   Newspaper,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { useTaxRate } from '@/hooks/useTaxRate';
 import { newsletterApi } from '@/newsletter';
 import {
   membershipTypeConfigsApi,
@@ -131,6 +132,7 @@ export default function MembershipCheckoutPage() {
   const navigate = useNavigate();
   const { user, profile, signUp } = useAuth();
 
+  const { taxRate, calculateTax } = useTaxRate();
   const [membership, setMembership] = useState<MembershipTypeConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1171,9 +1173,15 @@ export default function MembershipCheckoutPage() {
                         <span className="text-gray-400">Membership</span>
                         <span className="text-white">{membership.name}</span>
                       </div>
+                      {taxRate > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Tax ({(taxRate * 100).toFixed(0)}%)</span>
+                          <span className="text-white">${calculateTax(membership.price).toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between border-t border-slate-600 pt-2 mt-2">
                         <span className="text-gray-400">Total</span>
-                        <span className="text-orange-500 font-semibold">${membership.price.toFixed(2)}</span>
+                        <span className="text-orange-500 font-semibold">${(membership.price + calculateTax(membership.price)).toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -1244,13 +1252,19 @@ export default function MembershipCheckoutPage() {
                   <span className="text-gray-400">Duration</span>
                   <span className="text-white">12 months</span>
                 </div>
+                {taxRate > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Tax ({(taxRate * 100).toFixed(0)}%)</span>
+                    <span className="text-white">${calculateTax(membership.price).toFixed(2)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-slate-700 pt-4">
                 <div className="flex justify-between">
                   <span className="text-lg font-semibold text-white">Total</span>
                   <span className="text-lg font-bold text-orange-500">
-                    ${membership.price.toFixed(2)}
+                    ${(membership.price + calculateTax(membership.price)).toFixed(2)}
                   </span>
                 </div>
               </div>

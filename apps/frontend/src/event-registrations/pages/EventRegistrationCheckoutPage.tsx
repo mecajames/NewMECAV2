@@ -21,6 +21,7 @@ import {
   QrCode,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { useTaxRate } from '@/hooks/useTaxRate';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes/competition-classes.api-client';
 import {
@@ -92,6 +93,8 @@ export default function EventRegistrationCheckoutPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { user, profile, signUp } = useAuth();
+
+  const { taxRate, calculateTax } = useTaxRate();
 
   // Data state
   const [event, setEvent] = useState<Event | null>(null);
@@ -1378,7 +1381,7 @@ export default function EventRegistrationCheckoutPage() {
                 }>
                   <LazyStripePaymentForm
                     clientSecret={clientSecret}
-                    total={pricing.total}
+                    total={pricing.total + calculateTax(pricing.total)}
                     formData={formData}
                     onSuccess={handlePaymentSuccess}
                     onBack={() => setStep('info')}
@@ -1422,9 +1425,15 @@ export default function EventRegistrationCheckoutPage() {
                           <span className="text-green-400">Included</span>
                         </div>
                       )}
+                      {taxRate > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Tax ({(taxRate * 100).toFixed(0)}%)</span>
+                          <span className="text-white">${calculateTax(pricing.total).toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between border-t border-slate-600 pt-2 mt-2">
                         <span className="text-gray-400">Total</span>
-                        <span className="text-orange-500 font-semibold">${pricing.total.toFixed(2)}</span>
+                        <span className="text-orange-500 font-semibold">${(pricing.total + calculateTax(pricing.total)).toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -1513,13 +1522,19 @@ export default function EventRegistrationCheckoutPage() {
                     <span className="text-white">${pricing.membershipCost.toFixed(2)}</span>
                   </div>
                 )}
+                {taxRate > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Tax ({(taxRate * 100).toFixed(0)}%)</span>
+                    <span className="text-white">${calculateTax(pricing.total).toFixed(2)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-slate-700 pt-4">
                 <div className="flex justify-between">
                   <span className="text-lg font-semibold text-white">Total</span>
                   <span className="text-lg font-bold text-orange-500">
-                    ${pricing.total.toFixed(2)}
+                    ${(pricing.total + calculateTax(pricing.total)).toFixed(2)}
                   </span>
                 </div>
               </div>
