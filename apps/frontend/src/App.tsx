@@ -115,6 +115,9 @@ const VotingResultsPage = lazy(() => import('@/finals-voting/pages/VotingResults
 const AnalyticsPage = lazy(() => import('@/admin/pages/AnalyticsPage'));
 const SearchConsolePage = lazy(() => import('@/admin/pages/SearchConsolePage'));
 const SEOSettingsPage = lazy(() => import('@/admin/pages/SEOSettingsPage'));
+const WorldRecordsPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsPage'));
+const WorldRecordsAdminPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsAdminPage'));
+const HallOfFameAdminPage = lazy(() => import('@/hall-of-fame/pages/HallOfFameAdminPage'));
 
 // Lazy-loaded pages - Admin billing
 const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDashboardPage'));
@@ -321,11 +324,20 @@ function App() {
               {/* Admin Finals Voting */}
               <Route path="/admin/finals-voting" element={<L><FinalsVotingAdminPage /></L>} />
 
+              {/* Admin SPL World Records */}
+              <Route path="/admin/world-records" element={<L><WorldRecordsAdminPage /></L>} />
+
+              {/* Admin Hall of Fame */}
+              <Route path="/admin/hall-of-fame" element={<L><HallOfFameAdminPage /></L>} />
+
               {/* Card QR Code Redirect */}
               <Route path="/card/:membershipId" element={<L><CardRedirectPage /></L>} />
 
               {/* Finals Voting (Member) */}
               <Route path="/finals-voting" element={<L><FinalsVotingPage /></L>} />
+
+              {/* SPL World Records (Public) */}
+              <Route path="/world-records" element={<L><WorldRecordsPage /></L>} />
 
               {/* Voting Results (Public) */}
               <Route path="/voting-results/:sessionId" element={<L><VotingResultsPage /></L>} />

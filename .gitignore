@@ -220,3 +220,5 @@ supabase-storage-backup-2026-02-06-1730.zip
 /_bmad-output
 /_bmad
 /docs
+apps/backend/.env.example
+apps/backend/.env.example

@@ -60,3 +60,9 @@ export * from "./standings.schema.js";
 
 // Finals Voting
 export * from "./finals-voting.schema.js";
+
+// SPL World Records
+export * from "./spl-world-records.schema.js";
+
+// Hall of Fame
+export * from "./hall-of-fame.schema.js";

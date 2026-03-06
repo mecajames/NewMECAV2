@@ -451,29 +451,23 @@ export class EmailService {
       this.logger.log(`Email service configured with SMTP (${host}:${port})`);
 
     } else if (provider === 'mailgun') {
-      // Mailgun for production via SMTP
+      // Mailgun for production via HTTP API
       const domain = process.env.MAILGUN_DOMAIN;
-      const apiKey = process.env.MAILGUN_SMTP_PASSWORD || process.env.MAILGUN_API_KEY;
+      const apiKey = process.env.MAILGUN_API_KEY || process.env.MAILGUN_SMTP_PASSWORD;
 
       if (!domain || !apiKey) {
-        this.logger.warn('Mailgun configured but missing MAILGUN_DOMAIN or MAILGUN_SMTP_PASSWORD');
+        this.logger.warn('Mailgun configured but missing MAILGUN_DOMAIN or MAILGUN_API_KEY');
         return;
       }
 
-      this.transporter = nodemailer.createTransport({
-        host: process.env.MAILGUN_SMTP_HOST || 'smtp.mailgun.org',
-        port: parseInt(process.env.MAILGUN_SMTP_PORT || '587', 10),
-        secure: false,
-        auth: {
-          user: process.env.MAILGUN_SMTP_USER || `postmaster@${domain}`,
-          pass: apiKey,
-        },
-      });
+      this.mailgunDomain = domain;
+      this.mailgunApiKey = apiKey;
+      this.mailgunApiUrl = process.env.MAILGUN_API_URL || 'https://api.mailgun.net';
 
       this.fromEmail = process.env.MAILGUN_FROM_EMAIL || `noreply@${domain}`;
       this.isConfigured = true;
       this.provider = 'mailgun';
-      this.logger.log(`Email service configured with Mailgun (${domain})`);
+      this.logger.log(`Email service configured with Mailgun API (${domain})`);
 
     } else if (provider === 'sendgrid' && process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'placeholder') {
       this.fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@mecacaraudio.com';
@@ -534,7 +528,9 @@ export class EmailService {
     const emailToSend = { ...dto, to: filtered.recipientEmail };
 
     try {
-      if (this.provider === 'smtp' || this.provider === 'mailgun') {
+      if (this.provider === 'mailgun') {
+        return await this.sendViaMailgunApi(emailToSend);
+      } else if (this.provider === 'smtp') {
         return await this.sendViaNodemailer(emailToSend);
       } else if (this.provider === 'sendgrid') {
         return await this.sendViaSendGrid(emailToSend);
@@ -1487,6 +1483,36 @@ export class EmailService {
     } catch (error: any) {
       return { success: false, message: `Error sending "${templateKey}": ${error.message}` };
     }
+  }
+
+  private async sendViaMailgunApi(dto: SendEmailDto): Promise<{ success: boolean; error?: string }> {
+    const url = `${this.mailgunApiUrl}/v3/${this.mailgunDomain}/messages`;
+
+    const form = new URLSearchParams();
+    form.append('from', this.fromEmail);
+    form.append('to', dto.to);
+    form.append('subject', dto.subject);
+    form.append('html', dto.html);
+    if (dto.text) {
+      form.append('text', dto.text);
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${Buffer.from(`api:${this.mailgunApiKey}`).toString('base64')}`,
+      },
+      body: form,
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      this.logger.error(`Mailgun API error (${response.status}): ${body}`);
+      throw new Error(`Mailgun API error: ${response.status} ${body}`);
+    }
+
+    this.logger.log(`Email sent via Mailgun API to ${dto.to}`);
+    return { success: true };
   }
 
   private async sendViaSendGrid(dto: SendEmailDto): Promise<{ success: boolean; error?: string }> {
