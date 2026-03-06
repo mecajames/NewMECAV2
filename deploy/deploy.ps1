@@ -99,7 +99,8 @@ if (-not $SkipBuild) {
             "--build-arg", "VITE_API_URL=$($EnvVars['VITE_API_URL'])",
             "--build-arg", "VITE_RECAPTCHA_SITE_KEY=$($EnvVars['VITE_RECAPTCHA_SITE_KEY'])",
             "--build-arg", "VITE_STRIPE_PUBLISHABLE_KEY=$($EnvVars['VITE_STRIPE_PUBLISHABLE_KEY'])",
-            "--build-arg", "VITE_GA4_MEASUREMENT_ID=$($EnvVars['VITE_GA4_MEASUREMENT_ID'])"
+            "--build-arg", "VITE_GA4_MEASUREMENT_ID=$($EnvVars['VITE_GA4_MEASUREMENT_ID'])",
+            "--build-arg", "VITE_GOOGLE_MAPS_API_KEY=$($EnvVars['VITE_GOOGLE_MAPS_API_KEY'])"
         )
 
         docker build `
@@ -177,8 +178,14 @@ $envMap = $deploymentConfig.containers.backend.environment
 $secretKeys = @(
     "DATABASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
     "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "CORS_ORIGIN",
-    "RECAPTCHA_SECRET_KEY", "SENDGRID_API_KEY", "SUPER_ADMIN_PASSWORD",
-    "GA4_PROPERTY_ID", "GA4_CREDENTIALS_JSON"
+    "RECAPTCHA_SECRET_KEY", "SUPER_ADMIN_PASSWORD",
+    "GA4_PROPERTY_ID", "GA4_CREDENTIALS_JSON",
+    "USPS_CONSUMER_KEY", "USPS_CONSUMER_SECRET", "GOOGLE_MAPS_API_KEY",
+    "MAILGUN_DOMAIN", "MAILGUN_API_KEY",
+    "FRONTEND_URL",
+    "CONSTANT_CONTACT_API_KEY", "CONSTANT_CONTACT_CLIENT_SECRET",
+    "CONSTANT_CONTACT_ACCESS_TOKEN", "CONSTANT_CONTACT_REFRESH_TOKEN",
+    "CONSTANT_CONTACT_LIST_ID", "CONTACT_FORM_EMAIL"
 )
 foreach ($key in $secretKeys) {
     if ($BackendVars.ContainsKey($key)) {
