@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -1048,6 +1049,37 @@ export class MembershipsController {
     @Param('id') membershipId: string,
   ) {
     return this.membershipsService.getCardData(membershipId);
+  }
+
+  /**
+   * Admin: Update a membership's end date.
+   * Logs the change with old/new date and admin ID.
+   */
+  @Patch(':id/admin/update-end-date')
+  @HttpCode(HttpStatus.OK)
+  async updateEndDate(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { endDate: string },
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const { profile } = await this.requireAdmin(authHeader);
+
+    if (!data.endDate) {
+      throw new BadRequestException('endDate is required');
+    }
+
+    const newEndDate = new Date(data.endDate);
+    if (isNaN(newEndDate.getTime())) {
+      throw new BadRequestException('endDate must be a valid date');
+    }
+
+    this.logger.log(`Admin ${profile?.email} updating end date for membership ${membershipId}`);
+
+    return this.membershipsService.updateEndDate(
+      membershipId,
+      newEndDate,
+      profile?.id || 'unknown',
+    );
   }
 
   /**

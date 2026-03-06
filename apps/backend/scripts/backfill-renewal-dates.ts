@@ -217,6 +217,16 @@ async function main(): Promise<void> {
   console.log('  Auto-renew (calculated):       ' + autoRenewNoDate.length + ' records');
   console.log('  Skipped (admin/ED/no billing): ' + skipRecords.length + ' records');
   console.log('  Total to process:              ' + records.length + ' records');
+
+  if (skipRecords.length > 0) {
+    console.log('');
+    console.log('Skipped records (no billing / admin / ED):');
+    for (const r of skipRecords) {
+      const reason = r.billing_amount === 0 ? '$0 billing' : 'no recurring cycle';
+      console.log('  user_id: ' + r.user_id + ' | membership_id: ' + r.membership_id + ' | billing: $' + r.billing_amount + ' | reason: ' + reason);
+    }
+  }
+
   console.log('');
 
   // Connect to V2 database
@@ -315,7 +325,7 @@ async function main(): Promise<void> {
       // Skip if end_date is already the same (within 1 day tolerance)
       if (currentEndDate) {
         const diffMs = Math.abs(resolvedEndDate.getTime() - currentEndDate.getTime());
-        const diffDays = diffMs / (1000 * 60 * 60 * 1000 * 24);
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
         if (diffDays < 1) {
           alreadyCorrect++;
           continue;

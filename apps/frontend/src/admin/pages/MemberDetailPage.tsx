@@ -4441,6 +4441,52 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [autoRenewalLoading, setAutoRenewalLoading] = useState(false);
   const [autoRenewalError, setAutoRenewalError] = useState<string | null>(null);
 
+  // Inline end date editing state
+  const [editingEndDateId, setEditingEndDateId] = useState<string | null>(null);
+  const [editEndDateValue, setEditEndDateValue] = useState('');
+  const [savingEndDate, setSavingEndDate] = useState(false);
+  const [endDateSuccess, setEndDateSuccess] = useState<string | null>(null);
+  const [endDateError, setEndDateError] = useState<string | null>(null);
+
+  const handleStartEditEndDate = (membership: Membership) => {
+    const currentDate = membership.endDate
+      ? new Date(membership.endDate).toISOString().split('T')[0]
+      : '';
+    setEditingEndDateId(membership.id);
+    setEditEndDateValue(currentDate);
+    setEndDateSuccess(null);
+    setEndDateError(null);
+  };
+
+  const handleCancelEditEndDate = () => {
+    setEditingEndDateId(null);
+    setEditEndDateValue('');
+    setEndDateError(null);
+  };
+
+  const handleSaveEndDate = async (membershipId: string) => {
+    if (!editEndDateValue) {
+      setEndDateError('Please select a date');
+      return;
+    }
+    try {
+      setSavingEndDate(true);
+      setEndDateError(null);
+      const result = await membershipsApi.adminUpdateEndDate(membershipId, new Date(editEndDateValue).toISOString());
+      // Update local state with the returned membership
+      setMemberships(prev =>
+        prev.map(m => m.id === membershipId ? { ...m, endDate: result.membership.endDate } : m)
+      );
+      setEditingEndDateId(null);
+      setEndDateSuccess(result.message);
+      setTimeout(() => setEndDateSuccess(null), 4000);
+    } catch (err: any) {
+      setEndDateError(err.response?.data?.message || 'Failed to update end date');
+    } finally {
+      setSavingEndDate(false);
+    }
+  };
+
   useEffect(() => {
     fetchMemberships();
     fetchMembershipTypes();
@@ -4950,12 +4996,59 @@ function MembershipsTab({ member }: { member: Profile }) {
                         {membership.startDate ? formatDate(membership.startDate) : 'N/A'}
                       </span>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-gray-400">End Date: </span>
-                      <span className={`${isExpired(membership.endDate || '') ? 'text-red-400' : 'text-gray-200'}`}>
-                        {membership.endDate ? formatDate(membership.endDate) : 'N/A'}
-                      </span>
+                      {editingEndDateId === membership.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={editEndDateValue}
+                            onChange={(e) => setEditEndDateValue(e.target.value)}
+                            className="px-2 py-1 bg-slate-600 border border-slate-500 text-white rounded text-sm focus:ring-2 focus:ring-orange-500"
+                            disabled={savingEndDate}
+                          />
+                          <button
+                            onClick={() => handleSaveEndDate(membership.id)}
+                            disabled={savingEndDate}
+                            className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50"
+                            title="Save"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelEditEndDate}
+                            disabled={savingEndDate}
+                            className="p-1 text-red-400 hover:text-red-300 disabled:opacity-50"
+                            title="Cancel"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className={`${isExpired(membership.endDate || '') ? 'text-red-400' : 'text-gray-200'}`}>
+                            {membership.endDate ? formatDate(membership.endDate) : 'N/A'}
+                          </span>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleStartEditEndDate(membership)}
+                              className="p-1 text-gray-400 hover:text-orange-400 transition-colors"
+                              title="Edit end date"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {endDateError && editingEndDateId === membership.id && (
+                        <span className="text-red-400 text-xs">{endDateError}</span>
+                      )}
                     </div>
+                    {endDateSuccess && (
+                      <div className="col-span-2 text-green-400 text-xs flex items-center gap-1">
+                        <Check className="h-3 w-3" /> {endDateSuccess}
+                      </div>
+                    )}
                     {/* Auto-Renewal Status */}
                     <div className="flex items-center gap-2">
                       <span className="text-gray-400">Auto-Renewal: </span>
