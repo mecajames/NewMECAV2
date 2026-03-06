@@ -255,6 +255,7 @@ export class OrdersService {
   async createFromPayment(data: CreateOrderFromPaymentDto & {
     guestEmail?: string;
     guestName?: string;
+    tax?: string;
     shopOrderReference?: { shopOrderId: string; shopOrderNumber: string };
   }): Promise<Order> {
     const em = this.em.fork();
@@ -281,7 +282,9 @@ export class OrdersService {
     const orderNumber = await this.generateOrderNumber(em);
 
     // Calculate totals
-    const { subtotal, total } = this.calculateTotals(data.items);
+    const { subtotal } = this.calculateTotals(data.items);
+    const tax = data.tax || '0.00';
+    const total = (parseFloat(subtotal) + parseFloat(tax)).toFixed(2);
 
     // Create order - for guest orders, member can be null but we set guestEmail
     const orderData: Partial<Order> = {
@@ -289,7 +292,7 @@ export class OrdersService {
       status: OrderStatus.COMPLETED,
       orderType: data.orderType,
       subtotal,
-      tax: '0.00',
+      tax,
       discount: '0.00',
       total,
       currency: 'USD',

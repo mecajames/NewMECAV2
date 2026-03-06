@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ShopAddress } from '@newmeca/shared';
 import { useCart } from '../context/CartContext';
+import { useTaxRate } from '@/hooks/useTaxRate';
 import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { trackBeginCheckout, trackAddShippingInfo, trackPurchase } from '@/lib/gtag';
@@ -301,10 +302,14 @@ export function CheckoutPage() {
     sameAsShipping: true,
   });
 
+  // Tax
+  const { taxRate, calculateTax } = useTaxRate();
+
   // Get the selected shipping rate
   const selectedRate = shippingRates.find((r) => r.method === selectedShippingMethod);
   const shippingCost = selectedRate?.price || 0;
-  const orderTotal = subtotal + shippingCost;
+  const taxAmount = calculateTax(subtotal);
+  const orderTotal = subtotal + shippingCost + taxAmount;
 
   // Pre-fill address from user profile
   useEffect(() => {
@@ -733,8 +738,8 @@ export function CheckoutPage() {
                   </div>
                 )}
                 <div className="flex justify-between text-gray-400">
-                  <span>Tax</span>
-                  <span>$0.00</span>
+                  <span>Tax{taxRate > 0 ? ` (${(taxRate * 100).toFixed(0)}%)` : ''}</span>
+                  <span>${taxAmount.toFixed(2)}</span>
                 </div>
               </div>
 

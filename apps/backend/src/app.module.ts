@@ -56,6 +56,7 @@ import { FinalsVotingModule } from './finals-voting/finals-voting.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SeoModule } from './seo/seo.module';
 import { GeocodingModule } from './geocoding/geocoding.module';
+import { TaxModule } from './tax/tax.module';
 
 @Module({
   imports: [
@@ -126,6 +127,7 @@ import { GeocodingModule } from './geocoding/geocoding.module';
     AnalyticsModule,
     SeoModule,
     GeocodingModule,
+    TaxModule,
   ],
   controllers: [AppController],
   providers: [

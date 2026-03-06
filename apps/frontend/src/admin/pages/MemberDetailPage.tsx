@@ -4427,6 +4427,13 @@ function MembershipsTab({ member }: { member: Profile }) {
 
   // Auto-Renewal Management state
   const [showAutoRenewalModal, setShowAutoRenewalModal] = useState(false);
+  // Subscription details fetched from Stripe
+  const [subscriptionDetails, setSubscriptionDetails] = useState<Record<string, {
+    status: string;
+    currentPeriodEnd: string;
+    cancelAtPeriodEnd: boolean;
+  }>>({});
+
   const [autoRenewalMembership, setAutoRenewalMembership] = useState<Membership | null>(null);
   const [autoRenewalAction, setAutoRenewalAction] = useState<'cancel' | 'enable'>('cancel');
   const [autoRenewalReason, setAutoRenewalReason] = useState('');
@@ -4461,6 +4468,22 @@ function MembershipsTab({ member }: { member: Profile }) {
         }
       }
       setSecondaryMemberships(secondariesMap);
+
+      // Fetch Stripe subscription details for memberships with active subscriptions
+      const subDetails: Record<string, { status: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean }> = {};
+      for (const m of data) {
+        if (m.stripeSubscriptionId) {
+          try {
+            const subStatus = await membershipsApi.getSubscriptionStatus(m.id);
+            if (subStatus.stripeSubscription) {
+              subDetails[m.id] = subStatus.stripeSubscription;
+            }
+          } catch {
+            // Failed to fetch - that's ok
+          }
+        }
+      }
+      setSubscriptionDetails(subDetails);
     } catch (error) {
       console.error('Error fetching memberships:', error);
     } finally {
@@ -4955,6 +4978,33 @@ function MembershipsTab({ member }: { member: Profile }) {
                         </span>
                       )}
                     </div>
+                    {/* Stripe Subscription Details */}
+                    {subscriptionDetails[membership.id] && (
+                      <div className="col-span-2 mt-1 p-3 bg-slate-700/50 rounded-lg space-y-1">
+                        <div className="text-xs font-medium text-gray-300 mb-1">Subscription Details</div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-gray-400">Status:</span>
+                          <span className={
+                            subscriptionDetails[membership.id].status === 'active' ? 'text-green-400' :
+                            subscriptionDetails[membership.id].status === 'past_due' ? 'text-red-400' :
+                            'text-gray-400'
+                          }>
+                            {subscriptionDetails[membership.id].status}
+                          </span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="text-gray-400">Next Billing: </span>
+                          <span className="text-gray-200">
+                            {formatDate(subscriptionDetails[membership.id].currentPeriodEnd)}
+                          </span>
+                        </div>
+                        {subscriptionDetails[membership.id].cancelAtPeriodEnd && (
+                          <div className="text-sm text-amber-400 flex items-center gap-1">
+                            ⚠ Scheduled to cancel at end of period
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {membership.transactionId && (
                       <div className="col-span-2">
                         <span className="text-gray-400">Transaction ID: </span>
