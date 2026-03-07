@@ -56,6 +56,8 @@ import { FinalsVotingModule } from './finals-voting/finals-voting.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SeoModule } from './seo/seo.module';
 import { GeocodingModule } from './geocoding/geocoding.module';
+import { SplWorldRecordsModule } from './spl-world-records/spl-world-records.module';
+import { HallOfFameModule } from './hall-of-fame/hall-of-fame.module';
 import { TaxModule } from './tax/tax.module';
 
 @Module({
@@ -127,6 +129,8 @@ import { TaxModule } from './tax/tax.module';
     AnalyticsModule,
     SeoModule,
     GeocodingModule,
+    SplWorldRecordsModule,
+    HallOfFameModule,
     TaxModule,
   ],
   controllers: [AppController],

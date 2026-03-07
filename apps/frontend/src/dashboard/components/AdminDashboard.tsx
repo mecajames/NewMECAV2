@@ -154,6 +154,22 @@ export default function AdminDashboard() {
           color: 'cyan',
           navigateTo: '/admin/check-in',
         },
+        {
+          icon: Trophy,
+          title: 'SPL World Records',
+          description: 'Manage SPL world record holders per class',
+          action: 'spl-world-records',
+          color: 'yellow',
+          navigateTo: '/admin/world-records',
+        },
+        {
+          icon: Star,
+          title: 'Hall of Fame',
+          description: 'Manage Hall of Fame inductees by category and year',
+          action: 'hall-of-fame',
+          color: 'amber',
+          navigateTo: '/admin/hall-of-fame',
+        },
       ],
     },
     {

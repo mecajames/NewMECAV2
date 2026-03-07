@@ -72,6 +72,7 @@ export default function Navbar() {
     if (path.startsWith('/leaderboard')) return 'leaderboard';
     if (path.startsWith('/team-standings')) return 'team-standings';
     if (path.startsWith('/team-leaderboard')) return 'team-leaderboard';
+    if (path.startsWith('/world-records')) return 'world-records';
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/members')) return 'members';
     if (path.startsWith('/teams')) return 'teams';
@@ -145,7 +146,7 @@ export default function Navbar() {
             >
               <button
                 className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                  currentPage === 'results' || currentPage === 'standings' || currentPage === 'leaderboard' || currentPage === 'team-standings' || currentPage === 'team-leaderboard'
+                  currentPage === 'results' || currentPage === 'standings' || currentPage === 'leaderboard' || currentPage === 'team-standings' || currentPage === 'team-leaderboard' || currentPage === 'world-records'
                     ? 'bg-orange-600 text-white'
                     : 'text-gray-300 hover:bg-slate-800 hover:text-white'
                 }`}
@@ -236,6 +237,16 @@ export default function Navbar() {
                         </div>
                       )}
                     </div>
+                    <button
+                      onClick={() => {
+                        navigate('/world-records');
+                        setResultsMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Trophy className="h-4 w-4" />
+                      World Records
+                    </button>
                   </div>
                 </div>
               )}
@@ -689,6 +700,27 @@ export default function Navbar() {
             >
               <Trophy className="h-5 w-5" />
               Team Top 10
+            </button>
+
+            {/* World Records */}
+            <div className="border-t border-slate-700 mt-2 pt-2">
+              <div className="px-3 py-1 text-xs font-semibold text-orange-500 uppercase tracking-wide">
+                World Records
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                navigate('/world-records');
+                setMobileMenuOpen(false);
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                currentPage === 'world-records'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Trophy className="h-5 w-5" />
+              SPL World Records
             </button>
 
             {/* Members Section */}

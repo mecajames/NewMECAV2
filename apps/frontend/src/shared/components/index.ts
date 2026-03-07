@@ -7,3 +7,4 @@ export { default as Pagination } from './Pagination';
 export { StagingNoIndex } from './StagingNoIndex';
 export { default as SocialShareButtons } from './SocialShareButtons';
 export { GoogleMapsProvider, EventLocationMap } from '../maps';
+export { default as ActiveMemberLookup } from './MemberSearchInput';

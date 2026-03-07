@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, User } from 'lucide-react';
 import axios from '@/lib/axios';
 import { eventsApi, Event } from '@/events';
@@ -162,7 +162,78 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   // Membership status tracking for current entry
   const [currentEntryMembershipStatus, setCurrentEntryMembershipStatus] = useState<string>('');
 
+  // Member search dropdown for manual entry
+  const [memberSearchResults, setMemberSearchResults] = useState<Profile[]>([]);
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [memberSearchActiveField, setMemberSearchActiveField] = useState<'meca_id' | 'name' | null>(null);
+  const memberSearchRef = useRef<HTMLDivElement>(null);
+  const memberSearchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const skipMemberSearchRef = useRef(false);
+
   const availableFormats = ['SPL', 'SQL', 'Show and Shine', 'Ride the Light'];
+
+  // Member search for MECA ID / Name auto-population
+  const doMemberSearch = useCallback(async (query: string) => {
+    if (skipMemberSearchRef.current) {
+      skipMemberSearchRef.current = false;
+      return;
+    }
+    if (query.length < 2) {
+      setMemberSearchResults([]);
+      setShowMemberDropdown(false);
+      return;
+    }
+    if (memberSearchDebounceRef.current) clearTimeout(memberSearchDebounceRef.current);
+    memberSearchDebounceRef.current = setTimeout(async () => {
+      try {
+        const profiles = await profilesApi.searchProfiles(query);
+        setMemberSearchResults(profiles);
+        setShowMemberDropdown(profiles.length > 0);
+      } catch {
+        setMemberSearchResults([]);
+      }
+    }, 300);
+  }, []);
+
+  const handleMemberSelect = (selectedProfile: Profile) => {
+    skipMemberSearchRef.current = true;
+    const membershipStatus = selectedProfile.membership_status || '';
+    setCurrentEntryMembershipStatus(membershipStatus);
+    const updated = {
+      ...currentEntry,
+      competitor_id: selectedProfile.id,
+      competitor_name: `${selectedProfile.first_name || ''} ${selectedProfile.last_name || ''}`.trim(),
+      meca_id: String(selectedProfile.meca_id || ''),
+    };
+    if (membershipStatus !== 'active') {
+      updated.points_earned = '0';
+    }
+    if (updated.meca_id === '999999') {
+      updated.points_earned = '0';
+    }
+    setCurrentEntry(updated);
+    setMemberSearchResults([]);
+    setShowMemberDropdown(false);
+    setMemberSearchActiveField(null);
+  };
+
+  // Close member search dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (memberSearchRef.current && !memberSearchRef.current.contains(e.target as Node)) {
+        setShowMemberDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Cleanup member search debounce
+  useEffect(() => {
+    return () => {
+      if (memberSearchDebounceRef.current) clearTimeout(memberSearchDebounceRef.current);
+    };
+  }, []);
 
   // Initialize
   useEffect(() => {
@@ -607,6 +678,9 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       notes: '',
     });
     setCurrentEntryMembershipStatus('');
+    setMemberSearchResults([]);
+    setShowMemberDropdown(false);
+    setMemberSearchActiveField(null);
   };
 
   const updateField = (field: keyof ResultEntry, value: string) => {
@@ -616,36 +690,13 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     // Handle MECA ID field changes
     if (field === 'meca_id') {
       if (!value) {
-        // MECA ID was cleared - reset related fields
         updated.competitor_id = '';
         updated.competitor_name = '';
         setCurrentEntryMembershipStatus('');
-      } else if (value.length >= 4 && competitors.length > 0) {
-        // Only do lookup when we have at least 4 characters
-        const normalizedValue = value.trim().toLowerCase();
-        const competitor = competitors.find((c) => {
-          // Convert meca_id to string in case it's a number
-          const profileMecaId = String(c.meca_id || '').trim().toLowerCase();
-          return profileMecaId === normalizedValue;
-        });
-
-        if (competitor) {
-          const membershipStatus = competitor.membership_status || '';
-          setCurrentEntryMembershipStatus(membershipStatus);
-          updated.competitor_id = competitor.id;
-          updated.competitor_name = `${competitor.first_name || ''} ${competitor.last_name || ''}`.trim();
-          // If membership is not active, they don't earn points
-          if (membershipStatus !== 'active') {
-            updated.points_earned = '0';
-          }
-        } else {
-          // MECA ID not found in system
-          setCurrentEntryMembershipStatus('');
-        }
-      } else {
-        // Still typing (less than 4 chars) - just clear status
-        setCurrentEntryMembershipStatus('');
       }
+      // Trigger live API search for member dropdown
+      setMemberSearchActiveField('meca_id');
+      doMemberSearch(value);
     }
 
     // Handle competitor_id changes (from dropdown selection)
@@ -665,43 +716,14 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     // Handle competitor_name field changes
     if (field === 'competitor_name') {
       if (!value || value.trim() === '') {
-        // Name was cleared - reset related fields
         updated.meca_id = '';
         updated.competitor_id = '';
         updated.points_earned = '';
         setCurrentEntryMembershipStatus('');
-      } else if (competitors.length > 0) {
-        // Search for EXACT full name match only
-        const nameLower = value.toLowerCase().trim();
-        const matchingCompetitor = competitors.find((c) => {
-          const fullName = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().trim();
-          return fullName === nameLower;
-        });
-
-        if (matchingCompetitor) {
-          // Found exact match - check membership status
-          const membershipStatus = matchingCompetitor.membership_status || '';
-          setCurrentEntryMembershipStatus(membershipStatus);
-
-          if (membershipStatus === 'active') {
-            // Active member - populate their MECA ID
-            updated.competitor_id = matchingCompetitor.id;
-            updated.meca_id = String(matchingCompetitor.meca_id || '');
-          } else {
-            // Expired membership - keep their actual MECA ID for admin view
-            // but mark as expired (no points)
-            updated.competitor_id = matchingCompetitor.id;
-            updated.meca_id = String(matchingCompetitor.meca_id || '') || '999999';
-            updated.points_earned = '0';
-          }
-        } else {
-          // No exact match found - this is a non-member, use 999999
-          updated.competitor_id = '';
-          updated.meca_id = '999999';
-          updated.points_earned = '0';
-          setCurrentEntryMembershipStatus('');
-        }
       }
+      // Trigger live API search for member dropdown
+      setMemberSearchActiveField('name');
+      doMemberSearch(value);
     }
 
     // Handle class_id changes
@@ -1122,39 +1144,73 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
               {entryMethod === 'manual' && (
                 <div className="bg-slate-800 rounded-lg p-4">
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-3">
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">MECA ID</label>
-                      <input
-                        type="text"
-                        value={currentEntry.meca_id}
-                        onChange={(e) => updateField('meca_id', e.target.value)}
-                        placeholder="Enter ID"
-                        className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-1">
-                        Name *
-                        {currentEntryMembershipStatus === 'expired' && (
-                          <span className="ml-1 text-red-400">(Expired)</span>
-                        )}
-                        {currentEntryMembershipStatus === 'active' && (
-                          <span className="ml-1 text-green-400">(Active)</span>
-                        )}
-                      </label>
-                      <input
-                        type="text"
-                        value={currentEntry.competitor_name}
-                        onChange={(e) => updateField('competitor_name', e.target.value)}
-                        placeholder="Competitor"
-                        className={`w-full px-2 py-1.5 bg-slate-700 border rounded text-sm ${
-                          currentEntryMembershipStatus === 'expired'
-                            ? 'border-red-500 text-red-400'
-                            : currentEntryMembershipStatus === 'active'
-                            ? 'border-green-500 text-white'
-                            : 'border-slate-600 text-white'
-                        }`}
-                      />
+                    <div className="col-span-2 relative" ref={memberSearchRef}>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">MECA ID</label>
+                          <input
+                            type="text"
+                            value={currentEntry.meca_id}
+                            onChange={(e) => updateField('meca_id', e.target.value)}
+                            onFocus={() => { if (memberSearchResults.length > 0 && memberSearchActiveField === 'meca_id') setShowMemberDropdown(true); }}
+                            placeholder="Type to search..."
+                            className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Name *
+                            {currentEntryMembershipStatus === 'expired' && (
+                              <span className="ml-1 text-red-400">(Expired)</span>
+                            )}
+                            {currentEntryMembershipStatus === 'active' && (
+                              <span className="ml-1 text-green-400">(Active)</span>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            value={currentEntry.competitor_name}
+                            onChange={(e) => updateField('competitor_name', e.target.value)}
+                            onFocus={() => { if (memberSearchResults.length > 0 && memberSearchActiveField === 'name') setShowMemberDropdown(true); }}
+                            placeholder="Type to search..."
+                            className={`w-full px-2 py-1.5 bg-slate-700 border rounded text-sm ${
+                              currentEntryMembershipStatus === 'expired'
+                                ? 'border-red-500 text-red-400'
+                                : currentEntryMembershipStatus === 'active'
+                                ? 'border-green-500 text-white'
+                                : 'border-slate-600 text-white'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                      {showMemberDropdown && memberSearchResults.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                          {memberSearchResults.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => handleMemberSelect(p)}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-600 transition-colors flex items-center gap-2 border-b border-slate-600/50 last:border-0"
+                            >
+                              <User className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-white text-xs font-medium truncate">
+                                  {p.first_name} {p.last_name}
+                                </div>
+                                <div className="text-gray-400 text-xs flex items-center gap-2">
+                                  {p.meca_id && <span>MECA #{p.meca_id}</span>}
+                                  {p.state && <span>{p.state}</span>}
+                                </div>
+                              </div>
+                              {p.membership_status === 'active' ? (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 flex-shrink-0">Active</span>
+                              ) : (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 flex-shrink-0">{p.membership_status || 'N/A'}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs text-gray-400 mb-1">Format *</label>
