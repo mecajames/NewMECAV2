@@ -1,7 +1,6 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { ShopProduct } from './entities/shop-product.entity';
-import { ShopAddress } from '@newmeca/shared';
 
 export interface ShippingRate {
   method: 'standard' | 'priority';
@@ -20,30 +19,76 @@ export interface ShippingRateRequest {
 // MECA HQ address (origin)
 const ORIGIN_ZIP = '75006'; // Dallas, TX area - update with actual MECA HQ zip
 
+// USPS v3 API endpoints
+const USPS_TOKEN_URL = 'https://apis.usps.com/oauth2/v3/token';
+const USPS_RATES_URL = 'https://apis.usps.com/prices/v3/base-rates/search';
+
 @Injectable()
 export class ShippingService {
-  private readonly uspsUserId: string | undefined;
+  private readonly logger = new Logger(ShippingService.name);
+  private readonly uspsConsumerKey: string | undefined;
+  private readonly uspsConsumerSecret: string | undefined;
+  private accessToken: string | null = null;
+  private tokenExpiry: number = 0;
 
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {
-    this.uspsUserId = process.env.USPS_USER_ID;
+    this.uspsConsumerKey = process.env.USPS_CONSUMER_KEY;
+    this.uspsConsumerSecret = process.env.USPS_CONSUMER_SECRET;
+  }
+
+  private async getAccessToken(): Promise<string> {
+    // Return cached token if still valid (with 60s buffer)
+    if (this.accessToken && Date.now() < this.tokenExpiry - 60_000) {
+      return this.accessToken;
+    }
+
+    const response = await fetch(USPS_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: this.uspsConsumerKey,
+        client_secret: this.uspsConsumerSecret,
+        grant_type: 'client_credentials',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`USPS OAuth failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as { access_token: string; expires_in?: number };
+    this.accessToken = data.access_token;
+    // Token typically expires in 3600s; use expires_in if provided
+    this.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+    return this.accessToken!;
   }
 
   async calculateRates(request: ShippingRateRequest): Promise<ShippingRate[]> {
     const em = this.em.fork();
 
-    // Get products to calculate total weight
+    // Get products to calculate total weight and dimensions
     const productIds = request.items.map((item) => item.productId);
     const products = await em.find(ShopProduct, { id: { $in: productIds } });
 
-    // Calculate total weight in ounces
+    // Calculate total weight in ounces and aggregate dimensions
     let totalWeightOz = 0;
+    let maxLengthIn = 0;
+    let maxWidthIn = 0;
+    let maxHeightIn = 0;
+
     for (const item of request.items) {
       const product = products.find((p) => p.id === item.productId);
-      if (product?.weightOz) {
-        totalWeightOz += Number(product.weightOz) * item.quantity;
+      if (product) {
+        if (product.weightOz) {
+          totalWeightOz += Number(product.weightOz) * item.quantity;
+        }
+        // Use the largest dimensions across all products
+        if (product.lengthIn) maxLengthIn = Math.max(maxLengthIn, Number(product.lengthIn));
+        if (product.widthIn) maxWidthIn = Math.max(maxWidthIn, Number(product.widthIn));
+        if (product.heightIn) maxHeightIn = Math.max(maxHeightIn, Number(product.heightIn));
       }
     }
 
@@ -52,12 +97,16 @@ export class ShippingService {
       totalWeightOz = 8;
     }
 
-    // If USPS credentials are configured, use USPS API
-    if (this.uspsUserId && request.destinationCountry === 'US') {
+    // If USPS credentials are configured, use USPS API for domestic
+    if (this.uspsConsumerKey && this.uspsConsumerSecret && request.destinationCountry === 'US') {
       try {
-        return await this.getUspsRates(totalWeightOz, request.destinationZip);
+        return await this.getUspsRates(totalWeightOz, request.destinationZip, {
+          lengthIn: maxLengthIn,
+          widthIn: maxWidthIn,
+          heightIn: maxHeightIn,
+        });
       } catch (error) {
-        console.error('USPS API error, falling back to calculated rates:', error);
+        this.logger.error('USPS API error, falling back to calculated rates:', error);
       }
     }
 
@@ -65,83 +114,122 @@ export class ShippingService {
     return this.getCalculatedRates(totalWeightOz, request.destinationCountry);
   }
 
-  private async getUspsRates(weightOz: number, destinationZip: string): Promise<ShippingRate[]> {
-    // Convert ounces to pounds and ounces for USPS API
-    const pounds = Math.floor(weightOz / 16);
-    const ounces = weightOz % 16;
+  private async getUspsRates(
+    weightOz: number,
+    destinationZip: string,
+    dimensions: { lengthIn: number; widthIn: number; heightIn: number },
+  ): Promise<ShippingRate[]> {
+    const token = await this.getAccessToken();
 
-    // USPS Web Tools Rate Calculator V4 API
-    const xml = `
-      <RateV4Request USERID="${this.uspsUserId}">
-        <Revision>2</Revision>
-        <Package ID="1">
-          <Service>PRIORITY</Service>
-          <ZipOrigination>${ORIGIN_ZIP}</ZipOrigination>
-          <ZipDestination>${destinationZip}</ZipDestination>
-          <Pounds>${pounds}</Pounds>
-          <Ounces>${ounces}</Ounces>
-          <Container>VARIABLE</Container>
-          <Width></Width>
-          <Length></Length>
-          <Height></Height>
-          <Girth></Girth>
-          <Machinable>true</Machinable>
-        </Package>
-        <Package ID="2">
-          <Service>PARCEL SELECT GROUND</Service>
-          <ZipOrigination>${ORIGIN_ZIP}</ZipOrigination>
-          <ZipDestination>${destinationZip}</ZipDestination>
-          <Pounds>${pounds}</Pounds>
-          <Ounces>${ounces}</Ounces>
-          <Container>VARIABLE</Container>
-          <Width></Width>
-          <Length></Length>
-          <Height></Height>
-          <Girth></Girth>
-          <Machinable>true</Machinable>
-        </Package>
-      </RateV4Request>
-    `.trim();
+    // Weight in pounds (decimal) for USPS v3 API
+    const weightLbs = Math.round((weightOz / 16) * 100) / 100;
 
-    const url = `https://secure.shippingapis.com/ShippingAPI.dll?API=RateV4&XML=${encodeURIComponent(xml)}`;
+    // Use dimensions if available, otherwise use reasonable defaults
+    const length = dimensions.lengthIn || 6;
+    const width = dimensions.widthIn || 6;
+    const height = dimensions.heightIn || 6;
 
-    const response = await fetch(url);
-    const text = await response.text();
+    const today = new Date().toISOString().split('T')[0];
 
-    // Parse USPS XML response
+    // Build request body shared fields
+    const baseBody = {
+      originZIPCode: ORIGIN_ZIP,
+      destinationZIPCode: destinationZip,
+      weight: weightLbs,
+      length,
+      width,
+      height,
+      mailingDate: today,
+      priceType: 'RETAIL',
+    };
+
+    // Fetch both Ground Advantage and Priority Mail rates in parallel
+    const [groundResponse, priorityResponse] = await Promise.all([
+      fetch(USPS_RATES_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...baseBody,
+          mailClass: 'USPS_GROUND_ADVANTAGE',
+        }),
+      }),
+      fetch(USPS_RATES_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...baseBody,
+          mailClass: 'PRIORITY_MAIL',
+        }),
+      }),
+    ]);
+
     const rates: ShippingRate[] = [];
 
-    // Extract Priority Mail rate
-    const priorityMatch = text.match(/<Package ID="1">[\s\S]*?<Rate>([\d.]+)<\/Rate>/);
-    if (priorityMatch) {
-      rates.push({
-        method: 'priority',
-        name: 'USPS Priority Mail',
-        description: '1-3 business days',
-        price: parseFloat(priorityMatch[1]),
-        estimatedDays: '1-3 business days',
-      });
+    if (groundResponse.ok) {
+      const groundData = await groundResponse.json();
+      const groundPrice = this.extractPrice(groundData);
+      if (groundPrice !== null) {
+        rates.push({
+          method: 'standard',
+          name: 'USPS Ground Advantage',
+          description: '2-5 business days',
+          price: groundPrice,
+          estimatedDays: '2-5 business days',
+        });
+      }
+    } else {
+      this.logger.warn(`USPS Ground Advantage rate request failed: ${groundResponse.status}`);
     }
 
-    // Extract Ground rate
-    const groundMatch = text.match(/<Package ID="2">[\s\S]*?<Rate>([\d.]+)<\/Rate>/);
-    if (groundMatch) {
-      rates.push({
-        method: 'standard',
-        name: 'USPS Ground Advantage',
-        description: '2-5 business days',
-        price: parseFloat(groundMatch[1]),
-        estimatedDays: '2-5 business days',
-      });
+    if (priorityResponse.ok) {
+      const priorityData = await priorityResponse.json();
+      const priorityPrice = this.extractPrice(priorityData);
+      if (priorityPrice !== null) {
+        rates.push({
+          method: 'priority',
+          name: 'USPS Priority Mail',
+          description: '1-3 business days',
+          price: priorityPrice,
+          estimatedDays: '1-3 business days',
+        });
+      }
+    } else {
+      this.logger.warn(`USPS Priority Mail rate request failed: ${priorityResponse.status}`);
     }
 
-    // If we got rates from USPS, return them (standard first, then priority)
+    // If we got rates, return them sorted by price
     if (rates.length > 0) {
       return rates.sort((a, b) => a.price - b.price);
     }
 
-    // Fall back to calculated rates if USPS parsing failed
+    // Fall back to calculated rates if USPS returned no usable rates
     return this.getCalculatedRates(weightOz, 'US');
+  }
+
+  private extractPrice(responseData: any): number | null {
+    try {
+      // USPS v3 response structure: { rateOptions: [{ totalBasePrice: number }] }
+      // or { totalBasePrice: number } at top level
+      if (responseData.rateOptions?.length > 0) {
+        return responseData.rateOptions[0].totalBasePrice;
+      }
+      if (typeof responseData.totalBasePrice === 'number') {
+        return responseData.totalBasePrice;
+      }
+      // Try rates array format
+      if (responseData.rates?.length > 0) {
+        return responseData.rates[0].price ?? responseData.rates[0].totalBasePrice;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   private getCalculatedRates(weightOz: number, destinationCountry?: string): ShippingRate[] {

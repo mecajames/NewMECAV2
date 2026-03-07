@@ -76,13 +76,18 @@ export class ScheduledTasksService {
       {
         endDate: { $gte: startOfDay, $lte: endOfDay },
         paymentStatus: PaymentStatus.PAID,
+        // Exclude members with active auto-renewal (Stripe will extend them)
+        $or: [
+          { stripeSubscriptionId: null },
+          { cancelAtPeriodEnd: true },
+        ],
       },
       {
         populate: ['user', 'membershipTypeConfig'],
       }
     );
 
-    this.logger.log(`Found ${memberships.length} memberships expiring in ${daysRemaining} days`);
+    this.logger.log(`Found ${memberships.length} memberships expiring in ${daysRemaining} days (excluding active auto-renewals)`);
 
     for (const membership of memberships) {
       if (!membership.user?.email) {
@@ -120,13 +125,18 @@ export class ScheduledTasksService {
       {
         endDate: { $gte: startOfDay, $lte: endOfDay },
         paymentStatus: PaymentStatus.PAID,
+        // Exclude members with active auto-renewal (Stripe will extend them)
+        $or: [
+          { stripeSubscriptionId: null },
+          { cancelAtPeriodEnd: true },
+        ],
       },
       {
         populate: ['user', 'membershipTypeConfig'],
       }
     );
 
-    this.logger.log(`Found ${memberships.length} memberships that expired yesterday`);
+    this.logger.log(`Found ${memberships.length} memberships that expired yesterday (excluding active auto-renewals)`);
 
     for (const membership of memberships) {
       if (!membership.user?.email) {

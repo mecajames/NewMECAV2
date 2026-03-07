@@ -37,6 +37,9 @@ export class ShopOrder {
   @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'tax_amount', default: 0 })
   taxAmount: number = 0;
 
+  @Property({ type: 'decimal', precision: 5, scale: 4, fieldName: 'tax_rate', default: 0 })
+  taxRate: number = 0;
+
   @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'total_amount' })
   totalAmount!: number;
 

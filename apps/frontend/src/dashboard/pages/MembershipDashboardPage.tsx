@@ -212,14 +212,37 @@ export default function MembershipDashboardPage() {
 
           {/* Membership Details */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {/* Expiration Date */}
+            {/* Expiration / Renewal Date */}
             <div className="bg-slate-700/50 rounded-lg p-4">
-              <p className="text-gray-400 text-sm mb-1">Expires</p>
-              <p className="text-white text-lg font-semibold">
-                {activeMembership.endDate
-                  ? new Date(activeMembership.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : 'N/A'}
+              <p className="text-gray-400 text-sm mb-1">
+                {subscriptionStatus?.autoRenewalStatus === 'on' ? 'Renews' : 'Expires'}
               </p>
+              {activeMembership.endDate ? (() => {
+                const endDate = new Date(activeMembership.endDate);
+                const now = new Date();
+                const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                const isExpired = daysLeft < 0;
+                const isRenewing = subscriptionStatus?.autoRenewalStatus === 'on';
+                return (
+                  <>
+                    <p className={`text-lg font-semibold ${isExpired ? 'text-red-400' : isRenewing ? 'text-green-400' : daysLeft <= 30 ? 'text-amber-400' : 'text-white'}`}>
+                      {endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    {!isExpired && (
+                      <p className={`text-xs mt-1 ${isRenewing ? 'text-green-400/70' : daysLeft <= 30 ? 'text-amber-400/70' : 'text-gray-500'}`}>
+                        {isRenewing ? `Renews in ${daysLeft} days` : `${daysLeft} days remaining`}
+                      </p>
+                    )}
+                    {isExpired && (
+                      <p className="text-xs mt-1 text-red-400/70">
+                        Expired {Math.abs(daysLeft)} days ago
+                      </p>
+                    )}
+                  </>
+                );
+              })() : (
+                <p className="text-white text-lg font-semibold">N/A</p>
+              )}
             </div>
 
             {/* Auto-Renewal Status */}

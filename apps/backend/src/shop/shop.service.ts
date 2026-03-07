@@ -12,6 +12,7 @@ import { ShopProduct } from './entities/shop-product.entity';
 import { ShopOrder } from './entities/shop-order.entity';
 import { ShopOrderItem } from './entities/shop-order-item.entity';
 import { ShippingService } from './shipping.service';
+import { TaxService } from '../tax/tax.service';
 import {
   EmailService,
   ShopOrderItemDto,
@@ -27,6 +28,7 @@ interface OrderTotals {
   subtotal: number;
   shippingAmount: number;
   taxAmount: number;
+  taxRate: number;
   totalAmount: number;
 }
 
@@ -38,6 +40,7 @@ export class ShopService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly shippingService: ShippingService,
+    private readonly taxService: TaxService,
     private readonly emailService: EmailService,
   ) {}
 
@@ -213,6 +216,7 @@ export class ShopService {
       shippingAmount: totals.shippingAmount,
       shippingMethod: data.shippingMethod || 'standard',
       taxAmount: totals.taxAmount,
+      taxRate: totals.taxRate,
       totalAmount: totals.totalAmount,
       shippingAddress: data.shippingAddress,
       billingAddress: data.billingAddress,
@@ -605,10 +609,10 @@ export class ShopService {
 
     // Use provided shipping amount or default to 0
     const shippingAmount = providedShippingAmount ?? 0;
-    const taxAmount = 0; // Tax can be configured later
+    const { taxAmount, taxRate } = this.taxService.calculateTax(subtotal);
     const totalAmount = subtotal + shippingAmount + taxAmount;
 
-    return { subtotal, shippingAmount, taxAmount, totalAmount };
+    return { subtotal, shippingAmount, taxAmount, taxRate, totalAmount };
   }
 
   private async generateOrderNumber(em: EntityManager): Promise<string> {
