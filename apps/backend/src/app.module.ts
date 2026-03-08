@@ -58,6 +58,7 @@ import { SeoModule } from './seo/seo.module';
 import { GeocodingModule } from './geocoding/geocoding.module';
 import { SplWorldRecordsModule } from './spl-world-records/spl-world-records.module';
 import { HallOfFameModule } from './hall-of-fame/hall-of-fame.module';
+import { UserActivityModule } from './user-activity/user-activity.module';
 
 @Module({
   imports: [
@@ -130,6 +131,7 @@ import { HallOfFameModule } from './hall-of-fame/hall-of-fame.module';
     GeocodingModule,
     SplWorldRecordsModule,
     HallOfFameModule,
+    UserActivityModule,
   ],
   controllers: [AppController],
   providers: [
