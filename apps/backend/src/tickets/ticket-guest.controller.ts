@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { TicketGuestService, CreateGuestTicketData, GuestTicketResponse } from './ticket-guest.service';
+import { Public } from '../auth/public.decorator';
 
 interface RequestAccessDto {
   email: string;
@@ -43,6 +44,7 @@ export class TicketGuestController {
    * Step 1: Request a magic link to create a ticket.
    * POST /api/tickets/guest/request-access
    */
+  @Public()
   @Post('request-access')
   @HttpCode(HttpStatus.OK)
   async requestAccess(
@@ -75,6 +77,7 @@ export class TicketGuestController {
    * Step 2: Verify token and get email (frontend redirects here).
    * GET /api/tickets/guest/verify/:token
    */
+  @Public()
   @Get('verify/:token')
   async verifyToken(
     @Param('token') token: string,
@@ -91,6 +94,7 @@ export class TicketGuestController {
    * Step 3: Create a ticket with verified token.
    * POST /api/tickets/guest/create
    */
+  @Public()
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async createTicket(
@@ -110,6 +114,7 @@ export class TicketGuestController {
    * View a ticket using access token.
    * GET /api/tickets/guest/view/:accessToken
    */
+  @Public()
   @Get('view/:accessToken')
   async viewTicket(
     @Param('accessToken') accessToken: string,
@@ -121,6 +126,7 @@ export class TicketGuestController {
    * Add a comment to a guest ticket.
    * POST /api/tickets/guest/view/:accessToken/comment
    */
+  @Public()
   @Post('view/:accessToken/comment')
   @HttpCode(HttpStatus.CREATED)
   async addComment(
@@ -134,6 +140,7 @@ export class TicketGuestController {
    * Request access to an existing ticket (sends magic link to email).
    * POST /api/tickets/guest/request-ticket-access
    */
+  @Public()
   @Post('request-ticket-access')
   @HttpCode(HttpStatus.OK)
   async requestTicketAccess(
@@ -165,6 +172,7 @@ export class TicketGuestController {
    * Get ticket access token from view token.
    * GET /api/tickets/guest/access/:token
    */
+  @Public()
   @Get('access/:token')
   async getAccessFromToken(
     @Param('token') token: string,

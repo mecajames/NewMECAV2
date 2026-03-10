@@ -11,11 +11,13 @@ import {
 } from '@nestjs/common';
 import { RulebooksService } from './rulebooks.service';
 import { Rulebook } from './rulebooks.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/rulebooks')
 export class RulebooksController {
   constructor(private readonly rulebooksService: RulebooksService) {}
 
+  @Public()
   @Get()
   async getAllRulebooks(): Promise<Rulebook[]> {
     return this.rulebooksService.findAll();
@@ -26,6 +28,7 @@ export class RulebooksController {
     return this.rulebooksService.findAllIncludingInactive();
   }
 
+  @Public()
   @Get(':id')
   async getRulebook(@Param('id') id: string): Promise<Rulebook> {
     return this.rulebooksService.findById(id);

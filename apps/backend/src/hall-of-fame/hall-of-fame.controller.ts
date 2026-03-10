@@ -18,6 +18,7 @@ import { HallOfFameService } from './hall-of-fame.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/hall-of-fame')
 export class HallOfFameController {
@@ -44,11 +45,13 @@ export class HallOfFameController {
     return { user, profile };
   }
 
+  @Public()
   @Get('years')
   async getYears() {
     return this.hallOfFameService.getDistinctYears();
   }
 
+  @Public()
   @Get()
   async getAll(
     @Query('category') category?: string,
@@ -60,6 +63,7 @@ export class HallOfFameController {
     );
   }
 
+  @Public()
   @Get(':id')
   async getById(@Param('id') id: string) {
     return this.hallOfFameService.findById(id);

@@ -17,6 +17,7 @@ import { ResultTeamsService, CreateResultTeamDto } from './result-teams.service'
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/result-teams')
 export class ResultTeamsController {
@@ -54,6 +55,7 @@ export class ResultTeamsController {
   /**
    * Get result teams for a specific result
    */
+  @Public()
   @Get('result/:resultId')
   async getResultTeamsByResult(@Param('resultId') resultId: string) {
     return this.resultTeamsService.getResultTeamsByResultId(resultId);
@@ -62,6 +64,7 @@ export class ResultTeamsController {
   /**
    * Get result teams for a specific team
    */
+  @Public()
   @Get('team/:teamId')
   async getResultTeamsByTeam(@Param('teamId') teamId: string) {
     return this.resultTeamsService.getResultTeamsByTeamId(teamId);

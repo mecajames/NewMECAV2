@@ -10,11 +10,13 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ClassNameMappingsService } from './class-name-mappings.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/class-name-mappings')
 export class ClassNameMappingsController {
   constructor(private readonly service: ClassNameMappingsService) {}
 
+  @Public()
   @Get()
   async findAll() {
     return this.service.findAll();

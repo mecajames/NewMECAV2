@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property, Index } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, Index, Unique } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 
 /**
@@ -14,6 +14,7 @@ export class ProcessedWebhookEvent {
 
   @Property({ type: 'text', fieldName: 'stripe_event_id' })
   @Index()
+  @Unique()
   stripeEventId!: string;
 
   @Property({ type: 'text', fieldName: 'event_type' })

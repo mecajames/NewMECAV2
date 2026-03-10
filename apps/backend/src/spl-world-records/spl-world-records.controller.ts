@@ -16,6 +16,7 @@ import { SplWorldRecordsService } from './spl-world-records.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/spl-world-records')
 export class SplWorldRecordsController {
@@ -42,16 +43,19 @@ export class SplWorldRecordsController {
     return { user, profile };
   }
 
+  @Public()
   @Get()
   async getAll() {
     return this.splWorldRecordsService.findAll();
   }
 
+  @Public()
   @Get(':id')
   async getById(@Param('id') id: string) {
     return this.splWorldRecordsService.findById(id);
   }
 
+  @Public()
   @Get('history/:classId')
   async getHistory(@Param('classId') classId: string) {
     return this.splWorldRecordsService.findHistoryByClassId(classId);

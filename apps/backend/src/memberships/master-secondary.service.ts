@@ -699,17 +699,18 @@ export class MasterSecondaryService {
 
           // Now create the Profile with the same ID as the Supabase user
           // We need to use raw SQL to set the specific ID
-          // Use the knex query builder through em.getConnection()
           const connection = em.getConnection();
-          await connection.execute(`
-            INSERT INTO profiles (id, email, first_name, last_name, full_name, force_password_change, account_type, is_secondary_account, can_login, master_profile_id, created_at, updated_at)
-            VALUES ('${createResult.userId}', '${placeholderEmail}', '${firstName.replace(/'/g, "''")}', '${lastName.replace(/'/g, "''")}', '${(secondary.competitorName || 'Unknown').replace(/'/g, "''")}', false, 'member', true, false, '${masterUserId}', NOW(), NOW())
-          `);
+          await connection.execute(
+            `INSERT INTO profiles (id, email, first_name, last_name, full_name, force_password_change, account_type, is_secondary_account, can_login, master_profile_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, false, 'member', true, false, ?, NOW(), NOW())`,
+            [createResult.userId, placeholderEmail, firstName, lastName, secondary.competitorName || 'Unknown', masterUserId]
+          );
 
           // Update the membership to point to the new profile
-          await connection.execute(`
-            UPDATE memberships SET user_id = '${createResult.userId}' WHERE id = '${secondary.id}'
-          `);
+          await connection.execute(
+            `UPDATE memberships SET user_id = ? WHERE id = ?`,
+            [createResult.userId, secondary.id]
+          );
 
           fixed++;
           this.logger.log(`Created profile ${createResult.userId} for secondary ${secondary.id}`);

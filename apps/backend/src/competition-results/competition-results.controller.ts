@@ -21,6 +21,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CompetitionResultsService } from './competition-results.service';
 import { CompetitionResult } from './competition-results.entity';
 import { ResultsImportService } from './results-import.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/competition-results')
 export class CompetitionResultsController {
@@ -58,6 +59,7 @@ export class CompetitionResultsController {
     return this.competitionResultsService.getResultCountsByEvent();
   }
 
+  @Public()
   @Get('by-event/:eventId')
   async getResultsByEvent(@Param('eventId') eventId: string): Promise<CompetitionResult[]> {
     return this.competitionResultsService.findByEvent(eventId);
@@ -81,9 +83,28 @@ export class CompetitionResultsController {
     return this.competitionResultsService.findByMecaId(mecaId);
   }
 
+  @Public()
   @Get(':id')
   async getResult(@Param('id') id: string): Promise<CompetitionResult> {
     return this.competitionResultsService.findById(id);
+  }
+
+  // Whitelist of fields allowed for create/update to prevent mass assignment
+  private static readonly ALLOWED_RESULT_FIELDS = new Set([
+    'event_id', 'competitor_id', 'competitor_name', 'meca_id', 'state_code',
+    'competition_class', 'format', 'score', 'placement', 'points_earned',
+    'vehicle_info', 'wattage', 'frequency', 'notes', 'season_id', 'class_id',
+    'created_by', 'modification_reason',
+  ]);
+
+  private sanitizeResultData(data: Record<string, any>): Partial<CompetitionResult> {
+    const sanitized: Record<string, any> = {};
+    for (const key of Object.keys(data)) {
+      if (CompetitionResultsController.ALLOWED_RESULT_FIELDS.has(key)) {
+        sanitized[key] = data[key];
+      }
+    }
+    return sanitized as Partial<CompetitionResult>;
   }
 
   @Post()
@@ -91,8 +112,8 @@ export class CompetitionResultsController {
   async createResult(@Body() data: Partial<CompetitionResult & { userId?: string; created_by?: string }>): Promise<CompetitionResult> {
     // Support both userId and created_by for audit logging
     const userId = data.userId || data.created_by;
-    delete data.userId;
-    return this.competitionResultsService.create(data, userId);
+    const sanitized = this.sanitizeResultData(data as Record<string, any>);
+    return this.competitionResultsService.create(sanitized, userId);
   }
 
   @Put(':id')
@@ -102,9 +123,9 @@ export class CompetitionResultsController {
     @Req() req: Request,
   ): Promise<CompetitionResult> {
     const userId = data.userId;
-    delete data.userId;
+    const sanitized = this.sanitizeResultData(data as Record<string, any>);
     const ipAddress = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket?.remoteAddress || req.ip;
-    return this.competitionResultsService.update(id, data, userId, ipAddress);
+    return this.competitionResultsService.update(id, sanitized, userId, ipAddress);
   }
 
   @Delete(':id')

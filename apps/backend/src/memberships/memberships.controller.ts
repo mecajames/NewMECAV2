@@ -26,6 +26,7 @@ import { Membership } from './memberships.entity';
 import { MecaIdService } from './meca-id.service';
 import { MasterSecondaryService, CreateSecondaryMembershipDto, SecondaryMembershipInfo, MasterMembershipInfo } from './master-secondary.service';
 import { MembershipSyncService } from './membership-sync.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/memberships')
 export class MembershipsController {
@@ -88,6 +89,7 @@ export class MembershipsController {
    * Create a new membership for a user
    * Replaces the old guest/user checkout flow - all memberships require a user account
    */
+  @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createMembership(@Body() data: CreateMembershipDto): Promise<Membership> {
@@ -193,21 +195,44 @@ export class MembershipsController {
   }
 
   @Get(':id')
-  async getMembership(@Param('id') id: string): Promise<Membership> {
-    return this.membershipsService.findById(id);
+  async getMembership(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<Membership> {
+    const { user } = await this.getAuthenticatedUser(authHeader);
+    const membership = await this.membershipsService.findById(id);
+    // Allow access if user owns the membership or is admin
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN && membership.user?.id !== user.id) {
+      throw new ForbiddenException('You can only access your own membership data');
+    }
+    return membership;
   }
 
   @Put(':id')
   async updateMembership(
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() data: Partial<Membership>,
   ): Promise<Membership> {
+    const { user } = await this.getAuthenticatedUser(authHeader);
+    const membership = await this.membershipsService.findById(id);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN && membership.user?.id !== user.id) {
+      throw new ForbiddenException('You can only update your own membership data');
+    }
     return this.membershipsService.update(id, data);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteMembership(@Param('id') id: string): Promise<void> {
+  async deleteMembership(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.requireAdmin(authHeader);
     return this.membershipsService.delete(id);
   }
 

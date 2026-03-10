@@ -25,6 +25,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [quickFilter, setQuickFilter] = useState<string>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [resultsFilter, setResultsFilter] = useState<string>('all');
   const [eventResults, setEventResults] = useState<{[key: string]: number}>({});
   const [sendingRatingEmails, setSendingRatingEmails] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -86,12 +87,13 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     fetchEvents();
     fetchEventDirectors();
     fetchSeasons();
+    fetchResultCounts();
   }, []);
 
   useEffect(() => {
     filterEvents();
     setCurrentPage(1); // Reset to first page when filters change
-  }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter, monthFilter]);
+  }, [events, searchTerm, statusFilter, seasonFilter, countryFilter, stateFilter, quickFilter, monthFilter, resultsFilter, eventResults]);
 
   // Paginate the filtered events
   const paginatedEvents = useMemo(() => {
@@ -101,12 +103,12 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
 
   const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
 
-  // Only fetch result counts for the current page's events
+  // Re-fetch result counts when page changes (in case new results were added)
   useEffect(() => {
     if (paginatedEvents.length > 0) {
       fetchResultCounts();
     }
-  }, [paginatedEvents]);
+  }, [currentPage]);
 
   const fetchEvents = async () => {
     try {
@@ -195,6 +197,13 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       });
     } else if (quickFilter === 'pending') {
       filtered = filtered.filter(event => event.status === 'pending');
+    }
+
+    // Filter by results
+    if (resultsFilter === 'with-results') {
+      filtered = filtered.filter(event => (eventResults[event.id] || 0) > 0);
+    } else if (resultsFilter === 'no-results') {
+      filtered = filtered.filter(event => !eventResults[event.id]);
     }
 
     // Sort by date - closest to today first (descending order)
@@ -829,6 +838,20 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
               Clear Month
             </button>
           )}
+
+          {/* Results Filter Dropdown */}
+          <div className="ml-4 flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-300">Results:</label>
+            <select
+              value={resultsFilter}
+              onChange={(e) => setResultsFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="all">All Events</option>
+              <option value="with-results">With Results</option>
+              <option value="no-results">No Results</option>
+            </select>
+          </div>
         </div>
 
         <div className="mt-3 text-xs text-gray-400">

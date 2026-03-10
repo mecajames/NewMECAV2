@@ -140,9 +140,9 @@ export class EventsService {
     const { page = 1, limit = 20, seasonId } = options;
     const offset = (page - 1) * limit;
 
-    // Build WHERE conditions for count query
-    const conditions: string[] = [`e.status = 'completed'`];
-    const countParams: any[] = [];
+    // Build parameterized WHERE conditions
+    const conditions: string[] = [`e.status = ?`];
+    const countParams: any[] = ['completed'];
 
     if (seasonId) {
       conditions.push(`e.season_id = ?`);

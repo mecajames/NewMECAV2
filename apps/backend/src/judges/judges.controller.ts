@@ -37,6 +37,7 @@ import {
   EventAssignmentStatus,
 } from '@newmeca/shared';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { JudgeApplication } from './judge-application.entity';
 import { JudgeApplicationReference } from './judge-application-reference.entity';
@@ -217,6 +218,7 @@ export class JudgesController {
     }));
   }
 
+  @Public()
   @Get('directory/:id')
   async getPublicJudgeProfile(@Param('id') id: string) {
     const judge = await this.judgesService.getJudge(id);

@@ -35,6 +35,8 @@ import { InvoicePdfService } from '../invoices/pdf/invoice-pdf.service';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
 import { Order } from '../orders/orders.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
+import { UserRole } from '@newmeca/shared';
 
 /**
  * Billing Controller - Aggregation layer for billing operations
@@ -67,6 +69,17 @@ export class BillingController {
     return user;
   }
 
+  // Helper to require admin authentication
+  private async requireAdmin(authHeader?: string) {
+    const user = await this.getCurrentUser(authHeader);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (profile?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return user;
+  }
+
   // ==========================================
   // ORDERS ENDPOINTS
   // ==========================================
@@ -75,7 +88,11 @@ export class BillingController {
    * Get all orders with filters (admin)
    */
   @Get('orders')
-  async getOrders(@Query() query: OrderListQuery) {
+  async getOrders(
+    @Headers('authorization') authHeader: string,
+    @Query() query: OrderListQuery,
+  ) {
+    await this.requireAdmin(authHeader);
     const validatedQuery = OrderListQuerySchema.parse(query);
     return this.ordersService.findAll(validatedQuery);
   }
@@ -84,7 +101,11 @@ export class BillingController {
    * Get order by ID
    */
   @Get('orders/:id')
-  async getOrder(@Param('id') id: string) {
+  async getOrder(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.ordersService.findById(id);
   }
 
@@ -93,7 +114,11 @@ export class BillingController {
    */
   @Post('orders')
   @HttpCode(HttpStatus.CREATED)
-  async createOrder(@Body() data: CreateOrderDto) {
+  async createOrder(
+    @Headers('authorization') authHeader: string,
+    @Body() data: CreateOrderDto,
+  ) {
+    await this.requireAdmin(authHeader);
     const validatedData = CreateOrderSchema.parse(data);
     return this.ordersService.create(validatedData);
   }
@@ -106,7 +131,11 @@ export class BillingController {
    * Get all invoices with filters (admin)
    */
   @Get('invoices')
-  async getInvoices(@Query() query: InvoiceListQuery) {
+  async getInvoices(
+    @Headers('authorization') authHeader: string,
+    @Query() query: InvoiceListQuery,
+  ) {
+    await this.requireAdmin(authHeader);
     const validatedQuery = InvoiceListQuerySchema.parse(query);
     return this.invoicesService.findAll(validatedQuery);
   }
@@ -115,7 +144,11 @@ export class BillingController {
    * Get invoice by ID
    */
   @Get('invoices/:id')
-  async getInvoice(@Param('id') id: string) {
+  async getInvoice(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.invoicesService.findById(id);
   }
 
@@ -124,7 +157,12 @@ export class BillingController {
    */
   @Get('invoices/:id/pdf')
   @Header('Content-Type', 'text/html')
-  async getInvoicePdf(@Param('id') id: string, @Res() res: Response) {
+  async getInvoicePdf(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    await this.requireAdmin(authHeader);
     const invoice = await this.invoicesService.findById(id);
     const html = this.pdfService.generateInvoiceHtml(invoice);
     res.send(html);
@@ -135,7 +173,11 @@ export class BillingController {
    */
   @Post('invoices')
   @HttpCode(HttpStatus.CREATED)
-  async createInvoice(@Body() data: CreateInvoiceDto) {
+  async createInvoice(
+    @Headers('authorization') authHeader: string,
+    @Body() data: CreateInvoiceDto,
+  ) {
+    await this.requireAdmin(authHeader);
     const validatedData = CreateInvoiceSchema.parse(data);
     return this.invoicesService.create(validatedData);
   }
@@ -145,8 +187,11 @@ export class BillingController {
    */
   @Post('invoices/:id/send')
   @HttpCode(HttpStatus.OK)
-  async sendInvoice(@Param('id') id: string) {
-    // Send invoice email and mark as sent
+  async sendInvoice(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
     const result = await this.invoicesService.sendInvoice(id);
     return { success: result.success, invoice: result.invoice, error: result.error };
   }
@@ -216,7 +261,10 @@ export class BillingController {
    * Get billing dashboard statistics
    */
   @Get('stats/dashboard')
-  async getDashboardStats() {
+  async getDashboardStats(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
     // Run all queries in parallel
     const [
       orderStatusCounts,
@@ -268,7 +316,10 @@ export class BillingController {
    * Get order statistics
    */
   @Get('stats/orders')
-  async getOrderStats() {
+  async getOrderStats(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
     const counts = await this.ordersService.getStatusCounts();
     const recentOrders = await this.ordersService.getRecentOrders(10);
 
@@ -283,7 +334,10 @@ export class BillingController {
    * Get invoice statistics
    */
   @Get('stats/invoices')
-  async getInvoiceStats() {
+  async getInvoiceStats(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
     const counts = await this.invoicesService.getStatusCounts();
     const unpaid = await this.invoicesService.getUnpaidTotal();
     const recentInvoices = await this.invoicesService.getRecentInvoices(10);
@@ -301,9 +355,11 @@ export class BillingController {
    */
   @Get('stats/revenue')
   async getRevenueStats(
+    @Headers('authorization') authHeader: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
+    await this.requireAdmin(authHeader);
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
@@ -348,7 +404,10 @@ export class BillingController {
    */
   @Post('sync/registrations')
   @HttpCode(HttpStatus.OK)
-  async syncRegistrationOrders() {
+  async syncRegistrationOrders(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
     const em = this.em.fork();
 
     // Find all paid registrations
@@ -408,7 +467,11 @@ export class BillingController {
    */
   @Post('sync/registrations/:registrationId')
   @HttpCode(HttpStatus.OK)
-  async syncSingleRegistration(@Param('registrationId') registrationId: string) {
+  async syncSingleRegistration(
+    @Headers('authorization') authHeader: string,
+    @Param('registrationId') registrationId: string,
+  ) {
+    await this.requireAdmin(authHeader);
     const order = await this.ordersService.createFromEventRegistration(registrationId);
     const invoice = await this.invoicesService.createFromOrder(order.id);
 
@@ -432,7 +495,10 @@ export class BillingController {
    */
   @Post('fix/null-due-dates')
   @HttpCode(HttpStatus.OK)
-  async fixNullDueDates() {
+  async fixNullDueDates(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.invoicesService.fixNullDueDates();
   }
 
@@ -446,11 +512,13 @@ export class BillingController {
   @Get('export/orders')
   @Header('Content-Type', 'text/csv')
   async exportOrders(
+    @Headers('authorization') authHeader: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('status') status?: OrderStatus,
     @Res() res?: Response,
   ) {
+    await this.requireAdmin(authHeader);
     const query: OrderListQuery = {
       page: 1,
       limit: 10000, // Get all orders
@@ -510,11 +578,13 @@ export class BillingController {
   @Get('export/invoices')
   @Header('Content-Type', 'text/csv')
   async exportInvoices(
+    @Headers('authorization') authHeader: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('status') status?: InvoiceStatus,
     @Res() res?: Response,
   ) {
+    await this.requireAdmin(authHeader);
     const query: InvoiceListQuery = {
       page: 1,
       limit: 10000, // Get all invoices
@@ -576,10 +646,12 @@ export class BillingController {
   @Get('export/revenue')
   @Header('Content-Type', 'text/csv')
   async exportRevenue(
+    @Headers('authorization') authHeader: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Res() res?: Response,
   ) {
+    await this.requireAdmin(authHeader);
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 

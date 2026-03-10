@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
+import { Public } from '../auth/public.decorator';
 import { UserActivityService } from './user-activity.service';
 
 @Controller('api/user-activity')
@@ -19,6 +20,7 @@ export class UserActivityController {
   /**
    * Record a login event. Called by frontend after successful sign-in.
    */
+  @Public()
   @Post('login')
   @HttpCode(204)
   async recordLogin(@Req() req: Request): Promise<void> {
@@ -35,6 +37,7 @@ export class UserActivityController {
   /**
    * Record a logout event. Called by frontend before sign-out.
    */
+  @Public()
   @Post('logout')
   @HttpCode(204)
   async recordLogout(@Req() req: Request): Promise<void> {
@@ -51,6 +54,7 @@ export class UserActivityController {
   /**
    * Record a failed login attempt. Public endpoint, rate-limited.
    */
+  @Public()
   @Post('failed-attempt')
   @HttpCode(204)
   @Throttle({ default: { limit: 20, ttl: 900000 } }) // 20 per 15 min

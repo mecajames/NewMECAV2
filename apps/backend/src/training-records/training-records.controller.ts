@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { TrainingRecordsService } from './training-records.service';
+import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import {
@@ -76,6 +77,7 @@ export class TrainingRecordsController {
   /**
    * Health check endpoint - no auth required
    */
+  @Public()
   @Get('health')
   healthCheck() {
     return { status: 'ok', module: 'training-records' };

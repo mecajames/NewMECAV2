@@ -11,6 +11,7 @@ import {
 import { Response } from 'express';
 import { QuickBooksService } from './quickbooks.service';
 import { QuickBooksCompanyInfo } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/quickbooks')
 export class QuickBooksController {
@@ -19,6 +20,7 @@ export class QuickBooksController {
   /**
    * Get QuickBooks connection status
    */
+  @Public()
   @Get('status')
   async getConnectionStatus(): Promise<{ connected: boolean; company: QuickBooksCompanyInfo | null }> {
     const company = await this.quickBooksService.getConnectionStatus();
@@ -40,6 +42,7 @@ export class QuickBooksController {
   /**
    * OAuth callback - handles the redirect from QuickBooks
    */
+  @Public()
   @Get('callback')
   async callback(
     @Query('code') code: string,
@@ -77,6 +80,7 @@ export class QuickBooksController {
    * Get available QuickBooks items (products/services)
    * Used for mapping membership types to QuickBooks items
    */
+  @Public()
   @Get('items')
   async getItems(): Promise<any[]> {
     return this.quickBooksService.getItems();
@@ -86,6 +90,7 @@ export class QuickBooksController {
    * Get available QuickBooks bank accounts
    * Used for configuring deposit accounts
    */
+  @Public()
   @Get('accounts')
   async getAccounts(): Promise<any[]> {
     return this.quickBooksService.getAccounts();

@@ -35,10 +35,11 @@ export class RecaptchaService {
     }
 
     if (!this.secretKey) {
-      console.warn('reCAPTCHA verification skipped - no secret key configured');
-      // In development, you might want to return true to allow testing
-      // In production, this should throw an error
-      return process.env.NODE_ENV === 'development';
+      if (process.env.NODE_ENV === 'production') {
+        throw new BadRequestException('reCAPTCHA is not configured. Contact administrator.');
+      }
+      console.warn('reCAPTCHA verification skipped - no secret key configured (development mode)');
+      return true;
     }
 
     try {

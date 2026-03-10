@@ -11,11 +11,13 @@ import {
 } from '@nestjs/common';
 import { CompetitionFormatsService } from './competition-formats.service';
 import { CompetitionFormat } from './competition-formats.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/competition-formats')
 export class CompetitionFormatsController {
   constructor(private readonly competitionFormatsService: CompetitionFormatsService) {}
 
+  @Public()
   @Get()
   async getAllFormats(): Promise<CompetitionFormat[]> {
     return this.competitionFormatsService.findAll();
@@ -26,6 +28,7 @@ export class CompetitionFormatsController {
     return this.competitionFormatsService.findActive();
   }
 
+  @Public()
   @Get(':id')
   async getFormat(@Param('id') id: string): Promise<CompetitionFormat> {
     return this.competitionFormatsService.findById(id);

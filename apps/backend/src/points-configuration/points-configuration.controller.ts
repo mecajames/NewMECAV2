@@ -17,6 +17,7 @@ import { PointsConfigurationService } from './points-configuration.service';
 import { UpdatePointsConfigurationSchema, UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/points-configuration')
 export class PointsConfigurationController {
@@ -68,6 +69,7 @@ export class PointsConfigurationController {
   /**
    * Get points configuration for current season (public)
    */
+  @Public()
   @Get('current')
   async getCurrentSeasonConfig() {
     const config = await this.pointsConfigService.getConfigForCurrentSeason();
@@ -80,6 +82,7 @@ export class PointsConfigurationController {
   /**
    * Get points configuration by season ID
    */
+  @Public()
   @Get('season/:seasonId')
   async getConfigForSeason(@Param('seasonId') seasonId: string) {
     try {

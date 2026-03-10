@@ -20,6 +20,7 @@ import { Profile } from './profiles.entity';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/profiles')
 export class ProfilesController {
@@ -91,6 +92,7 @@ export class ProfilesController {
     return this.profilesService.ensureProfile(body.userId);
   }
 
+  @Public()
   @Get()
   async listProfiles(
     @Query('page') page: number = 1,
@@ -101,14 +103,19 @@ export class ProfilesController {
 
   @Get('search')
   async searchProfiles(
+    @Headers('authorization') authHeader: string,
     @Query('q') query: string,
     @Query('limit') limit: number = 20,
   ): Promise<Profile[]> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.search(query, limit);
   }
 
   @Get('stats')
-  async getStats(): Promise<{ totalUsers: number; totalMembers: number }> {
+  async getStats(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ totalUsers: number; totalMembers: number }> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.getStats();
   }
 
@@ -125,6 +132,7 @@ export class ProfilesController {
     });
   }
 
+  @Public()
   @Get('public/:id')
   async getPublicProfile(@Param('id') id: string): Promise<Profile> {
     return this.profilesService.findPublicById(id);
@@ -156,11 +164,13 @@ export class ProfilesController {
     return this.profilesService.findAdminMembers();
   }
 
+  @Public()
   @Get(':id')
   async getProfile(@Param('id') id: string): Promise<Profile> {
     return this.profilesService.findById(id);
   }
 
+  @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createProfile(@Body() data: Partial<Profile>): Promise<Profile> {
@@ -182,17 +192,18 @@ export class ProfilesController {
     // If meca_id is being changed, verify the caller is a super admin
     if ('meca_id' in data) {
       let allowed = false;
-      try {
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const { data: { user } } = await this.supabaseAdmin.getClient().auth.getUser(token);
-          if (user?.email && ProfilesController.SUPER_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-            allowed = true;
-          }
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+        if (error) {
+          throw new ForbiddenException('Failed to verify authorization for MECA ID change');
         }
-      } catch {}
+        if (user?.email && ProfilesController.SUPER_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+          allowed = true;
+        }
+      }
       if (!allowed) {
-        delete (data as any).meca_id;
+        throw new ForbiddenException('Only super admins can modify MECA IDs');
       }
     }
     return this.profilesService.update(id, data);

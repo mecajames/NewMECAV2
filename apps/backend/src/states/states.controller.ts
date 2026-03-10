@@ -18,6 +18,7 @@ import { StatesService, CreateStateFinalsDateDto, UpdateStateFinalsDateDto } fro
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/states')
 export class StatesController {
@@ -55,6 +56,7 @@ export class StatesController {
   /**
    * Get all states
    */
+  @Public()
   @Get()
   async getAllStates(@Query('type') type?: 'domestic' | 'international') {
     if (type === 'domestic') {
@@ -69,6 +71,7 @@ export class StatesController {
   /**
    * Search states by name or abbreviation
    */
+  @Public()
   @Get('search')
   async searchStates(@Query('q') query: string) {
     if (!query || query.trim().length === 0) {
@@ -80,6 +83,7 @@ export class StatesController {
   /**
    * Get state by abbreviation
    */
+  @Public()
   @Get(':abbreviation')
   async getStateByAbbreviation(@Param('abbreviation') abbreviation: string) {
     return this.statesService.getStateByAbbreviation(abbreviation);
@@ -92,6 +96,7 @@ export class StatesController {
   /**
    * Get state finals dates for a season (public)
    */
+  @Public()
   @Get('finals-dates/season/:seasonId')
   async getStateFinalsDatesBySeason(@Param('seasonId') seasonId: string) {
     return this.statesService.getStateFinalsDatesBySeasonId(seasonId);
@@ -100,6 +105,7 @@ export class StatesController {
   /**
    * Get state finals date for a specific state and season (public)
    */
+  @Public()
   @Get('finals-dates/:stateCode/:seasonId')
   async getStateFinalsDateByState(
     @Param('stateCode') stateCode: string,

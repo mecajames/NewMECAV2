@@ -28,6 +28,7 @@ import type {
 } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { Public } from '../auth/public.decorator';
 import { FinalsVotingService } from './finals-voting.service';
 
 @Controller('api/finals-voting')
@@ -316,6 +317,7 @@ export class FinalsVotingController {
   // PUBLIC
   // =========================================================================
 
+  @Public()
   @Get('status')
   async getPublicStatus(@Headers('authorization') authHeader?: string) {
     let userId: string | undefined;
@@ -330,6 +332,7 @@ export class FinalsVotingController {
     return this.finalsVotingService.getPublicStatus(userId);
   }
 
+  @Public()
   @Get('results/:id')
   async getPublicResults(@Param('id') sessionId: string) {
     return this.finalsVotingService.getResults(sessionId, false);

@@ -18,6 +18,7 @@ import { ManufacturerListing } from './manufacturer-listing.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 
 interface CreateRetailerDto {
   business_name: string;
@@ -88,6 +89,7 @@ export class BusinessListingsController {
   // PUBLIC ENDPOINTS
   // ============================================
 
+  @Public()
   @Get('retailers')
   async getAllRetailers(): Promise<RetailerListing[]> {
     return this.businessListingsService.findAllRetailers(false);
@@ -98,6 +100,7 @@ export class BusinessListingsController {
     return this.businessListingsService.findRetailerById(id);
   }
 
+  @Public()
   @Get('manufacturers')
   async getAllManufacturers(): Promise<ManufacturerListing[]> {
     return this.businessListingsService.findAllManufacturers(false);
