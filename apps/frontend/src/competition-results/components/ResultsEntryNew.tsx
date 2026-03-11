@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, User } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, User, CheckCircle } from 'lucide-react';
 import axios from '@/lib/axios';
 import { eventsApi, Event } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
@@ -88,6 +88,8 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [eventSearchTerm, setEventSearchTerm] = useState('');
+  const [eventDropdownOpen, setEventDropdownOpen] = useState(false);
+  const eventDropdownRef = useRef<HTMLDivElement>(null);
 
   // Entry Method
   const [entryMethod, setEntryMethod] = useState<EntryMethod>('manual');
@@ -257,25 +259,37 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     }
   }, [initialEventId, events]);
 
-  // Filter events by season
+  // Filter events by season and search term
   useEffect(() => {
+    let filtered = events;
     if (selectedSeasonId) {
-      const filtered = events.filter(e => e.season_id === selectedSeasonId);
-      setFilteredEvents(filtered);
-    } else {
-      setFilteredEvents(events);
+      filtered = filtered.filter(e => e.season_id === selectedSeasonId);
     }
-  }, [selectedSeasonId, events]);
-
-  // Filter events by search term
-  useEffect(() => {
     if (eventSearchTerm) {
-      const filtered = filteredEvents.filter(e =>
+      filtered = filtered.filter(e =>
         e.title.toLowerCase().includes(eventSearchTerm.toLowerCase())
       );
-      setFilteredEvents(filtered);
+    }
+    setFilteredEvents(filtered);
+  }, [selectedSeasonId, events, eventSearchTerm]);
+
+  // Open dropdown when search term changes and has results
+  useEffect(() => {
+    if (eventSearchTerm) {
+      setEventDropdownOpen(true);
     }
   }, [eventSearchTerm]);
+
+  // Close event dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (eventDropdownRef.current && !eventDropdownRef.current.contains(e.target as Node)) {
+        setEventDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Load results when event selected
   useEffect(() => {
@@ -1050,7 +1064,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
           </div>
 
           {/* Right Column - Event Search and Select */}
-          <div>
+          <div ref={eventDropdownRef} className="relative">
             <label className="block text-sm font-medium text-gray-300 mb-2">Event *</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -1059,22 +1073,64 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                 placeholder="Search events..."
                 value={eventSearchTerm}
                 onChange={(e) => setEventSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                onFocus={() => setEventDropdownOpen(true)}
+                className="w-full pl-10 pr-8 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <ChevronDown
+                className={`absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 transition-transform ${eventDropdownOpen ? 'rotate-180' : ''}`}
+                onClick={() => setEventDropdownOpen(!eventDropdownOpen)}
+                style={{ cursor: 'pointer' }}
               />
             </div>
-            <select
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full mt-2 px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="">Select an event...</option>
-              {filteredEvents.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.title} - {new Date(event.event_date).toLocaleDateString()}
-                  {event.day_number ? ` (Day ${event.day_number})` : ''}
-                </option>
-              ))}
-            </select>
+            {/* Selected event display */}
+            {selectedEventId && !eventDropdownOpen && (
+              <div className="mt-1 px-3 py-1.5 bg-slate-700 border border-orange-500/50 rounded-lg text-sm text-orange-300 flex items-center justify-between">
+                <span>
+                  {(() => {
+                    const ev = events.find(e => e.id === selectedEventId);
+                    return ev ? `${ev.title} - ${new Date(ev.event_date).toLocaleDateString()}${ev.day_number ? ` (Day ${ev.day_number})` : ''}` : '';
+                  })()}
+                </span>
+                <button
+                  onClick={() => { setSelectedEventId(''); setEventSearchTerm(''); }}
+                  className="ml-2 text-gray-400 hover:text-white"
+                  title="Clear selection"
+                >×</button>
+              </div>
+            )}
+            {/* Dropdown results */}
+            {eventDropdownOpen && (
+              <div className="absolute z-50 w-full mt-1 max-h-60 overflow-y-auto bg-slate-800 border border-slate-600 rounded-lg shadow-lg">
+                {filteredEvents.length === 0 ? (
+                  <div className="px-4 py-3 text-gray-400 text-sm">No events found</div>
+                ) : (
+                  filteredEvents.map((event) => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedEventId(event.id);
+                        setEventDropdownOpen(false);
+                        setEventSearchTerm('');
+                      }}
+                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-slate-700 transition-colors flex items-center gap-2 ${
+                        selectedEventId === event.id ? 'bg-slate-700 text-orange-400' : 'text-white'
+                      }`}
+                    >
+                      {event.result_count ? (
+                        <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      ) : (
+                        <span className="w-4 flex-shrink-0" />
+                      )}
+                      <span className="truncate font-medium">{event.title}{event.day_number ? ` (Day ${event.day_number})` : ''}</span>
+                      <span className="ml-auto text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">
+                        {new Date(event.event_date).toLocaleDateString()}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
