@@ -31,6 +31,7 @@ import {
   UserRole,
 } from '@newmeca/shared';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { Public } from '../auth/public.decorator';
 import { EventDirector } from './event-director.entity';
 import { EventDirectorApplication } from './event-director-application.entity';
 import { EventDirectorApplicationReference } from './event-director-application-reference.entity';
@@ -179,6 +180,7 @@ export class EventDirectorsController {
   // Public Endpoints
   // =============================================================================
 
+  @Public()
   @Get('directory')
   async getDirectory(
     @Query('state') state?: string,
@@ -187,6 +189,7 @@ export class EventDirectorsController {
     return this.eventDirectorsService.getDirectory({ state, region });
   }
 
+  @Public()
   @Get('directory/:id')
   async getPublicProfile(@Param('id') id: string) {
     const ed = await this.eventDirectorsService.getEventDirector(id);

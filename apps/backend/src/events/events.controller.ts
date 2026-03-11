@@ -19,6 +19,7 @@ import { Event } from './events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole, MultiDayResultsMode } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/events')
 export class EventsController {
@@ -51,6 +52,7 @@ export class EventsController {
     return { user, profile };
   }
 
+  @Public()
   @Get()
   async listEvents(
     @Query('page') page: number = 1,
@@ -68,11 +70,13 @@ export class EventsController {
     return this.eventsService.getStats();
   }
 
+  @Public()
   @Get('upcoming')
   async getUpcomingEvents(): Promise<Event[]> {
     return this.eventsService.findUpcoming();
   }
 
+  @Public()
   @Get('public')
   async getPublicEvents(
     @Query('page') page?: string,
@@ -88,6 +92,7 @@ export class EventsController {
     });
   }
 
+  @Public()
   @Get('completed-with-results')
   async getCompletedEventsWithResults(
     @Query('page') page?: string,
@@ -157,6 +162,7 @@ export class EventsController {
 
   // --- Wildcard :id routes (must be after specific routes) ---
 
+  @Public()
   @Get(':id')
   async getEvent(@Param('id') id: string): Promise<Event> {
     return this.eventsService.findById(id);

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Pencil, Trash2, Save, X, Search } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { ArrowLeft, Plus, Pencil, Trash2, Save, X, Search, Upload, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { hallOfFameApi, type HallOfFameInductee, type CreateHallOfFameInducteeDto } from '../hall-of-fame.api-client';
+import { uploadFile } from '@/api-client/uploads.api-client';
 import ActiveMemberLookup from '@/shared/components/MemberSearchInput';
 import type { Profile } from '@/profiles/profiles.api-client';
 
-const CATEGORIES = ['competitors', 'teams', 'retailers', 'judges'] as const;
+const DEFAULT_CATEGORIES = ['competitors', 'teams', 'retailers', 'judges'];
 
 const EMPTY_FORM: CreateHallOfFameInducteeDto = {
   category: 'competitors',
@@ -15,6 +16,7 @@ const EMPTY_FORM: CreateHallOfFameInducteeDto = {
   team_affiliation: '',
   location: '',
   bio: '',
+  image_url: '',
 };
 
 export default function HallOfFameAdminPage() {
@@ -31,6 +33,17 @@ export default function HallOfFameAdminPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [lookupMecaId, setLookupMecaId] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Derive all categories from data + defaults
+  const allCategories = useMemo(() => {
+    const fromData = inductees.map((i) => i.category);
+    const merged = new Set([...DEFAULT_CATEGORIES, ...fromData]);
+    return [...merged].sort();
+  }, [inductees]);
 
   const loadData = async () => {
     try {
@@ -72,6 +85,22 @@ export default function HallOfFameAdminPage() {
     setLookupMecaId(profile.meca_id || '');
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError('');
+    try {
+      const result = await uploadFile(file, 'media-library', undefined, 'hall-of-fame');
+      setForm((prev) => ({ ...prev, image_url: result.publicUrl }));
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Image upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
@@ -79,17 +108,24 @@ export default function HallOfFameAdminPage() {
     setError('');
     setSuccess('');
     try {
+      const payload = { ...form };
+      // Use the new custom category if provided
+      if (showNewCategory && newCategory.trim()) {
+        payload.category = newCategory.trim().toLowerCase();
+      }
       if (editingId) {
-        await hallOfFameApi.update(editingId, form);
+        await hallOfFameApi.update(editingId, payload);
         setSuccess(`Updated "${form.name}" successfully.`);
       } else {
-        await hallOfFameApi.create(form);
+        await hallOfFameApi.create(payload);
         setSuccess(`Added "${form.name}" to the Hall of Fame.`);
       }
       setForm({ ...EMPTY_FORM });
       setEditingId(null);
       setShowForm(false);
       setLookupMecaId('');
+      setNewCategory('');
+      setShowNewCategory(false);
       await loadData();
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Save failed');
@@ -99,15 +135,24 @@ export default function HallOfFameAdminPage() {
   };
 
   const handleEdit = (inductee: HallOfFameInductee) => {
+    const isKnownCategory = allCategories.includes(inductee.category);
     setForm({
-      category: inductee.category,
+      category: isKnownCategory ? inductee.category : DEFAULT_CATEGORIES[0],
       induction_year: inductee.induction_year,
       name: inductee.name,
       state: inductee.state || '',
       team_affiliation: inductee.team_affiliation || '',
       location: inductee.location || '',
       bio: inductee.bio || '',
+      image_url: inductee.image_url || '',
     });
+    if (!isKnownCategory) {
+      setShowNewCategory(true);
+      setNewCategory(inductee.category);
+    } else {
+      setShowNewCategory(false);
+      setNewCategory('');
+    }
     setEditingId(inductee.id);
     setShowForm(true);
     setSuccess('');
@@ -130,6 +175,8 @@ export default function HallOfFameAdminPage() {
     setEditingId(null);
     setShowForm(false);
     setLookupMecaId('');
+    setNewCategory('');
+    setShowNewCategory(false);
     setError('');
   };
 
@@ -149,7 +196,7 @@ export default function HallOfFameAdminPage() {
           <h1 className="text-2xl font-bold text-white">Hall of Fame Management</h1>
           {!showForm && (
             <button
-              onClick={() => { setShowForm(true); setEditingId(null); setForm({ ...EMPTY_FORM }); setSuccess(''); }}
+              onClick={() => { setShowForm(true); setEditingId(null); setForm({ ...EMPTY_FORM }); setSuccess(''); setShowNewCategory(false); setNewCategory(''); }}
               className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"
             >
               <Plus className="w-4 h-4" /> Add Inductee
@@ -180,15 +227,46 @@ export default function HallOfFameAdminPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Category *</label>
-                  <select
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-orange-500 focus:border-orange-500"
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-                    ))}
-                  </select>
+                  {showNewCategory ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        placeholder="e.g. manufacturers"
+                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-orange-500 focus:border-orange-500"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewCategory(false); setNewCategory(''); }}
+                        className="px-2 py-2 bg-slate-600 text-gray-300 rounded-lg hover:bg-slate-500 transition-colors text-sm"
+                        title="Use existing category"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <select
+                        value={form.category}
+                        onChange={(e) => setForm({ ...form, category: e.target.value })}
+                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-orange-500 focus:border-orange-500"
+                      >
+                        {allCategories.map((c) => (
+                          <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewCategory(true)}
+                        className="px-2 py-2 bg-slate-600 text-gray-300 rounded-lg hover:bg-slate-500 transition-colors text-sm"
+                        title="Add new category"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Induction Year *</label>
@@ -269,11 +347,58 @@ export default function HallOfFameAdminPage() {
                     className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-orange-500 focus:border-orange-500"
                   />
                 </div>
+
+                {/* Image Upload */}
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Photo</label>
+                  <div className="flex items-start gap-4">
+                    {form.image_url ? (
+                      <div className="relative group">
+                        <img
+                          src={form.image_url}
+                          alt="Inductee"
+                          className="w-20 h-20 rounded-lg object-cover border border-slate-600"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, image_url: '' })}
+                          className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remove image"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500">
+                        <ImageIcon className="w-8 h-8" />
+                      </div>
+                    )}
+                    <div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="flex items-center gap-2 px-3 py-2 bg-slate-700 text-gray-300 rounded-lg hover:bg-slate-600 transition-colors text-sm disabled:opacity-50"
+                      >
+                        <Upload className="w-4 h-4" />
+                        {uploading ? 'Uploading...' : 'Upload Photo'}
+                      </button>
+                      <p className="text-xs text-gray-500 mt-1">JPG, PNG, or WebP. Max 5MB.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-3 mt-5">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || uploading}
                   className="flex items-center gap-2 px-5 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors text-sm font-medium"
                 >
                   <Save className="w-4 h-4" />
@@ -299,7 +424,7 @@ export default function HallOfFameAdminPage() {
             className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
           >
             <option value="">All Categories</option>
-            {CATEGORIES.map((c) => (
+            {allCategories.map((c) => (
               <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
             ))}
           </select>
@@ -339,6 +464,7 @@ export default function HallOfFameAdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-700/50">
+                    <th className="text-left text-gray-400 font-medium px-4 py-3 w-10"></th>
                     <th className="text-left text-gray-400 font-medium px-4 py-3">Name</th>
                     <th className="text-left text-gray-400 font-medium px-4 py-3">Category</th>
                     <th className="text-left text-gray-400 font-medium px-4 py-3">Year</th>
@@ -351,6 +477,19 @@ export default function HallOfFameAdminPage() {
                 <tbody>
                   {filtered.map((inductee) => (
                     <tr key={inductee.id} className="border-b border-slate-700/30 hover:bg-slate-700/20">
+                      <td className="px-4 py-2">
+                        {inductee.image_url ? (
+                          <img
+                            src={inductee.image_url}
+                            alt={inductee.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-500">
+                            <ImageIcon className="w-4 h-4" />
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-white font-medium">{inductee.name}</td>
                       <td className="px-4 py-3 text-gray-300 capitalize">{inductee.category}</td>
                       <td className="px-4 py-3 text-gray-300">{inductee.induction_year}</td>
@@ -379,7 +518,7 @@ export default function HallOfFameAdminPage() {
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                      <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                         No inductees found
                       </td>
                     </tr>

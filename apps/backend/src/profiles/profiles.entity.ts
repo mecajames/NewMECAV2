@@ -178,6 +178,10 @@ export class Profile {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'member_since' })
   member_since?: Date;
 
+  // Last activity timestamp for online status tracking
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'last_seen_at' })
+  last_seen_at?: Date;
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   created_at: Date = new Date();
 

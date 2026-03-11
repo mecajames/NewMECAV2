@@ -29,6 +29,7 @@ import {
   GetAchievementRecipientsQuery,
   UserRole,
 } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/achievements')
 export class AchievementsController {
@@ -70,6 +71,7 @@ export class AchievementsController {
   /**
    * Get achievements for a specific profile (public)
    */
+  @Public()
   @Get('profile/:profileId')
   async getAchievementsForProfile(@Param('profileId', ParseUUIDPipe) profileId: string) {
     const achievements = await this.achievementsService.getAchievementsForProfile(profileId);
@@ -94,6 +96,7 @@ export class AchievementsController {
   /**
    * Get all available achievement templates (public)
    */
+  @Public()
   @Get('templates')
   async getTemplates() {
     return this.achievementsService.getAllTemplates();

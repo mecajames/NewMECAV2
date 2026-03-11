@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { MembershipTypeConfigsService } from './membership-type-configs.service';
 import { MembershipCategory, CreateMembershipTypeConfigDto, UpdateMembershipTypeConfigDto } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/membership-type-configs')
 export class MembershipTypeConfigsController {
@@ -19,6 +20,7 @@ export class MembershipTypeConfigsController {
     private readonly membershipTypeConfigsService: MembershipTypeConfigsService,
   ) {}
 
+  @Public()
   @Get()
   async findAll(@Query('includeInactive') includeInactive?: string) {
     const include = includeInactive === 'true';
@@ -49,6 +51,7 @@ export class MembershipTypeConfigsController {
     return this.membershipTypeConfigsService.findByCategory(category);
   }
 
+  @Public()
   @Get(':id')
   async findById(@Param('id') id: string) {
     return this.membershipTypeConfigsService.findById(id);

@@ -27,6 +27,7 @@ import {
 import { OrdersService } from './orders.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/orders')
 export class OrdersController {
@@ -71,6 +72,7 @@ export class OrdersController {
    * Get orders by user ID
    * Note: Must be before :id route to avoid matching 'user' as an ID
    */
+  @Public()
   @Get('user/:userId')
   async findByUser(
     @Param('userId') userId: string,
@@ -85,7 +87,8 @@ export class OrdersController {
    * Note: Must be before :id route to avoid matching 'stats' as an ID
    */
   @Get('stats/counts')
-  async getStatusCounts() {
+  async getStatusCounts(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
     return this.ordersService.getStatusCounts();
   }
 
@@ -94,7 +97,11 @@ export class OrdersController {
    * Note: Must be before :id route to avoid matching 'stats' as an ID
    */
   @Get('stats/recent')
-  async getRecentOrders(@Query('limit') limit?: number) {
+  async getRecentOrders(
+    @Headers('authorization') authHeader: string,
+    @Query('limit') limit?: number,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.ordersService.getRecentOrders(limit);
   }
 

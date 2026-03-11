@@ -4,7 +4,8 @@ import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
-  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe
+  ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe,
+  Shield, Wifi
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -17,6 +18,7 @@ import { profilesApi } from '@/profiles';
 import { eventsApi } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { billingApi } from '@/api-client/billing.api-client';
+import { userActivityApi } from '@/user-activity/user-activity.api-client';
 
 type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
 
@@ -46,6 +48,7 @@ export default function AdminDashboard() {
     totalRegistrations: 0,
     totalMembers: 0,
     totalRevenue: '0.00',
+    onlineCount: 0,
   });
   const [loading, setLoading] = useState(true);
   // Load expanded sections from localStorage, default to all collapsed
@@ -72,11 +75,12 @@ export default function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      const [profileStats, eventStats, registrationStats, billingStats] = await Promise.all([
+      const [profileStats, eventStats, registrationStats, billingStats, onlineCount] = await Promise.all([
         profilesApi.getStats(),
         eventsApi.getStats(),
         eventRegistrationsApi.getStats(),
         billingApi.getDashboardStats().catch(() => null),
+        userActivityApi.getOnlineCount().catch(() => 0),
       ]);
 
       setStats({
@@ -85,6 +89,7 @@ export default function AdminDashboard() {
         totalRegistrations: registrationStats.totalRegistrations,
         totalMembers: profileStats.totalMembers,
         totalRevenue: billingStats?.revenue?.total || '0.00',
+        onlineCount,
       });
     } catch (error) {
       console.error('Failed to fetch admin stats:', error);
@@ -94,6 +99,7 @@ export default function AdminDashboard() {
         totalRegistrations: 0,
         totalMembers: 0,
         totalRevenue: '0.00',
+        onlineCount: 0,
       });
     } finally {
       setLoading(false);
@@ -402,6 +408,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/seo-settings',
         },
         {
+          icon: Shield,
+          title: 'Login Audit Log',
+          description: 'View login history, logouts, and failed attempts',
+          action: 'login-audit',
+          color: 'rose',
+          navigateTo: '/admin/login-audit',
+        },
+        {
           icon: BookOpen,
           title: 'Documentation',
           description: 'View system documentation and guides',
@@ -557,7 +571,7 @@ export default function AdminDashboard() {
   const renderOverview = () => (
     <>
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
           <div className="flex items-center justify-between">
             <div>
@@ -565,6 +579,19 @@ export default function AdminDashboard() {
               <p className="text-2xl font-bold text-white mt-1">{stats.totalMembers}</p>
             </div>
             <Users className="h-8 w-8 text-blue-500" />
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-slate-400 text-sm">Currently Online</p>
+              <p className="text-2xl font-bold text-white mt-1">{stats.onlineCount}</p>
+            </div>
+            <div className="relative">
+              <Wifi className="h-8 w-8 text-green-500" />
+              <span className="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-pulse" />
+            </div>
           </div>
         </div>
 

@@ -17,6 +17,7 @@ import { TeamsService } from './teams.service';
 import { Team } from './team.entity';
 import { TeamMember, TeamMemberRole } from './team-member.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 
 interface CreateTeamDto {
   name: string;
@@ -104,18 +105,21 @@ export class TeamsController {
   }
 
   // Public endpoint - get all public teams for directory
+  @Public()
   @Get('public')
   async getPublicTeams(): Promise<Team[]> {
     return this.teamsService.findAllPublicTeams();
   }
 
   // Public endpoint - get public team by ID
+  @Public()
   @Get('public/:id')
   async getPublicTeamById(@Param('id') id: string): Promise<Team | null> {
     return this.teamsService.getPublicTeamById(id);
   }
 
   // Public endpoint - get team stats (optionally filtered by season)
+  @Public()
   @Get('public/:id/stats')
   async getTeamPublicStats(
     @Param('id') id: string,
@@ -206,6 +210,7 @@ export class TeamsController {
     return this.teamsService.findByUserId(userId);
   }
 
+  @Public()
   @Get(':id')
   async getTeam(@Param('id') id: string, @Headers('authorization') authHeader: string): Promise<Team> {
     try {

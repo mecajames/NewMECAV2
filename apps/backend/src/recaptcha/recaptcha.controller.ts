@@ -1,5 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { RecaptchaService } from './recaptcha.service';
+import { Public } from '../auth/public.decorator';
 
 interface VerifyRecaptchaDto {
   token: string;
@@ -14,6 +15,7 @@ export class RecaptchaController {
    * Verify a reCAPTCHA token
    * POST /api/recaptcha/verify
    */
+  @Public()
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   async verify(@Body() dto: VerifyRecaptchaDto): Promise<{ success: boolean; message: string }> {

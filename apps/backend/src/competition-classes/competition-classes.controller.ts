@@ -12,11 +12,13 @@ import {
 } from '@nestjs/common';
 import { CompetitionClassesService } from './competition-classes.service';
 import { CompetitionClass } from './competition-classes.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/competition-classes')
 export class CompetitionClassesController {
   constructor(private readonly competitionClassesService: CompetitionClassesService) {}
 
+  @Public()
   @Get()
   async getAllClasses(): Promise<CompetitionClass[]> {
     return this.competitionClassesService.findAll();
@@ -32,11 +34,13 @@ export class CompetitionClassesController {
     return this.competitionClassesService.findBySeason(seasonId);
   }
 
+  @Public()
   @Get('format/:format')
   async getClassesByFormat(@Param('format') format: string): Promise<CompetitionClass[]> {
     return this.competitionClassesService.findByFormat(format);
   }
 
+  @Public()
   @Get(':id')
   async getClass(@Param('id') id: string): Promise<CompetitionClass> {
     return this.competitionClassesService.findById(id);

@@ -21,6 +21,7 @@ import { EventRegistrationsService, CreateRegistrationDto, AdminListFilters, Che
 import { EventRegistration } from './event-registrations.entity';
 import { RegistrationStatus, PaymentStatus, UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 import { Profile } from '../profiles/profiles.entity';
 
 @Controller('api/event-registrations')
@@ -70,6 +71,7 @@ export class EventRegistrationsController {
     return this.eventRegistrationsService.toggleInterest(eventId, user.id);
   }
 
+  @Public()
   @Post('interest/guest')
   @HttpCode(HttpStatus.OK)
   async guestInterest(
@@ -80,6 +82,7 @@ export class EventRegistrationsController {
     return this.eventRegistrationsService.addGuestInterest(eventId, email, firstName);
   }
 
+  @Public()
   @Get('interest/verify')
   async verifyGuestInterest(
     @Query('token') token: string,
@@ -108,6 +111,7 @@ export class EventRegistrationsController {
     }
   }
 
+  @Public()
   @Get('interest/check')
   async checkInterest(
     @Query('eventId') eventId: string,
@@ -130,6 +134,7 @@ export class EventRegistrationsController {
     return this.eventRegistrationsService.getCountByEvent(eventId);
   }
 
+  @Public()
   @Get('pricing')
   async calculatePricing(
     @Query('eventId') eventId: string,

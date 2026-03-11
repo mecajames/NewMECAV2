@@ -23,6 +23,7 @@ import { PrerenderService } from './prerender.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller()
 export class SeoController {
@@ -57,6 +58,7 @@ export class SeoController {
   // Public SEO endpoints
   // ===========================================================================
 
+  @Public()
   @Get('sitemap.xml')
   @Header('Content-Type', 'application/xml')
   @Header('Cache-Control', 'public, max-age=3600')
@@ -64,6 +66,7 @@ export class SeoController {
     return this.seoService.generateSitemap();
   }
 
+  @Public()
   @Get('robots.txt')
   @Header('Content-Type', 'text/plain')
   @Header('Cache-Control', 'public, max-age=86400')
@@ -71,6 +74,7 @@ export class SeoController {
     return this.seoService.generateRobotsTxt();
   }
 
+  @Public()
   @Get('prerender/*')
   @Header('Content-Type', 'text/html')
   @Header('Cache-Control', 'public, max-age=3600')
@@ -80,6 +84,7 @@ export class SeoController {
   }
 
   // Public endpoint for frontend to fetch SEO override for current page
+  @Public()
   @Get('api/seo/override')
   async getPublicOverride(@Query('path') path: string) {
     if (!path) return null;
@@ -95,6 +100,7 @@ export class SeoController {
   }
 
   // Public endpoint for frontend to get verification codes
+  @Public()
   @Get('api/seo/verification')
   async getVerificationCodes() {
     const settings = await this.seoService.getSeoSettings();

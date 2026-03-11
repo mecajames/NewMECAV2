@@ -16,6 +16,7 @@ import { Request } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { ContactService } from './contact.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { ContactFormSchema, ContactFormDto, ContactStatus, UserRole } from '@newmeca/shared';
@@ -61,6 +62,7 @@ export class ContactController {
   /**
    * Submit a contact form (public)
    */
+  @Public()
   @Post()
   async submitContactForm(
     @Body(new ZodValidationPipe(ContactFormSchema)) dto: ContactFormDto,

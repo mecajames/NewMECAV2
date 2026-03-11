@@ -27,6 +27,7 @@ import {
 } from '@newmeca/shared';
 import { InvoicesService } from './invoices.service';
 import { InvoicePdfService } from './pdf/invoice-pdf.service';
+import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 
@@ -74,6 +75,7 @@ export class InvoicesController {
    * Get invoice for public payment page (no auth required)
    * Note: Must be before :id route
    */
+  @Public()
   @Get('pay/:id')
   async getInvoiceForPayment(@Param('id') id: string) {
     const invoice = await this.invoicesService.findById(id);

@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus
 } from '@nestjs/common';
+import { Public } from '../auth/public.decorator';
 import { SeasonsService } from './seasons.service';
 import { Season } from './seasons.entity';
 
@@ -16,21 +17,25 @@ import { Season } from './seasons.entity';
 export class SeasonsController {
   constructor(private readonly seasonsService: SeasonsService) {}
 
+  @Public()
   @Get()
   async getAllSeasons(): Promise<Season[]> {
     return this.seasonsService.findAll();
   }
 
+  @Public()
   @Get('current')
   async getCurrentSeason(): Promise<Season | null> {
     return this.seasonsService.getCurrentSeason();
   }
 
+  @Public()
   @Get('next')
   async getNextSeason(): Promise<Season | null> {
     return this.seasonsService.getNextSeason();
   }
 
+  @Public()
   @Get(':id')
   async getSeason(@Param('id') id: string): Promise<Season> {
     return this.seasonsService.findById(id);

@@ -23,6 +23,7 @@ import {
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/world-finals')
 export class WorldFinalsController {
@@ -63,6 +64,7 @@ export class WorldFinalsController {
   /**
    * Get qualifications for the current season (public for leaderboard highlighting)
    */
+  @Public()
   @Get('qualifications/current')
   async getCurrentSeasonQualifications() {
     return this.worldFinalsService.getCurrentSeasonQualifications();
@@ -71,6 +73,7 @@ export class WorldFinalsController {
   /**
    * Get qualifications for a specific season
    */
+  @Public()
   @Get('qualifications/season/:seasonId')
   async getSeasonQualifications(@Param('seasonId') seasonId: string) {
     return this.worldFinalsService.getSeasonQualifications(seasonId);

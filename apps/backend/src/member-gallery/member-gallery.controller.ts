@@ -19,6 +19,7 @@ import {
   UpdateGalleryImageDto,
 } from './member-gallery.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
 
@@ -65,6 +66,7 @@ export class MemberGalleryController {
   /**
    * Get public gallery for a member
    */
+  @Public()
   @Get(':memberId')
   async getPublicGallery(@Param('memberId') memberId: string) {
     return this.memberGalleryService.getPublicGalleryByMemberId(memberId);

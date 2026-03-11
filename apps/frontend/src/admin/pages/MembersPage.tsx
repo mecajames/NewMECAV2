@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Search, Filter, UserPlus, Mail, Phone, ArrowLeft, Eye, UserCog, Trash2, AlertTriangle, Loader2, ChevronDown, ChevronRight, UserMinus } from 'lucide-react';
+import { Users, Search, Filter, UserPlus, Mail, Phone, ArrowLeft, Eye, UserCog, Trash2, AlertTriangle, Loader2, ChevronDown, ChevronRight, UserMinus, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
@@ -8,6 +8,8 @@ import AdminUserWizard from '../components/AdminUserWizard';
 import { Pagination } from '@/shared/components';
 import { membershipsApi } from '@/memberships/memberships.api-client';
 import axios from '@/lib/axios';
+import { userActivityApi } from '@/user-activity/user-activity.api-client';
+import { notificationsApi } from '@/notifications/notifications.api-client';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -91,6 +93,45 @@ export default function MembersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [membersPerPage, setMembersPerPage] = useState(50);
 
+  // Online status tracking
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
+
+  // Send message modal
+  const [messageModalMember, setMessageModalMember] = useState<MemberWithMembership | null>(null);
+  const [messageTitle, setMessageTitle] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  const handleSendMessage = async () => {
+    if (!messageModalMember || !messageTitle.trim() || !messageBody.trim()) {
+      alert('Please enter both subject and message');
+      return;
+    }
+    setSendingMessage(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+      await notificationsApi.createNotification({
+        user: { id: messageModalMember.id },
+        fromUser: { id: session.user.id },
+        title: messageTitle,
+        message: messageBody,
+        type: 'message',
+        link: 'dashboard',
+      });
+      setMessageTitle('');
+      setMessageBody('');
+      setMessageModalMember(null);
+      alert('Message sent successfully!');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   const toggleMemberExpanded = (memberId: string) => {
     setExpandedMembers(prev => {
       const newSet = new Set(prev);
@@ -106,12 +147,16 @@ export default function MembersPage() {
   useEffect(() => {
     if (!permLoading) {
       fetchMembers();
+      // Fetch online user IDs for status dots
+      userActivityApi.getOnlineUsers()
+        .then(ids => setOnlineUserIds(new Set(ids)))
+        .catch(() => {});
     }
   }, [permLoading]);
 
   useEffect(() => {
     filterAndSortMembers();
-  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax]);
+  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax, showOnlineOnly, onlineUserIds]);
 
   const fetchMembers = async () => {
     try {
@@ -487,6 +532,11 @@ export default function MembersPage() {
       });
     }
 
+    // Apply online-only filter
+    if (showOnlineOnly) {
+      filtered = filtered.filter((member) => onlineUserIds.has(member.id));
+    }
+
     // Apply sorting
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -507,7 +557,7 @@ export default function MembersPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax]);
+  }, [searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax, showOnlineOnly]);
 
   // Paginated members
   const totalPages = Math.ceil(filteredMembers.length / membersPerPage);
@@ -829,8 +879,8 @@ export default function MembersPage() {
             </div>
           </div>
 
-          {/* Sort Options */}
-          <div className="mt-4 flex items-center gap-4">
+          {/* Sort Options & Online Filter */}
+          <div className="mt-4 flex items-center gap-4 flex-wrap">
             <span className="text-sm font-medium text-gray-300">Sort by:</span>
             <div className="flex gap-2">
               <button
@@ -864,6 +914,19 @@ export default function MembersPage() {
                 Newest
               </button>
             </div>
+
+            <label className="ml-auto flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showOnlineOnly}
+                onChange={(e) => setShowOnlineOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-green-500 focus:ring-green-500 focus:ring-offset-0"
+              />
+              <span className="flex items-center gap-1.5 text-sm text-gray-300">
+                <span className="h-2.5 w-2.5 rounded-full bg-green-500 inline-block" />
+                Online Only ({onlineUserIds.size})
+              </span>
+            </label>
           </div>
         </div>
 
@@ -980,7 +1043,7 @@ export default function MembersPage() {
                           </td>
                           <td className="px-3 py-4">
                             <div className="flex items-center min-w-0">
-                              <div className="flex-shrink-0 h-10 w-10">
+                              <div className="relative flex-shrink-0 h-10 w-10">
                                 {member.profile_picture_url ? (
                                   <img
                                     src={member.profile_picture_url}
@@ -992,6 +1055,12 @@ export default function MembersPage() {
                                     {getInitials(member.first_name, member.last_name)}
                                   </div>
                                 )}
+                                <span
+                                  className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-800 ${
+                                    onlineUserIds.has(member.id) ? 'bg-green-500' : 'bg-red-500'
+                                  }`}
+                                  title={onlineUserIds.has(member.id) ? 'Online' : 'Offline'}
+                                />
                               </div>
                               <div className="ml-3 min-w-0">
                                 <div className="text-sm font-medium text-white flex items-center gap-1 truncate">
@@ -1129,6 +1198,18 @@ export default function MembersPage() {
                                 title="View Details"
                               >
                                 <Eye className="h-5 w-5" />
+                              </button>
+
+                              {/* Send Message */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMessageModalMember(member);
+                                }}
+                                className="p-2 text-gray-400 hover:text-orange-400 hover:bg-slate-700 rounded-lg transition-colors"
+                                title={`Send message to ${member.first_name || member.email}`}
+                              >
+                                <Send className="h-5 w-5" />
                               </button>
 
                               {/* Impersonate */}
@@ -1350,6 +1431,60 @@ export default function MembersPage() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Message Modal */}
+      {messageModalMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 border border-slate-700">
+            <h3 className="text-xl font-bold text-white mb-4">
+              Send Message to {messageModalMember.first_name} {messageModalMember.last_name}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Subject</label>
+                <input
+                  type="text"
+                  value={messageTitle}
+                  onChange={(e) => setMessageTitle(e.target.value)}
+                  placeholder="Message subject..."
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Message</label>
+                <textarea
+                  value={messageBody}
+                  onChange={(e) => setMessageBody(e.target.value)}
+                  placeholder="Type your message here..."
+                  rows={6}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setMessageModalMember(null);
+                    setMessageTitle('');
+                    setMessageBody('');
+                  }}
+                  disabled={sendingMessage}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendMessage}
+                  disabled={sendingMessage}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Send className="h-4 w-4" />
+                  {sendingMessage ? 'Sending...' : 'Send Message'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

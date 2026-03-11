@@ -14,6 +14,7 @@ import {
 import { ChampionshipArchivesService } from './championship-archives.service';
 import { ChampionshipArchive } from './championship-archives.entity';
 import { ChampionshipAward } from './championship-awards.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/championship-archives')
 export class ChampionshipArchivesController {
@@ -22,6 +23,7 @@ export class ChampionshipArchivesController {
   /**
    * Get all archives (public - only published unless includeUnpublished=true)
    */
+  @Public()
   @Get()
   async listArchives(
     @Query('includeUnpublished') includeUnpublished?: string,
@@ -35,6 +37,7 @@ export class ChampionshipArchivesController {
   /**
    * Get archive by year
    */
+  @Public()
   @Get('year/:year')
   async getArchiveByYear(
     @Param('year') year: number,

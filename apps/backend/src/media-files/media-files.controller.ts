@@ -17,6 +17,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { MediaFilesService } from './media-files.service';
 import { MediaFile } from './media-files.entity';
 import { MediaType, UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 
@@ -49,11 +50,13 @@ export class MediaFilesController {
     return { user, profile };
   }
 
+  @Public()
   @Get()
   async getAllMediaFiles(@Query('fileType') fileType?: MediaType): Promise<MediaFile[]> {
     return this.mediaFilesService.findAll(fileType);
   }
 
+  @Public()
   @Get('search')
   async searchMediaFiles(
     @Query('q') searchTerm: string,
@@ -62,6 +65,7 @@ export class MediaFilesController {
     return this.mediaFilesService.search(searchTerm, fileType);
   }
 
+  @Public()
   @Get(':id')
   async getMediaFile(@Param('id') id: string): Promise<MediaFile> {
     return this.mediaFilesService.findById(id);

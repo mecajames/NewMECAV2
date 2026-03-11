@@ -26,6 +26,7 @@ import {
 } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/shop')
 export class ShopController {
@@ -76,32 +77,38 @@ export class ShopController {
   // PUBLIC ENDPOINTS
   // =============================================================================
 
+  @Public()
   @Get('products')
   async getProducts(@Query('category') category?: ShopProductCategory) {
     return this.shopService.findActiveProducts(category);
   }
 
+  @Public()
   @Get('products/featured')
   async getFeaturedProducts() {
     return this.shopService.findFeaturedProducts();
   }
 
+  @Public()
   @Get('products/:id')
   async getProduct(@Param('id') id: string) {
     return this.shopService.findProductById(id);
   }
 
+  @Public()
   @Get('categories')
   async getCategories() {
     return this.shopService.getCategories();
   }
 
+  @Public()
   @Post('check-availability')
   @HttpCode(HttpStatus.OK)
   async checkAvailability(@Body() body: { items: Array<{ productId: string; quantity: number }> }) {
     return this.shopService.checkStockAvailability(body.items);
   }
 
+  @Public()
   @Post('shipping-rates')
   @HttpCode(HttpStatus.OK)
   async getShippingRates(

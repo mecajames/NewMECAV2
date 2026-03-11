@@ -31,6 +31,7 @@ import {
   UserRole,
 } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Public } from '../auth/public.decorator';
 import { Profile } from '../profiles/profiles.entity';
 import { Advertiser } from './entities/advertiser.entity';
 
@@ -70,6 +71,7 @@ export class BannersController {
   // PUBLIC ENDPOINTS (no auth required)
   // =============================================================================
 
+  @Public()
   @Get('banners/active/:position')
   async getActiveBanner(@Param('position') position: BannerPosition) {
     return this.bannersService.getActiveBanner(position);
@@ -80,6 +82,7 @@ export class BannersController {
     return this.bannersService.getAllActiveBanners(position);
   }
 
+  @Public()
   @Post('banners/engagement')
   @HttpCode(HttpStatus.OK)
   async recordEngagement(@Body() dto: RecordEngagementDto) {

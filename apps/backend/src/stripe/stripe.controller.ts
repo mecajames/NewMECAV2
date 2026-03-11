@@ -13,6 +13,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { Public } from '../auth/public.decorator';
 import { EntityManager } from '@mikro-orm/core';
 import { StripeService } from './stripe.service';
 import { MembershipsService } from '../memberships/memberships.service';
@@ -128,11 +129,28 @@ export class StripeController {
     private readonly em: EntityManager,
   ) {}
 
+  // Helper to extract userId from JWT token (returns null for guests)
+  private async extractUserId(authHeader?: string): Promise<string | null> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      return null;
+    }
+    return user.id;
+  }
+
   // Helper to validate admin for test mode
   private async validateTestModeAccess(authHeader?: string): Promise<void> {
-    // Must be in development environment
-    if (process.env.NODE_ENV !== 'development') {
+    // Must be in development environment - explicitly block production and unset NODE_ENV
+    const env = process.env.NODE_ENV;
+    if (env !== 'development') {
       throw new ForbiddenException('Test mode is only available in development environment');
+    }
+    if (process.env.ENABLE_TEST_MODE !== 'true') {
+      throw new ForbiddenException('Test mode is not enabled. Set ENABLE_TEST_MODE=true in development.');
     }
 
     // Must have valid admin auth
@@ -154,9 +172,11 @@ export class StripeController {
     }
   }
 
+  @Public()
   @Post('create-payment-intent')
   @HttpCode(HttpStatus.OK)
   async createPaymentIntent(
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateMembershipPaymentIntentDto,
   ): Promise<PaymentIntentResult> {
     // Validate required fields
@@ -165,6 +185,15 @@ export class StripeController {
     }
     if (!data.email) {
       throw new BadRequestException('Email is required');
+    }
+
+    // Override client-sent userId with JWT-verified userId to prevent spoofing
+    const verifiedUserId = await this.extractUserId(authHeader);
+    if (verifiedUserId) {
+      data.userId = verifiedUserId;
+    } else {
+      // Guest checkout - clear any client-sent userId
+      delete data.userId;
     }
 
     // Fetch the membership type config to get the price
@@ -179,6 +208,14 @@ export class StripeController {
 
     if (!membershipConfig.isActive) {
       throw new BadRequestException('This membership type is not available');
+    }
+
+    // Verify user is allowed to purchase this membership type
+    if (data.userId) {
+      const eligibility = await this.membershipsService.canPurchaseMembership(data.userId, data.membershipTypeConfigId);
+      if (!eligibility.allowed) {
+        throw new BadRequestException(eligibility.reason || 'You are not eligible to purchase this membership type');
+      }
     }
 
     // Calculate tax
@@ -222,6 +259,7 @@ export class StripeController {
     });
   }
 
+  @Public()
   @Post('create-event-registration-payment-intent')
   @HttpCode(HttpStatus.OK)
   async createEventRegistrationPaymentIntent(
@@ -240,6 +278,19 @@ export class StripeController {
     }
     if (!data.classes || data.classes.length === 0) {
       throw new BadRequestException('At least one class must be selected');
+    }
+
+    // Override client-sent userId with JWT-verified userId to prevent spoofing
+    const verifiedUserId = await this.extractUserId(authHeader);
+    if (verifiedUserId) {
+      data.userId = verifiedUserId;
+    } else {
+      // Guest checkout - clear any client-sent userId
+      delete data.userId;
+      // Guests cannot bundle membership purchases (no account to attach to)
+      if (data.includeMembership) {
+        throw new BadRequestException('You must be logged in to add a membership to your registration');
+      }
     }
 
     const em = this.em.fork();
@@ -369,14 +420,19 @@ export class StripeController {
   @Post('create-team-upgrade-payment-intent')
   @HttpCode(HttpStatus.OK)
   async createTeamUpgradePaymentIntent(
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateTeamUpgradePaymentIntentDto,
   ): Promise<PaymentIntentResult> {
+    // Team upgrade requires authentication - override userId from JWT
+    const verifiedUserId = await this.extractUserId(authHeader);
+    if (!verifiedUserId) {
+      throw new UnauthorizedException('Authentication required for team upgrade');
+    }
+    data.userId = verifiedUserId;
+
     // Validate required fields
     if (!data.membershipId) {
       throw new BadRequestException('Membership ID is required');
-    }
-    if (!data.userId) {
-      throw new BadRequestException('User ID is required');
     }
     if (!data.teamName) {
       throw new BadRequestException('Team name is required');
@@ -438,6 +494,7 @@ export class StripeController {
     });
   }
 
+  @Public()
   @Post('create-invoice-payment-intent')
   @HttpCode(HttpStatus.OK)
   async createInvoicePaymentIntent(
@@ -495,11 +552,21 @@ export class StripeController {
     });
   }
 
+  @Public()
   @Post('create-shop-payment-intent')
   @HttpCode(HttpStatus.OK)
   async createShopPaymentIntent(
+    @Headers('authorization') authHeader: string,
     @Body() data: CreateShopPaymentIntentDto,
   ): Promise<PaymentIntentResult & { orderId: string }> {
+    // Override client-sent userId with JWT-verified userId to prevent spoofing
+    const verifiedUserId = await this.extractUserId(authHeader);
+    if (verifiedUserId) {
+      data.userId = verifiedUserId;
+    } else {
+      delete data.userId;
+    }
+
     // Validate required fields
     if (!data.items || data.items.length === 0) {
       throw new BadRequestException('At least one item is required');
@@ -569,9 +636,11 @@ export class StripeController {
    * Create a Stripe Checkout Session for subscription-based membership purchase.
    * This redirects the user to Stripe Checkout for recurring billing setup.
    */
+  @Public()
   @Post('create-subscription-checkout')
   @HttpCode(HttpStatus.OK)
   async createSubscriptionCheckout(
+    @Headers('authorization') authHeader: string,
     @Body() data: {
       membershipTypeConfigId: string;
       email: string;
@@ -582,6 +651,14 @@ export class StripeController {
       billingLastName?: string;
     },
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
+    // Override client-sent userId with JWT-verified userId to prevent spoofing
+    const verifiedUserId = await this.extractUserId(authHeader);
+    if (verifiedUserId) {
+      data.userId = verifiedUserId;
+    } else {
+      delete data.userId;
+    }
+
     // Validate required fields
     if (!data.membershipTypeConfigId) {
       throw new BadRequestException('Membership type is required');
@@ -648,6 +725,7 @@ export class StripeController {
     };
   }
 
+  @Public()
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
@@ -666,15 +744,8 @@ export class StripeController {
     // Verify and construct the event
     const event = this.stripeService.constructWebhookEvent(rawBody, signature);
 
-    // Idempotency check: Skip if already processed
+    // Idempotency: Insert record first using unique constraint to prevent race conditions
     const em = this.em.fork();
-    const existingEvent = await em.findOne(ProcessedWebhookEvent, { stripeEventId: event.id });
-    if (existingEvent) {
-      console.log(`Webhook event ${event.id} already processed, skipping`);
-      return { received: true, message: 'Already processed' };
-    }
-
-    // Create record to track this event (before processing to prevent race conditions)
     const webhookEvent = new ProcessedWebhookEvent();
     webhookEvent.stripeEventId = event.id;
     webhookEvent.eventType = event.type;
@@ -685,6 +756,18 @@ export class StripeController {
       webhookEvent.paymentIntentId = paymentIntent.id;
       webhookEvent.paymentType = paymentIntent.metadata?.paymentType;
       webhookEvent.metadata = paymentIntent.metadata;
+    }
+
+    // Attempt to insert - unique constraint on stripe_event_id prevents duplicates
+    try {
+      await em.persistAndFlush(webhookEvent);
+    } catch (error: any) {
+      // Unique constraint violation (Postgres error code 23505) means already processed
+      if (error?.code === '23505' || error?.message?.includes('duplicate key')) {
+        console.log(`Webhook event ${event.id} already processed, skipping`);
+        return { received: true, message: 'Already processed' };
+      }
+      throw error;
     }
 
     try {
@@ -731,12 +814,12 @@ export class StripeController {
     } catch (error) {
       webhookEvent.processingResult = 'error';
       webhookEvent.errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      // Still persist the event to avoid reprocessing, but log the error
+      // Still persist the result to track the error, but log it
       console.error(`Error processing webhook ${event.id}:`, error);
     }
 
-    // Persist the processed event record
-    await em.persistAndFlush(webhookEvent);
+    // Update the record with processing result
+    await em.flush();
 
     return { received: true };
   }

@@ -16,6 +16,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { CreateRatingSchema, CreateRatingDto, RatingEntityType, UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/ratings')
 export class RatingsController {
@@ -58,6 +59,7 @@ export class RatingsController {
   /**
    * Get ratings for a judge
    */
+  @Public()
   @Get('judges/:judgeId')
   async getJudgeRatings(
     @Param('judgeId') judgeId: string,
@@ -97,6 +99,7 @@ export class RatingsController {
   /**
    * Get ratings for an event director
    */
+  @Public()
   @Get('event-directors/:edId')
   async getEventDirectorRatings(
     @Param('edId') edId: string,

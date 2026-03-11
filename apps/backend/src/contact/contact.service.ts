@@ -17,6 +17,18 @@ export class ContactService {
   ) {}
 
   /**
+   * Escape HTML special characters to prevent HTML injection in email templates
+   */
+  private escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  /**
    * Submit a contact form message
    */
   async submitContactForm(
@@ -77,21 +89,21 @@ export class ContactService {
 
   <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
     <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-      <p style="margin: 0 0 10px 0;"><strong>From:</strong> ${submission.name}</p>
-      <p style="margin: 0 0 10px 0;"><strong>Email:</strong> <a href="mailto:${submission.email}" style="color: #f97316;">${submission.email}</a></p>
-      <p style="margin: 0 0 10px 0;"><strong>Subject:</strong> ${submission.subject}</p>
+      <p style="margin: 0 0 10px 0;"><strong>From:</strong> ${this.escapeHtml(submission.name)}</p>
+      <p style="margin: 0 0 10px 0;"><strong>Email:</strong> <a href="mailto:${encodeURIComponent(submission.email)}" style="color: #f97316;">${this.escapeHtml(submission.email)}</a></p>
+      <p style="margin: 0 0 10px 0;"><strong>Subject:</strong> ${this.escapeHtml(submission.subject)}</p>
       <p style="margin: 0 0 10px 0;"><strong>Submitted:</strong> ${submission.createdAt.toLocaleString()}</p>
     </div>
 
     <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
       <p style="margin: 0 0 10px 0;"><strong>Message:</strong></p>
-      <p style="margin: 0; white-space: pre-wrap;">${submission.message}</p>
+      <p style="margin: 0; white-space: pre-wrap;">${this.escapeHtml(submission.message)}</p>
     </div>
 
     <div style="margin-top: 20px; text-align: center;">
-      <a href="mailto:${submission.email}?subject=Re: ${encodeURIComponent(submission.subject)}"
+      <a href="mailto:${encodeURIComponent(submission.email)}?subject=Re: ${encodeURIComponent(submission.subject)}"
          style="display: inline-block; background: #f97316; color: #fff; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-        Reply to ${submission.name}
+        Reply to ${this.escapeHtml(submission.name)}
       </a>
     </div>
 
@@ -152,14 +164,14 @@ IP Address: ${submission.ipAddress || 'Unknown'}
   </div>
 
   <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
-    <p style="font-size: 16px;">Hello ${submission.name},</p>
+    <p style="font-size: 16px;">Hello ${this.escapeHtml(submission.name)},</p>
 
     <p>We've received your message and appreciate you reaching out to MECA. Our team will review your inquiry and get back to you as soon as possible.</p>
 
     <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
       <p style="margin: 0 0 10px 0;"><strong>Your Message:</strong></p>
-      <p style="margin: 0 0 10px 0;"><strong>Subject:</strong> ${submission.subject}</p>
-      <p style="margin: 0; color: #64748b; font-style: italic; white-space: pre-wrap;">${submission.message.substring(0, 300)}${submission.message.length > 300 ? '...' : ''}</p>
+      <p style="margin: 0 0 10px 0;"><strong>Subject:</strong> ${this.escapeHtml(submission.subject)}</p>
+      <p style="margin: 0; color: #64748b; font-style: italic; white-space: pre-wrap;">${this.escapeHtml(submission.message.substring(0, 300))}${submission.message.length > 300 ? '...' : ''}</p>
     </div>
 
     <p>In the meantime, feel free to:</p>

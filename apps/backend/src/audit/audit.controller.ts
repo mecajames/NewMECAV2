@@ -16,6 +16,7 @@ import { AuditService } from './audit.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -81,26 +82,31 @@ export class AuditController {
     });
   }
 
+  @Public()
   @Get('event/:eventId/sessions')
   async getEventSessions(@Param('eventId') eventId: string) {
     return this.auditService.getEventSessions(eventId);
   }
 
+  @Public()
   @Get('event/:eventId/modifications')
   async getEventModifications(@Param('eventId') eventId: string) {
     return this.auditService.getEventModifications(eventId);
   }
 
+  @Public()
   @Get('event/:eventId/deletions')
   async getEventDeletions(@Param('eventId') eventId: string) {
     return this.auditService.getEventDeletions(eventId);
   }
 
+  @Public()
   @Get('event/:eventId/all')
   async getEventAllLogs(@Param('eventId') eventId: string) {
     return this.auditService.getEventAllLogs(eventId);
   }
 
+  @Public()
   @Get('log/:logId')
   async getAuditLogById(@Param('logId') logId: string) {
     const log = await this.auditService.getAuditLogById(logId);
@@ -110,11 +116,13 @@ export class AuditController {
     return log;
   }
 
+  @Public()
   @Get('session/:sessionId/logs')
   async getSessionAuditLogs(@Param('sessionId') sessionId: string) {
     return this.auditService.getSessionAuditLogs(sessionId);
   }
 
+  @Public()
   @Get('session/:sessionId/download')
   async downloadSessionFile(
     @Param('sessionId') sessionId: string,

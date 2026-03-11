@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
+import { GlobalAuthGuard } from './auth/global-auth.guard';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -58,6 +59,7 @@ import { SeoModule } from './seo/seo.module';
 import { GeocodingModule } from './geocoding/geocoding.module';
 import { SplWorldRecordsModule } from './spl-world-records/spl-world-records.module';
 import { HallOfFameModule } from './hall-of-fame/hall-of-fame.module';
+import { UserActivityModule } from './user-activity/user-activity.module';
 import { TaxModule } from './tax/tax.module';
 
 @Module({
@@ -69,7 +71,7 @@ import { TaxModule } from './tax/tax.module';
       {
         name: 'default',
         ttl: 60000, // 1 minute window
-        limit: process.env.NODE_ENV === 'development' ? 1000 : 1000,
+        limit: process.env.NODE_ENV === 'development' ? 1000 : 300,
       },
       {
         name: 'strict',
@@ -131,6 +133,7 @@ import { TaxModule } from './tax/tax.module';
     GeocodingModule,
     SplWorldRecordsModule,
     HallOfFameModule,
+    UserActivityModule,
     TaxModule,
   ],
   controllers: [AppController],
@@ -140,6 +143,11 @@ import { TaxModule } from './tax/tax.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    // Apply authentication globally - endpoints must use @Public() to opt out
+    {
+      provide: APP_GUARD,
+      useClass: GlobalAuthGuard,
     },
   ],
 })

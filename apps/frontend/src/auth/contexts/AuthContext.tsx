@@ -3,6 +3,7 @@ import { User, Session, Provider } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/lib/supabase';
 import { setAxiosUserId } from '@/lib/axios';
 import { profilesApi } from '@/profiles';
+import { userActivityApi } from '@/user-activity/user-activity.api-client';
 
 interface AuthContextType {
   user: User | null;
@@ -101,6 +102,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
     });
 
+    if (error) {
+      // Record failed login attempt (fire-and-forget)
+      userActivityApi.recordFailedAttempt(email, error.message);
+    } else {
+      // Record successful login (fire-and-forget)
+      userActivityApi.recordLogin(email);
+    }
+
     return { error };
   };
 
@@ -196,6 +205,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Record logout before clearing auth state (try/catch, don't block)
+    try {
+      if (user?.email) {
+        await userActivityApi.recordLogout(user.email);
+      }
+    } catch {
+      // Don't block signout
+    }
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);

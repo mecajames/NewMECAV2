@@ -8,6 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConstantContactService } from './constant-contact.service';
+import { Public } from '../auth/public.decorator';
 
 interface NewsletterSignupDto {
   email: string;
@@ -25,6 +26,7 @@ export class ConstantContactController {
    * POST /api/newsletter/signup
    * Subscribe a user to the newsletter
    */
+  @Public()
   @Post('signup')
   async signup(@Body() dto: NewsletterSignupDto) {
     // Validate email

@@ -14,6 +14,7 @@ import { EventHostingRequestsService } from './event-hosting-requests.service';
 import { EventHostingRequest } from './event-hosting-requests.entity';
 import { EventHostingRequestMessage } from './event-hosting-request-message.entity';
 import { EventHostingRequestStatus, FinalApprovalStatus, SenderRole, RecipientType } from '@newmeca/shared';
+import { Public } from '../auth/public.decorator';
 import { Profile } from '../profiles/profiles.entity';
 
 @Controller('api/event-hosting-requests')
@@ -34,6 +35,7 @@ export class EventHostingRequestsController {
     return this.eventHostingRequestsService.findAll(page, limit, status, search);
   }
 
+  @Public()
   @Get('stats')
   async getStats(): Promise<{
     total: number;
@@ -76,6 +78,7 @@ export class EventHostingRequestsController {
     return this.eventHostingRequestsService.getEventDirectorStats(edId);
   }
 
+  @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createRequest(
