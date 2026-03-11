@@ -77,7 +77,7 @@ export class EventsService {
     );
     const countMap = new Map(rows.map(r => [r.event_id, Number(r.count)]));
     return events.map(e => {
-      const plain = e.toJSON ? e.toJSON() : { ...e };
+      const plain = (e as any).toJSON ? (e as any).toJSON() : { ...e };
       (plain as any).result_count = countMap.get(e.id) || 0;
       return plain;
     });
