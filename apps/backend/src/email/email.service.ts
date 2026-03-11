@@ -428,7 +428,11 @@ export class EmailService {
   }
 
   private checkConfiguration() {
-    const provider = process.env.EMAIL_PROVIDER;
+    const rawProvider = process.env.EMAIL_PROVIDER;
+    const provider = rawProvider?.trim().toLowerCase();
+
+    this.logger.log(`Email provider config: EMAIL_PROVIDER="${rawProvider}" (resolved: "${provider}")`);
+    this.logger.log(`Mailgun env check: MAILGUN_DOMAIN="${process.env.MAILGUN_DOMAIN || ''}", MAILGUN_API_KEY=${process.env.MAILGUN_API_KEY ? 'SET' : 'NOT SET'}, MAILGUN_SMTP_PASSWORD=${process.env.MAILGUN_SMTP_PASSWORD ? 'SET' : 'NOT SET'}`);
 
     if (provider === 'smtp') {
       // SMTP for local development (Mailpit, Mailtrap, etc.)
