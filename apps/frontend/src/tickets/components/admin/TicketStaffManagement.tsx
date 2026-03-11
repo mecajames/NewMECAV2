@@ -97,9 +97,9 @@ export function TicketStaffManagement() {
 
     setUserSearchLoading(true);
     try {
-      const response = await fetch(`/api/profiles/search?q=${encodeURIComponent(query)}&limit=10`);
-      if (response.ok) {
-        const results: ProfileSearchResult[] = await response.json();
+      const { default: axios } = await import('@/lib/axios');
+      const { data: results } = await axios.get<ProfileSearchResult[]>(`/api/profiles/search?q=${encodeURIComponent(query)}&limit=10`);
+      if (results) {
         // Filter out users who are already staff
         const existingProfileIds = new Set(staff.map((s) => s.profile_id));
         const filteredResults = results.filter((r) => !existingProfileIds.has(r.id));

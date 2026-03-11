@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LogIn, Mail, Lock, Clock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '@/auth';
+import { useAuth } from '../contexts/AuthContext';
 import { REDIRECT_STORAGE_KEY } from '../idle-timeout.constants';
 
 // Google OAuth icon

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/auth';
+import { useAuth } from './contexts/AuthContext';
 
 /**
  * Hook to check if the current user has a specific permission

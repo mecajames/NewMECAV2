@@ -919,7 +919,14 @@ export default function MembersPage() {
               <input
                 type="checkbox"
                 checked={showOnlineOnly}
-                onChange={(e) => setShowOnlineOnly(e.target.checked)}
+                onChange={(e) => {
+                  setShowOnlineOnly(e.target.checked);
+                  if (e.target.checked) {
+                    setStatusFilter('all');
+                    setRoleFilter('all');
+                    setMembershipTypeFilter('all');
+                  }
+                }}
                 className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-green-500 focus:ring-green-500 focus:ring-offset-0"
               />
               <span className="flex items-center gap-1.5 text-sm text-gray-300">
@@ -972,7 +979,7 @@ export default function MembersPage() {
               <thead className="bg-slate-700">
                 <tr>
                   <th className="w-8 px-1 py-3"></th>{/* Expand/collapse column */}
-                  <th className="w-[14%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[13%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Member
                   </th>
                   <th className="w-[7%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -981,7 +988,7 @@ export default function MembersPage() {
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Contact
                   </th>
-                  <th className="w-[12%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[11%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Membership Type
                   </th>
                   <th className="w-[8%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -993,10 +1000,13 @@ export default function MembersPage() {
                   <th className="w-[8%] px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Auto-Renew
                   </th>
-                  <th className="w-[9%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[8%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Member Since
                   </th>
-                  <th className="w-[10%] px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[9%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Renewal/Expiration
+                  </th>
+                  <th className="w-[9%] px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -1004,7 +1014,7 @@ export default function MembersPage() {
               <tbody className="bg-slate-800 divide-y divide-slate-700">
                 {paginatedMembers.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan={11} className="px-6 py-12 text-center text-gray-400">
                       No members found matching your criteria.
                     </td>
                   </tr>
@@ -1186,6 +1196,14 @@ export default function MembersPage() {
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-400">
                             {new Date(member.member_since).toLocaleDateString()}
                           </td>
+                          <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-400">
+                            {member.membershipInfo?.endDate
+                              ? new Date(member.membershipInfo.endDate).toLocaleDateString()
+                              : member.membershipInfo?.autoRenewStatus === 'on'
+                                ? <span className="text-green-400 text-xs font-medium">Auto-Renewing</span>
+                                : <span className="text-gray-500">—</span>
+                            }
+                          </td>
                           <td className="px-3 py-4 whitespace-nowrap text-right">
                             <div className="flex items-center justify-end gap-1">
                               {/* View Details */}
@@ -1322,8 +1340,17 @@ export default function MembersPage() {
                                 {secondary.paymentStatus === 'paid' ? 'active' : 'pending'}
                               </span>
                             </td>
+                            <td className="px-3 py-3 whitespace-nowrap text-center">
+                              <span className="text-sm text-gray-500">—</span>
+                            </td>
                             <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-400">
                               {new Date(secondary.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-400">
+                              {secondary.endDate
+                                ? new Date(secondary.endDate).toLocaleDateString()
+                                : <span className="text-gray-500">—</span>
+                              }
                             </td>
                             <td className="px-3 py-3 whitespace-nowrap text-right">
                               <div className="flex items-center justify-end gap-2">
