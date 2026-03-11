@@ -978,6 +978,20 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: Update a membership's end date.
+   * Logs the change with old/new date and admin ID.
+   */
+  adminUpdateEndDate: async (
+    membershipId: string,
+    endDate: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> => {
+    const response = await axios.patch(`/api/memberships/${membershipId}/admin/update-end-date`, {
+      endDate,
+    });
+    return response.data;
+  },
+
+  /**
    * Admin: Bulk update card status for multiple memberships
    */
   bulkUpdateCardStatus: async (membershipIds: string[], data: {

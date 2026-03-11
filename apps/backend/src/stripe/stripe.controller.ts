@@ -33,6 +33,7 @@ import { Payment } from '../payments/payments.entity';
 import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, UserRole, ShopAddress, StripePaymentType } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { ShopService } from '../shop/shop.service';
+import { TaxService } from '../tax/tax.service';
 import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
 import Stripe from 'stripe';
 
@@ -121,6 +122,7 @@ export class StripeController {
     private readonly invoicesService: InvoicesService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly shopService: ShopService,
+    private readonly taxService: TaxService,
     private readonly mecaIdService: MecaIdService,
     private readonly membershipSyncService: MembershipSyncService,
     @Inject('EntityManager')
@@ -216,13 +218,19 @@ export class StripeController {
       }
     }
 
-    // Convert price to cents for Stripe
-    const amountInCents = Math.round(Number(membershipConfig.price) * 100);
+    // Calculate tax
+    const membershipPrice = Number(membershipConfig.price);
+    const tax = this.taxService.calculateTax(membershipPrice);
+
+    // Convert price + tax to cents for Stripe
+    const amountInCents = Math.round((membershipPrice + tax.taxAmount) * 100);
 
     // Create metadata to store with the payment intent
     const metadata: Record<string, string> = {
       email: data.email.toLowerCase(),
       membershipCategory: membershipConfig.category,
+      taxAmount: tax.taxAmount.toFixed(2),
+      taxRate: tax.taxRate.toString(),
     };
 
     // Add optional fields to metadata if provided
@@ -322,6 +330,10 @@ export class StripeController {
       }
     }
 
+    // Calculate tax on total amount
+    const tax = this.taxService.calculateTax(totalAmount);
+    totalAmount += tax.taxAmount;
+
     // Create the registration in pending state
     const registration = await this.eventRegistrationsService.createRegistration({
       eventId: data.eventId,
@@ -363,6 +375,8 @@ export class StripeController {
 
     if (data.userId) metadata.userId = data.userId;
     if (data.mecaId) metadata.mecaId = String(data.mecaId);
+    metadata.taxAmount = tax.taxAmount.toFixed(2);
+    metadata.taxRate = tax.taxRate.toString();
     if (data.includeMembership) {
       metadata.includeMembership = 'true';
       metadata.membershipTypeConfigId = data.membershipTypeConfigId || '';
@@ -445,8 +459,11 @@ export class StripeController {
       throw new BadRequestException('User does not have an email address');
     }
 
-    // Convert pro-rated price to cents for Stripe
-    const amountInCents = Math.round(upgradeDetails.proRatedPrice * 100);
+    // Calculate tax on pro-rated price
+    const teamTax = this.taxService.calculateTax(upgradeDetails.proRatedPrice);
+
+    // Convert pro-rated price + tax to cents for Stripe
+    const amountInCents = Math.round((upgradeDetails.proRatedPrice + teamTax.taxAmount) * 100);
 
     // Create metadata
     const metadata: Record<string, string> = {
@@ -458,6 +475,8 @@ export class StripeController {
       originalPrice: upgradeDetails.originalPrice.toString(),
       proRatedPrice: upgradeDetails.proRatedPrice.toString(),
       daysRemaining: upgradeDetails.daysRemaining.toString(),
+      taxAmount: teamTax.taxAmount.toFixed(2),
+      taxRate: teamTax.taxRate.toString(),
     };
 
     if (data.teamDescription) {
@@ -784,6 +803,10 @@ export class StripeController {
           await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
           webhookEvent.processingResult = 'success';
           break;
+        case 'invoice.paid':
+          await this.handleInvoicePaid(event.data.object as Stripe.Invoice);
+          webhookEvent.processingResult = 'success';
+          break;
         default:
           console.log(`Unhandled Stripe event type: ${event.type}`);
           webhookEvent.processingResult = 'unhandled';
@@ -855,15 +878,18 @@ export class StripeController {
       });
 
       // Create order for the upgrade
-      const amountPaid = (paymentIntent.amount / 100).toFixed(2);
+      const taxAmount = metadata.taxAmount || '0.00';
+      const subtotalCents = paymentIntent.amount - Math.round(parseFloat(taxAmount) * 100);
+      const subtotalPaid = (subtotalCents / 100).toFixed(2);
       const order = await this.ordersService.createFromPayment({
         userId: metadata.userId,
         orderType: OrderType.MEMBERSHIP,
+        tax: taxAmount,
         items: [{
           itemType: OrderItemType.TEAM_ADDON,
           description: `Team Add-on Upgrade: ${teamName}`,
           quantity: 1,
-          unitPrice: amountPaid,
+          unitPrice: subtotalPaid,
           metadata: {
             membershipId,
             teamName,
@@ -935,7 +961,8 @@ export class StripeController {
       console.log('Membership created successfully for:', email);
 
       // Create Order and Invoice (async, non-blocking)
-      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'membership').catch((error) => {
+      const membershipTaxAmount = metadata.taxAmount || '0.00';
+      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'membership', membershipTaxAmount).catch((error) => {
         console.error('Order/Invoice creation failed (non-critical):', error);
       });
 
@@ -1002,7 +1029,8 @@ export class StripeController {
       console.log('Event registration completed successfully for:', email);
 
       // Create Order and Invoice (async, non-blocking)
-      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'event_registration').catch((error) => {
+      const eventTaxAmount = metadata.taxAmount || '0.00';
+      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'event_registration', eventTaxAmount).catch((error) => {
         console.error('Order/Invoice creation failed (non-critical):', error);
       });
     } catch (error) {
@@ -1133,6 +1161,7 @@ export class StripeController {
         orderType: OrderType.SHOP,
         items,
         billingAddress,
+        tax: Number(shopOrder.taxAmount).toFixed(2),
         notes: `Shop Order: ${shopOrder.orderNumber} | Stripe: ${paymentIntent.id}`,
         shopOrderReference: {
           shopOrderId: shopOrder.id,
@@ -1511,6 +1540,61 @@ export class StripeController {
   }
 
   /**
+   * Handle invoice.paid event for subscription renewals.
+   * Extends the membership end_date by 1 year when a subscription invoice is paid.
+   * Only processes subscription_cycle invoices (not initial purchases).
+   */
+  private async handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
+    const subscriptionId = typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : invoice.subscription?.id;
+
+    if (!subscriptionId) {
+      console.log('Invoice has no subscription, skipping (one-time payment)');
+      return;
+    }
+
+    // Only process renewal invoices, not the initial subscription purchase
+    if (invoice.billing_reason === 'subscription_create') {
+      console.log('Invoice is for initial subscription creation, skipping (handled by checkout.session.completed)');
+      return;
+    }
+
+    console.log('Invoice paid for subscription renewal:', subscriptionId, 'Reason:', invoice.billing_reason);
+
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { stripeSubscriptionId: subscriptionId });
+
+    if (!membership) {
+      console.warn('No membership found for subscription ' + subscriptionId + ', skipping invoice.paid');
+      return;
+    }
+
+    // Extend end_date by 1 year from current end_date (not from today, to prevent drift)
+    const currentEndDate = membership.endDate;
+    let newEndDate: Date;
+
+    if (currentEndDate && currentEndDate > new Date()) {
+      // End date is still in the future - extend from it
+      newEndDate = new Date(currentEndDate);
+      newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+    } else {
+      // End date is in the past or null - recovery case, extend from now
+      newEndDate = new Date();
+      newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+    }
+
+    const oldEndStr = currentEndDate ? currentEndDate.toISOString().split('T')[0] : 'NULL';
+    const newEndStr = newEndDate.toISOString().split('T')[0];
+
+    membership.endDate = newEndDate;
+    membership.paymentStatus = PaymentStatus.PAID;
+    await em.flush();
+
+    console.log('Extended membership ' + membership.id + ' end_date: ' + oldEndStr + ' -> ' + newEndStr + ' (subscription: ' + subscriptionId + ')');
+  }
+
+  /**
    * Handle checkout.session.completed event for subscription checkouts.
    * Creates the membership when a subscription checkout completes.
    */
@@ -1608,7 +1692,8 @@ export class StripeController {
           membershipId: membership.id,
           mecaId: String(mecaId),
         };
-        await this.createOrderAndInvoice(paymentIntent, orderMetadata, membershipConfig.price, 'membership');
+        const subTax = this.taxService.calculateTax(membershipConfig.price);
+        await this.createOrderAndInvoice(paymentIntent, orderMetadata, membershipConfig.price, 'membership', subTax.taxAmount.toFixed(2));
       }
 
     } catch (error) {
@@ -1639,6 +1724,7 @@ export class StripeController {
     metadata: Stripe.Metadata,
     amountPaid: number,
     type: 'membership' | 'event_registration',
+    taxAmount: string = '0.00',
   ): Promise<void> {
     try {
       const em = this.em.fork();
@@ -1727,6 +1813,7 @@ export class StripeController {
           orderType,
           items,
           billingAddress: billingAddress.name ? billingAddress : undefined,
+          tax: taxAmount,
           notes: `Stripe Payment: ${paymentIntent.id}`,
         });
 

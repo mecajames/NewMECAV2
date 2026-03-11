@@ -54,6 +54,7 @@ jobs:
             --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
             --build-arg VITE_STRIPE_PUBLISHABLE_KEY="${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}" \
             --build-arg VITE_GA4_MEASUREMENT_ID="${{ secrets.VITE_GA4_MEASUREMENT_ID }}" \
+            --build-arg VITE_GOOGLE_MAPS_API_KEY="${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}" \
             -t newmeca-nginx:latest \
             .
 
@@ -100,9 +101,20 @@ jobs:
             --arg stripe_webhook_secret "${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
             --arg cors_origin "${{ secrets.CORS_ORIGIN }}" \
             --arg recaptcha_secret_key "${{ secrets.RECAPTCHA_SECRET_KEY }}" \
-            --arg sendgrid_api_key "${{ secrets.SENDGRID_API_KEY }}" \
             --arg super_admin_password "${{ secrets.SUPER_ADMIN_PASSWORD }}" \
             --arg ga4_property_id "${{ secrets.GA4_PROPERTY_ID }}" \
+            --arg usps_consumer_key "${{ secrets.USPS_CONSUMER_KEY }}" \
+            --arg usps_consumer_secret "${{ secrets.USPS_CONSUMER_SECRET }}" \
+            --arg google_maps_api_key "${{ secrets.GOOGLE_MAPS_API_KEY }}" \
+            --arg mailgun_domain "${{ secrets.MAILGUN_DOMAIN }}" \
+            --arg mailgun_api_key "${{ secrets.MAILGUN_API_KEY }}" \
+            --arg frontend_url "${{ secrets.FRONTEND_URL }}" \
+            --arg cc_api_key "${{ secrets.CONSTANT_CONTACT_API_KEY }}" \
+            --arg cc_client_secret "${{ secrets.CONSTANT_CONTACT_CLIENT_SECRET }}" \
+            --arg cc_access_token "${{ secrets.CONSTANT_CONTACT_ACCESS_TOKEN }}" \
+            --arg cc_refresh_token "${{ secrets.CONSTANT_CONTACT_REFRESH_TOKEN }}" \
+            --arg cc_list_id "${{ secrets.CONSTANT_CONTACT_LIST_ID }}" \
+            --arg contact_form_email "${{ secrets.CONTACT_FORM_EMAIL }}" \
             '
             .containers.backend.image = $backend |
             .containers.nginx.image = $nginx |
@@ -114,10 +126,21 @@ jobs:
             .containers.backend.environment.STRIPE_WEBHOOK_SECRET = $stripe_webhook_secret |
             .containers.backend.environment.CORS_ORIGIN = $cors_origin |
             .containers.backend.environment.RECAPTCHA_SECRET_KEY = $recaptcha_secret_key |
-            .containers.backend.environment.SENDGRID_API_KEY = $sendgrid_api_key |
             .containers.backend.environment.SUPER_ADMIN_PASSWORD = $super_admin_password |
             .containers.backend.environment.GA4_PROPERTY_ID = $ga4_property_id |
-            .containers.backend.environment.GA4_CREDENTIALS_JSON = $ENV.GA4_CREDENTIALS_JSON
+            .containers.backend.environment.GA4_CREDENTIALS_JSON = $ENV.GA4_CREDENTIALS_JSON |
+            .containers.backend.environment.USPS_CONSUMER_KEY = $usps_consumer_key |
+            .containers.backend.environment.USPS_CONSUMER_SECRET = $usps_consumer_secret |
+            .containers.backend.environment.GOOGLE_MAPS_API_KEY = $google_maps_api_key |
+            .containers.backend.environment.MAILGUN_DOMAIN = $mailgun_domain |
+            .containers.backend.environment.MAILGUN_API_KEY = $mailgun_api_key |
+            .containers.backend.environment.FRONTEND_URL = $frontend_url |
+            .containers.backend.environment.CONSTANT_CONTACT_API_KEY = $cc_api_key |
+            .containers.backend.environment.CONSTANT_CONTACT_CLIENT_SECRET = $cc_client_secret |
+            .containers.backend.environment.CONSTANT_CONTACT_ACCESS_TOKEN = $cc_access_token |
+            .containers.backend.environment.CONSTANT_CONTACT_REFRESH_TOKEN = $cc_refresh_token |
+            .containers.backend.environment.CONSTANT_CONTACT_LIST_ID = $cc_list_id |
+            .containers.backend.environment.CONTACT_FORM_EMAIL = $contact_form_email
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"

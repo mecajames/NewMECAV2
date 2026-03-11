@@ -4427,12 +4427,65 @@ function MembershipsTab({ member }: { member: Profile }) {
 
   // Auto-Renewal Management state
   const [showAutoRenewalModal, setShowAutoRenewalModal] = useState(false);
+  // Subscription details fetched from Stripe
+  const [subscriptionDetails, setSubscriptionDetails] = useState<Record<string, {
+    status: string;
+    currentPeriodEnd: string;
+    cancelAtPeriodEnd: boolean;
+  }>>({});
+
   const [autoRenewalMembership, setAutoRenewalMembership] = useState<Membership | null>(null);
   const [autoRenewalAction, setAutoRenewalAction] = useState<'cancel' | 'enable'>('cancel');
   const [autoRenewalReason, setAutoRenewalReason] = useState('');
   const [autoRenewalCancelImmediately, setAutoRenewalCancelImmediately] = useState(false);
   const [autoRenewalLoading, setAutoRenewalLoading] = useState(false);
   const [autoRenewalError, setAutoRenewalError] = useState<string | null>(null);
+
+  // Inline end date editing state
+  const [editingEndDateId, setEditingEndDateId] = useState<string | null>(null);
+  const [editEndDateValue, setEditEndDateValue] = useState('');
+  const [savingEndDate, setSavingEndDate] = useState(false);
+  const [endDateSuccess, setEndDateSuccess] = useState<string | null>(null);
+  const [endDateError, setEndDateError] = useState<string | null>(null);
+
+  const handleStartEditEndDate = (membership: Membership) => {
+    const currentDate = membership.endDate
+      ? new Date(membership.endDate).toISOString().split('T')[0]
+      : '';
+    setEditingEndDateId(membership.id);
+    setEditEndDateValue(currentDate);
+    setEndDateSuccess(null);
+    setEndDateError(null);
+  };
+
+  const handleCancelEditEndDate = () => {
+    setEditingEndDateId(null);
+    setEditEndDateValue('');
+    setEndDateError(null);
+  };
+
+  const handleSaveEndDate = async (membershipId: string) => {
+    if (!editEndDateValue) {
+      setEndDateError('Please select a date');
+      return;
+    }
+    try {
+      setSavingEndDate(true);
+      setEndDateError(null);
+      const result = await membershipsApi.adminUpdateEndDate(membershipId, new Date(editEndDateValue).toISOString());
+      // Update local state with the returned membership
+      setMemberships(prev =>
+        prev.map(m => m.id === membershipId ? { ...m, endDate: result.membership.endDate } : m)
+      );
+      setEditingEndDateId(null);
+      setEndDateSuccess(result.message);
+      setTimeout(() => setEndDateSuccess(null), 4000);
+    } catch (err: any) {
+      setEndDateError(err.response?.data?.message || 'Failed to update end date');
+    } finally {
+      setSavingEndDate(false);
+    }
+  };
 
   useEffect(() => {
     fetchMemberships();
@@ -4461,6 +4514,22 @@ function MembershipsTab({ member }: { member: Profile }) {
         }
       }
       setSecondaryMemberships(secondariesMap);
+
+      // Fetch Stripe subscription details for memberships with active subscriptions
+      const subDetails: Record<string, { status: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean }> = {};
+      for (const m of data) {
+        if (m.stripeSubscriptionId) {
+          try {
+            const subStatus = await membershipsApi.getSubscriptionStatus(m.id);
+            if (subStatus.stripeSubscription) {
+              subDetails[m.id] = subStatus.stripeSubscription;
+            }
+          } catch {
+            // Failed to fetch - that's ok
+          }
+        }
+      }
+      setSubscriptionDetails(subDetails);
     } catch (error) {
       console.error('Error fetching memberships:', error);
     } finally {
@@ -4927,12 +4996,59 @@ function MembershipsTab({ member }: { member: Profile }) {
                         {membership.startDate ? formatDate(membership.startDate) : 'N/A'}
                       </span>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-gray-400">End Date: </span>
-                      <span className={`${isExpired(membership.endDate || '') ? 'text-red-400' : 'text-gray-200'}`}>
-                        {membership.endDate ? formatDate(membership.endDate) : 'N/A'}
-                      </span>
+                      {editingEndDateId === membership.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={editEndDateValue}
+                            onChange={(e) => setEditEndDateValue(e.target.value)}
+                            className="px-2 py-1 bg-slate-600 border border-slate-500 text-white rounded text-sm focus:ring-2 focus:ring-orange-500"
+                            disabled={savingEndDate}
+                          />
+                          <button
+                            onClick={() => handleSaveEndDate(membership.id)}
+                            disabled={savingEndDate}
+                            className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50"
+                            title="Save"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelEditEndDate}
+                            disabled={savingEndDate}
+                            className="p-1 text-red-400 hover:text-red-300 disabled:opacity-50"
+                            title="Cancel"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className={`${isExpired(membership.endDate || '') ? 'text-red-400' : 'text-gray-200'}`}>
+                            {membership.endDate ? formatDate(membership.endDate) : 'N/A'}
+                          </span>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleStartEditEndDate(membership)}
+                              className="p-1 text-gray-400 hover:text-orange-400 transition-colors"
+                              title="Edit end date"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {endDateError && editingEndDateId === membership.id && (
+                        <span className="text-red-400 text-xs">{endDateError}</span>
+                      )}
                     </div>
+                    {endDateSuccess && (
+                      <div className="col-span-2 text-green-400 text-xs flex items-center gap-1">
+                        <Check className="h-3 w-3" /> {endDateSuccess}
+                      </div>
+                    )}
                     {/* Auto-Renewal Status */}
                     <div className="flex items-center gap-2">
                       <span className="text-gray-400">Auto-Renewal: </span>
@@ -4955,6 +5071,33 @@ function MembershipsTab({ member }: { member: Profile }) {
                         </span>
                       )}
                     </div>
+                    {/* Stripe Subscription Details */}
+                    {subscriptionDetails[membership.id] && (
+                      <div className="col-span-2 mt-1 p-3 bg-slate-700/50 rounded-lg space-y-1">
+                        <div className="text-xs font-medium text-gray-300 mb-1">Subscription Details</div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-gray-400">Status:</span>
+                          <span className={
+                            subscriptionDetails[membership.id].status === 'active' ? 'text-green-400' :
+                            subscriptionDetails[membership.id].status === 'past_due' ? 'text-red-400' :
+                            'text-gray-400'
+                          }>
+                            {subscriptionDetails[membership.id].status}
+                          </span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="text-gray-400">Next Billing: </span>
+                          <span className="text-gray-200">
+                            {formatDate(subscriptionDetails[membership.id].currentPeriodEnd)}
+                          </span>
+                        </div>
+                        {subscriptionDetails[membership.id].cancelAtPeriodEnd && (
+                          <div className="text-sm text-amber-400 flex items-center gap-1">
+                            ⚠ Scheduled to cancel at end of period
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {membership.transactionId && (
                       <div className="col-span-2">
                         <span className="text-gray-400">Transaction ID: </span>

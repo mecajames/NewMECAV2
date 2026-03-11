@@ -1498,6 +1498,47 @@ export class MembershipsService {
   // =============================================================================
 
   /**
+   * Update a membership's end date (admin action).
+   * Logs the change with old date, new date, and admin ID.
+   *
+   * @param membershipId The membership to update
+   * @param newEndDate The new end date
+   * @param adminId The ID of the admin making the change
+   */
+  async updateEndDate(
+    membershipId: string,
+    newEndDate: Date,
+    adminId: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    const oldEndDate = membership.endDate;
+    const oldEndStr = oldEndDate ? oldEndDate.toISOString().split('T')[0] : 'NULL';
+    const newEndStr = newEndDate.toISOString().split('T')[0];
+
+    membership.endDate = newEndDate;
+    await em.flush();
+
+    this.logger.log(
+      `Admin ${adminId} updated end date for membership ${membershipId}: ${oldEndStr} -> ${newEndStr} (user: ${membership.user?.email || 'unknown'})`,
+    );
+
+    return {
+      success: true,
+      membership,
+      message: `End date updated from ${oldEndStr} to ${newEndStr}`,
+    };
+  }
+
+  /**
    * Cancel a membership immediately (admin action).
    * Sets payment status to CANCELLED and deactivates the membership.
    *

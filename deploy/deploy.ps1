@@ -99,7 +99,8 @@ if (-not $SkipBuild) {
             "--build-arg", "VITE_API_URL=$($EnvVars['VITE_API_URL'])",
             "--build-arg", "VITE_RECAPTCHA_SITE_KEY=$($EnvVars['VITE_RECAPTCHA_SITE_KEY'])",
             "--build-arg", "VITE_STRIPE_PUBLISHABLE_KEY=$($EnvVars['VITE_STRIPE_PUBLISHABLE_KEY'])",
-            "--build-arg", "VITE_GA4_MEASUREMENT_ID=$($EnvVars['VITE_GA4_MEASUREMENT_ID'])"
+            "--build-arg", "VITE_GA4_MEASUREMENT_ID=$($EnvVars['VITE_GA4_MEASUREMENT_ID'])",
+            "--build-arg", "VITE_GOOGLE_MAPS_API_KEY=$($EnvVars['VITE_GOOGLE_MAPS_API_KEY'])"
         )
 
         docker build `

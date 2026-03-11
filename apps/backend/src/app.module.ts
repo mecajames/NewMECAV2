@@ -60,6 +60,7 @@ import { GeocodingModule } from './geocoding/geocoding.module';
 import { SplWorldRecordsModule } from './spl-world-records/spl-world-records.module';
 import { HallOfFameModule } from './hall-of-fame/hall-of-fame.module';
 import { UserActivityModule } from './user-activity/user-activity.module';
+import { TaxModule } from './tax/tax.module';
 
 @Module({
   imports: [
@@ -133,6 +134,7 @@ import { UserActivityModule } from './user-activity/user-activity.module';
     SplWorldRecordsModule,
     HallOfFameModule,
     UserActivityModule,
+    TaxModule,
   ],
   controllers: [AppController],
   providers: [

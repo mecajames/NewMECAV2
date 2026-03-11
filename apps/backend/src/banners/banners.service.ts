@@ -235,30 +235,45 @@ export class BannersService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    let engagement = await em.findOne(BannerEngagement, {
-      banner,
-      date: today,
-    });
+    const column = type === 'impression' ? 'impressions' : 'clicks';
 
-    if (!engagement) {
-      engagement = em.create(BannerEngagement, {
+    try {
+      let engagement = await em.findOne(BannerEngagement, {
         banner,
         date: today,
-        impressions: 0,
-        clicks: 0,
-        createdAt: today,
-        updatedAt: today,
       });
-      em.persist(engagement);
-    }
 
-    if (type === 'impression') {
-      engagement.impressions += 1;
-    } else {
-      engagement.clicks += 1;
-    }
+      if (!engagement) {
+        engagement = em.create(BannerEngagement, {
+          banner,
+          date: today,
+          impressions: 0,
+          clicks: 0,
+          createdAt: today,
+          updatedAt: today,
+        });
+        em.persist(engagement);
+      }
 
-    await em.flush();
+      if (type === 'impression') {
+        engagement.impressions += 1;
+      } else {
+        engagement.clicks += 1;
+      }
+
+      await em.flush();
+    } catch (error: any) {
+      // Handle race condition: concurrent requests may both try to INSERT
+      if (error?.code === '23505') {
+        const em2 = this.em.fork();
+        await em2.getConnection().execute(
+          `UPDATE banner_engagements SET ${column} = ${column} + 1, updated_at = NOW() WHERE banner_id = ? AND date = ?`,
+          [bannerId, today],
+        );
+      } else {
+        throw error;
+      }
+    }
   }
 
   // =============================================================================

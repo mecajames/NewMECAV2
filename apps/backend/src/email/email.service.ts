@@ -317,7 +317,7 @@ export interface SendShopDeliveryConfirmationEmailDto {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private isConfigured = false;
-  private provider: 'sendgrid' | 'resend' | 'mailgun' | 'mailgun-api' | 'smtp' | null = null;
+  private provider: 'sendgrid' | 'resend' | 'mailgun' | 'smtp' | null = null;
   private transporter: Transporter | null = null;
   private fromEmail: string = 'noreply@mecacaraudio.com';
   private mailgunDomain: string | null = null;
@@ -463,6 +463,7 @@ export class EmailService {
       this.mailgunDomain = domain;
       this.mailgunApiKey = apiKey;
       this.mailgunApiUrl = process.env.MAILGUN_API_URL || 'https://api.mailgun.net';
+
 
       this.fromEmail = process.env.MAILGUN_FROM_EMAIL || `noreply@${domain}`;
       this.isConfigured = true;
@@ -1485,36 +1486,6 @@ export class EmailService {
     }
   }
 
-  private async sendViaMailgunApi(dto: SendEmailDto): Promise<{ success: boolean; error?: string }> {
-    const url = `${this.mailgunApiUrl}/v3/${this.mailgunDomain}/messages`;
-
-    const form = new URLSearchParams();
-    form.append('from', this.fromEmail);
-    form.append('to', dto.to);
-    form.append('subject', dto.subject);
-    form.append('html', dto.html);
-    if (dto.text) {
-      form.append('text', dto.text);
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${Buffer.from(`api:${this.mailgunApiKey}`).toString('base64')}`,
-      },
-      body: form,
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      this.logger.error(`Mailgun API error (${response.status}): ${body}`);
-      throw new Error(`Mailgun API error: ${response.status} ${body}`);
-    }
-
-    this.logger.log(`Email sent via Mailgun API to ${dto.to}`);
-    return { success: true };
-  }
-
   private async sendViaSendGrid(dto: SendEmailDto): Promise<{ success: boolean; error?: string }> {
     // Dynamic import to avoid requiring the package if not used
     try {
@@ -1567,6 +1538,39 @@ export class EmailService {
       }
       throw error;
     }
+  }
+
+  private async sendViaMailgunApi(dto: SendEmailDto): Promise<{ success: boolean; error?: string }> {
+    if (!this.mailgunDomain || !this.mailgunApiKey) {
+      return { success: false, error: 'Mailgun API not configured' };
+    }
+
+    const url = `${this.mailgunApiUrl}/v3/${this.mailgunDomain}/messages`;
+    const form = new URLSearchParams();
+    form.append('from', dto.from || this.fromEmail);
+    form.append('to', dto.to);
+    form.append('subject', dto.subject);
+    form.append('html', dto.html);
+    if (dto.text) {
+      form.append('text', dto.text);
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`api:${this.mailgunApiKey}`).toString('base64')}`,
+      },
+      body: form,
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      this.logger.error(`Mailgun API error (${response.status}): ${body}`);
+      throw new Error(`Mailgun API error: ${response.status} ${body}`);
+    }
+
+    this.logger.log(`Email sent via Mailgun API to ${dto.to}`);
+    return { success: true };
   }
 
   private async sendViaNodemailer(dto: SendEmailDto): Promise<{ success: boolean; error?: string }> {
