@@ -23,11 +23,12 @@ export class EventsService {
   async findAll(page: number = 1, limit: number = 10): Promise<Event[]> {
     const em = this.em.fork();
     const offset = (page - 1) * limit;
-    return em.find(Event, {}, {
+    const events = await em.find(Event, {}, {
       limit,
       offset,
       orderBy: { eventDate: 'DESC' }
     });
+    return this.attachResultCounts(em, events);
   }
 
   async findById(id: string): Promise<Event> {
@@ -58,10 +59,27 @@ export class EventsService {
   async findBySeason(seasonId: string, page: number = 1, limit: number = 10): Promise<Event[]> {
     const em = this.em.fork();
     const offset = (page - 1) * limit;
-    return em.find(Event, { season: seasonId }, {
+    const events = await em.find(Event, { season: seasonId }, {
       limit,
       offset,
       orderBy: { eventDate: 'DESC' }
+    });
+    return this.attachResultCounts(em, events);
+  }
+
+  private async attachResultCounts(em: EntityManager, events: Event[]): Promise<any[]> {
+    if (events.length === 0) return events;
+    const ids = events.map(e => e.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const rows: { event_id: string; count: string }[] = await em.getConnection().execute(
+      `SELECT event_id, COUNT(*)::integer as count FROM competition_results WHERE event_id IN (${placeholders}) GROUP BY event_id`,
+      ids,
+    );
+    const countMap = new Map(rows.map(r => [r.event_id, Number(r.count)]));
+    return events.map(e => {
+      const plain = e.toJSON ? e.toJSON() : { ...e };
+      (plain as any).result_count = countMap.get(e.id) || 0;
+      return plain;
     });
   }
 

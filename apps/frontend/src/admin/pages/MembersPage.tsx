@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Search, Filter, UserPlus, Mail, Phone, ArrowLeft, Eye, UserCog, Trash2, AlertTriangle, Loader2, ChevronDown, ChevronRight, UserMinus } from 'lucide-react';
+import { Users, Search, Filter, UserPlus, Mail, Phone, ArrowLeft, Eye, UserCog, Trash2, AlertTriangle, Loader2, ChevronDown, ChevronRight, UserMinus, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
@@ -9,6 +9,7 @@ import { Pagination } from '@/shared/components';
 import { membershipsApi } from '@/memberships/memberships.api-client';
 import axios from '@/lib/axios';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
+import { notificationsApi } from '@/notifications/notifications.api-client';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -95,6 +96,41 @@ export default function MembersPage() {
   // Online status tracking
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
+
+  // Send message modal
+  const [messageModalMember, setMessageModalMember] = useState<MemberWithMembership | null>(null);
+  const [messageTitle, setMessageTitle] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  const handleSendMessage = async () => {
+    if (!messageModalMember || !messageTitle.trim() || !messageBody.trim()) {
+      alert('Please enter both subject and message');
+      return;
+    }
+    setSendingMessage(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+      await notificationsApi.createNotification({
+        user: { id: messageModalMember.id },
+        fromUser: { id: session.user.id },
+        title: messageTitle,
+        message: messageBody,
+        type: 'message',
+        link: 'dashboard',
+      });
+      setMessageTitle('');
+      setMessageBody('');
+      setMessageModalMember(null);
+      alert('Message sent successfully!');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
 
   const toggleMemberExpanded = (memberId: string) => {
     setExpandedMembers(prev => {
@@ -1164,6 +1200,18 @@ export default function MembersPage() {
                                 <Eye className="h-5 w-5" />
                               </button>
 
+                              {/* Send Message */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMessageModalMember(member);
+                                }}
+                                className="p-2 text-gray-400 hover:text-orange-400 hover:bg-slate-700 rounded-lg transition-colors"
+                                title={`Send message to ${member.first_name || member.email}`}
+                              >
+                                <Send className="h-5 w-5" />
+                              </button>
+
                               {/* Impersonate */}
                               {hasPermission('manage_users') && (
                                 <button
@@ -1383,6 +1431,60 @@ export default function MembersPage() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Message Modal */}
+      {messageModalMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 border border-slate-700">
+            <h3 className="text-xl font-bold text-white mb-4">
+              Send Message to {messageModalMember.first_name} {messageModalMember.last_name}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Subject</label>
+                <input
+                  type="text"
+                  value={messageTitle}
+                  onChange={(e) => setMessageTitle(e.target.value)}
+                  placeholder="Message subject..."
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Message</label>
+                <textarea
+                  value={messageBody}
+                  onChange={(e) => setMessageBody(e.target.value)}
+                  placeholder="Type your message here..."
+                  rows={6}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setMessageModalMember(null);
+                    setMessageTitle('');
+                    setMessageBody('');
+                  }}
+                  disabled={sendingMessage}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendMessage}
+                  disabled={sendingMessage}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Send className="h-4 w-4" />
+                  {sendingMessage ? 'Sending...' : 'Send Message'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
