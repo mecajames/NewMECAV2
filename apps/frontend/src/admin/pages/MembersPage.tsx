@@ -919,7 +919,14 @@ export default function MembersPage() {
               <input
                 type="checkbox"
                 checked={showOnlineOnly}
-                onChange={(e) => setShowOnlineOnly(e.target.checked)}
+                onChange={(e) => {
+                  setShowOnlineOnly(e.target.checked);
+                  if (e.target.checked) {
+                    setStatusFilter('all');
+                    setRoleFilter('all');
+                    setMembershipTypeFilter('all');
+                  }
+                }}
                 className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-green-500 focus:ring-green-500 focus:ring-offset-0"
               />
               <span className="flex items-center gap-1.5 text-sm text-gray-300">
