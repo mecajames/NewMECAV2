@@ -172,18 +172,10 @@ Write-Host "  Nginx image: $nginxImage" -ForegroundColor DarkGray
 $deploymentConfig.containers.backend.image = $backendImage
 $deploymentConfig.containers.nginx.image = $nginxImage
 
-# Inject backend secrets from .env.backend
+# Inject all backend env vars from .env.backend
 $envMap = $deploymentConfig.containers.backend.environment
-$secretKeys = @(
-    "DATABASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
-    "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "CORS_ORIGIN",
-    "RECAPTCHA_SECRET_KEY", "SENDGRID_API_KEY", "SUPER_ADMIN_PASSWORD",
-    "GA4_PROPERTY_ID", "GA4_CREDENTIALS_JSON"
-)
-foreach ($key in $secretKeys) {
-    if ($BackendVars.ContainsKey($key)) {
-        $envMap.$key = $BackendVars[$key]
-    }
+foreach ($key in $BackendVars.Keys) {
+    $envMap | Add-Member -NotePropertyName $key -NotePropertyValue $BackendVars[$key] -Force
 }
 
 # Write updated config to temp file

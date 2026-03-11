@@ -82,7 +82,7 @@ export class ConstantContactService {
             setting_value: value,
             setting_type: 'secret',
             description: `Constant Contact ${key === CC_TOKEN_KEY ? 'access' : 'refresh'} token (auto-managed)`,
-            updated_by: 'system',
+            updated_by: null,
             updated_at: new Date(),
           });
         }
