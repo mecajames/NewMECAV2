@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/auth';
+import { useAuth } from '../contexts/AuthContext';
 import { REDIRECT_STORAGE_KEY } from '../idle-timeout.constants';
 
 export default function AuthCallbackPage() {

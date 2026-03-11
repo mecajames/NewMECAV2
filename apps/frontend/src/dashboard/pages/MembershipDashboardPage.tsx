@@ -215,7 +215,7 @@ export default function MembershipDashboardPage() {
             {/* Expiration / Renewal Date */}
             <div className="bg-slate-700/50 rounded-lg p-4">
               <p className="text-gray-400 text-sm mb-1">
-                {subscriptionStatus?.autoRenewalStatus === 'on' ? 'Renews' : 'Expires'}
+                {subscriptionStatus?.autoRenewalStatus === 'on' ? 'Renewal Date' : 'Expiration Date'}
               </p>
               {activeMembership.endDate ? (() => {
                 const endDate = new Date(activeMembership.endDate);
