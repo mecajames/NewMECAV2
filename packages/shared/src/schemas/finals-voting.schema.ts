@@ -16,6 +16,7 @@ export const CreateVotingSessionSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   start_date: z.coerce.date(),
   end_date: z.coerce.date(),
+  results_publish_date: z.coerce.date().optional().nullable(),
 }).refine(data => data.end_date > data.start_date, {
   message: 'End date must be after start date',
   path: ['end_date'],
@@ -27,6 +28,7 @@ export const UpdateVotingSessionSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   start_date: z.coerce.date().optional(),
   end_date: z.coerce.date().optional(),
+  results_publish_date: z.coerce.date().optional().nullable(),
   status: VotingSessionStatusSchema.optional(),
 });
 export type UpdateVotingSessionDto = z.infer<typeof UpdateVotingSessionSchema>;
@@ -38,6 +40,7 @@ export const VotingSessionSchema = z.object({
   description: z.string().nullable(),
   start_date: z.coerce.date(),
   end_date: z.coerce.date(),
+  results_publish_date: z.coerce.date().nullable().optional(),
   status: VotingSessionStatusSchema,
   results_finalized_at: z.coerce.date().nullable(),
   created_at: z.coerce.date(),
@@ -137,6 +140,7 @@ export const CloneSessionSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   start_date: z.coerce.date(),
   end_date: z.coerce.date(),
+  results_publish_date: z.coerce.date().optional().nullable(),
 });
 export type CloneSessionDto = z.infer<typeof CloneSessionSchema>;
 

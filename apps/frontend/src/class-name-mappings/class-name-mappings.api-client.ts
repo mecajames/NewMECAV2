@@ -28,6 +28,20 @@ export interface UnmappedClass {
   format: string | null;
 }
 
+export interface UnmappedResult {
+  id: string;
+  competitorName: string;
+  mecaId: string | null;
+  score: number;
+  placement: number;
+  format: string | null;
+  vehicleInfo: string | null;
+  competitionClass: string;
+  pointsEarned: number;
+  eventName: string | null;
+  eventDate: string | null;
+}
+
 export const classNameMappingsApi = {
   getAll: async (): Promise<ClassNameMapping[]> => {
     const response = await axios.get('/api/class-name-mappings');
@@ -83,5 +97,21 @@ export const classNameMappingsApi = {
 
   delete: async (id: string): Promise<void> => {
     await axios.delete(`/api/class-name-mappings/${id}`);
+  },
+
+  getUnmappedResults: async (className: string, format?: string): Promise<UnmappedResult[]> => {
+    const params = format ? { format } : {};
+    const response = await axios.get(`/api/class-name-mappings/unmapped/${encodeURIComponent(className)}/results`, { params });
+    return response.data;
+  },
+
+  remapResults: async (data: {
+    className: string;
+    targetClassId: string;
+    format?: string;
+    resultIds?: string[];
+  }): Promise<{ updated: number }> => {
+    const response = await axios.post('/api/class-name-mappings/remap-results', data);
+    return response.data;
   },
 };

@@ -166,6 +166,7 @@ export class FinalsVotingService {
     session.description = dto.description ?? undefined;
     session.startDate = new Date(dto.start_date);
     session.endDate = new Date(dto.end_date);
+    if (dto.results_publish_date) session.resultsPublishDate = new Date(dto.results_publish_date);
     session.status = VotingSessionStatus.DRAFT;
 
     em.persist(session);
@@ -186,11 +187,13 @@ export class FinalsVotingService {
       if (dto.title) session.title = dto.title;
       if (dto.description !== undefined) session.description = dto.description ?? undefined;
       if (dto.end_date) session.endDate = new Date(dto.end_date);
+      if (dto.results_publish_date !== undefined) session.resultsPublishDate = dto.results_publish_date ? new Date(dto.results_publish_date) : undefined;
     } else {
       if (dto.title) session.title = dto.title;
       if (dto.description !== undefined) session.description = dto.description ?? undefined;
       if (dto.start_date) session.startDate = new Date(dto.start_date);
       if (dto.end_date) session.endDate = new Date(dto.end_date);
+      if (dto.results_publish_date !== undefined) session.resultsPublishDate = dto.results_publish_date ? new Date(dto.results_publish_date) : undefined;
     }
 
     await em.flush();
@@ -306,6 +309,7 @@ export class FinalsVotingService {
       newSession.description = dto.description ?? undefined;
       newSession.startDate = new Date(dto.start_date);
       newSession.endDate = new Date(dto.end_date);
+      if (dto.results_publish_date) newSession.resultsPublishDate = new Date(dto.results_publish_date);
       newSession.status = VotingSessionStatus.DRAFT;
       txEm.persist(newSession);
 
