@@ -183,62 +183,59 @@ export default function SiteSettings() {
     }
   };
 
-  const saveSetting = async (key: string, value: string, type: string = 'text', description?: string) => {
-    if (!user) return;
-    await siteSettingsApi.upsert(key, value, type, description, user.id);
-  };
-
   const handleSave = async () => {
     if (!user) return;
 
     setSaving(true);
 
     try {
-      await Promise.all([
-        saveSetting('hero_image_urls', JSON.stringify(formData.hero_image_urls), 'json', 'Homepage hero carousel images (JSON array)'),
-        saveSetting('hero_title', formData.hero_title, 'text', 'Homepage hero title'),
-        saveSetting('hero_subtitle', formData.hero_subtitle, 'text', 'Homepage hero subtitle'),
-        saveSetting('hero_button_text', formData.hero_button_text, 'text', 'Homepage hero button text'),
-        saveSetting('hero_carousel_speed', formData.hero_carousel_speed, 'number', 'Hero carousel transition interval in milliseconds'),
-        saveSetting('hero_carousel_direction', formData.hero_carousel_direction, 'text', 'Hero carousel slide direction: left, right, top, bottom'),
-        saveSetting('sponsor_carousel_speed', formData.sponsor_carousel_speed, 'number', 'Sponsor carousel scroll speed in seconds'),
-        saveSetting('pdf_viewer_height', formData.pdf_viewer_height, 'text', 'PDF viewer height in pixels'),
-        saveSetting('pdf_viewer_width', formData.pdf_viewer_width, 'text', 'PDF viewer width (percentage or pixels)'),
-        saveSetting('social_facebook_url', formData.social_facebook_url, 'text', 'Facebook page URL'),
-        saveSetting('social_facebook_active', formData.social_facebook_active.toString(), 'boolean', 'Show Facebook link in footer'),
-        saveSetting('social_instagram_url', formData.social_instagram_url, 'text', 'Instagram profile URL'),
-        saveSetting('social_instagram_active', formData.social_instagram_active.toString(), 'boolean', 'Show Instagram link in footer'),
-        saveSetting('social_youtube_url', formData.social_youtube_url, 'text', 'YouTube channel URL'),
-        saveSetting('social_youtube_active', formData.social_youtube_active.toString(), 'boolean', 'Show YouTube link in footer'),
-        saveSetting('social_x_url', formData.social_x_url, 'text', 'X (Twitter) profile URL'),
-        saveSetting('social_x_active', formData.social_x_active.toString(), 'boolean', 'Show X link in footer'),
-        saveSetting('youtube_video_1_url', formData.youtube_video_1_url, 'text', 'YouTube Video 1 Embed URL'),
-        saveSetting('youtube_video_1_title', formData.youtube_video_1_title, 'text', 'YouTube Video 1 Title'),
-        saveSetting('youtube_video_2_url', formData.youtube_video_2_url, 'text', 'YouTube Video 2 Embed URL'),
-        saveSetting('youtube_video_2_title', formData.youtube_video_2_title, 'text', 'YouTube Video 2 Title'),
-        saveSetting('youtube_video_3_url', formData.youtube_video_3_url, 'text', 'YouTube Video 3 Embed URL'),
-        saveSetting('youtube_video_3_title', formData.youtube_video_3_title, 'text', 'YouTube Video 3 Title'),
-        saveSetting('youtube_video_4_url', formData.youtube_video_4_url, 'text', 'YouTube Video 4 Embed URL'),
-        saveSetting('youtube_video_4_title', formData.youtube_video_4_title, 'text', 'YouTube Video 4 Title'),
-        saveSetting('youtube_section_active', formData.youtube_section_active.toString(), 'boolean', 'Show YouTube section on homepage'),
-        saveSetting('youtube_api_key', formData.youtube_api_key, 'text', 'YouTube Data API v3 Key'),
-        saveSetting('youtube_channel_id', formData.youtube_channel_id, 'text', 'YouTube Channel ID'),
-        saveSetting('youtube_auto_fetch_live', formData.youtube_auto_fetch_live.toString(), 'boolean', 'Auto-fetch latest live video'),
-        saveSetting('youtube_auto_fetch_enabled', formData.youtube_auto_fetch_enabled.toString(), 'boolean', 'Enable automatic video fetching'),
-        saveSetting('youtube_auto_fetch_frequency', formData.youtube_auto_fetch_frequency, 'text', 'Auto-fetch frequency'),
-        saveSetting('youtube_auto_fetch_time', formData.youtube_auto_fetch_time, 'text', 'Auto-fetch time'),
+      const settings = [
+        { key: 'hero_image_urls', value: JSON.stringify(formData.hero_image_urls), type: 'json', description: 'Homepage hero carousel images (JSON array)' },
+        { key: 'hero_title', value: formData.hero_title, type: 'text', description: 'Homepage hero title' },
+        { key: 'hero_subtitle', value: formData.hero_subtitle, type: 'text', description: 'Homepage hero subtitle' },
+        { key: 'hero_button_text', value: formData.hero_button_text, type: 'text', description: 'Homepage hero button text' },
+        { key: 'hero_carousel_speed', value: formData.hero_carousel_speed, type: 'number', description: 'Hero carousel transition interval in milliseconds' },
+        { key: 'hero_carousel_direction', value: formData.hero_carousel_direction, type: 'text', description: 'Hero carousel slide direction: left, right, top, bottom' },
+        { key: 'sponsor_carousel_speed', value: formData.sponsor_carousel_speed, type: 'number', description: 'Sponsor carousel scroll speed in seconds' },
+        { key: 'pdf_viewer_height', value: formData.pdf_viewer_height, type: 'text', description: 'PDF viewer height in pixels' },
+        { key: 'pdf_viewer_width', value: formData.pdf_viewer_width, type: 'text', description: 'PDF viewer width (percentage or pixels)' },
+        { key: 'social_facebook_url', value: formData.social_facebook_url, type: 'text', description: 'Facebook page URL' },
+        { key: 'social_facebook_active', value: formData.social_facebook_active.toString(), type: 'boolean', description: 'Show Facebook link in footer' },
+        { key: 'social_instagram_url', value: formData.social_instagram_url, type: 'text', description: 'Instagram profile URL' },
+        { key: 'social_instagram_active', value: formData.social_instagram_active.toString(), type: 'boolean', description: 'Show Instagram link in footer' },
+        { key: 'social_youtube_url', value: formData.social_youtube_url, type: 'text', description: 'YouTube channel URL' },
+        { key: 'social_youtube_active', value: formData.social_youtube_active.toString(), type: 'boolean', description: 'Show YouTube link in footer' },
+        { key: 'social_x_url', value: formData.social_x_url, type: 'text', description: 'X (Twitter) profile URL' },
+        { key: 'social_x_active', value: formData.social_x_active.toString(), type: 'boolean', description: 'Show X link in footer' },
+        { key: 'youtube_video_1_url', value: formData.youtube_video_1_url, type: 'text', description: 'YouTube Video 1 Embed URL' },
+        { key: 'youtube_video_1_title', value: formData.youtube_video_1_title, type: 'text', description: 'YouTube Video 1 Title' },
+        { key: 'youtube_video_2_url', value: formData.youtube_video_2_url, type: 'text', description: 'YouTube Video 2 Embed URL' },
+        { key: 'youtube_video_2_title', value: formData.youtube_video_2_title, type: 'text', description: 'YouTube Video 2 Title' },
+        { key: 'youtube_video_3_url', value: formData.youtube_video_3_url, type: 'text', description: 'YouTube Video 3 Embed URL' },
+        { key: 'youtube_video_3_title', value: formData.youtube_video_3_title, type: 'text', description: 'YouTube Video 3 Title' },
+        { key: 'youtube_video_4_url', value: formData.youtube_video_4_url, type: 'text', description: 'YouTube Video 4 Embed URL' },
+        { key: 'youtube_video_4_title', value: formData.youtube_video_4_title, type: 'text', description: 'YouTube Video 4 Title' },
+        { key: 'youtube_section_active', value: formData.youtube_section_active.toString(), type: 'boolean', description: 'Show YouTube section on homepage' },
+        { key: 'youtube_api_key', value: formData.youtube_api_key, type: 'text', description: 'YouTube Data API v3 Key' },
+        { key: 'youtube_channel_id', value: formData.youtube_channel_id, type: 'text', description: 'YouTube Channel ID' },
+        { key: 'youtube_auto_fetch_live', value: formData.youtube_auto_fetch_live.toString(), type: 'boolean', description: 'Auto-fetch latest live video' },
+        { key: 'youtube_auto_fetch_enabled', value: formData.youtube_auto_fetch_enabled.toString(), type: 'boolean', description: 'Enable automatic video fetching' },
+        { key: 'youtube_auto_fetch_frequency', value: formData.youtube_auto_fetch_frequency, type: 'text', description: 'Auto-fetch frequency' },
+        { key: 'youtube_auto_fetch_time', value: formData.youtube_auto_fetch_time, type: 'text', description: 'Auto-fetch time' },
         // Staging Mode settings
-        saveSetting('staging_mode_enabled', formData.staging_mode_enabled.toString(), 'boolean', 'Enable staging mode to redirect/block emails and payments'),
-        saveSetting('staging_mode_test_email', formData.staging_mode_test_email, 'text', 'Redirect all emails to this test address'),
-        saveSetting('staging_mode_allowed_emails', JSON.stringify(formData.staging_mode_allowed_emails.map(s => s.trim()).filter(Boolean)), 'json', 'Emails that receive real emails (whitelist)'),
-        saveSetting('staging_mode_allowed_domains', JSON.stringify(formData.staging_mode_allowed_domains.map(s => s.trim()).filter(Boolean)), 'json', 'Domains that receive real emails'),
-        saveSetting('staging_mode_block_payments', formData.staging_mode_block_payments.toString(), 'boolean', 'Block Stripe payment processing'),
+        { key: 'staging_mode_enabled', value: formData.staging_mode_enabled.toString(), type: 'boolean', description: 'Enable staging mode to redirect/block emails and payments' },
+        { key: 'staging_mode_test_email', value: formData.staging_mode_test_email, type: 'text', description: 'Redirect all emails to this test address' },
+        { key: 'staging_mode_allowed_emails', value: JSON.stringify(formData.staging_mode_allowed_emails.map(s => s.trim()).filter(Boolean)), type: 'json', description: 'Emails that receive real emails (whitelist)' },
+        { key: 'staging_mode_allowed_domains', value: JSON.stringify(formData.staging_mode_allowed_domains.map(s => s.trim()).filter(Boolean)), type: 'json', description: 'Domains that receive real emails' },
+        { key: 'staging_mode_block_payments', value: formData.staging_mode_block_payments.toString(), type: 'boolean', description: 'Block Stripe payment processing' },
         // Maintenance Mode settings
-        saveSetting('maintenance_mode_enabled', formData.maintenance_mode_enabled.toString(), 'boolean', 'Enable maintenance mode to block non-admin users'),
-        saveSetting('maintenance_mode_message', formData.maintenance_mode_message, 'text', 'Custom maintenance message shown to users'),
+        { key: 'maintenance_mode_enabled', value: formData.maintenance_mode_enabled.toString(), type: 'boolean', description: 'Enable maintenance mode to block non-admin users' },
+        { key: 'maintenance_mode_message', value: formData.maintenance_mode_message, type: 'text', description: 'Custom maintenance message shown to users' },
         // Invoice Auto-Cancel setting
-        saveSetting('invoice_auto_cancel_days', formData.invoice_auto_cancel_days, 'number', 'Days after due date before overdue invoices are auto-cancelled (0 = disabled)'),
-      ]);
+        { key: 'invoice_auto_cancel_days', value: formData.invoice_auto_cancel_days, type: 'number', description: 'Days after due date before overdue invoices are auto-cancelled (0 = disabled)' },
+      ].map(s => ({ ...s, updatedBy: user.id }));
+
+      await siteSettingsApi.bulkUpsert(settings);
 
       alert('Settings saved successfully!');
       fetchSettings();
