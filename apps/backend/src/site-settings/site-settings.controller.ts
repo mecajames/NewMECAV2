@@ -79,6 +79,16 @@ export class SiteSettingsController {
     );
   }
 
+  @Post('bulk-upsert')
+  @HttpCode(HttpStatus.OK)
+  async bulkUpsertSettings(
+    @Headers('authorization') authHeader: string,
+    @Body() dto: { settings: UpsertSettingDto[] },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.siteSettingsService.bulkUpsert(dto.settings);
+  }
+
   @Delete(':key')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteSetting(

@@ -32,6 +32,13 @@ export const siteSettingsApi = {
     return response.data;
   },
 
+  bulkUpsert: async (
+    settings: { key: string; value: string; type: string; description?: string; updatedBy: string }[]
+  ): Promise<SiteSetting[]> => {
+    const response = await axios.post('/api/site-settings/bulk-upsert', { settings });
+    return response.data;
+  },
+
   delete: async (key: string): Promise<void> => {
     await axios.delete(`/api/site-settings/${key}`);
   },
