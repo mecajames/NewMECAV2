@@ -46,6 +46,7 @@ export class MembershipTypeConfigsController {
     return this.membershipTypeConfigsService.findPublic();
   }
 
+  @Public()
   @Get('category/:category')
   async findByCategory(@Param('category') category: MembershipCategory) {
     return this.membershipTypeConfigsService.findByCategory(category);

@@ -87,7 +87,7 @@ export default function EventsPage() {
       // Use optimized endpoint with server-side filtering
       const result = await eventsApi.getPublicEvents({
         page: 1,
-        limit: 200, // Reduced from 1000 for better performance
+        limit: 10000,
         seasonId: selectedSeason !== 'all' ? selectedSeason : undefined,
         status: filter !== 'all' ? filter : undefined,
       });
