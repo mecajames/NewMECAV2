@@ -307,17 +307,25 @@ export class JudgesService {
     });
     const reviewer = await em.findOneOrFail(Profile, reviewerId);
 
-    if (application.status === ApplicationStatus.APPROVED) {
+    if (application.status === ApplicationStatus.APPROVED && dto.status !== ApplicationStatus.APPROVED) {
       throw new BadRequestException('This application has already been approved');
+    }
+
+    // Allow note updates on approved applications without re-triggering approval logic
+    if (dto.admin_notes) {
+      application.adminNotes = dto.admin_notes;
+    }
+
+    if (application.status === ApplicationStatus.APPROVED && dto.status === ApplicationStatus.APPROVED) {
+      // Only updating notes on an already-approved application
+      application.reviewedBy = reviewer;
+      await em.flush();
+      return application;
     }
 
     application.status = dto.status;
     application.reviewedDate = new Date();
     application.reviewedBy = reviewer;
-
-    if (dto.admin_notes) {
-      application.adminNotes = dto.admin_notes;
-    }
 
     // If approved, create the Judge record
     if (dto.status === ApplicationStatus.APPROVED) {

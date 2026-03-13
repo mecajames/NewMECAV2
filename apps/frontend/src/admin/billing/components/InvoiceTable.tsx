@@ -55,7 +55,9 @@ export function InvoiceTable({
 
   const handleDownloadPdf = (invoice: Invoice, e: React.MouseEvent) => {
     e.stopPropagation();
-    billingApi.viewInvoicePdf(invoice.id);
+    billingApi.viewInvoicePdf(invoice.id).catch(() => {
+      alert('Failed to load invoice PDF');
+    });
     setOpenMenuId(null);
   };
 

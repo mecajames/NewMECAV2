@@ -163,11 +163,11 @@ export default function SEOSettingsPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/admin')}
-              className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back
+              Back to Admin Dashboard
             </button>
             <div className="h-6 w-px bg-slate-600" />
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">

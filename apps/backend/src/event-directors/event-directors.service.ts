@@ -268,6 +268,17 @@ export class EventDirectorsService {
   ): Promise<EventDirectorApplication> {
     const application = await this.getApplication(applicationId);
 
+    // Allow note updates on already-approved applications without re-triggering approval
+    if (application.status === ApplicationStatus.APPROVED && dto.status === ApplicationStatus.APPROVED) {
+      if (dto.admin_notes !== undefined) {
+        application.adminNotes = dto.admin_notes;
+      }
+      application.reviewedBy = this.em.getReference(Profile, reviewerId);
+      application.updatedAt = new Date();
+      await this.em.flush();
+      return application;
+    }
+
     application.status = dto.status;
     application.adminNotes = dto.admin_notes;
     application.reviewedBy = this.em.getReference(Profile, reviewerId);

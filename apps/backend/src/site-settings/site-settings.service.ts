@@ -52,6 +52,43 @@ export class SiteSettingsService {
     }
   }
 
+  async bulkUpsert(settings: { key: string; value: string; type: string; description?: string; updatedBy: string }[]): Promise<SiteSettings[]> {
+    const em = this.em.fork();
+    const results: SiteSettings[] = [];
+
+    // Load all existing settings in one query
+    const keys = settings.map(s => s.key);
+    const existing = await em.find(SiteSettings, { setting_key: { $in: keys } });
+    const existingMap = new Map(existing.map(s => [s.setting_key, s]));
+
+    for (const s of settings) {
+      const found = existingMap.get(s.key);
+      if (found) {
+        found.setting_value = s.value;
+        found.updated_by = s.updatedBy;
+        found.updated_at = new Date();
+        if (s.description) {
+          found.description = s.description;
+        }
+        results.push(found);
+      } else {
+        const setting = em.create(SiteSettings, {
+          setting_key: s.key,
+          setting_value: s.value,
+          setting_type: s.type,
+          description: s.description,
+          updated_by: s.updatedBy,
+          updated_at: new Date(),
+        });
+        em.persist(setting);
+        results.push(setting);
+      }
+    }
+
+    await em.flush();
+    return results;
+  }
+
   async delete(key: string): Promise<boolean> {
     const em = this.em.fork();
     const setting = await em.findOne(SiteSettings, { setting_key: key });

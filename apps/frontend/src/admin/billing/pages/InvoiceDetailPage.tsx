@@ -12,9 +12,13 @@ export default function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const isNew = id === 'new';
+
   useEffect(() => {
-    if (id) {
+    if (id && !isNew) {
       fetchInvoice();
+    } else if (isNew) {
+      setLoading(false);
     }
   }, [id]);
 
@@ -89,7 +93,9 @@ export default function InvoiceDetailPage() {
 
   const handleViewPdf = () => {
     if (invoice) {
-      billingApi.viewInvoicePdf(invoice.id);
+      billingApi.viewInvoicePdf(invoice.id).catch(() => {
+        alert('Failed to load invoice PDF');
+      });
     }
   };
 
