@@ -83,6 +83,7 @@ export default function SiteSettings() {
   });
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     fetchSettings();
     fetchMediaImages();
   }, []);

@@ -232,6 +232,7 @@ export class AchievementsController {
    * Returns real-time progress updates during the re-check process
    * Note: Accepts authorization via query param since EventSource doesn't support headers
    */
+  @Public()
   @Sse('admin/backfill-stream')
   backfillStream(
     @Headers('authorization') authHeader?: string,
