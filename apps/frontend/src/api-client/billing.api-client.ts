@@ -264,10 +264,16 @@ export const billingApi = {
   },
 
   /**
-   * Open invoice PDF in new tab
+   * Open invoice PDF in new tab (with auth)
    */
-  viewInvoicePdf: (id: string): void => {
-    window.open(`/api/billing/invoices/${id}/pdf`, '_blank');
+  viewInvoicePdf: async (id: string): Promise<void> => {
+    const response = await axios.get(`/api/billing/invoices/${id}/pdf`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   },
 
   /**

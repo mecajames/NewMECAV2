@@ -83,6 +83,7 @@ export default function SiteSettings() {
   });
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     fetchSettings();
     fetchMediaImages();
   }, []);
@@ -1662,101 +1663,6 @@ export default function SiteSettings() {
         </div>
       </div>
 
-      {/* Production Environment Settings */}
-      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
-        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
-          <Server className="h-6 w-6 text-purple-500" />
-          <div>
-            <h3 className="text-xl font-semibold text-white">Production Environment Setup</h3>
-            <p className="text-sm text-gray-400">
-              Required environment variables for AWS Lightsail production deployment
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
-          <p className="text-sm text-gray-400 mb-3">
-            Add these environment variables to your AWS Lightsail container or .env file:
-          </p>
-          <pre className="text-sm text-gray-300 font-mono whitespace-pre-wrap">
-{`# ===========================================
-# EMAIL CONFIGURATION (Required for emails)
-# ===========================================
-
-# For Production - Use Mailgun
-MAILGUN_API_KEY=your-mailgun-api-key
-MAILGUN_DOMAIN=mg.mecacaraudio.com
-EMAIL_FROM=noreply@mecacaraudio.com
-
-# ===========================================
-# APPLICATION URLs
-# ===========================================
-
-# Frontend URL (used in email links)
-FRONTEND_URL=https://www.maborc.com
-
-# ===========================================
-# SCHEDULED TASKS
-# ===========================================
-
-# Cron jobs run automatically when server starts:
-# - Membership expiration emails: Daily at 8:00 AM
-# - Event reminder emails: Daily at 8:00 AM
-
-# No additional configuration needed - runs within NestJS
-
-# ===========================================
-# OTHER PRODUCTION SETTINGS
-# ===========================================
-
-# Database
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
-
-# Supabase
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# Stripe
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-
-# QuickBooks (if using)
-QUICKBOOKS_CLIENT_ID=your-client-id
-QUICKBOOKS_CLIENT_SECRET=your-client-secret
-QUICKBOOKS_REDIRECT_URI=https://www.maborc.com/api/quickbooks/callback
-QUICKBOOKS_ENVIRONMENT=production`}
-          </pre>
-        </div>
-
-        <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
-            <div className="space-y-2">
-              <p className="text-blue-300 font-medium">Mailgun Setup Instructions</p>
-              <ol className="text-sm text-blue-200/80 list-decimal list-inside space-y-1">
-                <li>Create a Mailgun account at <span className="text-blue-400">mailgun.com</span></li>
-                <li>Add and verify your domain (e.g., mg.mecacaraudio.com)</li>
-                <li>Get your API key from API Security settings</li>
-                <li>Set <code className="bg-slate-700 px-1 rounded">MAILGUN_API_KEY</code> and <code className="bg-slate-700 px-1 rounded">MAILGUN_DOMAIN</code></li>
-              </ol>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 flex-shrink-0" />
-            <div className="space-y-2">
-              <p className="text-green-300 font-medium">Local Development</p>
-              <p className="text-sm text-green-200/80">
-                In development, emails are captured by Mailpit (included with Supabase local).
-                View sent emails at <span className="text-green-400">http://localhost:8025</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
         </>
       )}
 

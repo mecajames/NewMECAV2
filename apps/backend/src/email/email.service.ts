@@ -1603,6 +1603,24 @@ export class EmailService {
   // Shared Email Template Helpers
   // ==========================================================================
 
+  /**
+   * Returns an Outlook-compatible button using a table-based layout.
+   * Outlook ignores border-radius and display:inline-block on <a> tags.
+   */
+  private getEmailButton(text: string, url: string, bgColor = '#f97316'): string {
+    return `<div style="text-align: center; margin: 30px 0;">
+      <!--[if mso]>
+      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:50px;v-text-anchor:middle;width:250px;" arcsize="16%" strokecolor="${bgColor}" fillcolor="${bgColor}">
+        <w:anchorlock/>
+        <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">${text}</center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a href="${url}" style="display: inline-block; background-color: ${bgColor}; color: #ffffff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; font-family: Arial, sans-serif;">${text}</a>
+      <!--<![endif]-->
+    </div>`;
+  }
+
   private get logoUrl(): string {
     return `${process.env.FRONTEND_URL || 'https://www.mecacaraudio.com'}/meca-logo-transparent.png`;
   }
@@ -1619,26 +1637,43 @@ export class EmailService {
       ? `<p style="color: #ffffff; margin: 10px 0 0 0; font-size: 14px;">${subtitle}</p>`
       : '';
     return `<!DOCTYPE html>
-<html>
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>${title} - MECA</title>
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td { font-family: Arial, sans-serif !important; }
+  </style>
+  <![endif]-->
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0; background-color: #f1f5f9;">
-  <!-- MECA Logo Banner -->
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 30px; border-radius: 10px 10px 0 0; text-align: center;">
-    <img src="${this.logoUrl}" alt="MECA - Mobile Electronics Competition Association" style="max-width: 280px; height: auto;" />
-  </div>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
+  <!-- Outer wrapper table for centering -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9;">
+    <tr>
+      <td align="center" style="padding: 20px 10px;">
+        <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto;">
+          <!-- MECA Logo Banner -->
+          <tr>
+            <td align="center" style="background-color: #1e293b; padding: 20px 30px;">
+              <img src="${this.logoUrl}" alt="MECA - Mobile Electronics Competition Association" width="280" style="display: block; max-width: 280px; height: auto; border: 0;" />
+            </td>
+          </tr>
 
-  <!-- Title Bar -->
-  <div style="background: #c41e1e; padding: 15px 30px;">
-    <h1 style="color: #ffffff; margin: 0; font-size: 24px;">${title}</h1>
-    ${subtitleHtml}
-  </div>
+          <!-- Title Bar -->
+          <tr>
+            <td style="background-color: #c41e1e; padding: 15px 30px;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-family: Arial, sans-serif;">${title}</h1>
+              ${subtitleHtml}
+            </td>
+          </tr>
 
-  <!-- Content -->
-  <div style="background: #ffffff; padding: 30px;">`;
+          <!-- Content -->
+          <tr>
+            <td style="background-color: #ffffff; padding: 30px;">`;
   }
 
   /**
@@ -1649,18 +1684,28 @@ export class EmailService {
     <p style="color: #64748b; font-size: 13px; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
       Need help? <a href="${this.supportDeskUrl}" style="color: #f97316; text-decoration: none; font-weight: bold;">Visit our Support Desk</a>
     </p>
-  </div>
+            </td>
+          </tr>
 
-  <!-- Fun, Fair, Loud and Clear! Banner -->
-  <div style="background: #c41e1e; padding: 20px 30px; text-align: center;">
-    <p style="color: #ffffff; margin: 0; font-size: 22px; font-weight: bold; font-style: italic;">Fun, Fair, Loud and Clear!</p>
-  </div>
+          <!-- Fun, Fair, Loud and Clear! Banner -->
+          <tr>
+            <td align="center" style="background-color: #c41e1e; padding: 20px 30px;">
+              <p style="color: #ffffff; margin: 0; font-size: 22px; font-weight: bold; font-style: italic; font-family: Arial, sans-serif;">Fun, Fair, Loud and Clear!</p>
+            </td>
+          </tr>
 
-  <!-- Copyright Footer -->
-  <div style="text-align: center; padding: 15px 20px; color: #94a3b8; font-size: 12px; background: #1e293b; border-radius: 0 0 10px 10px;">
-    <p style="margin: 0;">MECA - Mobile Electronics Competition Association</p>
-    <p style="margin: 5px 0 0 0;">&copy; 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.</p>
-  </div>
+          <!-- Copyright Footer -->
+          <tr>
+            <td align="center" style="background-color: #1e293b; padding: 15px 20px; color: #94a3b8; font-size: 12px;">
+              <p style="margin: 0; color: #94a3b8; font-family: Arial, sans-serif;">MECA - Mobile Electronics Competition Association</p>
+              <p style="margin: 5px 0 0 0; color: #94a3b8; font-family: Arial, sans-serif;">&copy; 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.</p>
+            </td>
+          </tr>
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
   }
@@ -1676,15 +1721,15 @@ ${this.getEmailHeaderHtml('Welcome to MECA!')}
 
     <p>Your MECA account has been created. Here are your login details:</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${email}</p>
       <p style="margin: 0;"><strong>Password:</strong> <code style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-family: monospace;">${password}</code></p>
-    </div>
+    </td></tr></table>
 
     ${forceChange ? `
-    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px;">
       <p style="margin: 0; color: #92400e;"><strong>Important:</strong> You will be required to change your password when you first log in.</p>
-    </div>
+    </td></tr></table>
     ` : ''}
 
     <p>You can log in at: <a href="https://mecacaraudio.com/login" style="color: #f97316;">https://mecacaraudio.com/login</a></p>
@@ -1703,15 +1748,15 @@ ${this.getEmailHeaderHtml('Password Reset')}
 
     <p>Your MECA account password has been reset by an administrator. Here is your new password:</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px; text-align: center;">
       <p style="margin: 0;"><strong>New Password:</strong></p>
       <p style="margin: 10px 0 0 0;"><code style="background: #f1f5f9; padding: 8px 16px; border-radius: 4px; font-family: monospace; font-size: 18px;">${password}</code></p>
-    </div>
+    </td></tr></table>
 
     ${forceChange ? `
-    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px;">
       <p style="margin: 0; color: #92400e;"><strong>Important:</strong> You will be required to change your password when you next log in.</p>
-    </div>
+    </td></tr></table>
     ` : ''}
 
     <p>You can log in at: <a href="https://mecacaraudio.com/login" style="color: #f97316;">https://mecacaraudio.com/login</a></p>
@@ -1787,7 +1832,7 @@ ${this.getEmailHeaderHtml('Invoice ' + invoiceNumber)}
 
     <p>A new invoice has been generated for your MECA membership. Please review the details below and make payment by the due date.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background: #f1f5f9;">
@@ -1807,15 +1852,13 @@ ${this.getEmailHeaderHtml('Invoice ' + invoiceNumber)}
           </tr>
         </tfoot>
       </table>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px;">
       <p style="margin: 0; color: #92400e;"><strong>Due Date:</strong> ${dueDate}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${paymentUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Pay Invoice Now</a>
-    </div>
+    ${this.getEmailButton('Pay Invoice Now', paymentUrl)}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -1862,9 +1905,7 @@ ${this.getEmailHeaderHtml(dto.applicationType + ' Application', 'Reference Verif
 
     <p>We would greatly appreciate it if you could take a few minutes to verify that you know this applicant and provide a brief testimonial about their qualifications.</p>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.verificationUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Verify Reference</a>
-    </div>
+    ${this.getEmailButton('Verify Reference', dto.verificationUrl)}
 
     <p style="color: #64748b; font-size: 14px;">This link will expire in 14 days.</p>
 
@@ -1905,7 +1946,7 @@ ${this.getEmailHeaderHtml('How Was Your Experience?', "We'd love to hear your fe
 
     <p>Your feedback helps us improve our events and recognize our outstanding judges and event directors. Please take a moment to rate your experience.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px; text-align: center;">
       <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 15px;">
         <span style="font-size: 32px;">⭐</span>
         <span style="font-size: 32px;">⭐</span>
@@ -1914,11 +1955,9 @@ ${this.getEmailHeaderHtml('How Was Your Experience?', "We'd love to hear your fe
         <span style="font-size: 32px;">⭐</span>
       </div>
       <p style="margin: 0; color: #64748b;">Rate the judges and event directors who made this event possible</p>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${ratingUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Rate Event Staff Now</a>
-    </div>
+    ${this.getEmailButton('Rate Event Staff Now', ratingUrl)}
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Your ratings can be anonymous if you prefer. All feedback is valuable and helps us maintain the highest standards at MECA events.
@@ -1986,17 +2025,15 @@ ${this.getEmailHeaderHtml('Support Request Received', 'Ticket ' + dto.ticketNumb
 
     <p>Thank you for contacting MECA Support. We have received your request and our team will review it shortly.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <p style="margin: 0 0 10px 0;"><strong>Ticket Number:</strong> ${dto.ticketNumber}</p>
       <p style="margin: 0 0 10px 0;"><strong>Subject:</strong> ${dto.ticketTitle}</p>
       <p style="margin: 0 0 10px 0;"><strong>Category:</strong> ${this.formatCategory(dto.category)}</p>
       <p style="margin: 0;"><strong>Description:</strong></p>
       <p style="margin: 10px 0 0 0; padding: 10px; background: #f1f5f9; border-radius: 4px; white-space: pre-wrap;">${truncatedDescription}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.viewTicketUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">View Ticket</a>
-    </div>
+    ${this.getEmailButton('View Ticket', dto.viewTicketUrl)}
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       We typically respond within 24-48 hours. You will receive an email notification when our team responds to your request.
@@ -2040,7 +2077,7 @@ ${this.getEmailHeaderHtml('New Support Ticket', dto.departmentName + ' Departmen
 
     <p>A new support ticket has been submitted that requires your attention.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <div style="margin-bottom: 15px;">
         <span style="font-weight: bold; font-size: 18px;">${dto.ticketNumber}</span>
         <span style="background: ${this.getPriorityColor(dto.priority)}; color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-left: 10px;">${dto.priority}</span>
@@ -2051,11 +2088,9 @@ ${this.getEmailHeaderHtml('New Support Ticket', dto.departmentName + ' Departmen
       <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 15px 0;">
       <p style="margin: 0;"><strong>Description:</strong></p>
       <p style="margin: 10px 0 0 0; padding: 10px; background: #f1f5f9; border-radius: 4px; white-space: pre-wrap;">${truncatedDescription}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.viewTicketUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">View & Respond</a>
-    </div>
+    ${this.getEmailButton('View & Respond', dto.viewTicketUrl)}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -2094,7 +2129,7 @@ ${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumb
 
     <p>There is a new reply on your support ticket <strong>"${dto.ticketTitle}"</strong>.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <div style="margin-bottom: 15px;">
         <span style="display: inline-block; width: 40px; height: 40px; background: ${dto.isStaffReply ? '#f97316' : '#3b82f6'}; border-radius: 50%; text-align: center; line-height: 40px; color: #fff; font-weight: bold; vertical-align: middle;">${dto.replierName.charAt(0).toUpperCase()}</span>
         <span style="margin-left: 12px; vertical-align: middle;">
@@ -2103,11 +2138,9 @@ ${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumb
         </span>
       </div>
       <div style="padding: 15px; background: #f1f5f9; border-radius: 8px; white-space: pre-wrap;">${dto.replyContent}</div>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.viewTicketUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">View Full Conversation</a>
-    </div>
+    ${this.getEmailButton('View Full Conversation', dto.viewTicketUrl)}
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       You can reply directly to continue the conversation.
@@ -2150,7 +2183,7 @@ ${this.getEmailHeaderHtml('Ticket Status Update', `Ticket ${dto.ticketNumber}`)}
 
     <p>The status of your support ticket has been updated.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px; text-align: center;">
       <p style="margin: 0 0 10px 0;"><strong>${dto.ticketTitle}</strong></p>
       <div style="margin: 20px 0;">
         <span style="padding: 8px 16px; background: #e2e8f0; border-radius: 4px; color: #64748b; text-decoration: line-through;">${this.formatStatus(dto.oldStatus)}</span>
@@ -2158,16 +2191,14 @@ ${this.getEmailHeaderHtml('Ticket Status Update', `Ticket ${dto.ticketNumber}`)}
         <span style="padding: 8px 16px; background: ${statusColor}; border-radius: 4px; color: #fff; font-weight: bold;">${this.formatStatus(dto.newStatus)}</span>
       </div>
       <p style="margin: 10px 0 0 0; color: #64748b; font-size: 14px;">${statusMessage}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.viewTicketUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">View Ticket</a>
-    </div>
+    ${this.getEmailButton('View Ticket', dto.viewTicketUrl)}
 
     ${dto.newStatus === 'resolved' ? `
-    <div style="background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 15px;">
       <p style="margin: 0; color: #166534;">If you need further assistance or the issue persists, you can reopen this ticket by replying.</p>
-    </div>
+    </td></tr></table>
     ` : ''}
 ${this.getEmailFooterHtml()}
     `.trim();
@@ -2219,13 +2250,11 @@ ${this.getEmailHeaderHtml(title, 'MECA Support System')}
 
     <p>${description}</p>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.magicLinkUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">${dto.isNewTicket ? 'Verify & Continue' : 'Access Ticket'}</a>
-    </div>
+    ${this.getEmailButton(dto.isNewTicket ? 'Verify & Continue' : 'Access Ticket', dto.magicLinkUrl)}
 
-    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px;">
       <p style="margin: 0; color: #92400e;"><strong>Important:</strong> This link will expire in ${dto.expiresInHours} hour${dto.expiresInHours > 1 ? 's' : ''}.</p>
-    </div>
+    </td></tr></table>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       If you did not request this email, you can safely ignore it. For security reasons, do not share this link with anyone.
@@ -2281,14 +2310,14 @@ ${this.getEmailHeaderHtml('Registration Confirmed!', `You're all set for ${dto.e
 
     <p>Your registration for <strong>${dto.eventName}</strong> has been confirmed. We look forward to seeing you there!</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Event Details</h3>
       <p style="margin: 5px 0;"><strong>Date:</strong> ${eventDateStr}</p>
       <p style="margin: 5px 0;"><strong>Venue:</strong> ${dto.venueName}</p>
       <p style="margin: 5px 0;"><strong>Address:</strong> ${dto.venueAddress}${venueLocation ? `, ${venueLocation}` : ''}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Registration Details</h3>
       <p style="margin: 5px 0;"><strong>Confirmation #:</strong> <code style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-family: monospace;">${dto.checkInCode}</code></p>
 
@@ -2310,19 +2339,19 @@ ${this.getEmailHeaderHtml('Registration Confirmed!', `You're all set for ${dto.e
           </tr>
         </tfoot>
       </table>
-    </div>
+    </td></tr></table>
 
     ${dto.qrCodeData ? `
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px; text-align: center;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Your Check-In QR Code</h3>
       <img src="${dto.qrCodeData}" alt="Check-in QR Code" style="max-width: 200px; height: auto;" />
       <p style="margin: 10px 0 0 0; color: #64748b; font-size: 14px;">Show this at the event for quick check-in</p>
-    </div>
+    </td></tr></table>
     ` : ''}
 
-    <div style="background: #dbeafe; border: 1px solid #3b82f6; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #dbeafe; border: 1px solid #3b82f6; padding: 15px;">
       <p style="margin: 0; color: #1e40af;"><strong>Important:</strong> Please bring your MECA Membership card or log in to your <strong>MY MECA</strong> account and have your QR code ready for the event team to scan at check-in. Arrive at least 30 minutes early.</p>
-    </div>
+    </td></tr></table>
 
 ${this.getEmailFooterHtml()}
     `.trim();
@@ -2376,17 +2405,17 @@ ${this.getEmailHeaderHtml('Registration Cancelled', dto.eventName)}
 
     <p>Your registration for <strong>${dto.eventName}</strong> scheduled for ${eventDateStr} has been cancelled.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <p style="margin: 5px 0;"><strong>Event:</strong> ${dto.eventName}</p>
       <p style="margin: 5px 0;"><strong>Date:</strong> ${eventDateStr}</p>
       <p style="margin: 5px 0;"><strong>Confirmation #:</strong> ${dto.checkInCode}</p>
-    </div>
+    </td></tr></table>
 
     ${dto.refundAmount !== undefined && dto.refundAmount > 0 ? `
-    <div style="background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 15px;">
       <p style="margin: 0; color: #166534;"><strong>Refund Amount:</strong> $${dto.refundAmount.toFixed(2)}</p>
       <p style="margin: 5px 0 0 0; color: #166534; font-size: 14px;">Your refund will be processed within 5-10 business days.</p>
-    </div>
+    </td></tr></table>
     ` : ''}
 
     <p>We're sorry you won't be joining us at this event. We hope to see you at a future MECA competition!</p>
@@ -2441,31 +2470,31 @@ ${this.getEmailHeaderHtml('See You Tomorrow!', `${dto.eventName} is coming up`)}
 
     <p>This is a friendly reminder that <strong>${dto.eventName}</strong> is tomorrow! Here's everything you need to know:</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Event Details</h3>
       <p style="margin: 5px 0;"><strong>Date:</strong> ${eventDateStr}</p>
       <p style="margin: 5px 0;"><strong>Venue:</strong> ${dto.venueName}</p>
       <p style="margin: 5px 0;"><strong>Address:</strong> ${dto.venueAddress}${venueLocation ? `, ${venueLocation}` : ''}</p>
       <p style="margin: 15px 0 5px 0;"><strong>Your Check-In Code:</strong></p>
       <p style="margin: 0;"><code style="background: #f1f5f9; padding: 8px 16px; border-radius: 4px; font-family: monospace; font-size: 18px;">${dto.checkInCode}</code></p>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 10px 0; color: #1e293b;">Your Competition Classes</h3>
       <ul style="margin: 0; padding-left: 20px;">
         ${classesHtml}
       </ul>
-    </div>
+    </td></tr></table>
 
     ${dto.qrCodeData ? `
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px; text-align: center;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Your Check-In QR Code</h3>
       <img src="${dto.qrCodeData}" alt="Check-in QR Code" style="max-width: 200px; height: auto;" />
       <p style="margin: 10px 0 0 0; color: #64748b; font-size: 14px;">Show this at the event for quick check-in</p>
-    </div>
+    </td></tr></table>
     ` : ''}
 
-    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px;">
       <p style="margin: 0; color: #92400e;"><strong>Checklist for Tomorrow:</strong></p>
       <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400e;">
         <li>Bring your MECA Membership card or log in to MY MECA</li>
@@ -2473,7 +2502,7 @@ ${this.getEmailHeaderHtml('See You Tomorrow!', `${dto.eventName} is coming up`)}
         <li>Arrive 30 minutes early</li>
         <li>Ensure your vehicle is ready for competition</li>
       </ul>
-    </div>
+    </td></tr></table>
 
     <p>Good luck, and we'll see you at the competition!</p>
 
@@ -2541,15 +2570,23 @@ ${this.getEmailHeaderHtml('Still Interested?', `${dto.eventName} is tomorrow!`)}
 
     <p>You expressed interest in <strong>${dto.eventName}</strong>, and it's happening <strong>tomorrow</strong>! There's still time to register and secure your spot.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Event Details</h3>
       <p style="margin: 5px 0;"><strong>Date:</strong> ${eventDateStr}</p>
       <p style="margin: 5px 0;"><strong>Venue:</strong> ${dto.venueName}</p>
       <p style="margin: 5px 0;"><strong>Address:</strong> ${dto.venueAddress}${venueLocation ? `, ${venueLocation}` : ''}</p>
-    </div>
+    </td></tr></table>
 
     <div style="text-align: center; margin: 30px 0;">
-      <a href="${registerUrl}" style="display: inline-block; background: #ea580c; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Register Now</a>
+      <!--[if mso]>
+      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${registerUrl}" style="height:50px;v-text-anchor:middle;width:250px;" arcsize="16%" strokecolor="#ea580c" fillcolor="#ea580c">
+        <w:anchorlock/>
+        <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Register Now</center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a href="${registerUrl}" style="display: inline-block; background-color: #ea580c; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Register Now</a>
+      <!--<![endif]-->
     </div>
 
     <p style="color: #64748b; font-size: 14px;">Don't miss out — spots may be limited. We'd love to see you there!</p>
@@ -2601,7 +2638,15 @@ ${this.getEmailHeaderHtml('Confirm Your Interest', eventName)}
     <p>Thanks for your interest in <strong>${eventName}</strong>! To keep our event lists accurate, please click the button below to confirm.</p>
 
     <div style="text-align: center; margin: 30px 0;">
-      <a href="${verificationUrl}" style="display: inline-block; background: #ea580c; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Confirm Interest</a>
+      <!--[if mso]>
+      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${verificationUrl}" style="height:50px;v-text-anchor:middle;width:250px;" arcsize="16%" strokecolor="#ea580c" fillcolor="#ea580c">
+        <w:anchorlock/>
+        <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Confirm Interest</center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a href="${verificationUrl}" style="display: inline-block; background-color: #ea580c; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Confirm Interest</a>
+      <!--<![endif]-->
     </div>
 
     <p style="color: #64748b; font-size: 14px;">This link will expire in 24 hours. If you didn't request this, you can safely ignore this email.</p>
@@ -2668,24 +2713,22 @@ ${this.getEmailHeaderHtml('Welcome to MECA!', `Your ${dto.membershipType} Member
 
     <p>Congratulations! Your MECA ${dto.membershipType} membership has been successfully activated. Welcome to the Mobile Electronics Competition Association family!</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Your Membership Details</h3>
       <p style="margin: 5px 0;"><strong>MECA ID:</strong> <span style="font-size: 20px; color: #f97316; font-weight: bold;">#${dto.mecaId}</span></p>
       <p style="margin: 5px 0;"><strong>Membership Type:</strong> ${dto.membershipType} (${dto.membershipCategory})</p>
       <p style="margin: 5px 0;"><strong>Valid Until:</strong> ${expiryDateStr}</p>
       ${businessOrTeamInfo}
-    </div>
+    </td></tr></table>
 
-    <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ecfdf5; border: 1px solid #10b981; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #065f46;">Your Member Benefits</h3>
       <ul style="margin: 0; padding-left: 20px; color: #047857;">
         ${this.getMembershipBenefitsList(dto.benefits)}
       </ul>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="https://mecacaraudio.com/dashboard" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Go to Your Dashboard</a>
-    </div>
+    ${this.getEmailButton('Go to Your Dashboard', 'https://mecacaraudio.com/dashboard')}
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Keep your MECA ID handy - you'll need it when registering for events and competitions.
@@ -2735,23 +2778,21 @@ ${this.getEmailHeaderHtml('Membership Renewed!', 'Thank you for your continued s
 
     <p>Great news! Your MECA membership has been successfully renewed. We're thrilled to have you continue as part of the MECA community!</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Renewal Confirmation</h3>
       <p style="margin: 5px 0;"><strong>MECA ID:</strong> <span style="font-size: 20px; color: #f97316; font-weight: bold;">#${dto.mecaId}</span></p>
       <p style="margin: 5px 0;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
       <p style="margin: 5px 0;"><strong>New Expiration Date:</strong> ${expiryDateStr}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ecfdf5; border: 1px solid #10b981; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #065f46;">Your Member Benefits Continue</h3>
       <ul style="margin: 0; padding-left: 20px; color: #047857;">
         ${this.getMembershipBenefitsList(dto.benefits)}
       </ul>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="https://mecacaraudio.com/events" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Find Upcoming Events</a>
-    </div>
+    ${this.getEmailButton('Find Upcoming Events', 'https://mecacaraudio.com/events')}
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Thank you for being a valued member of MECA. We look forward to seeing you at upcoming events!
@@ -2808,10 +2849,10 @@ ${this.getEmailHeaderHtml(headerText, "Don't lose your membership benefits")}
       </p>
     </div>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <p style="margin: 0 0 10px 0;"><strong>MECA ID:</strong> #${dto.mecaId}</p>
       <p style="margin: 0;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
-    </div>
+    </td></tr></table>
 
     <p>Renew now to maintain uninterrupted access to:</p>
     <ul style="color: #64748b;">
@@ -2821,9 +2862,7 @@ ${this.getEmailHeaderHtml(headerText, "Don't lose your membership benefits")}
       <li>Your MECA ID number</li>
     </ul>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.renewalUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Renew Membership Now</a>
-    </div>
+    ${this.getEmailButton('Renew Membership Now', dto.renewalUrl)}
 
 ${this.getEmailFooterHtml()}
     `.trim();
@@ -2862,19 +2901,19 @@ Fun, Fair, Loud and Clear!
 ${this.getEmailHeaderHtml('Your Membership Has Expired', 'We miss you at MECA!')}
     <p style="font-size: 16px;">${greeting},</p>
 
-    <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef2f2; border: 2px solid #ef4444; padding: 20px;">
       <p style="margin: 0; color: #991b1b; font-size: 18px; font-weight: bold;">
         Your MECA membership has expired
       </p>
       <p style="margin: 10px 0 0 0; color: #991b1b;">
         Expired on: <strong>${expiredDateStr}</strong>
       </p>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <p style="margin: 0 0 10px 0;"><strong>MECA ID:</strong> #${dto.mecaId}</p>
       <p style="margin: 0;"><strong>Previous Membership:</strong> ${dto.membershipType}</p>
-    </div>
+    </td></tr></table>
 
     <p>Without an active membership, you:</p>
     <ul style="color: #64748b;">
@@ -2885,9 +2924,7 @@ ${this.getEmailHeaderHtml('Your Membership Has Expired', 'We miss you at MECA!')
 
     <p><strong>Good news:</strong> If you renew within 90 days, you can keep your same MECA ID number!</p>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${dto.renewalUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Renew Membership Now</a>
-    </div>
+    ${this.getEmailButton('Renew Membership Now', dto.renewalUrl)}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -2929,30 +2966,28 @@ ${this.getEmailHeaderHtml('Welcome to MECA!', "You've been added as a secondary 
 
     <p><strong>${dto.masterMemberName}</strong> has added you as a secondary member to their MECA account. You now have your own MECA membership and can compete at MECA events!</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Your Membership Details</h3>
       <p style="margin: 5px 0;"><strong>MECA ID:</strong> <span style="font-size: 20px; color: #f97316; font-weight: bold;">#${dto.mecaId}</span></p>
       <p style="margin: 5px 0;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
       <p style="margin: 5px 0;"><strong>Valid Until:</strong> ${expiryDateStr}</p>
       <p style="margin: 5px 0;"><strong>Primary Account:</strong> ${dto.masterMemberName}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ecfdf5; border: 1px solid #10b981; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #065f46;">Your Member Benefits</h3>
       <ul style="margin: 0; padding-left: 20px; color: #047857;">
         ${this.getMembershipBenefitsList(dto.benefits)}
       </ul>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #f0f9ff; border: 1px solid #0ea5e9; padding: 15px;">
       <p style="margin: 0; color: #0369a1;">
         <strong>Note:</strong> As a secondary member, your membership is managed by ${dto.masterMemberName}. Contact them for any account changes or renewals.
       </p>
-    </div>
+    </td></tr></table>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="https://mecacaraudio.com/events" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Find Upcoming Events</a>
-    </div>
+    ${this.getEmailButton('Find Upcoming Events', 'https://mecacaraudio.com/events')}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -2992,7 +3027,7 @@ Fun, Fair, Loud and Clear!
   ): string {
     const refundSection = dto.refundAmount
       ? `
-      <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ecfdf5; border: 1px solid #10b981; padding: 20px;">
         <h3 style="margin: 0 0 10px 0; color: #065f46;">Refund Processed</h3>
         <p style="margin: 0; color: #047857; font-size: 20px; font-weight: bold;">
           $${dto.refundAmount.toFixed(2)}
@@ -3000,7 +3035,7 @@ Fun, Fair, Loud and Clear!
         <p style="margin: 10px 0 0 0; color: #047857; font-size: 14px;">
           The refund will appear on your original payment method within 5-10 business days.
         </p>
-      </div>`
+      </td></tr></table>`
       : '';
 
     return `
@@ -3009,17 +3044,17 @@ ${this.getEmailHeaderHtml('Membership Cancelled', 'Your MECA membership has been
 
     <p>We're writing to confirm that your MECA membership has been cancelled as requested.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Cancellation Details</h3>
       <p style="margin: 5px 0;"><strong>MECA ID:</strong> #${dto.mecaId}</p>
       <p style="margin: 5px 0;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
       <p style="margin: 5px 0;"><strong>Cancelled On:</strong> ${cancellationDateStr}</p>
       ${dto.reason ? `<p style="margin: 5px 0;"><strong>Reason:</strong> ${dto.reason}</p>` : ''}
-    </div>
+    </td></tr></table>
 
     ${refundSection}
 
-    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px;">
       <p style="margin: 0; color: #92400e;">
         <strong>Important:</strong> Your membership is now inactive. You will no longer be able to:
       </p>
@@ -3028,13 +3063,11 @@ ${this.getEmailHeaderHtml('Membership Cancelled', 'Your MECA membership has been
         <li>Access member-only benefits</li>
         <li>Maintain your competition standings</li>
       </ul>
-    </div>
+    </td></tr></table>
 
     <p>If you change your mind, you can rejoin MECA at any time by visiting our website.</p>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="https://mecacaraudio.com/memberships" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Rejoin MECA</a>
-    </div>
+    ${this.getEmailButton('Rejoin MECA', 'https://mecacaraudio.com/memberships')}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -3090,13 +3123,13 @@ Fun, Fair, Loud and Clear!
   ): string {
     const membershipSection = dto.membershipCancelled
       ? `
-      <div style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef2f2; border: 1px solid #ef4444; padding: 20px;">
         <h3 style="margin: 0 0 10px 0; color: #991b1b;">Membership Also Cancelled</h3>
         <p style="margin: 0; color: #991b1b; font-size: 14px;">
           The membership associated with this invoice has also been cancelled due to non-payment.
           You will no longer be able to register for MECA events or access member-only benefits.
         </p>
-      </div>`
+      </td></tr></table>`
       : '';
 
     return `
@@ -3105,19 +3138,17 @@ ${this.getEmailHeaderHtml('Invoice Cancelled', 'Your invoice has been automatica
 
     <p>We're writing to inform you that your invoice has been automatically cancelled because payment was not received within the required timeframe.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Cancellation Details</h3>
       <p style="margin: 5px 0;"><strong>Invoice:</strong> ${dto.invoiceNumber}</p>
       <p style="margin: 5px 0;"><strong>Reason:</strong> ${dto.reason}</p>
-    </div>
+    </td></tr></table>
 
     ${membershipSection}
 
     <p>If you believe this was a mistake or would like to reinstate your membership, please contact us.</p>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="mailto:support@mecacaraudio.com" style="display: inline-block; background: #f97316; color: #fff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Contact Support</a>
-    </div>
+    ${this.getEmailButton('Contact Support', 'mailto:support@mecacaraudio.com')}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -3213,13 +3244,13 @@ ${this.getEmailHeaderHtml('Order Confirmed!', `Order #${dto.orderNumber}`)}
 
     <p>Thank you for your order from the MECA Shop! We've received your order and are getting it ready.</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Order Details</h3>
       <p style="margin: 0; color: #64748b;">Order Date: ${orderDateStr}</p>
       ${dto.shippingMethod ? `<p style="margin: 5px 0 0 0; color: #64748b;">Shipping: ${dto.shippingMethod === 'priority' ? 'Priority Shipping' : 'Standard Shipping'}</p>` : ''}
-    </div>
+    </td></tr></table>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background: #f1f5f9;">
@@ -3253,16 +3284,16 @@ ${this.getEmailHeaderHtml('Order Confirmed!', `Order #${dto.orderNumber}`)}
           </tr>
         </tfoot>
       </table>
-    </div>
+    </td></tr></table>
 
     ${dto.shippingAddress ? `
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Shipping Address</h3>
       <p style="margin: 0; color: #64748b;">
         ${dto.shippingAddress.name ? `<strong>${dto.shippingAddress.name}</strong><br>` : ''}
         ${this.formatShopAddress(dto.shippingAddress)}
       </p>
-    </div>
+    </td></tr></table>
     ` : ''}
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
@@ -3327,13 +3358,13 @@ ${this.getEmailHeaderHtml('Payment Received!', `Order #${dto.orderNumber}`)}
 
     <p>We've received your payment. Thank you for shopping with MECA!</p>
 
-    <div style="background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 20px; text-align: center;">
       <p style="margin: 0; color: #166534; font-size: 14px;">Payment Confirmed</p>
       <p style="margin: 10px 0 0 0; color: #166534; font-size: 24px; font-weight: bold;">${this.formatCurrency(dto.totalAmount)}</p>
       <p style="margin: 10px 0 0 0; color: #166534; font-size: 12px;">${paymentDateStr}${dto.last4 ? ` | Card ending in ${dto.last4}` : ''}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background: #f1f5f9;">
@@ -3367,7 +3398,7 @@ ${this.getEmailHeaderHtml('Payment Received!', `Order #${dto.orderNumber}`)}
           </tr>
         </tfoot>
       </table>
-    </div>
+    </td></tr></table>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       This email serves as your payment receipt. Your order is now being processed and we'll notify you when it ships.
@@ -3426,7 +3457,7 @@ ${this.getEmailHeaderHtml('Your Order Has Shipped!', `Order #${dto.orderNumber}`
 
     <p>Great news! Your order is on its way. Here are the shipping details:</p>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Shipping Information</h3>
       <p style="margin: 0; color: #64748b;">Shipped: ${shippedDateStr}</p>
       ${dto.carrier ? `<p style="margin: 5px 0 0 0; color: #64748b;">Carrier: ${dto.carrier}</p>` : ''}
@@ -3437,24 +3468,32 @@ ${this.getEmailHeaderHtml('Your Order Has Shipped!', `Order #${dto.orderNumber}`
         <p style="margin: 5px 0 0 0;"><code style="background: #f1f5f9; padding: 8px 16px; border-radius: 4px; font-family: monospace;">${dto.trackingNumber}</code></p>
         ${dto.trackingUrl ? `
         <div style="margin-top: 15px;">
-          <a href="${dto.trackingUrl}" style="display: inline-block; background: #f97316; color: #fff; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold;">Track Package</a>
+          <!--[if mso]>
+          <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${dto.trackingUrl}" style="height:45px;v-text-anchor:middle;width:200px;" arcsize="16%" strokecolor="#f97316" fillcolor="#f97316">
+            <w:anchorlock/>
+            <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">Track Package</center>
+          </v:roundrect>
+          <![endif]-->
+          <!--[if !mso]><!-->
+          <a href="${dto.trackingUrl}" style="display: inline-block; background-color: #f97316; color: #ffffff; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold;">Track Package</a>
+          <!--<![endif]-->
         </div>
         ` : ''}
       </div>
       ` : ''}
-    </div>
+    </td></tr></table>
 
     ${dto.shippingAddress ? `
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Shipping To</h3>
       <p style="margin: 0; color: #64748b;">
         ${dto.shippingAddress.name ? `<strong>${dto.shippingAddress.name}</strong><br>` : ''}
         ${this.formatShopAddress(dto.shippingAddress)}
       </p>
-    </div>
+    </td></tr></table>
     ` : ''}
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Items Shipped</h3>
       ${dto.items.map(item => `
       <div style="padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
@@ -3462,7 +3501,7 @@ ${this.getEmailHeaderHtml('Your Order Has Shipped!', `Order #${dto.orderNumber}`
         ${item.productSku ? `<p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 12px;">SKU: ${item.productSku}</p>` : ''}
       </div>
       `).join('')}
-    </div>
+    </td></tr></table>
 
 ${this.getEmailFooterHtml()}
     `.trim();
@@ -3519,11 +3558,11 @@ ${this.getEmailHeaderHtml('Order Delivered!', `Order #${dto.orderNumber}`)}
 
     <p>Your order has been delivered! We hope you enjoy your MECA merchandise.</p>
 
-    <div style="background: #dcfce7; border: 1px solid #22c55e; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 20px; text-align: center;">
       <p style="margin: 0; color: #166534; font-size: 18px; font-weight: bold;">Delivered on ${deliveryDateStr}</p>
-    </div>
+    </td></tr></table>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
       <h3 style="margin: 0 0 15px 0; color: #1e293b;">Items Delivered</h3>
       ${dto.items.map(item => `
       <div style="padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
@@ -3531,7 +3570,7 @@ ${this.getEmailHeaderHtml('Order Delivered!', `Order #${dto.orderNumber}`)}
         ${item.productSku ? `<p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 12px;">SKU: ${item.productSku}</p>` : ''}
       </div>
       `).join('')}
-    </div>
+    </td></tr></table>
 
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Thank you for shopping with MECA!
