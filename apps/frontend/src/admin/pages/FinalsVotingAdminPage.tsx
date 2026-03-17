@@ -24,6 +24,7 @@ interface SessionData {
   status: VotingSessionStatus;
   startDate: string;
   endDate: string;
+  resultsPublishDate?: string;
   resultsFinalizedAt?: string;
   season: { id: string; name: string };
   categories: CategoryData[];
@@ -98,6 +99,7 @@ export default function FinalsVotingAdminPage() {
     description: '',
     start_date: '',
     end_date: '',
+    results_publish_date: '',
   });
 
   // Category modal
@@ -138,6 +140,7 @@ export default function FinalsVotingAdminPage() {
     description: '',
     start_date: '',
     end_date: '',
+    results_publish_date: '',
   });
 
   // Delete confirmation
@@ -181,14 +184,23 @@ export default function FinalsVotingAdminPage() {
   // Session Handlers
   // =========================================================================
 
+  const toLocalDatetime = (d: Date) => {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const openCreateSession = () => {
     setEditingSession(null);
+    const now = new Date();
+    const twoWeeks = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const threeWeeks = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
     setSessionForm({
       season_id: seasons.find(s => s.is_current || s.isCurrent)?.id || seasons[0]?.id || '',
       title: '',
       description: '',
-      start_date: new Date().toISOString().split('T')[0],
-      end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      start_date: toLocalDatetime(now),
+      end_date: toLocalDatetime(twoWeeks),
+      results_publish_date: toLocalDatetime(threeWeeks),
     });
     setShowSessionModal(true);
   };
@@ -199,8 +211,9 @@ export default function FinalsVotingAdminPage() {
       season_id: session.season.id,
       title: session.title,
       description: session.description || '',
-      start_date: new Date(session.startDate).toISOString().split('T')[0],
-      end_date: new Date(session.endDate).toISOString().split('T')[0],
+      start_date: toLocalDatetime(new Date(session.startDate)),
+      end_date: toLocalDatetime(new Date(session.endDate)),
+      results_publish_date: session.resultsPublishDate ? toLocalDatetime(new Date(session.resultsPublishDate)) : '',
     });
     setShowSessionModal(true);
   };
@@ -216,6 +229,7 @@ export default function FinalsVotingAdminPage() {
           description: sessionForm.description || undefined,
           start_date: new Date(sessionForm.start_date),
           end_date: new Date(sessionForm.end_date),
+          results_publish_date: sessionForm.results_publish_date ? new Date(sessionForm.results_publish_date) : null,
         });
       } else {
         const newSession = await finalsVotingApi.createSession({
@@ -224,6 +238,7 @@ export default function FinalsVotingAdminPage() {
           description: sessionForm.description || undefined,
           start_date: new Date(sessionForm.start_date),
           end_date: new Date(sessionForm.end_date),
+          results_publish_date: sessionForm.results_publish_date ? new Date(sessionForm.results_publish_date) : null,
         });
         // Auto-navigate into the new session detail view
         setShowSessionModal(false);
@@ -449,12 +464,16 @@ export default function FinalsVotingAdminPage() {
 
   const openCloneModal = (sourceId: string, sourceTitle: string) => {
     setCloneSourceId(sourceId);
+    const now = new Date();
+    const twoWeeks = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const threeWeeks = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
     setCloneForm({
       season_id: seasons.find(s => s.is_current || s.isCurrent)?.id || seasons[0]?.id || '',
       title: `${sourceTitle} (Copy)`,
       description: '',
-      start_date: new Date().toISOString().split('T')[0],
-      end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      start_date: toLocalDatetime(now),
+      end_date: toLocalDatetime(twoWeeks),
+      results_publish_date: toLocalDatetime(threeWeeks),
     });
     setShowCloneModal(true);
   };
@@ -470,6 +489,7 @@ export default function FinalsVotingAdminPage() {
         description: cloneForm.description || undefined,
         start_date: new Date(cloneForm.start_date),
         end_date: new Date(cloneForm.end_date),
+        results_publish_date: cloneForm.results_publish_date ? new Date(cloneForm.results_publish_date) : null,
       });
       setShowCloneModal(false);
       await loadSessions();
@@ -506,6 +526,10 @@ export default function FinalsVotingAdminPage() {
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const formatDateTime = (date: string) => {
+    return new Date(date).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
   const toggleCategory = (id: string) => {
@@ -606,7 +630,7 @@ export default function FinalsVotingAdminPage() {
                           </td>
                           <td className="py-4 px-6 text-white">{session.season?.name}</td>
                           <td className="py-4 px-6 text-sm text-white">
-                            {formatDate(session.startDate)} - {formatDate(session.endDate)}
+                            {formatDateTime(session.startDate)} - {formatDateTime(session.endDate)}
                           </td>
                           <td className="py-4 px-6 text-white">{session.categories?.length || 0}</td>
                           <td className="py-4 px-6">
@@ -661,9 +685,14 @@ export default function FinalsVotingAdminPage() {
                     </span>
                   </div>
                   {selectedSession.description && <p className="text-slate-400 mb-2">{selectedSession.description}</p>}
-                  <p className="text-sm text-slate-500">
-                    {formatDate(selectedSession.startDate)} - {formatDate(selectedSession.endDate)} | Season: {selectedSession.season?.name}
-                  </p>
+                  <div className="text-sm text-slate-500 space-y-1">
+                    <p><span className="text-slate-400 font-medium">Voting Opens:</span> {formatDateTime(selectedSession.startDate)}</p>
+                    <p><span className="text-slate-400 font-medium">Voting Closes:</span> {formatDateTime(selectedSession.endDate)}</p>
+                    {selectedSession.resultsPublishDate && (
+                      <p><span className="text-slate-400 font-medium">Results Publish:</span> {formatDateTime(selectedSession.resultsPublishDate)}</p>
+                    )}
+                    <p><span className="text-slate-400 font-medium">Season:</span> {selectedSession.season?.name}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {selectedSession.status === VotingSessionStatus.DRAFT && (
@@ -680,9 +709,14 @@ export default function FinalsVotingAdminPage() {
                     </>
                   )}
                   {selectedSession.status === VotingSessionStatus.OPEN && (
-                    <button onClick={() => handleStatusChange(selectedSession.id, 'close')} disabled={saving} className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm flex items-center gap-1 disabled:opacity-50">
-                      <Square className="h-4 w-4" /> Close Voting
-                    </button>
+                    <>
+                      <button onClick={() => loadResults(selectedSession.id)} disabled={loadingResults} className="px-3 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm flex items-center gap-1 disabled:opacity-50">
+                        <Eye className="h-4 w-4" /> Preview Results
+                      </button>
+                      <button onClick={() => handleStatusChange(selectedSession.id, 'close')} disabled={saving} className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm flex items-center gap-1 disabled:opacity-50">
+                        <Square className="h-4 w-4" /> Close Voting
+                      </button>
+                    </>
                   )}
                   {selectedSession.status === VotingSessionStatus.CLOSED && (
                     <>
@@ -879,13 +913,18 @@ export default function FinalsVotingAdminPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Start Date *</label>
-                  <input type="date" value={sessionForm.start_date} onChange={(e) => setSessionForm({ ...sessionForm, start_date: e.target.value })} required className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Voting Opens *</label>
+                  <input type="datetime-local" value={sessionForm.start_date} onChange={(e) => setSessionForm({ ...sessionForm, start_date: e.target.value })} required className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">End Date *</label>
-                  <input type="date" value={sessionForm.end_date} onChange={(e) => setSessionForm({ ...sessionForm, end_date: e.target.value })} required min={sessionForm.start_date} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Voting Closes *</label>
+                  <input type="datetime-local" value={sessionForm.end_date} onChange={(e) => setSessionForm({ ...sessionForm, end_date: e.target.value })} required min={sessionForm.start_date} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Results Publish Date</label>
+                <input type="datetime-local" value={sessionForm.results_publish_date} onChange={(e) => setSessionForm({ ...sessionForm, results_publish_date: e.target.value })} min={sessionForm.end_date} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                <p className="text-xs text-slate-500 mt-1">When results will be publicly visible (optional)</p>
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowSessionModal(false)} className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors">Cancel</button>
@@ -1214,13 +1253,17 @@ export default function FinalsVotingAdminPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Start Date *</label>
-                  <input type="date" value={cloneForm.start_date} onChange={(e) => setCloneForm({ ...cloneForm, start_date: e.target.value })} required className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Voting Opens *</label>
+                  <input type="datetime-local" value={cloneForm.start_date} onChange={(e) => setCloneForm({ ...cloneForm, start_date: e.target.value })} required className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">End Date *</label>
-                  <input type="date" value={cloneForm.end_date} onChange={(e) => setCloneForm({ ...cloneForm, end_date: e.target.value })} required min={cloneForm.start_date} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Voting Closes *</label>
+                  <input type="datetime-local" value={cloneForm.end_date} onChange={(e) => setCloneForm({ ...cloneForm, end_date: e.target.value })} required min={cloneForm.start_date} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Results Publish Date</label>
+                <input type="datetime-local" value={cloneForm.results_publish_date} onChange={(e) => setCloneForm({ ...cloneForm, results_publish_date: e.target.value })} min={cloneForm.end_date} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowCloneModal(false)} className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors">Cancel</button>

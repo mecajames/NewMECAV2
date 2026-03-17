@@ -173,6 +173,97 @@ export class ClassNameMappingsService {
   }
 
   /**
+   * Get actual competition results for a specific unmapped class name
+   */
+  async getUnmappedResults(className: string, format?: string): Promise<any[]> {
+    const em = this.em.fork();
+
+    let query = `
+      SELECT
+        cr.id,
+        cr.competitor_name,
+        cr.meca_id,
+        cr.score,
+        cr.placement,
+        cr.format,
+        cr.vehicle_info,
+        cr.competition_class,
+        cr.points_earned,
+        e.title as event_name,
+        e.event_date
+      FROM public.competition_results cr
+      LEFT JOIN public.events e ON e.id = cr.event_id
+      WHERE cr.class_id IS NULL
+        AND cr.competition_class = ?
+    `;
+    const params: any[] = [className];
+
+    if (format) {
+      query += ` AND cr.format = ?`;
+      params.push(format);
+    }
+
+    query += ` ORDER BY e.event_date DESC, cr.placement ASC`;
+
+    const rows = await em.getConnection().execute(query, params);
+    return rows.map((row: any) => ({
+      id: row.id,
+      competitorName: row.competitor_name,
+      mecaId: row.meca_id,
+      score: row.score,
+      placement: row.placement,
+      format: row.format,
+      vehicleInfo: row.vehicle_info,
+      competitionClass: row.competition_class,
+      pointsEarned: row.points_earned,
+      eventName: row.event_name,
+      eventDate: row.event_date,
+    }));
+  }
+
+  /**
+   * Remap competition results from one class name to a target competition class
+   */
+  async remapResults(
+    className: string,
+    targetClassId: string,
+    format?: string,
+    resultIds?: string[],
+  ): Promise<{ updated: number }> {
+    const em = this.em.fork();
+
+    // Validate target class exists
+    const targetClass = await em.findOne(CompetitionClass, { id: targetClassId });
+    if (!targetClass) {
+      throw new NotFoundException(`Target class with ID ${targetClassId} not found`);
+    }
+
+    let query = `
+      UPDATE public.competition_results
+      SET class_id = ?, competition_class = ?
+      WHERE class_id IS NULL
+        AND competition_class = ?
+    `;
+    const params: any[] = [targetClassId, targetClass.name, className];
+
+    if (format) {
+      query += ` AND format = ?`;
+      params.push(format);
+    }
+
+    if (resultIds && resultIds.length > 0) {
+      const placeholders = resultIds.map(() => '?').join(', ');
+      query += ` AND id IN (${placeholders})`;
+      params.push(...resultIds);
+    }
+
+    const result = await em.getConnection().execute(query, params);
+    const updated = typeof result === 'number' ? result : (result as any)?.affectedRows ?? (result as any)?.length ?? 0;
+
+    return { updated };
+  }
+
+  /**
    * Bulk create mappings for unmapped classes
    */
   async bulkCreateMappings(mappings: {

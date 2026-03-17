@@ -12,26 +12,31 @@ import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { Public } from '../auth/public.decorator';
 import { UserActivityService } from './user-activity.service';
+import { AdminAuditService } from './admin-audit.service';
 
 @Controller('api/user-activity')
 export class UserActivityController {
-  constructor(private readonly userActivityService: UserActivityService) {}
+  constructor(
+    private readonly userActivityService: UserActivityService,
+    private readonly adminAuditService: AdminAuditService,
+  ) {}
 
   /**
    * Record a login event. Called by frontend after successful sign-in.
+   * Returns sessionId for session tracking.
    */
   @Public()
   @Post('login')
-  @HttpCode(204)
-  async recordLogin(@Req() req: Request): Promise<void> {
+  async recordLogin(@Req() req: Request): Promise<{ sessionId: string | null }> {
     const userId = req.headers['x-user-id'] as string;
-    if (!userId) return;
+    if (!userId) return { sessionId: null };
 
     const email = (req.body?.email as string) || '';
     const ip = (req.headers['x-forwarded-for'] as string) || req.ip || '';
     const ua = req.headers['user-agent'] || '';
 
-    await this.userActivityService.recordLogin(userId, email, ip, ua);
+    const sessionId = await this.userActivityService.recordLogin(userId, email, ip, ua);
+    return { sessionId };
   }
 
   /**
@@ -45,10 +50,12 @@ export class UserActivityController {
     if (!userId) return;
 
     const email = (req.body?.email as string) || '';
+    const sessionId = (req.body?.sessionId as string) || undefined;
+    const reason = (req.body?.reason as string) || 'manual';
     const ip = (req.headers['x-forwarded-for'] as string) || req.ip || '';
     const ua = req.headers['user-agent'] || '';
 
-    await this.userActivityService.recordLogout(userId, email, ip, ua);
+    await this.userActivityService.recordLogout(userId, email, ip, ua, sessionId, reason);
   }
 
   /**
@@ -112,6 +119,65 @@ export class UserActivityController {
   }
 
   /**
+   * Get paginated sessions view. Admin only.
+   */
+  @Get('sessions')
+  async getSessions(
+    @Req() req: Request,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    this.requireAdmin(req);
+    return this.userActivityService.getSessionsView({
+      search,
+      startDate,
+      endDate,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  /**
+   * Get session statistics summary. Admin only.
+   */
+  @Get('session-stats')
+  async getSessionStats(@Req() req: Request) {
+    this.requireAdmin(req);
+    return this.userActivityService.getSessionStats();
+  }
+
+  /**
+   * Get paginated admin audit log. Admin only.
+   */
+  @Get('admin-audit-log')
+  async getAdminAuditLog(
+    @Req() req: Request,
+    @Query('action') action?: string,
+    @Query('resourceType') resourceType?: string,
+    @Query('adminUserId') adminUserId?: string,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    this.requireAdmin(req);
+    return this.adminAuditService.getAuditLog({
+      action,
+      resourceType,
+      adminUserId,
+      search,
+      startDate,
+      endDate,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  /**
    * Simple admin check using x-user-role header or database lookup.
    * Relies on existing auth patterns in the project.
    */
@@ -120,8 +186,5 @@ export class UserActivityController {
     if (!userId) {
       throw new ForbiddenException('Authentication required');
     }
-    // Admin check is handled by the auth guard pattern in this project.
-    // The frontend only calls these endpoints from admin pages.
-    // For additional security, the service could verify the role from the DB.
   }
 }
