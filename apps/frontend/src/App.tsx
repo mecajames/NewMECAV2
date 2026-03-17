@@ -119,6 +119,7 @@ const WorldRecordsPage = lazy(() => import('@/spl-world-records/pages/WorldRecor
 const WorldRecordsAdminPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsAdminPage'));
 const HallOfFameAdminPage = lazy(() => import('@/hall-of-fame/pages/HallOfFameAdminPage'));
 const LoginAuditPage = lazy(() => import('@/admin/pages/LoginAuditPage'));
+const AdminAuditPage = lazy(() => import('@/admin/pages/AdminAuditPage'));
 
 // Lazy-loaded pages - Admin billing
 const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDashboardPage'));
@@ -333,6 +334,7 @@ function App() {
 
               {/* Admin Login Audit */}
               <Route path="/admin/login-audit" element={<L><LoginAuditPage /></L>} />
+              <Route path="/admin/admin-audit" element={<L><AdminAuditPage /></L>} />
 
               {/* Card QR Code Redirect */}
               <Route path="/card/:membershipId" element={<L><CardRedirectPage /></L>} />

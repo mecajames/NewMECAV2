@@ -5,6 +5,7 @@ import { EmailService } from '../email/email.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { SiteSettingsService } from '../site-settings/site-settings.service';
+import { UserActivityService } from '../user-activity/user-activity.service';
 import { Membership } from '../memberships/memberships.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
@@ -23,6 +24,7 @@ export class ScheduledTasksService {
     private readonly invoicesService: InvoicesService,
     private readonly membershipsService: MembershipsService,
     private readonly siteSettingsService: SiteSettingsService,
+    private readonly userActivityService: UserActivityService,
   ) {}
 
   // =============================================================================
@@ -628,6 +630,106 @@ export class ScheduledTasksService {
       };
     } catch (error) {
       return { success: false, message: `Error: ${error}`, updated: 0 };
+    }
+  }
+
+  // =============================================================================
+  // AUDIT LOG ROTATION
+  // Runs daily at 3:00 AM - deletes old audit log entries
+  // =============================================================================
+
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async handleLogRotation() {
+    this.logger.log('Running audit log rotation job...');
+
+    try {
+      // Read retention days from site settings (default 180)
+      const setting = await this.siteSettingsService.findByKey('audit_log_retention_days');
+      const retentionDays = setting ? parseInt(setting.setting_value, 10) : 180;
+
+      if (retentionDays <= 0) {
+        this.logger.log('Log rotation disabled (retention days is 0 or negative)');
+        return;
+      }
+
+      // Rotate login audit log
+      const loginDeleted = await this.userActivityService.rotateLoginAuditLog(retentionDays);
+      this.logger.log(`Deleted ${loginDeleted} login audit log entries older than ${retentionDays} days`);
+
+      // Rotate admin audit log
+      const adminDeleted = await this.userActivityService.rotateAdminAuditLog(retentionDays);
+      this.logger.log(`Deleted ${adminDeleted} admin audit log entries older than ${retentionDays} days`);
+
+      // Mark orphaned sessions as expired
+      const orphaned = await this.userActivityService.markOrphanedSessions();
+      this.logger.log(`Marked ${orphaned} orphaned sessions as session_expired`);
+
+      this.logger.log('Audit log rotation job completed');
+    } catch (error) {
+      this.logger.error('Error running audit log rotation job:', error);
+    }
+  }
+
+  // =============================================================================
+  // BRUTE FORCE DETECTION
+  // Runs every 15 minutes - alerts admins about suspicious login activity
+  // =============================================================================
+
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async handleBruteForceDetection() {
+    try {
+      const { byEmail, byIp } = await this.userActivityService.getBruteForceAttempts(15, 5);
+
+      if (byEmail.length === 0 && byIp.length === 0) return;
+
+      this.logger.warn(
+        `Brute force detection: ${byEmail.length} emails and ${byIp.length} IPs with 5+ failed attempts in last 15 minutes`,
+      );
+
+      // Build alert email
+      const emailLines = byEmail.map(e => `${e.email}: ${e.count} attempts`).join('<br>');
+      const ipLines = byIp.map(e => `${e.ip_address}: ${e.count} attempts`).join('<br>');
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #dc2626;">Security Alert: Suspicious Login Activity</h2>
+          <p>The following accounts/IPs have had 5+ failed login attempts in the last 15 minutes:</p>
+          ${byEmail.length > 0 ? `<h3>By Email:</h3><p>${emailLines}</p>` : ''}
+          ${byIp.length > 0 ? `<h3>By IP Address:</h3><p>${ipLines}</p>` : ''}
+          <hr style="border: 1px solid #e2e8f0; margin: 20px 0;">
+          <p style="color: #64748b; font-size: 12px;">
+            This is an automated alert from the MECA login monitoring system.<br>
+            Time: ${new Date().toISOString()}
+          </p>
+        </div>
+      `;
+
+      // Get admin email from site settings or use default
+      const adminEmailSetting = await this.siteSettingsService.findByKey('admin_alert_email');
+      const adminEmail = adminEmailSetting?.setting_value || 'admin@mecacaraudio.com';
+
+      await this.emailService.sendEmail({
+        to: adminEmail,
+        subject: 'MECA Security Alert: Suspicious Login Activity',
+        html,
+        text: `Security Alert: ${byEmail.length} emails and ${byIp.length} IPs with 5+ failed login attempts in the last 15 minutes.`,
+      });
+
+      this.logger.log(`Brute force alert email sent to ${adminEmail}`);
+    } catch (error) {
+      this.logger.error('Error running brute force detection:', error);
+    }
+  }
+
+  /**
+   * Manually trigger log rotation (for testing)
+   */
+  async triggerLogRotation(): Promise<{ success: boolean; message: string }> {
+    try {
+      await this.handleLogRotation();
+      return { success: true, message: 'Log rotation completed. Check server logs for details.' };
+    } catch (error) {
+      return { success: false, message: `Error: ${error}` };
     }
   }
 }

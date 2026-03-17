@@ -66,8 +66,22 @@ export class ShippingService {
     return this.accessToken!;
   }
 
+  private normalizeCountry(country?: string): string {
+    if (!country) return 'US';
+    const upper = country.trim().toUpperCase();
+    // Accept common US variants
+    if (upper === 'US' || upper === 'USA' || upper === 'UNITED STATES' || upper === 'UNITED STATES OF AMERICA') {
+      return 'US';
+    }
+    if (upper === 'CA' || upper === 'CAN' || upper === 'CANADA') {
+      return 'CA';
+    }
+    return upper;
+  }
+
   async calculateRates(request: ShippingRateRequest): Promise<ShippingRate[]> {
     const em = this.em.fork();
+    request.destinationCountry = this.normalizeCountry(request.destinationCountry);
 
     // Get products to calculate total weight and dimensions
     const productIds = request.items.map((item) => item.productId);

@@ -29,6 +29,7 @@ export class CompetitionClassesController {
     return this.competitionClassesService.findActiveClasses();
   }
 
+  @Public()
   @Get('season/:seasonId')
   async getClassesBySeason(@Param('seasonId') seasonId: string): Promise<CompetitionClass[]> {
     return this.competitionClassesService.findBySeason(seasonId);

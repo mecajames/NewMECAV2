@@ -5,6 +5,8 @@ import { setAxiosUserId } from '@/lib/axios';
 import { profilesApi } from '@/profiles';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
 
+const SESSION_ID_KEY = 'meca-login-session-id';
+
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
@@ -14,7 +16,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any; data: any }>;
   signInWithOAuth: (provider: Provider) => Promise<{ error: any }>;
-  signOut: () => Promise<void>;
+  signOut: (logoutReason?: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<{ error: any }>;
   resetPassword: (email: string) => Promise<{ error: any }>;
@@ -106,8 +108,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Record failed login attempt (fire-and-forget)
       userActivityApi.recordFailedAttempt(email, error.message);
     } else {
-      // Record successful login (fire-and-forget)
-      userActivityApi.recordLogin(email);
+      // Record successful login and store session ID
+      const sessionId = await userActivityApi.recordLogin(email);
+      if (sessionId) {
+        try {
+          sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+        } catch {
+          // sessionStorage unavailable
+        }
+      }
     }
 
     return { error };
@@ -204,11 +213,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(profileData);
   };
 
-  const signOut = async () => {
+  const signOut = async (logoutReason?: string) => {
     // Record logout before clearing auth state (try/catch, don't block)
     try {
       if (user?.email) {
-        await userActivityApi.recordLogout(user.email);
+        let sessionId: string | undefined;
+        try {
+          sessionId = sessionStorage.getItem(SESSION_ID_KEY) || undefined;
+          sessionStorage.removeItem(SESSION_ID_KEY);
+        } catch {
+          // sessionStorage unavailable
+        }
+        await userActivityApi.recordLogout(user.email, sessionId, logoutReason || 'manual');
       }
     } catch {
       // Don't block signout

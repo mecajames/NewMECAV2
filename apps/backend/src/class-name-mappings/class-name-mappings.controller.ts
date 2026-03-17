@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -30,6 +31,26 @@ export class ClassNameMappingsController {
   @Get('unmapped')
   async getUnmapped() {
     return this.service.getUnmappedClassNames();
+  }
+
+  @Get('unmapped/:className/results')
+  async getUnmappedResults(
+    @Param('className') className: string,
+    @Query('format') format?: string,
+  ) {
+    return this.service.getUnmappedResults(decodeURIComponent(className), format);
+  }
+
+  @Post('remap-results')
+  async remapResults(
+    @Body() data: {
+      className: string;
+      targetClassId: string;
+      format?: string;
+      resultIds?: string[];
+    },
+  ) {
+    return this.service.remapResults(data.className, data.targetClassId, data.format, data.resultIds);
   }
 
   @Get(':id')

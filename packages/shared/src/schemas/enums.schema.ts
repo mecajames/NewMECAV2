@@ -440,3 +440,16 @@ export enum VotingAnswerType {
 }
 
 export const VotingAnswerTypeSchema = z.nativeEnum(VotingAnswerType);
+
+// =============================================================================
+// Logout Reason (Session Tracking)
+// =============================================================================
+
+export enum LogoutReason {
+  MANUAL = 'manual',
+  IDLE_TIMEOUT = 'idle_timeout',
+  SESSION_EXPIRED = 'session_expired',
+  UNKNOWN = 'unknown',
+}
+
+export const LogoutReasonSchema = z.nativeEnum(LogoutReason);

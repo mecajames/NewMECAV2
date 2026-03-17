@@ -6,6 +6,7 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { EmailService } from '../email/email.service';
 import { generateSecurePassword, validatePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { AccountType } from '@newmeca/shared';
+import { AdminAuditService } from '../user-activity/admin-audit.service';
 
 export interface EnsureProfileDto {
   userId: string;
@@ -43,6 +44,7 @@ export class ProfilesService {
     private readonly em: EntityManager,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly emailService: EmailService,
+    private readonly adminAuditService: AdminAuditService,
   ) {}
 
   // ============================================
@@ -881,6 +883,17 @@ export class ProfilesService {
 
     await em.flush();
 
+    // Audit log
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: data.enabled ? 'judge_permission_grant' : 'judge_permission_revoke',
+      resourceType: 'profile',
+      resourceId: profileId,
+      description: `${data.enabled ? 'Enabled' : 'Disabled'} judge permission for ${profile.email}`,
+      oldValues: { canApplyJudge: !data.enabled },
+      newValues: { canApplyJudge: data.enabled, expirationDate: data.expirationDate },
+    });
+
     return profile;
   }
 
@@ -923,6 +936,17 @@ export class ProfilesService {
     }
 
     await em.flush();
+
+    // Audit log
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: data.enabled ? 'ed_permission_grant' : 'ed_permission_revoke',
+      resourceType: 'profile',
+      resourceId: profileId,
+      description: `${data.enabled ? 'Enabled' : 'Disabled'} event director permission for ${profile.email}`,
+      oldValues: { canApplyEventDirector: !data.enabled },
+      newValues: { canApplyEventDirector: data.enabled, expirationDate: data.expirationDate },
+    });
 
     return profile;
   }

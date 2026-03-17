@@ -6,9 +6,10 @@ import { AuthModule } from '../auth/auth.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { SiteSettingsModule } from '../site-settings/site-settings.module';
+import { UserActivityModule } from '../user-activity/user-activity.module';
 
 @Module({
-  imports: [EmailModule, AuthModule, InvoicesModule, MembershipsModule, SiteSettingsModule],
+  imports: [EmailModule, AuthModule, InvoicesModule, MembershipsModule, SiteSettingsModule, UserActivityModule],
   providers: [ScheduledTasksService],
   controllers: [ScheduledTasksController],
   exports: [ScheduledTasksService],

@@ -294,6 +294,7 @@ export function CheckoutPage() {
   const [selectedShippingMethod, setSelectedShippingMethod] = useState<'standard' | 'priority'>('standard');
   const [loadingRates, setLoadingRates] = useState(false);
   const [lastZipChecked, setLastZipChecked] = useState('');
+  const [lastCountryChecked, setLastCountryChecked] = useState('');
 
   const [formData, setFormData] = useState<CheckoutFormData>({
     email: user?.email || '',
@@ -319,6 +320,15 @@ export function CheckoutPage() {
     if (profile) {
       const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
 
+      // Normalize country codes (profile may store "USA" or "United States" instead of "US")
+      const normalizeCountry = (val?: string | null): 'US' | 'CA' => {
+        if (!val) return 'US';
+        const upper = val.trim().toUpperCase();
+        if (upper === 'US' || upper === 'USA' || upper === 'UNITED STATES') return 'US';
+        if (upper === 'CA' || upper === 'CAN' || upper === 'CANADA') return 'CA';
+        return 'US';
+      };
+
       // Pre-populate shipping address (prefer shipping_* fields, fallback to main address)
       const shippingAddress: ShopAddress = {
         name: fullName,
@@ -327,7 +337,7 @@ export function CheckoutPage() {
         city: profile.shipping_city || profile.city || '',
         state: profile.shipping_state || profile.state || '',
         postalCode: profile.shipping_zip || profile.postal_code || '',
-        country: profile.shipping_country || profile.country || 'US',
+        country: normalizeCountry(profile.shipping_country || profile.country),
         phone: profile.phone || '',
       };
 
@@ -339,7 +349,7 @@ export function CheckoutPage() {
         city: profile.billing_city || profile.city || '',
         state: profile.billing_state || profile.state || '',
         postalCode: profile.billing_zip || profile.postal_code || '',
-        country: profile.billing_country || profile.country || 'US',
+        country: normalizeCountry(profile.billing_country || profile.country),
         phone: profile.phone || '',
       };
 
@@ -356,8 +366,8 @@ export function CheckoutPage() {
     const zip = formData.shippingAddress.postalCode;
     const country = formData.shippingAddress.country;
 
-    // Only fetch if we have a valid 5-digit zip and it's different from last checked
-    if (zip && zip.length >= 5 && zip !== lastZipChecked && items.length > 0) {
+    // Fetch if we have a valid 5-digit zip and zip or country changed
+    if (zip && zip.length >= 5 && (zip !== lastZipChecked || country !== lastCountryChecked) && items.length > 0) {
       const fetchRates = async () => {
         setLoadingRates(true);
         try {
@@ -368,6 +378,7 @@ export function CheckoutPage() {
           });
           setShippingRates(rates);
           setLastZipChecked(zip);
+          setLastCountryChecked(country);
           // Default to standard if not already set
           if (rates.length > 0 && !rates.find((r) => r.method === selectedShippingMethod)) {
             setSelectedShippingMethod(rates[0].method as 'standard' | 'priority');

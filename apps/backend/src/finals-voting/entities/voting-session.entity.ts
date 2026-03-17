@@ -31,6 +31,9 @@ export class VotingSession {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'results_finalized_at' })
   resultsFinalizedAt?: Date;
 
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'results_publish_date' })
+  resultsPublishDate?: Date;
+
   @OneToMany(() => VotingCategory, cat => cat.session)
   categories = new Collection<VotingCategory>(this);
 
