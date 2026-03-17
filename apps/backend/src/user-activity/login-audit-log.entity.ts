@@ -16,6 +16,12 @@ export class LoginAuditLog {
   @Property({ type: 'text' })
   action!: string; // 'login' | 'logout' | 'failed_attempt'
 
+  @Property({ type: 'uuid', nullable: true, fieldName: 'session_id' })
+  session_id?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'logout_reason' })
+  logout_reason?: string;
+
   @Property({ type: 'text', nullable: true, fieldName: 'ip_address' })
   ip_address?: string;
 

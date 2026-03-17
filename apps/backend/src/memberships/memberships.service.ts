@@ -23,6 +23,7 @@ import { OrderItem } from '../orders/order-items.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { EmailService } from '../email/email.service';
+import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
 
 /**
@@ -153,6 +154,7 @@ export class MembershipsService {
     private readonly emailService: EmailService,
     @Inject(forwardRef(() => StripeService))
     private readonly stripeService: StripeService,
+    private readonly adminAuditService: AdminAuditService,
   ) {}
 
   async findById(id: string): Promise<Membership> {
@@ -1585,6 +1587,17 @@ export class MembershipsService {
 
     this.logger.log(`Membership ${membershipId} cancelled immediately by admin ${adminId}. Reason: ${reason}`);
 
+    // Audit log
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_cancel',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      description: `Cancelled membership immediately for ${membership.user?.email || 'unknown'}. Reason: ${reason}`,
+      oldValues: { paymentStatus: PaymentStatus.PAID },
+      newValues: { paymentStatus: PaymentStatus.CANCELLED, cancellationReason: reason },
+    });
+
     return {
       success: true,
       membership,
@@ -1641,6 +1654,16 @@ export class MembershipsService {
       : 'the end of the current period';
 
     this.logger.log(`Membership ${membershipId} scheduled for cancellation at period end by admin ${adminId}. Reason: ${reason}`);
+
+    // Audit log
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_cancel_at_renewal',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      description: `Scheduled cancellation at period end for ${membership.user?.email || 'unknown'}. Reason: ${reason}`,
+      newValues: { cancelAtPeriodEnd: true, cancellationReason: reason },
+    });
 
     return {
       success: true,
@@ -1741,6 +1764,21 @@ export class MembershipsService {
     }
 
     this.logger.log(`Membership ${membershipId} refunded by admin ${adminId}. Reason: ${reason}`);
+
+    // Audit log
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_refund',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      description: `Refunded membership for ${membership.user?.email || 'unknown'}. Reason: ${reason}`,
+      oldValues: { paymentStatus: PaymentStatus.PAID },
+      newValues: {
+        paymentStatus: PaymentStatus.REFUNDED,
+        refundAmount: stripeRefund ? stripeRefund.amount / 100 : Number(membership.amountPaid),
+        cancellationReason: reason,
+      },
+    });
 
     return {
       success: true,

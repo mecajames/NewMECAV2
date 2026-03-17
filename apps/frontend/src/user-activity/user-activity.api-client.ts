@@ -8,6 +8,8 @@ export interface AuditLogEntry {
   ip_address: string | null;
   user_agent: string | null;
   error_message: string | null;
+  session_id: string | null;
+  logout_reason: string | null;
   created_at: string;
   first_name: string | null;
   last_name: string | null;
@@ -21,20 +23,74 @@ export interface AuditLogResponse {
   totalPages: number;
 }
 
+export interface SessionEntry {
+  session_id: string;
+  user_id: string | null;
+  email: string;
+  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  login_time: string;
+  logout_time: string | null;
+  logout_reason: string | null;
+  duration_seconds: number | null;
+  ip_address: string | null;
+}
+
+export interface SessionsResponse {
+  items: SessionEntry[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface SessionStats {
+  totalSessions: number;
+  avgDurationSeconds: number | null;
+  activeSessions: number;
+  manualLogouts: number;
+  timeoutLogouts: number;
+  failedAttempts24h: number;
+  uniqueFailedIps24h: number;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  admin_user_id: string;
+  admin_name: string | null;
+  admin_email: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  description: string | null;
+  old_values: Record<string, any> | null;
+  new_values: Record<string, any> | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+export interface AdminAuditResponse {
+  items: AdminAuditEntry[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
 export const userActivityApi = {
-  /** Record a successful login */
-  recordLogin: async (email: string): Promise<void> => {
+  /** Record a successful login. Returns sessionId for session tracking. */
+  recordLogin: async (email: string): Promise<string | null> => {
     try {
-      await axios.post('/api/user-activity/login', { email });
+      const { data } = await axios.post<{ sessionId: string | null }>('/api/user-activity/login', { email });
+      return data?.sessionId ?? null;
     } catch {
-      // Fire-and-forget
+      return null;
     }
   },
 
-  /** Record a logout */
-  recordLogout: async (email: string): Promise<void> => {
+  /** Record a logout with optional sessionId and reason */
+  recordLogout: async (email: string, sessionId?: string, reason?: string): Promise<void> => {
     try {
-      await axios.post('/api/user-activity/logout', { email });
+      await axios.post('/api/user-activity/logout', { email, sessionId, reason });
     } catch {
       // Fire-and-forget
     }
@@ -71,6 +127,39 @@ export const userActivityApi = {
     limit?: number;
   }): Promise<AuditLogResponse> => {
     const { data } = await axios.get<AuditLogResponse>('/api/user-activity/audit-log', { params });
+    return data;
+  },
+
+  /** Get paginated sessions view (admin) */
+  getSessions: async (params: {
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<SessionsResponse> => {
+    const { data } = await axios.get<SessionsResponse>('/api/user-activity/sessions', { params });
+    return data;
+  },
+
+  /** Get session statistics (admin) */
+  getSessionStats: async (): Promise<SessionStats> => {
+    const { data } = await axios.get<SessionStats>('/api/user-activity/session-stats');
+    return data;
+  },
+
+  /** Get paginated admin audit log (admin) */
+  getAdminAuditLog: async (params: {
+    action?: string;
+    resourceType?: string;
+    adminUserId?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<AdminAuditResponse> => {
+    const { data } = await axios.get<AdminAuditResponse>('/api/user-activity/admin-audit-log', { params });
     return data;
   },
 };

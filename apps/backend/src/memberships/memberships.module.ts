@@ -7,9 +7,10 @@ import { MembershipSyncService } from './membership-sync.service';
 import { TeamsModule } from '../teams/teams.module';
 import { AuthModule } from '../auth/auth.module';
 import { StripeModule } from '../stripe/stripe.module';
+import { UserActivityModule } from '../user-activity/user-activity.module';
 
 @Module({
-  imports: [forwardRef(() => TeamsModule), AuthModule, forwardRef(() => StripeModule)],
+  imports: [forwardRef(() => TeamsModule), AuthModule, forwardRef(() => StripeModule), UserActivityModule],
   controllers: [MembershipsController],
   providers: [MembershipsService, MecaIdService, MasterSecondaryService, MembershipSyncService],
   exports: [MembershipsService, MecaIdService, MasterSecondaryService, MembershipSyncService],

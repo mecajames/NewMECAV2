@@ -3,9 +3,10 @@ import { ProfilesController } from './profiles.controller';
 import { ProfilesService } from './profiles.service';
 import { MemberStatsService } from './member-stats.service';
 import { AuthModule } from '../auth/auth.module';
+import { UserActivityModule } from '../user-activity/user-activity.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, UserActivityModule],
   controllers: [ProfilesController],
   providers: [ProfilesService, MemberStatsService],
   exports: [ProfilesService, MemberStatsService],

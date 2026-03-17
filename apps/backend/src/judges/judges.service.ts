@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
+import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { JudgeApplication } from './judge-application.entity';
 import { JudgeApplicationReference } from './judge-application-reference.entity';
 import { Judge } from './judge.entity';
@@ -38,6 +39,7 @@ export class JudgesService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
+    private readonly adminAuditService: AdminAuditService,
   ) {}
 
   // =============================================================================
@@ -343,6 +345,16 @@ export class JudgesService {
     }
 
     await em.flush();
+
+    // Audit log
+    this.adminAuditService.logAction({
+      adminUserId: reviewerId,
+      action: dto.status === ApplicationStatus.APPROVED ? 'judge_approve' : 'judge_application_review',
+      resourceType: 'judge',
+      resourceId: applicationId,
+      description: `${dto.status === ApplicationStatus.APPROVED ? 'Approved' : 'Reviewed'} judge application for ${application.user?.email || 'unknown'} - status: ${dto.status}`,
+      newValues: { status: dto.status, judgeLevel: dto.judge_level },
+    });
 
     // Send notification email to applicant
     await this.sendApplicationStatusEmail(application);

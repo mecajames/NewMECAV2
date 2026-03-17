@@ -11,6 +11,7 @@ import { EventJudgeAssignment } from './event-judge-assignment.entity';
 import { EmailVerificationToken } from '../auth/email-verification-token.entity';
 import { EmailModule } from '../email/email.module';
 import { AuthModule } from '../auth/auth.module';
+import { UserActivityModule } from '../user-activity/user-activity.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AuthModule } from '../auth/auth.module';
     ]),
     EmailModule,
     AuthModule,
+    UserActivityModule,
   ],
   controllers: [JudgesController],
   providers: [JudgesService],

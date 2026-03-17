@@ -53,8 +53,8 @@ export function useIdleTimeout() {
       // localStorage unavailable
     }
 
-    // Sign out and redirect
-    signOut().finally(() => {
+    // Sign out with idle_timeout reason and redirect
+    signOut('idle_timeout').finally(() => {
       window.location.href = '/login?reason=timeout';
     });
   }, [signOut]);
