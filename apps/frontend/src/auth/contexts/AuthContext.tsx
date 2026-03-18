@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -104,6 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Record failed login attempt (fire-and-forget)
       userActivityApi.recordFailedAttempt(email, error.message);
     } else {
+      // Set axios user ID immediately so recordLogin has the header
+      // (onAuthStateChange fires async and may not have run yet)
+      if (data?.user?.id) {
+        setAxiosUserId(data.user.id);
+      }
+
       // Record successful login and store session ID
       const sessionId = await userActivityApi.recordLogin(email);
       if (sessionId) {

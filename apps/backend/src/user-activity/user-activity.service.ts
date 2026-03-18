@@ -186,7 +186,8 @@ export class UserActivityService {
                 THEN EXTRACT(EPOCH FROM (logout."created_at" - login."created_at"))::int
                 ELSE NULL
               END AS duration_seconds,
-              login."ip_address"
+              login."ip_address",
+              login."user_agent"
        FROM "public"."login_audit_log" login
        LEFT JOIN "public"."login_audit_log" logout
          ON login."session_id" = logout."session_id" AND logout."action" = 'logout'

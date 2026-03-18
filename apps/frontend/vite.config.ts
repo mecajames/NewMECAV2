@@ -29,21 +29,18 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Core React framework - cached long-term
-          'react-vendor': ['react', 'react-dom', 'react-router-dom', 'react-helmet-async'],
-          // Supabase client
-          'supabase-vendor': ['@supabase/supabase-js'],
-          // Stripe (loaded on-demand via lazy routes, but cached separately)
-          'stripe-vendor': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
-          // Charts library (only used on dashboard)
-          'charts-vendor': ['recharts'],
-          // HTTP client
-          'data-vendor': ['axios'],
-          // UI icons
-          'icons-vendor': ['lucide-react'],
-          // Google Maps (loaded on event detail pages)
-          'maps-vendor': ['@react-google-maps/api'],
+        manualChunks(id) {
+          // Keep auth context + hooks in one chunk to avoid circular deps from barrel re-exports
+          if (/[/\\]src[/\\]auth[/\\](contexts|hooks|index\.|usePermissions|idle-timeout)/.test(id)) {
+            return 'auth-core';
+          }
+          if (/[/\\]node_modules[/\\](react|react-dom|react-router|react-helmet)[/\\]/.test(id)) return 'react-vendor';
+          if (/[/\\]node_modules[/\\]@supabase[/\\]/.test(id)) return 'supabase-vendor';
+          if (/[/\\]node_modules[/\\]@stripe[/\\]/.test(id)) return 'stripe-vendor';
+          if (/[/\\]node_modules[/\\]recharts[/\\]/.test(id)) return 'charts-vendor';
+          if (/[/\\]node_modules[/\\]axios[/\\]/.test(id)) return 'data-vendor';
+          if (/[/\\]node_modules[/\\]lucide-react[/\\]/.test(id)) return 'icons-vendor';
+          if (/[/\\]node_modules[/\\]@react-google-maps[/\\]/.test(id)) return 'maps-vendor';
         },
       },
     },

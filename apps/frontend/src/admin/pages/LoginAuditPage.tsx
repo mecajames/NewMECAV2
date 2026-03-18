@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Shield, LogIn, LogOut, AlertTriangle, Loader2, Clock, Users, Timer, Activity } from 'lucide-react';
+import { ArrowLeft, Search, Shield, LogIn, LogOut, AlertTriangle, Loader2, Clock, Users, Timer, Activity, Monitor, Smartphone } from 'lucide-react';
 import { userActivityApi, AuditLogEntry, SessionEntry, SessionStats } from '@/user-activity/user-activity.api-client';
 
 type ActionFilter = 'all' | 'login' | 'logout' | 'failed_attempt';
@@ -13,6 +13,47 @@ function formatDuration(seconds: number | null): string {
   const mins = Math.floor((seconds % 3600) / 60);
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m`;
+}
+
+/** Parse a user agent string into a human-readable "Browser / OS" label */
+function parseUserAgent(ua: string | null): { browser: string; os: string; isMobile: boolean } {
+  if (!ua) return { browser: 'Unknown', os: 'Unknown', isMobile: false };
+
+  // Detect OS
+  let os = 'Unknown';
+  if (/Windows NT 10/.test(ua)) os = 'Windows 10/11';
+  else if (/Windows NT/.test(ua)) os = 'Windows';
+  else if (/Mac OS X/.test(ua)) {
+    const match = ua.match(/Mac OS X (\d+[._]\d+)/);
+    os = match ? `macOS ${match[1].replace(/_/g, '.')}` : 'macOS';
+  } else if (/Android ([\d.]+)/.test(ua)) {
+    const match = ua.match(/Android ([\d.]+)/);
+    os = `Android ${match?.[1] || ''}`;
+  } else if (/iPhone|iPad/.test(ua)) {
+    const match = ua.match(/OS (\d+_\d+)/);
+    os = `iOS ${match?.[1]?.replace(/_/g, '.') || ''}`;
+  } else if (/Linux/.test(ua)) os = 'Linux';
+  else if (/CrOS/.test(ua)) os = 'Chrome OS';
+
+  // Detect browser
+  let browser = 'Unknown';
+  if (/Edg\//.test(ua)) {
+    const match = ua.match(/Edg\/([\d.]+)/);
+    browser = `Edge ${match?.[1]?.split('.')[0] || ''}`;
+  } else if (/Chrome\/([\d.]+)/.test(ua) && !/Chromium/.test(ua)) {
+    const match = ua.match(/Chrome\/([\d.]+)/);
+    browser = `Chrome ${match?.[1]?.split('.')[0] || ''}`;
+  } else if (/Safari\/([\d.]+)/.test(ua) && !/Chrome/.test(ua)) {
+    const match = ua.match(/Version\/([\d.]+)/);
+    browser = `Safari ${match?.[1]?.split('.')[0] || ''}`;
+  } else if (/Firefox\/([\d.]+)/.test(ua)) {
+    const match = ua.match(/Firefox\/([\d.]+)/);
+    browser = `Firefox ${match?.[1]?.split('.')[0] || ''}`;
+  }
+
+  const isMobile = /Mobile|Android|iPhone|iPad/.test(ua);
+
+  return { browser, os, isMobile };
 }
 
 function getReasonBadge(reason: string | null) {
@@ -336,38 +377,58 @@ export default function LoginAuditPage() {
                     <thead className="bg-slate-700/50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Timestamp</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Email</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">User</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Action</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Details</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">IP Address</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Error</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Device</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700">
-                      {entries.map(entry => (
-                        <tr key={entry.id} className="hover:bg-slate-700/30">
-                          <td className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">
-                            {new Date(entry.created_at).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-white">
-                            {entry.email}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-300">
-                            {entry.full_name || entry.first_name
-                              ? `${entry.first_name || ''} ${entry.last_name || ''}`.trim()
-                              : <span className="text-gray-500">-</span>}
-                          </td>
-                          <td className="px-4 py-3">
-                            {getActionBadge(entry.action)}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-400 font-mono">
-                            {entry.ip_address || '-'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-red-400 max-w-xs truncate">
-                            {entry.error_message || '-'}
-                          </td>
-                        </tr>
-                      ))}
+                      {entries.map(entry => {
+                        const device = parseUserAgent(entry.user_agent);
+                        return (
+                          <tr key={entry.id} className="hover:bg-slate-700/30">
+                            <td className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">
+                              {new Date(entry.created_at).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm text-white">
+                                {entry.full_name || entry.first_name
+                                  ? `${entry.first_name || ''} ${entry.last_name || ''}`.trim()
+                                  : '-'}
+                              </div>
+                              <div className="text-xs text-gray-400">{entry.email}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {getActionBadge(entry.action)}
+                            </td>
+                            <td className="px-4 py-3 text-sm max-w-xs">
+                              {entry.action === 'logout' && entry.logout_reason ? (
+                                getReasonBadge(entry.logout_reason)
+                              ) : entry.action === 'failed_attempt' && entry.error_message ? (
+                                <span className="text-red-400 truncate block">{entry.error_message}</span>
+                              ) : (
+                                <span className="text-gray-500">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-400 font-mono">
+                              {entry.ip_address || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-400">
+                              <div className="flex items-center gap-1.5">
+                                {device.isMobile
+                                  ? <Smartphone className="h-3.5 w-3.5 text-gray-500 shrink-0" />
+                                  : <Monitor className="h-3.5 w-3.5 text-gray-500 shrink-0" />}
+                                <div>
+                                  <div className="text-xs">{device.browser}</div>
+                                  <div className="text-xs text-gray-500">{device.os}</div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -452,40 +513,55 @@ export default function LoginAuditPage() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Duration</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Logout Reason</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">IP Address</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Device</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700">
-                      {sessions.map(session => (
-                        <tr key={session.session_id} className="hover:bg-slate-700/30">
-                          <td className="px-4 py-3">
-                            <div className="text-sm text-white">
-                              {session.full_name || `${session.first_name || ''} ${session.last_name || ''}`.trim() || '-'}
-                            </div>
-                            <div className="text-xs text-gray-400">{session.email}</div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">
-                            {new Date(session.login_time).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-sm whitespace-nowrap">
-                            {session.logout_time ? (
-                              <span className="text-gray-300">{new Date(session.logout_time).toLocaleString()}</span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-emerald-900/50 text-emerald-400">
-                                Active
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-300 font-mono">
-                            {formatDuration(session.duration_seconds)}
-                          </td>
-                          <td className="px-4 py-3">
-                            {session.logout_time ? getReasonBadge(session.logout_reason) : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-400 font-mono">
-                            {session.ip_address || '-'}
-                          </td>
-                        </tr>
-                      ))}
+                      {sessions.map(session => {
+                        const device = parseUserAgent(session.user_agent);
+                        return (
+                          <tr key={session.session_id} className="hover:bg-slate-700/30">
+                            <td className="px-4 py-3">
+                              <div className="text-sm text-white">
+                                {session.full_name || `${session.first_name || ''} ${session.last_name || ''}`.trim() || '-'}
+                              </div>
+                              <div className="text-xs text-gray-400">{session.email}</div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">
+                              {new Date(session.login_time).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-sm whitespace-nowrap">
+                              {session.logout_time ? (
+                                <span className="text-gray-300">{new Date(session.logout_time).toLocaleString()}</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full bg-emerald-900/50 text-emerald-400">
+                                  Active
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-300 font-mono">
+                              {formatDuration(session.duration_seconds)}
+                            </td>
+                            <td className="px-4 py-3">
+                              {session.logout_time ? getReasonBadge(session.logout_reason) : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-400 font-mono">
+                              {session.ip_address || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-400">
+                              <div className="flex items-center gap-1.5">
+                                {device.isMobile
+                                  ? <Smartphone className="h-3.5 w-3.5 text-gray-500 shrink-0" />
+                                  : <Monitor className="h-3.5 w-3.5 text-gray-500 shrink-0" />}
+                                <div>
+                                  <div className="text-xs">{device.browser}</div>
+                                  <div className="text-xs text-gray-500">{device.os}</div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
