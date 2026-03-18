@@ -77,6 +77,7 @@ export class BannersController {
     return this.bannersService.getActiveBanner(position);
   }
 
+  @Public()
   @Get('banners/active/:position/all')
   async getAllActiveBanners(@Param('position') position: BannerPosition) {
     return this.bannersService.getAllActiveBanners(position);

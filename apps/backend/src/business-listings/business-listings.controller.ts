@@ -111,6 +111,7 @@ export class BusinessListingsController {
     return this.businessListingsService.findManufacturerById(id);
   }
 
+  @Public()
   @Get('sponsors')
   async getAllSponsors(): Promise<{ retailers: RetailerListing[]; manufacturers: ManufacturerListing[] }> {
     return this.businessListingsService.getAllSponsors();
