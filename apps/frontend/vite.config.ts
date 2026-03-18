@@ -29,33 +29,21 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          // Keep auth context + hooks in a single chunk to avoid circular deps from barrel re-exports
-          if (id.includes('/src/auth/contexts/') || id.includes('/src/auth/hooks/') || id.includes('/src/auth/index.') || id.includes('/src/auth/usePermissions') || id.includes('/src/auth/idle-timeout') || id.includes('\\src\\auth\\contexts\\') || id.includes('\\src\\auth\\hooks\\') || id.includes('\\src\\auth\\index.') || id.includes('\\src\\auth\\usePermissions') || id.includes('\\src\\auth\\idle-timeout')) {
-            return 'auth-core';
-          }
+        manualChunks: {
           // Core React framework - cached long-term
-          if (['react', 'react-dom', 'react-router-dom', 'react-helmet-async'].some(dep => id.includes(`/node_modules/${dep}/`) || id.includes(`\\node_modules\\${dep}\\`))) {
-            return 'react-vendor';
-          }
-          if (id.includes('/node_modules/@supabase/') || id.includes('\\node_modules\\@supabase\\')) {
-            return 'supabase-vendor';
-          }
-          if (id.includes('/node_modules/@stripe/') || id.includes('\\node_modules\\@stripe\\')) {
-            return 'stripe-vendor';
-          }
-          if (id.includes('/node_modules/recharts/') || id.includes('\\node_modules\\recharts\\')) {
-            return 'charts-vendor';
-          }
-          if (id.includes('/node_modules/axios/') || id.includes('\\node_modules\\axios\\')) {
-            return 'data-vendor';
-          }
-          if (id.includes('/node_modules/lucide-react/') || id.includes('\\node_modules\\lucide-react\\')) {
-            return 'icons-vendor';
-          }
-          if (id.includes('/node_modules/@react-google-maps/') || id.includes('\\node_modules\\@react-google-maps\\')) {
-            return 'maps-vendor';
-          }
+          'react-vendor': ['react', 'react-dom', 'react-router-dom', 'react-helmet-async'],
+          // Supabase client
+          'supabase-vendor': ['@supabase/supabase-js'],
+          // Stripe (loaded on-demand via lazy routes, but cached separately)
+          'stripe-vendor': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+          // Charts library (only used on dashboard)
+          'charts-vendor': ['recharts'],
+          // HTTP client
+          'data-vendor': ['axios'],
+          // UI icons
+          'icons-vendor': ['lucide-react'],
+          // Google Maps (loaded on event detail pages)
+          'maps-vendor': ['@react-google-maps/api'],
         },
       },
     },
