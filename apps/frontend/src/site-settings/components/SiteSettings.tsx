@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, Eye, EyeOff, CreditCard } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { mediaFilesApi, MediaFile } from '@/media-files';
@@ -8,12 +8,13 @@ import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 import { scheduledTasksApi } from '@/scheduled-tasks';
 
 // Tab definitions
-type SettingsTab = 'appearance' | 'integrations' | 'system';
+type SettingsTab = 'appearance' | 'integrations' | 'system' | 'shop';
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode; description: string }[] = [
   { id: 'appearance', label: 'Appearance', icon: <Palette className="h-5 w-5" />, description: 'Homepage, media, and social settings' },
   { id: 'integrations', label: 'Integrations', icon: <Link2 className="h-5 w-5" />, description: 'Third-party service connections' },
   { id: 'system', label: 'System', icon: <Settings2 className="h-5 w-5" />, description: 'Staging mode, tasks, and environment' },
+  { id: 'shop', label: 'Shop Configuration', icon: <ShoppingCart className="h-5 w-5" />, description: 'Tax, shipping, and store settings' },
 ];
 
 export default function SiteSettings() {
@@ -34,6 +35,7 @@ export default function SiteSettings() {
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testEmailTemplate, setTestEmailTemplate] = useState('');
   const [taskResult, setTaskResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   const [formData, setFormData] = useState({
     hero_image_urls: [] as string[],
@@ -80,6 +82,25 @@ export default function SiteSettings() {
     maintenance_mode_message: '',
     // Invoice Auto-Cancel setting
     invoice_auto_cancel_days: '0',
+    // Shop Configuration settings
+    shop_enabled: true,
+    shop_currency: 'USD',
+    shop_tax_enabled: false,
+    shop_tax_rate_percent: '0',
+    shop_tax_name: 'KY Sales Tax',
+    shop_shipping_enabled: true,
+    shop_shipping_origin_zip: '75006',
+    shop_free_shipping_threshold: '0',
+    // Stripe Configuration
+    stripe_enabled: false,
+    stripe_secret_key: '',
+    stripe_publishable_key: '',
+    stripe_webhook_secret: '',
+    // PayPal Configuration
+    paypal_enabled: false,
+    paypal_client_id: '',
+    paypal_client_secret: '',
+    paypal_sandbox_mode: true,
   });
 
   useEffect(() => {
@@ -167,6 +188,25 @@ export default function SiteSettings() {
         maintenance_mode_message: settingsMap['maintenance_mode_message'] || '',
         // Invoice Auto-Cancel setting
         invoice_auto_cancel_days: settingsMap['invoice_auto_cancel_days'] || '0',
+        // Shop Configuration settings
+        shop_enabled: settingsMap['shop_enabled'] !== 'false',
+        shop_currency: settingsMap['shop_currency'] || 'USD',
+        shop_tax_enabled: settingsMap['shop_tax_enabled'] === 'true',
+        shop_tax_rate_percent: settingsMap['shop_tax_rate_percent'] || '0',
+        shop_tax_name: settingsMap['shop_tax_name'] || 'KY Sales Tax',
+        shop_shipping_enabled: settingsMap['shop_shipping_enabled'] !== 'false',
+        shop_shipping_origin_zip: settingsMap['shop_shipping_origin_zip'] || '75006',
+        shop_free_shipping_threshold: settingsMap['shop_free_shipping_threshold'] || '0',
+        // Stripe Configuration
+        stripe_enabled: settingsMap['stripe_enabled'] === 'true',
+        stripe_secret_key: settingsMap['stripe_secret_key'] || '',
+        stripe_publishable_key: settingsMap['stripe_publishable_key'] || '',
+        stripe_webhook_secret: settingsMap['stripe_webhook_secret'] || '',
+        // PayPal Configuration
+        paypal_enabled: settingsMap['paypal_enabled'] === 'true',
+        paypal_client_id: settingsMap['paypal_client_id'] || '',
+        paypal_client_secret: settingsMap['paypal_client_secret'] || '',
+        paypal_sandbox_mode: settingsMap['paypal_sandbox_mode'] !== 'false',
       });
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -241,6 +281,41 @@ export default function SiteSettings() {
       fetchSettings();
     } catch (error: any) {
       alert('Error saving settings: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleShopSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const settings = [
+        { key: 'shop_enabled', value: formData.shop_enabled.toString(), type: 'boolean', description: 'Enable or disable the MECA Shop' },
+        { key: 'shop_currency', value: formData.shop_currency, type: 'text', description: 'Shop currency code (e.g., USD)' },
+        { key: 'shop_tax_enabled', value: formData.shop_tax_enabled.toString(), type: 'boolean', description: 'Enable tax calculation on orders' },
+        { key: 'shop_tax_rate_percent', value: formData.shop_tax_rate_percent, type: 'number', description: 'Tax rate as a percentage (e.g., 6 for 6%)' },
+        { key: 'shop_tax_name', value: formData.shop_tax_name, type: 'text', description: 'Tax display name (e.g., KY Sales Tax)' },
+        { key: 'shop_shipping_enabled', value: formData.shop_shipping_enabled.toString(), type: 'boolean', description: 'Enable shipping calculation' },
+        { key: 'shop_shipping_origin_zip', value: formData.shop_shipping_origin_zip, type: 'text', description: 'Origin ZIP code for shipping rate calculation' },
+        { key: 'shop_free_shipping_threshold', value: formData.shop_free_shipping_threshold, type: 'number', description: 'Order subtotal threshold for free shipping (0 = disabled)' },
+        // Stripe Configuration
+        { key: 'stripe_enabled', value: formData.stripe_enabled.toString(), type: 'boolean', description: 'Enable Stripe payment gateway' },
+        { key: 'stripe_secret_key', value: formData.stripe_secret_key, type: 'text', description: 'Stripe Secret Key (sk_live_... or sk_test_...)' },
+        { key: 'stripe_publishable_key', value: formData.stripe_publishable_key, type: 'text', description: 'Stripe Publishable Key (pk_live_... or pk_test_...)' },
+        { key: 'stripe_webhook_secret', value: formData.stripe_webhook_secret, type: 'text', description: 'Stripe Webhook Secret (whsec_...)' },
+        // PayPal Configuration
+        { key: 'paypal_enabled', value: formData.paypal_enabled.toString(), type: 'boolean', description: 'Enable PayPal payment gateway' },
+        { key: 'paypal_client_id', value: formData.paypal_client_id, type: 'text', description: 'PayPal Client ID' },
+        { key: 'paypal_client_secret', value: formData.paypal_client_secret, type: 'text', description: 'PayPal Client Secret' },
+        { key: 'paypal_sandbox_mode', value: formData.paypal_sandbox_mode.toString(), type: 'boolean', description: 'Use PayPal Sandbox (test) environment' },
+      ].map(s => ({ ...s, updatedBy: user.id }));
+
+      await siteSettingsApi.bulkUpsert(settings);
+      alert('Shop settings saved successfully!');
+      fetchSettings();
+    } catch (error: any) {
+      alert('Error saving shop settings: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -1660,6 +1735,440 @@ export default function SiteSettings() {
         </div>
       </div>
 
+        </>
+      )}
+
+      {/* ==================== SHOP CONFIGURATION TAB ==================== */}
+      {activeTab === 'shop' && (
+        <>
+      {/* General Shop Settings */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          General
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Shop Enabled
+              </label>
+              <button
+                onClick={() => setFormData({ ...formData, shop_enabled: !formData.shop_enabled })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  formData.shop_enabled ? 'bg-orange-600' : 'bg-slate-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.shop_enabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              When disabled, the shop will not be accessible to customers
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Currency
+            </label>
+            <select
+              value={formData.shop_currency}
+              onChange={(e) => setFormData({ ...formData, shop_currency: e.target.value })}
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="USD">USD - US Dollar</option>
+              <option value="CAD">CAD - Canadian Dollar</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Tax Settings */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          Tax Configuration
+        </h3>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Tax Enabled
+              </label>
+              <p className="text-xs text-gray-400 mt-1">
+                When enabled, tax will be calculated and applied to all orders
+              </p>
+            </div>
+            <button
+              onClick={() => setFormData({ ...formData, shop_tax_enabled: !formData.shop_tax_enabled })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                formData.shop_tax_enabled ? 'bg-orange-600' : 'bg-slate-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  formData.shop_tax_enabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {formData.shop_tax_enabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-4 border-l-2 border-orange-600/30">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Tax Rate (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={formData.shop_tax_rate_percent}
+                  onChange={(e) => setFormData({ ...formData, shop_tax_rate_percent: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="e.g., 6 for 6%"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Enter the percentage (e.g., 6 for 6%). Applied to all taxable items.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Tax Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.shop_tax_name}
+                  onChange={(e) => setFormData({ ...formData, shop_tax_name: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="e.g., KY Sales Tax"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Display name shown to customers on checkout and invoices
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Shipping Settings */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          Shipping Configuration
+        </h3>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Shipping Enabled
+              </label>
+              <p className="text-xs text-gray-400 mt-1">
+                When enabled, shipping rates will be calculated via USPS
+              </p>
+            </div>
+            <button
+              onClick={() => setFormData({ ...formData, shop_shipping_enabled: !formData.shop_shipping_enabled })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                formData.shop_shipping_enabled ? 'bg-orange-600' : 'bg-slate-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  formData.shop_shipping_enabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {formData.shop_shipping_enabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-4 border-l-2 border-orange-600/30">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Origin ZIP Code
+                </label>
+                <input
+                  type="text"
+                  value={formData.shop_shipping_origin_zip}
+                  onChange={(e) => setFormData({ ...formData, shop_shipping_origin_zip: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="e.g., 75006"
+                  maxLength={5}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  MECA HQ ZIP code used as the shipping origin for rate calculations
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Free Shipping Threshold ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.shop_free_shipping_threshold}
+                  onChange={(e) => setFormData({ ...formData, shop_free_shipping_threshold: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="0"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Orders above this amount qualify for free standard shipping. Set to 0 to disable.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stripe Configuration */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
+          <CreditCard className="h-6 w-6 text-[#635BFF]" />
+          <h3 className="text-xl font-semibold text-white">
+            Stripe Configuration
+          </h3>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Stripe Enabled
+              </label>
+              <p className="text-xs text-gray-400 mt-1">
+                Accept payments via Stripe (credit/debit cards)
+              </p>
+            </div>
+            <button
+              onClick={() => setFormData({ ...formData, stripe_enabled: !formData.stripe_enabled })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                formData.stripe_enabled ? 'bg-orange-600' : 'bg-slate-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  formData.stripe_enabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {formData.stripe_enabled && (
+            <div className="space-y-4 pl-4 border-l-2 border-[#635BFF]/30">
+              <div className="bg-slate-700/50 rounded-lg p-3">
+                <p className="text-xs text-gray-400">
+                  {formData.stripe_secret_key.startsWith('sk_live_') ? (
+                    <span className="text-green-400 font-medium">Live mode</span>
+                  ) : formData.stripe_secret_key.startsWith('sk_test_') ? (
+                    <span className="text-yellow-400 font-medium">Test mode</span>
+                  ) : (
+                    <span className="text-gray-500">Enter your Stripe API keys from the Stripe Dashboard</span>
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Secret Key
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSecrets['stripe_secret'] ? 'text' : 'password'}
+                    value={formData.stripe_secret_key}
+                    onChange={(e) => setFormData({ ...formData, stripe_secret_key: e.target.value })}
+                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                    placeholder="sk_test_... or sk_live_..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecrets(prev => ({ ...prev, stripe_secret: !prev.stripe_secret }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                  >
+                    {showSecrets['stripe_secret'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Publishable Key
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSecrets['stripe_pub'] ? 'text' : 'password'}
+                    value={formData.stripe_publishable_key}
+                    onChange={(e) => setFormData({ ...formData, stripe_publishable_key: e.target.value })}
+                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                    placeholder="pk_test_... or pk_live_..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecrets(prev => ({ ...prev, stripe_pub: !prev.stripe_pub }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                  >
+                    {showSecrets['stripe_pub'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Webhook Secret
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSecrets['stripe_webhook'] ? 'text' : 'password'}
+                    value={formData.stripe_webhook_secret}
+                    onChange={(e) => setFormData({ ...formData, stripe_webhook_secret: e.target.value })}
+                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                    placeholder="whsec_..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecrets(prev => ({ ...prev, stripe_webhook: !prev.stripe_webhook }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                  >
+                    {showSecrets['stripe_webhook'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Required for receiving Stripe webhook events (payment confirmations, refunds, etc.)
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* PayPal Configuration */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
+          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none">
+            <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 3.72a.77.77 0 0 1 .757-.644h6.527c2.168 0 3.758.562 4.727 1.672.906 1.04 1.186 2.478.834 4.275l-.03.148v.463l.361.206c.306.162.55.345.74.555.39.43.643.973.75 1.612.11.655.074 1.434-.107 2.315-.208 1.012-.547 1.893-1.01 2.617a5.15 5.15 0 0 1-1.574 1.618 6.014 6.014 0 0 1-2.084.876c-.757.18-1.585.27-2.46.27h-.584a1.754 1.754 0 0 0-1.733 1.483l-.045.232-.753 4.773-.032.166a.18.18 0 0 1-.178.152H7.076Z" fill="#253B80"/>
+            <path d="M19.445 8.07c-.012.08-.027.163-.043.247-1.382 7.095-6.112 9.547-12.15 9.547H5.204a1.493 1.493 0 0 0-1.476 1.263L2.59 26.924l-.322 2.04a.786.786 0 0 0 .776.91h5.44a1.308 1.308 0 0 0 1.293-1.104l.053-.277.994-6.316.064-.348a1.308 1.308 0 0 1 1.293-1.104h.814c5.274 0 9.403-2.143 10.609-8.342.504-2.59.243-4.751-1.09-6.272a5.203 5.203 0 0 0-1.493-1.224l-.283.183Z" fill="#179BD7"/>
+            <path d="M18.318 7.626a10.523 10.523 0 0 0-1.295-.287 16.432 16.432 0 0 0-2.595-.19h-7.87a1.258 1.258 0 0 0-1.245 1.064L4.09 16.847l-.044.283a1.493 1.493 0 0 1 1.476-1.263h2.048c6.038 0 10.768-2.452 12.15-9.547.041-.21.075-.413.104-.61a7.388 7.388 0 0 0-1.506-.084Z" fill="#222D65"/>
+          </svg>
+          <h3 className="text-xl font-semibold text-white">
+            PayPal Configuration
+          </h3>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                PayPal Enabled
+              </label>
+              <p className="text-xs text-gray-400 mt-1">
+                Accept payments via PayPal
+              </p>
+            </div>
+            <button
+              onClick={() => setFormData({ ...formData, paypal_enabled: !formData.paypal_enabled })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                formData.paypal_enabled ? 'bg-orange-600' : 'bg-slate-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  formData.paypal_enabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {formData.paypal_enabled && (
+            <div className="space-y-4 pl-4 border-l-2 border-[#0070BA]/30">
+              <div className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">
+                    Sandbox Mode
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {formData.paypal_sandbox_mode
+                      ? 'Using PayPal Sandbox (test) environment'
+                      : 'Using PayPal Live (production) environment'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setFormData({ ...formData, paypal_sandbox_mode: !formData.paypal_sandbox_mode })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.paypal_sandbox_mode ? 'bg-yellow-600' : 'bg-green-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      formData.paypal_sandbox_mode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Client ID
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSecrets['paypal_id'] ? 'text' : 'password'}
+                    value={formData.paypal_client_id}
+                    onChange={(e) => setFormData({ ...formData, paypal_client_id: e.target.value })}
+                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                    placeholder="PayPal Client ID"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecrets(prev => ({ ...prev, paypal_id: !prev.paypal_id }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                  >
+                    {showSecrets['paypal_id'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Client Secret
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSecrets['paypal_secret'] ? 'text' : 'password'}
+                    value={formData.paypal_client_secret}
+                    onChange={(e) => setFormData({ ...formData, paypal_client_secret: e.target.value })}
+                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                    placeholder="PayPal Client Secret"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecrets(prev => ({ ...prev, paypal_secret: !prev.paypal_secret }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                  >
+                    {showSecrets['paypal_secret'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={handleShopSave}
+        disabled={saving}
+        className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+      >
+        <Save className="h-5 w-5" />
+        {saving ? 'Saving...' : 'Save Shop Settings'}
+      </button>
         </>
       )}
 

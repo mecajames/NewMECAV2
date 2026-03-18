@@ -34,25 +34,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [forcePasswordChange, setForcePasswordChange] = useState(false);
 
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const data = await profilesApi.getById(userId);
 
-    if (error) {
+      if (data) {
+        // Add computed full_name field for backward compatibility
+        (data as any).full_name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+        // Check if user needs to change password
+        setForcePasswordChange(data.force_password_change === true);
+      }
+
+      return data;
+    } catch (error) {
       console.error('Error fetching profile:', error);
       return null;
     }
-
-    // Add computed full_name field for backward compatibility
-    if (data) {
-      data.full_name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
-      // Check if user needs to change password
-      setForcePasswordChange(data.force_password_change === true);
-    }
-
-    return data;
   };
 
   const refreshProfile = async () => {

@@ -44,6 +44,10 @@ interface ProductFormData {
   sku: string;
   stock_quantity: number;
   track_inventory: boolean;
+  weight_oz: string;
+  length_in: string;
+  width_in: string;
+  height_in: string;
 }
 
 const initialFormData: ProductFormData = {
@@ -60,6 +64,10 @@ const initialFormData: ProductFormData = {
   sku: '',
   stock_quantity: -1,
   track_inventory: false,
+  weight_oz: '',
+  length_in: '',
+  width_in: '',
+  height_in: '',
 };
 
 export function AdminShopProductsPage() {
@@ -139,6 +147,10 @@ export function AdminShopProductsPage() {
       sku: product.sku || '',
       stock_quantity: product.stockQuantity,
       track_inventory: product.trackInventory,
+      weight_oz: product.weightOz ? String(product.weightOz) : '',
+      length_in: product.lengthIn ? String(product.lengthIn) : '',
+      width_in: product.widthIn ? String(product.widthIn) : '',
+      height_in: product.heightIn ? String(product.heightIn) : '',
     });
     setShowModal(true);
   };
@@ -163,6 +175,10 @@ export function AdminShopProductsPage() {
         sku: formData.sku || undefined,
         stockQuantity: formData.stock_quantity,
         trackInventory: formData.track_inventory,
+        weightOz: formData.weight_oz ? parseFloat(formData.weight_oz) : undefined,
+        lengthIn: formData.length_in ? parseFloat(formData.length_in) : undefined,
+        widthIn: formData.width_in ? parseFloat(formData.width_in) : undefined,
+        heightIn: formData.height_in ? parseFloat(formData.height_in) : undefined,
       };
 
       if (editingProduct) {
@@ -693,6 +709,72 @@ export function AdminShopProductsPage() {
                       />
                     </div>
                   )}
+
+                  {/* Weight & Dimensions (for shipping calculations) */}
+                  <div className="sm:col-span-2">
+                    <h4 className="text-sm font-medium text-gray-300 mb-3 border-t border-slate-700 pt-4">
+                      Weight & Dimensions
+                      <span className="text-xs text-gray-500 ml-2 font-normal">Used for USPS shipping rate calculations</span>
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Weight (oz)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.weight_oz}
+                          onChange={(e) => setFormData({ ...formData, weight_oz: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="oz"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Length (in)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.length_in}
+                          onChange={(e) => setFormData({ ...formData, length_in: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="in"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Width (in)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.width_in}
+                          onChange={(e) => setFormData({ ...formData, width_in: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="in"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Height (in)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.height_in}
+                          onChange={(e) => setFormData({ ...formData, height_in: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          placeholder="in"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="sm:col-span-2 flex flex-wrap gap-6">
                     <label className="flex items-center gap-2 cursor-pointer">

@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { ShopProduct } from './entities/shop-product.entity';
+import { SiteSettingsService } from '../site-settings/site-settings.service';
 
 export interface ShippingRate {
   method: 'standard' | 'priority';
@@ -16,12 +17,21 @@ export interface ShippingRateRequest {
   destinationCountry?: string;
 }
 
-// MECA HQ address (origin)
-const ORIGIN_ZIP = '75006'; // Dallas, TX area - update with actual MECA HQ zip
+// Default MECA HQ address (origin) - can be overridden via site_settings
+const DEFAULT_ORIGIN_ZIP = '75006'; // Dallas, TX area
 
 // USPS v3 API endpoints
 const USPS_TOKEN_URL = 'https://apis.usps.com/oauth2/v3/token';
 const USPS_RATES_URL = 'https://apis.usps.com/prices/v3/base-rates/search';
+
+interface CachedShippingConfig {
+  originZip: string;
+  enabled: boolean;
+  freeShippingThreshold: number; // 0 = disabled
+  fetchedAt: number;
+}
+
+const CACHE_TTL_MS = 60_000; // 60 seconds
 
 @Injectable()
 export class ShippingService {
@@ -30,13 +40,56 @@ export class ShippingService {
   private readonly uspsConsumerSecret: string | undefined;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
+  private configCache: CachedShippingConfig | null = null;
 
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
+    private readonly siteSettingsService: SiteSettingsService,
   ) {
     this.uspsConsumerKey = process.env.USPS_CONSUMER_KEY;
     this.uspsConsumerSecret = process.env.USPS_CONSUMER_SECRET;
+  }
+
+  private async loadConfig(): Promise<CachedShippingConfig> {
+    if (this.configCache && Date.now() - this.configCache.fetchedAt < CACHE_TTL_MS) {
+      return this.configCache;
+    }
+
+    try {
+      const [originZipSetting, enabledSetting, thresholdSetting] = await Promise.all([
+        this.siteSettingsService.findByKey('shop_shipping_origin_zip'),
+        this.siteSettingsService.findByKey('shop_shipping_enabled'),
+        this.siteSettingsService.findByKey('shop_free_shipping_threshold'),
+      ]);
+
+      this.configCache = {
+        originZip: originZipSetting?.setting_value || DEFAULT_ORIGIN_ZIP,
+        enabled: enabledSetting ? enabledSetting.setting_value === 'true' : true,
+        freeShippingThreshold: thresholdSetting ? parseFloat(thresholdSetting.setting_value) || 0 : 0,
+        fetchedAt: Date.now(),
+      };
+      return this.configCache;
+    } catch (error) {
+      this.logger.error('Failed to load shipping config from DB, using defaults', error);
+      this.configCache = {
+        originZip: DEFAULT_ORIGIN_ZIP,
+        enabled: true,
+        freeShippingThreshold: 0,
+        fetchedAt: Date.now(),
+      };
+      return this.configCache;
+    }
+  }
+
+  /** Clear cached config (call after admin updates settings) */
+  clearCache(): void {
+    this.configCache = null;
+  }
+
+  private async getOriginZip(): Promise<string> {
+    const config = await this.loadConfig();
+    return config.originZip;
   }
 
   private async getAccessToken(): Promise<string> {
@@ -80,6 +133,12 @@ export class ShippingService {
   }
 
   async calculateRates(request: ShippingRateRequest): Promise<ShippingRate[]> {
+    const config = await this.loadConfig();
+
+    if (!config.enabled) {
+      return [];
+    }
+
     const em = this.em.fork();
     request.destinationCountry = this.normalizeCountry(request.destinationCountry);
 
@@ -92,6 +151,7 @@ export class ShippingService {
     let maxLengthIn = 0;
     let maxWidthIn = 0;
     let maxHeightIn = 0;
+    let totalPrice = 0;
 
     for (const item of request.items) {
       const product = products.find((p) => p.id === item.productId);
@@ -99,11 +159,25 @@ export class ShippingService {
         if (product.weightOz) {
           totalWeightOz += Number(product.weightOz) * item.quantity;
         }
+        totalPrice += Number(product.price) * item.quantity;
         // Use the largest dimensions across all products
         if (product.lengthIn) maxLengthIn = Math.max(maxLengthIn, Number(product.lengthIn));
         if (product.widthIn) maxWidthIn = Math.max(maxWidthIn, Number(product.widthIn));
         if (product.heightIn) maxHeightIn = Math.max(maxHeightIn, Number(product.heightIn));
       }
+    }
+
+    // Check free shipping threshold
+    if (config.freeShippingThreshold > 0 && totalPrice >= config.freeShippingThreshold) {
+      return [
+        {
+          method: 'standard',
+          name: 'Free Shipping',
+          description: 'Free standard shipping',
+          price: 0,
+          estimatedDays: '2-5 business days',
+        },
+      ];
     }
 
     // Default minimum weight (8 oz) if no weights set
@@ -134,6 +208,7 @@ export class ShippingService {
     dimensions: { lengthIn: number; widthIn: number; heightIn: number },
   ): Promise<ShippingRate[]> {
     const token = await this.getAccessToken();
+    const originZip = await this.getOriginZip();
 
     // Weight in pounds (decimal) for USPS v3 API
     const weightLbs = Math.round((weightOz / 16) * 100) / 100;
@@ -147,7 +222,7 @@ export class ShippingService {
 
     // Build request body shared fields
     const baseBody = {
-      originZIPCode: ORIGIN_ZIP,
+      originZIPCode: originZip,
       destinationZIPCode: destinationZip,
       weight: weightLbs,
       length,
