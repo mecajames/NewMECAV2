@@ -21,6 +21,16 @@ export class UserActivityController {
     private readonly adminAuditService: AdminAuditService,
   ) {}
 
+  /** Extract the real client IP (first entry in x-forwarded-for chain) */
+  private getClientIp(req: Request): string {
+    const forwarded = req.headers['x-forwarded-for'] as string;
+    if (forwarded) {
+      // x-forwarded-for is "client, proxy1, proxy2" - take the first one
+      return forwarded.split(',')[0].trim();
+    }
+    return req.ip || '';
+  }
+
   /**
    * Record a login event. Called by frontend after successful sign-in.
    * Returns sessionId for session tracking.
@@ -32,7 +42,7 @@ export class UserActivityController {
     if (!userId) return { sessionId: null };
 
     const email = (req.body?.email as string) || '';
-    const ip = (req.headers['x-forwarded-for'] as string) || req.ip || '';
+    const ip = this.getClientIp(req);
     const ua = req.headers['user-agent'] || '';
 
     const sessionId = await this.userActivityService.recordLogin(userId, email, ip, ua);
@@ -52,7 +62,7 @@ export class UserActivityController {
     const email = (req.body?.email as string) || '';
     const sessionId = (req.body?.sessionId as string) || undefined;
     const reason = (req.body?.reason as string) || 'manual';
-    const ip = (req.headers['x-forwarded-for'] as string) || req.ip || '';
+    const ip = this.getClientIp(req);
     const ua = req.headers['user-agent'] || '';
 
     await this.userActivityService.recordLogout(userId, email, ip, ua, sessionId, reason);
@@ -68,7 +78,7 @@ export class UserActivityController {
   async recordFailedAttempt(@Req() req: Request, @Body() body: { email: string; error?: string }): Promise<void> {
     if (!body.email) return;
 
-    const ip = (req.headers['x-forwarded-for'] as string) || req.ip || '';
+    const ip = this.getClientIp(req);
     const ua = req.headers['user-agent'] || '';
 
     await this.userActivityService.recordFailedAttempt(body.email, body.error, ip, ua);

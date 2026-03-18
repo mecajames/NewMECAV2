@@ -35,6 +35,7 @@ export interface SessionEntry {
   logout_reason: string | null;
   duration_seconds: number | null;
   ip_address: string | null;
+  user_agent: string | null;
 }
 
 export interface SessionsResponse {
