@@ -8,7 +8,7 @@ export class TaxController {
 
   @Public()
   @Get('rate')
-  getTaxRate() {
+  async getTaxRate() {
     return this.taxService.getRate();
   }
 }

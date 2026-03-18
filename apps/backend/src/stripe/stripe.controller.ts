@@ -220,7 +220,7 @@ export class StripeController {
 
     // Calculate tax
     const membershipPrice = Number(membershipConfig.price);
-    const tax = this.taxService.calculateTax(membershipPrice);
+    const tax = await this.taxService.calculateTax(membershipPrice);
 
     // Convert price + tax to cents for Stripe
     const amountInCents = Math.round((membershipPrice + tax.taxAmount) * 100);
@@ -331,7 +331,7 @@ export class StripeController {
     }
 
     // Calculate tax on total amount
-    const tax = this.taxService.calculateTax(totalAmount);
+    const tax = await this.taxService.calculateTax(totalAmount);
     totalAmount += tax.taxAmount;
 
     // Create the registration in pending state
@@ -460,7 +460,7 @@ export class StripeController {
     }
 
     // Calculate tax on pro-rated price
-    const teamTax = this.taxService.calculateTax(upgradeDetails.proRatedPrice);
+    const teamTax = await this.taxService.calculateTax(upgradeDetails.proRatedPrice);
 
     // Convert pro-rated price + tax to cents for Stripe
     const amountInCents = Math.round((upgradeDetails.proRatedPrice + teamTax.taxAmount) * 100);
@@ -1692,7 +1692,7 @@ export class StripeController {
           membershipId: membership.id,
           mecaId: String(mecaId),
         };
-        const subTax = this.taxService.calculateTax(membershipConfig.price);
+        const subTax = await this.taxService.calculateTax(membershipConfig.price);
         await this.createOrderAndInvoice(paymentIntent, orderMetadata, membershipConfig.price, 'membership', subTax.taxAmount.toFixed(2));
       }
 

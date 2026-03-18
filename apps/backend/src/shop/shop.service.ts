@@ -118,6 +118,10 @@ export class ShopService {
       stripePriceId: data.stripePriceId,
       quickbooksItemId: data.quickbooksItemId,
       metadata: data.metadata,
+      weightOz: data.weightOz,
+      lengthIn: data.lengthIn,
+      widthIn: data.widthIn,
+      heightIn: data.heightIn,
     } as unknown as ShopProduct);
 
     await em.persistAndFlush(product);
@@ -152,6 +156,10 @@ export class ShopService {
     if (data.stripePriceId !== undefined) updateData.stripePriceId = data.stripePriceId;
     if (data.quickbooksItemId !== undefined) updateData.quickbooksItemId = data.quickbooksItemId;
     if (data.metadata !== undefined) updateData.metadata = data.metadata;
+    if (data.weightOz !== undefined) updateData.weightOz = data.weightOz;
+    if (data.lengthIn !== undefined) updateData.lengthIn = data.lengthIn;
+    if (data.widthIn !== undefined) updateData.widthIn = data.widthIn;
+    if (data.heightIn !== undefined) updateData.heightIn = data.heightIn;
 
     em.assign(product, updateData);
     await em.flush();
@@ -201,7 +209,7 @@ export class ShopService {
 
     // Validate items and calculate totals
     const products = await this.validateAndGetProducts(em, data.items);
-    const totals = this.calculateOrderTotals(products, data.items, data.shippingAmount);
+    const totals = await this.calculateOrderTotals(products, data.items, data.shippingAmount);
 
     // Generate order number
     const orderNumber = await this.generateOrderNumber(em);
@@ -595,11 +603,11 @@ export class ShopService {
     return products;
   }
 
-  private calculateOrderTotals(
+  private async calculateOrderTotals(
     products: ShopProduct[],
     items: CartItem[],
     providedShippingAmount?: number,
-  ): OrderTotals {
+  ): Promise<OrderTotals> {
     let subtotal = 0;
 
     for (const item of items) {
@@ -609,7 +617,7 @@ export class ShopService {
 
     // Use provided shipping amount or default to 0
     const shippingAmount = providedShippingAmount ?? 0;
-    const { taxAmount, taxRate } = this.taxService.calculateTax(subtotal);
+    const { taxAmount, taxRate } = await this.taxService.calculateTax(subtotal);
     const totalAmount = subtotal + shippingAmount + taxAmount;
 
     return { subtotal, shippingAmount, taxAmount, taxRate, totalAmount };
