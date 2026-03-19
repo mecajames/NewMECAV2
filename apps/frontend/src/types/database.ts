@@ -56,6 +56,7 @@ export interface Profile {
   // Computed field (from AuthContext)
   full_name?: string;
   // Permission fields
+  is_staff?: boolean;
   is_trainer?: boolean;
   can_apply_judge?: boolean;
   can_apply_event_director?: boolean;

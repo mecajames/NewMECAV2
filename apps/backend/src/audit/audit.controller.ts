@@ -15,6 +15,7 @@ import { Response } from 'express';
 import { AuditService } from './audit.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
 import * as fs from 'fs/promises';
@@ -40,7 +41,7 @@ export class AuditController {
     }
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

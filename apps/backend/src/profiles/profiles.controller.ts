@@ -19,6 +19,7 @@ import { MemberStatsService } from './member-stats.service';
 import { Profile } from './profiles.entity';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
 
@@ -46,10 +47,10 @@ export class ProfilesController {
 
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
-    return { user, profile };
+    return { user, profile: profile! };
   }
 
   // Helper to require any authenticated user (not necessarily admin)
@@ -306,7 +307,7 @@ export class ProfilesController {
     if (authUser.id !== id) {
       const em = this.em.fork();
       const callerProfile = await em.findOne(Profile, { id: authUser.id });
-      if (callerProfile?.role !== UserRole.ADMIN) {
+      if (!isAdminUser(callerProfile)) {
         throw new ForbiddenException('You can only clear your own force password change flag');
       }
     }

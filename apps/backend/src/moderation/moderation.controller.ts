@@ -13,6 +13,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { ModerationService } from './moderation.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 
 @Controller('api/moderation')
@@ -38,7 +39,7 @@ export class ModerationController {
 
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

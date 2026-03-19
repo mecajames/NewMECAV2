@@ -462,23 +462,30 @@ export default function MembersPage() {
   const filterAndSortMembers = () => {
     let filtered = [...members];
 
-    // Apply search filter - only searches first name and last name
+    // Apply search filter - searches name, email, and MECA ID
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
-        // Search profile fields (including combined full name)
         const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
+        const mecaId = String(member.meca_id || '');
         return (
           fullName.includes(term) ||
           member.first_name?.toLowerCase().includes(term) ||
-          member.last_name?.toLowerCase().includes(term)
+          member.last_name?.toLowerCase().includes(term) ||
+          member.email?.toLowerCase().includes(term) ||
+          mecaId.includes(term)
         );
       });
     }
 
     // Apply role filter (for staff roles)
     if (roleFilter !== 'all') {
-      filtered = filtered.filter((member) => member.role === roleFilter);
+      if (roleFilter === 'admin') {
+        // "Admin" filter should show both role=admin AND is_staff users
+        filtered = filtered.filter((member) => member.role === 'admin' || member.is_staff);
+      } else {
+        filtered = filtered.filter((member) => member.role === roleFilter);
+      }
     }
 
     // Apply membership type filter
@@ -1144,7 +1151,13 @@ export default function MembersPage() {
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            {member.role !== 'user' ? (
+                            {member.role === 'admin' || member.is_staff ? (
+                              <span
+                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor('admin')}`}
+                              >
+                                admin
+                              </span>
+                            ) : member.role !== 'user' ? (
                               <span
                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(
                                   member.role

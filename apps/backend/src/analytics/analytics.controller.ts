@@ -13,6 +13,7 @@ import {
 import { EntityManager } from '@mikro-orm/postgresql';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { AnalyticsService } from './analytics.service';
 import { SearchConsoleService } from './search-console.service';
@@ -40,7 +41,7 @@ export class AnalyticsController {
 
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

@@ -17,6 +17,7 @@ import { PointsConfigurationService } from './points-configuration.service';
 import { UpdatePointsConfigurationSchema, UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Public } from '../auth/public.decorator';
 
 @Controller('api/points-configuration')
@@ -49,7 +50,7 @@ export class PointsConfigurationController {
       throw new UnauthorizedException('Profile not found');
     }
 
-    if (profile.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 

@@ -14,6 +14,7 @@ import {
 import { EntityManager } from '@mikro-orm/core';
 import { JudgesService } from './judges.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import {
   CreateJudgeApplicationDto,
   CreateJudgeApplicationSchema,
@@ -180,7 +181,7 @@ export class JudgesController {
     // Get profile to check role
     const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (!profile || profile.role !== UserRole.ADMIN) {
+    if (!profile || !isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 
@@ -389,7 +390,7 @@ export class JudgesController {
     // Check if user is admin or the judge
     const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (profile?.role !== UserRole.ADMIN && judge.user.id !== user.id) {
+    if (!isAdminUser(profile) && judge.user.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
 
@@ -452,7 +453,7 @@ export class JudgesController {
     // Check if user is admin or the assigned judge
     const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
 
-    if (profile?.role !== UserRole.ADMIN && assignment.judge.user.id !== user.id) {
+    if (!isAdminUser(profile) && assignment.judge.user.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
 

@@ -453,3 +453,40 @@ export enum LogoutReason {
 }
 
 export const LogoutReasonSchema = z.nativeEnum(LogoutReason);
+
+// =============================================================================
+// QA Checklist Enums
+// =============================================================================
+
+export enum QaRoundStatus {
+  DRAFT = 'draft',
+  ACTIVE = 'active',
+  COMPLETED = 'completed',
+}
+
+export const QaRoundStatusSchema = z.nativeEnum(QaRoundStatus);
+
+export enum QaAssignmentStatus {
+  ASSIGNED = 'assigned',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+}
+
+export const QaAssignmentStatusSchema = z.nativeEnum(QaAssignmentStatus);
+
+export enum QaResponseStatus {
+  NOT_STARTED = 'not_started',
+  PASS = 'pass',
+  FAIL = 'fail',
+  SKIP = 'skip',
+}
+
+export const QaResponseStatusSchema = z.nativeEnum(QaResponseStatus);
+
+export enum QaFixStatus {
+  IN_PROGRESS = 'in_progress',
+  FIXED = 'fixed',
+  WONT_FIX = 'wont_fix',
+}
+
+export const QaFixStatusSchema = z.nativeEnum(QaFixStatus);

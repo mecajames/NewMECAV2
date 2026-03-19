@@ -21,6 +21,7 @@ import { EventDirectorApplicationReference } from './event-director-application-
 import { EventDirector } from './event-director.entity';
 import { EventDirectorAssignment } from './event-director-assignment.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Event } from '../events/events.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { EmailService } from '../email/email.service';
@@ -374,7 +375,7 @@ export class EventDirectorsService {
       user.edPermissionGrantedBy = admin;
 
       // Update user role to EVENT_DIRECTOR if not already admin
-      if (user.role !== UserRole.ADMIN) {
+      if (!isAdminUser(user)) {
         user.role = UserRole.EVENT_DIRECTOR;
       }
 

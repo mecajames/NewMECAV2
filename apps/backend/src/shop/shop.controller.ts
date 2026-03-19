@@ -26,6 +26,7 @@ import {
 } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Public } from '../auth/public.decorator';
 
 @Controller('api/shop')
@@ -67,7 +68,7 @@ export class ShopController {
   // Helper to require admin authentication
   private async requireAdmin(authHeader?: string) {
     const result = await this.requireAuth(authHeader);
-    if (result.profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(result.profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return result;
@@ -144,7 +145,7 @@ export class ShopController {
     const order = await this.shopService.findOrderById(id);
 
     // Allow if admin or if the order belongs to the user
-    if (profile?.role !== UserRole.ADMIN && order.user?.id !== user.id) {
+    if (!isAdminUser(profile) && order.user?.id !== user.id) {
       throw new ForbiddenException('Access denied to this order');
     }
 

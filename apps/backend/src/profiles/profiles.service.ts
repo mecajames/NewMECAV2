@@ -211,6 +211,7 @@ export class ProfilesService {
       membership_status: 'none',
       meca_id: mecaId,
       account_type: AccountType.MEMBER,
+      is_staff: false,
       force_password_change: false,
       canApplyJudge: false,
       canApplyEventDirector: false,
@@ -230,6 +231,16 @@ export class ProfilesService {
     const profile = await em.findOne(Profile, { id });
     if (!profile) {
       throw new NotFoundException(`Profile with ID ${id} not found`);
+    }
+
+    // Protect certain accounts from staff/role downgrade
+    if (String(profile.meca_id) === '202401') {
+      if ('is_staff' in data && data.is_staff === false) {
+        delete (data as any).is_staff;
+      }
+      if ('role' in data && data.role !== 'admin') {
+        delete (data as any).role;
+      }
     }
 
     // Ensure meca_id is always a string (frontend may send it as a number)
@@ -285,6 +296,9 @@ export class ProfilesService {
     const profile = await em.findOne(Profile, { id });
     if (!profile) {
       throw new NotFoundException(`Profile with ID ${id} not found`);
+    }
+    if (String(profile.meca_id) === '202401') {
+      throw new BadRequestException('This account cannot be deleted');
     }
     await em.removeAndFlush(profile);
   }
@@ -516,6 +530,7 @@ export class ProfilesService {
         role: dto.role || 'user',
         membership_status: 'none',
         meca_id: mecaId,
+        is_staff: dto.role === 'admin',
         force_password_change: dto.forcePasswordChange ?? false,
         account_type: AccountType.MEMBER,
         canApplyJudge: false,

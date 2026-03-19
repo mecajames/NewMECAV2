@@ -9,6 +9,7 @@ import { JudgeSeasonQualification } from './judge-season-qualification.entity';
 import { EventJudgeAssignment } from './event-judge-assignment.entity';
 import { EmailVerificationToken } from '../auth/email-verification-token.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Event } from '../events/events.entity';
 import { Season } from '../seasons/seasons.entity';
 import {
@@ -334,7 +335,7 @@ export class JudgesService {
       await this.createJudgeFromApplication(em, application, dto.judge_level);
 
       // Update user role to include JUDGE
-      if (application.user.role !== UserRole.ADMIN) {
+      if (!isAdminUser(application.user)) {
         application.user.role = UserRole.JUDGE;
       }
 
@@ -607,7 +608,7 @@ export class JudgesService {
       user.judgePermissionGrantedBy = admin;
 
       // Update user role to JUDGE if not already admin
-      if (user.role !== UserRole.ADMIN) {
+      if (!isAdminUser(user)) {
         user.role = UserRole.JUDGE;
       }
     }

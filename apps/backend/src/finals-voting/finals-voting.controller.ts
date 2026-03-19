@@ -28,6 +28,7 @@ import type {
 } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Public } from '../auth/public.decorator';
 import { FinalsVotingService } from './finals-voting.service';
 
@@ -60,7 +61,7 @@ export class FinalsVotingController {
 
   private async requireAdmin(authHeader?: string) {
     const { user, profile } = await this.getAuthenticatedUser(authHeader);
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

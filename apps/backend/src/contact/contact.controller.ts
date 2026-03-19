@@ -19,6 +19,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { ContactFormSchema, ContactFormDto, ContactStatus, UserRole } from '@newmeca/shared';
 
 @Controller('api/contact')
@@ -49,7 +50,7 @@ export class ContactController {
     const user = await this.getCurrentUser(authHeader);
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

@@ -21,6 +21,7 @@ import {
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Public } from '../auth/public.decorator';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 
 @Controller('api/member-gallery')
@@ -53,7 +54,7 @@ export class MemberGalleryController {
   private async requireAdmin(authHeader?: string) {
     const { user, profile } = await this.requireAuth(authHeader);
 
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

@@ -79,6 +79,10 @@ export class Profile {
   @Property({ type: 'text', nullable: true })
   role?: string;
 
+  // Whether this user has staff/admin access (independent of membership role)
+  @Property({ type: 'boolean', default: false, fieldName: 'is_staff' })
+  is_staff: boolean = false;
+
   // Whether this user can act as a MECA Training Trainer
   @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'is_trainer' })
   is_trainer?: boolean = false;

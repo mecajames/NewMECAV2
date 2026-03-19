@@ -17,6 +17,7 @@ import { AdvertisersService } from './advertisers.service';
 import { CreateAdvertiserDto, UpdateAdvertiserDto, UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 
 @Controller('api/admin/advertisers')
 export class AdvertisersController {
@@ -41,7 +42,7 @@ export class AdvertisersController {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
 
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 

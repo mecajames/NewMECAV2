@@ -8,8 +8,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!loading && profile) {
-      // Redirect based on role
-      if (profile.role === 'admin') {
+      // Staff/admin users go to admin dashboard, regular users go to MyMECA
+      if (profile.role === 'admin' || profile.is_staff) {
         navigate('/dashboard/admin', { replace: true });
       } else {
         navigate('/dashboard/mymeca', { replace: true });

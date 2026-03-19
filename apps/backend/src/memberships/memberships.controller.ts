@@ -21,6 +21,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole, MembershipAccountType, PaymentStatus } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { ZodError } from 'zod';
 import { MembershipsService, AdminAssignMembershipDto, CreateMembershipDto, AdminCreateMembershipResult } from './memberships.service';
 import { Membership } from './memberships.entity';
@@ -64,7 +65,7 @@ export class MembershipsController {
   private async requireAdminOrOwner(authHeader: string | undefined, targetUserId: string) {
     const { user, profile } = await this.getAuthenticatedUser(authHeader);
 
-    if (profile?.role === UserRole.ADMIN) {
+    if (isAdminUser(profile)) {
       return { user, profile, isAdmin: true };
     }
 
@@ -79,7 +80,7 @@ export class MembershipsController {
   private async requireAdmin(authHeader?: string) {
     const { user, profile } = await this.getAuthenticatedUser(authHeader);
 
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 
@@ -205,7 +206,7 @@ export class MembershipsController {
     // Allow access if user owns the membership or is admin
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN && membership.user?.id !== user.id) {
+    if (!isAdminUser(profile) && membership.user?.id !== user.id) {
       throw new ForbiddenException('You can only access your own membership data');
     }
     return membership;
@@ -221,7 +222,7 @@ export class MembershipsController {
     const membership = await this.membershipsService.findById(id);
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN && membership.user?.id !== user.id) {
+    if (!isAdminUser(profile) && membership.user?.id !== user.id) {
       throw new ForbiddenException('You can only update your own membership data');
     }
     return this.membershipsService.update(id, data);
@@ -948,12 +949,12 @@ export class MembershipsController {
     currentPeriodEnd?: Date;
     cancelAtPeriodEnd?: boolean;
   }> {
-    const { user } = await this.getAuthenticatedUser(authHeader);
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
     const membership = await this.membershipsService.findById(membershipId);
 
     // Allow member to view their own, or admin to view any
     const isOwner = membership.user.id === user.id;
-    const isAdmin = user.role === 'admin';
+    const isAdmin = isAdminUser(profile);
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException('You can only view your own membership subscription status');
     }

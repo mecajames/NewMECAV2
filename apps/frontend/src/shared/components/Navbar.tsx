@@ -529,7 +529,7 @@ export default function Navbar() {
                             My Registrations
                           </div>
                         </button>
-                        {profile?.role === 'admin' && (
+                        {(profile?.role === 'admin' || profile?.is_staff) && (
                           <button
                             onClick={() => {
                               navigate('/dashboard/admin');
@@ -845,7 +845,7 @@ export default function Navbar() {
                   <User className="h-5 w-5" />
                   Public Profile
                 </button>
-                {profile?.role === 'admin' && (
+                {(profile?.role === 'admin' || profile?.is_staff) && (
                   <button
                     onClick={() => {
                       navigate('/dashboard/admin');

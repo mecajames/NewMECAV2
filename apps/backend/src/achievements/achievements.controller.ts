@@ -22,6 +22,7 @@ import { AchievementImageService } from './image-generator/achievement-image.ser
 import { AchievementRecipient } from './achievement-recipient.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import {
   CreateAchievementDefinitionDto,
   UpdateAchievementDefinitionDto,
@@ -57,7 +58,7 @@ export class AchievementsController {
 
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 
@@ -262,7 +263,7 @@ export class AchievementsController {
 
         const em = this.em.fork();
         const profile = await em.findOne(Profile, { id: user.id });
-        if (profile?.role !== UserRole.ADMIN) {
+        if (!isAdminUser(profile)) {
           throw new ForbiddenException('Admin access required');
         }
 
