@@ -21,6 +21,7 @@ import { TicketComment } from './ticket-comment.entity';
 import { TicketAttachment } from './ticket-attachment.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -56,7 +57,7 @@ export class TicketsController {
     const user = await this.requireAuth(authHeader);
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };
@@ -125,7 +126,7 @@ export class TicketsController {
     if (user.id !== userId) {
       const em = this.em.fork();
       const profile = await em.findOne(Profile, { id: user.id });
-      if (profile?.role !== UserRole.ADMIN) {
+      if (!isAdminUser(profile)) {
         throw new ForbiddenException('You can only view your own tickets');
       }
     }

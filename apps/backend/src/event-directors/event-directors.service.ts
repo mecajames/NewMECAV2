@@ -21,6 +21,7 @@ import { EventDirectorApplicationReference } from './event-director-application-
 import { EventDirector } from './event-director.entity';
 import { EventDirectorAssignment } from './event-director-assignment.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Event } from '../events/events.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { EmailService } from '../email/email.service';
@@ -289,11 +290,11 @@ export class EventDirectorsService {
       // Create EventDirector record
       await this.createEventDirectorFromApplication(application);
 
-      // Auto-enable canApplyEventDirector permission on approval
+      // Auto-enable can_apply_event_director permission on approval
       const user = await this.em.findOneOrFail(Profile, application.user.id);
-      user.canApplyEventDirector = true;
-      user.edPermissionGrantedAt = new Date();
-      user.edPermissionGrantedBy = application.reviewedBy;
+      user.can_apply_event_director = true;
+      user.ed_permission_granted_at = new Date();
+      user.ed_permission_granted_by = application.reviewedBy;
     }
 
     await this.em.flush();
@@ -369,12 +370,12 @@ export class EventDirectorsService {
 
     // Only enable permission if explicitly requested
     if (dto.enable_permission) {
-      user.canApplyEventDirector = true;
-      user.edPermissionGrantedAt = new Date();
-      user.edPermissionGrantedBy = admin;
+      user.can_apply_event_director = true;
+      user.ed_permission_granted_at = new Date();
+      user.ed_permission_granted_by = admin;
 
       // Update user role to EVENT_DIRECTOR if not already admin
-      if (user.role !== UserRole.ADMIN) {
+      if (!isAdminUser(user)) {
         user.role = UserRole.EVENT_DIRECTOR;
       }
 
@@ -517,7 +518,7 @@ export class EventDirectorsService {
     }
 
     // Check if ED has permission enabled on their profile
-    if (!eventDirector.user.canApplyEventDirector) {
+    if (!eventDirector.user.can_apply_event_director) {
       throw new BadRequestException('Cannot assign event director - event director permission is not enabled on their profile');
     }
 

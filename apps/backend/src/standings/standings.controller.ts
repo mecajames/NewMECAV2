@@ -14,6 +14,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { StandingsService } from './standings.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
 
@@ -41,7 +42,7 @@ export class StandingsController {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
 
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 

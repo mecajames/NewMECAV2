@@ -15,6 +15,7 @@ import { RatingsService } from './ratings.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { CreateRatingSchema, CreateRatingDto, RatingEntityType, UserRole } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
 
@@ -46,7 +47,7 @@ export class RatingsController {
     const user = await this.getCurrentUser(authHeader);
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

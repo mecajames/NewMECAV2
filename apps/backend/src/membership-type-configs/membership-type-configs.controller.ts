@@ -41,6 +41,7 @@ export class MembershipTypeConfigsController {
    * Get memberships visible on the public website
    * Excludes manufacturer memberships
    */
+  @Public()
   @Get('public')
   async findPublic() {
     return this.membershipTypeConfigsService.findPublic();

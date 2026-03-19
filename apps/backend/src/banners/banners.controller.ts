@@ -33,6 +33,7 @@ import {
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Public } from '../auth/public.decorator';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Advertiser } from './entities/advertiser.entity';
 
 @Controller('api')
@@ -60,7 +61,7 @@ export class BannersController {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
 
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 

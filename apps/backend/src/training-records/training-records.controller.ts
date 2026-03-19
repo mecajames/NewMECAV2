@@ -17,6 +17,7 @@ import { TrainingRecordsService } from './training-records.service';
 import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import {
   CreateTrainingRecordDto,
   UpdateTrainingRecordDto,
@@ -63,7 +64,7 @@ export class TrainingRecordsController {
         console.error('[TrainingRecords] Profile not found for user:', user.id);
         throw new ForbiddenException('Profile not found');
       }
-      if (profile.role !== UserRole.ADMIN) {
+      if (!isAdminUser(profile)) {
         throw new ForbiddenException('Admin access required');
       }
       return { user, profile };

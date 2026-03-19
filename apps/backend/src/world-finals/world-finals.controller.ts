@@ -22,6 +22,7 @@ import {
 } from './world-finals.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
 
@@ -47,7 +48,7 @@ export class WorldFinalsController {
     }
 
     const em = this.em.fork();
-    const profile = await em.findOne(Profile, { id: user.id }, { fields: ['id', 'email', 'role'] as any });
+    const profile = await em.findOne(Profile, { id: user.id }, { fields: ['id', 'email', 'role', 'is_staff', 'meca_id'] as any });
     return { user, profile };
   }
 
@@ -55,7 +56,7 @@ export class WorldFinalsController {
   private async requireAdmin(authHeader?: string) {
     const { user, profile } = await this.requireAuth(authHeader);
 
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

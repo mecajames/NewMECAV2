@@ -27,6 +27,7 @@ import {
 import { OrdersService } from './orders.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Public } from '../auth/public.decorator';
 
 @Controller('api/orders')
@@ -49,7 +50,7 @@ export class OrdersController {
     }
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

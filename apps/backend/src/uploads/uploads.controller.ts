@@ -19,6 +19,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { UploadsService, UploadResult } from './uploads.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 
 @Controller('api/uploads')
 export class UploadsController {
@@ -48,7 +49,7 @@ export class UploadsController {
 
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id }, {
-      fields: ['id', 'email', 'role'] as any,
+      fields: ['id', 'email', 'role', 'is_staff', 'meca_id'] as any,
     });
 
     if (!profile) {
@@ -131,7 +132,7 @@ export class UploadsController {
   ): Promise<{ success: boolean }> {
     const profile = await this.requireAuth(authHeader);
 
-    if (profile.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required to delete files');
     }
 

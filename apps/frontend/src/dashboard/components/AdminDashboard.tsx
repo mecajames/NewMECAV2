@@ -5,7 +5,7 @@ import {
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
   ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe,
-  Shield, Wifi
+  Shield, Wifi, ClipboardCheck
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -19,6 +19,7 @@ import { eventsApi } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { billingApi } from '@/api-client/billing.api-client';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
+import { qaApi } from '@/api-client/qa.api-client';
 
 type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
 
@@ -51,6 +52,7 @@ export default function AdminDashboard() {
     onlineCount: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [qaAssignments, setQaAssignments] = useState<any[]>([]);
   // Load expanded sections from localStorage, default to all collapsed
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('adminDashboardExpandedSections');
@@ -66,6 +68,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchStats();
+    fetchQaAssignments();
   }, []);
 
   // Save expanded sections to localStorage when they change
@@ -103,6 +106,16 @@ export default function AdminDashboard() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchQaAssignments = async () => {
+    try {
+      const assignments = await qaApi.getMyAssignments();
+      // Only show incomplete assignments
+      setQaAssignments(assignments.filter((a: any) => a.status !== 'completed'));
+    } catch {
+      // QA module may not be set up yet, ignore
     }
   };
 
@@ -416,6 +429,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/login-audit',
         },
         {
+          icon: ClipboardCheck,
+          title: 'QA Testing Checklist',
+          description: 'Step-by-step site testing checklist for QA sign-off',
+          action: 'qa-checklist',
+          color: 'orange',
+          navigateTo: '/admin/qa-checklist',
+        },
+        {
           icon: BookOpen,
           title: 'Documentation',
           description: 'View system documentation and guides',
@@ -625,6 +646,42 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* QA Assignments Banner */}
+      {qaAssignments.length > 0 && (
+        <div className="bg-orange-900/20 border border-orange-700 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <ClipboardCheck className="h-5 w-5 text-orange-500" />
+            <h3 className="text-orange-300 font-semibold">You have QA testing assigned to you</h3>
+          </div>
+          <div className="space-y-2">
+            {qaAssignments.map((a: any) => (
+              <button
+                key={a.id}
+                onClick={() => navigate(`/admin/qa-checklist/review/${a.id}`)}
+                className="w-full flex items-center justify-between bg-slate-800 hover:bg-slate-700 rounded-lg p-3 transition-colors"
+              >
+                <div className="text-left">
+                  <p className="text-white font-medium text-sm">{a.round.title} (v{a.round.versionNumber})</p>
+                  <p className="text-slate-400 text-xs">
+                    {a.counts.pass + a.counts.fail + a.counts.skip}/{a.counts.total} items tested
+                    {a.counts.fail > 0 && <span className="text-red-400 ml-2">{a.counts.fail} failed</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-24 bg-slate-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-orange-600 to-orange-400"
+                      style={{ width: `${a.counts.total > 0 ? Math.round(((a.counts.pass + a.counts.fail + a.counts.skip) / a.counts.total) * 100) : 0}%` }}
+                    />
+                  </div>
+                  <span className="text-orange-400 text-sm font-medium">Start Review →</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Management Sections */}
       <h2 className="text-xl font-bold text-white mb-4">Management Sections</h2>

@@ -11,6 +11,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { ScheduledTasksService } from './scheduled-tasks.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 
 @Controller('api/scheduled-tasks')
@@ -33,7 +34,7 @@ export class ScheduledTasksController {
     }
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

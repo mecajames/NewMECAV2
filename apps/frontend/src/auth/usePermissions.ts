@@ -30,9 +30,9 @@ export function usePermissions() {
     if (!user) return;
 
     try {
-      // If user is admin, they have all permissions
-      if (profile?.role === 'admin') {
-        // Admins have all permissions - just set a wildcard
+      // If user is admin (by role or is_staff flag), they have all permissions
+      if (profile?.role === 'admin' || profile?.is_staff === true) {
+        // Admins/staff have all permissions - just set a wildcard
         setPermissions(new Set(['*'])); // Wildcard means all permissions
         setLoading(false);
         return;
@@ -69,7 +69,7 @@ export function usePermissions() {
     hasAnyPermission,
     hasAllPermissions,
     loading,
-    isAdmin: profile?.role === 'admin',
+    isAdmin: profile?.role === 'admin' || profile?.is_staff === true,
   };
 }
 

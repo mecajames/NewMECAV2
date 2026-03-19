@@ -166,22 +166,16 @@ export default function MembersPage() {
         membershipsApi.getMembersList(),
       ]);
 
-      // Map backend camelCase response to snake_case shape for compatibility with existing processing code
+      // Map backend response - most fields are already snake_case from the API
       const profilesData = backendProfiles.map((p: any) => ({
         ...p,
-        is_secondary_account: p.isSecondaryAccount,
-        master_profile_id: typeof p.masterProfile === 'string' ? p.masterProfile : p.masterProfile?.id,
-        can_apply_judge: p.canApplyJudge,
-        can_apply_event_director: p.canApplyEventDirector,
-        can_login: p.canLogin,
-        force_password_change: p.force_password_change,
-        profile_picture_url: p.profile_picture_url,
-        // Map the masterProfile join data to the shape the UI expects
-        masterProfile: p.masterProfile && typeof p.masterProfile === 'object' ? {
-          id: p.masterProfile.id,
-          first_name: p.masterProfile.first_name,
-          last_name: p.masterProfile.last_name,
-          email: p.masterProfile.email,
+        master_profile_id: typeof p.master_profile === 'string' ? p.master_profile : p.master_profile?.id,
+        // Map the master_profile join data to the shape the UI expects
+        master_profile: p.master_profile && typeof p.master_profile === 'object' ? {
+          id: p.master_profile.id,
+          first_name: p.master_profile.first_name,
+          last_name: p.master_profile.last_name,
+          email: p.master_profile.email,
         } : null,
       }));
 
@@ -374,8 +368,8 @@ export default function MembersPage() {
         full_name: member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim(),
         membershipInfo: membershipMap.get(member.id),
         // Add master profile info for display
-        masterProfileName: member.masterProfile
-          ? `${member.masterProfile.first_name || ''} ${member.masterProfile.last_name || ''}`.trim()
+        masterProfileName: member.master_profile
+          ? `${member.master_profile.first_name || ''} ${member.master_profile.last_name || ''}`.trim()
           : undefined,
       }));
 
@@ -462,23 +456,30 @@ export default function MembersPage() {
   const filterAndSortMembers = () => {
     let filtered = [...members];
 
-    // Apply search filter - only searches first name and last name
+    // Apply search filter - searches name, email, and MECA ID
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
-        // Search profile fields (including combined full name)
         const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
+        const mecaId = String(member.meca_id || '');
         return (
           fullName.includes(term) ||
           member.first_name?.toLowerCase().includes(term) ||
-          member.last_name?.toLowerCase().includes(term)
+          member.last_name?.toLowerCase().includes(term) ||
+          member.email?.toLowerCase().includes(term) ||
+          mecaId.includes(term)
         );
       });
     }
 
     // Apply role filter (for staff roles)
     if (roleFilter !== 'all') {
-      filtered = filtered.filter((member) => member.role === roleFilter);
+      if (roleFilter === 'admin') {
+        // "Admin" filter should show both role=admin AND is_staff users
+        filtered = filtered.filter((member) => member.role === 'admin' || member.is_staff);
+      } else {
+        filtered = filtered.filter((member) => member.role === roleFilter);
+      }
     }
 
     // Apply membership type filter
@@ -1144,7 +1145,13 @@ export default function MembersPage() {
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            {member.role !== 'user' ? (
+                            {member.role === 'admin' || member.is_staff ? (
+                              <span
+                                className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor('admin')}`}
+                              >
+                                admin
+                              </span>
+                            ) : member.role !== 'user' ? (
                               <span
                                 className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(
                                   member.role

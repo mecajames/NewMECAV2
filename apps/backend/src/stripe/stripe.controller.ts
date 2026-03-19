@@ -29,6 +29,7 @@ import { InvoicesService } from '../invoices/invoices.service';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Payment } from '../payments/payments.entity';
 import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, UserRole, ShopAddress, StripePaymentType } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
@@ -167,7 +168,7 @@ export class StripeController {
 
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required for test mode');
     }
   }

@@ -265,8 +265,8 @@ describe('ProfilesService', () => {
         membership_status: 'none',
         account_type: AccountType.MEMBER,
         force_password_change: false,
-        canApplyJudge: false,
-        canApplyEventDirector: false,
+        can_apply_judge: false,
+        can_apply_event_director: false,
       }));
       expect(mockEm.persistAndFlush).toHaveBeenCalledWith(createdProfile);
       expect(result).toEqual(createdProfile);

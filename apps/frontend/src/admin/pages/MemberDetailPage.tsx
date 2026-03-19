@@ -111,6 +111,10 @@ export default function MemberDetailPage() {
   const [emailServiceConfigured, setEmailServiceConfigured] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
 
+  // Staff access modal
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [togglingStaff, setTogglingStaff] = useState(false);
+
   // Password reset modal for edit mode
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [resetPasswordMode, setResetPasswordMode] = useState<'manual' | 'generated'>('generated');
@@ -170,24 +174,12 @@ export default function MemberDetailPage() {
     try {
       const backendData = await profilesApi.getById(memberId!);
 
-      // Map backend camelCase response to snake_case shape for compatibility
+      // All fields are now snake_case from the API
       const data: any = {
         ...backendData,
-        is_secondary_account: (backendData as any).isSecondaryAccount,
-        can_login: (backendData as any).canLogin,
-        master_profile_id: typeof (backendData as any).masterProfile === 'string'
-          ? (backendData as any).masterProfile
-          : (backendData as any).masterProfile?.id,
-        can_apply_judge: (backendData as any).canApplyJudge ?? backendData.can_apply_judge,
-        can_apply_event_director: (backendData as any).canApplyEventDirector ?? backendData.can_apply_event_director,
-        judge_permission_granted_at: (backendData as any).judgePermissionGrantedAt ?? backendData.judge_permission_granted_at,
-        judge_permission_granted_by: (backendData as any).judgePermissionGrantedBy ?? backendData.judge_permission_granted_by,
-        ed_permission_granted_at: (backendData as any).edPermissionGrantedAt ?? backendData.ed_permission_granted_at,
-        ed_permission_granted_by: (backendData as any).edPermissionGrantedBy ?? backendData.ed_permission_granted_by,
-        judge_certification_expires: (backendData as any).judgeCertificationExpires ?? backendData.judge_certification_expires,
-        ed_certification_expires: (backendData as any).edCertificationExpires ?? backendData.ed_certification_expires,
-        force_password_change: (backendData as any).force_password_change,
-        account_type: (backendData as any).account_type,
+        master_profile_id: typeof (backendData as any).master_profile === 'string'
+          ? (backendData as any).master_profile
+          : (backendData as any).master_profile?.id,
       };
 
       // Add computed full_name
@@ -974,16 +966,16 @@ export default function MemberDetailPage() {
                       No Membership
                     </span>
                   )}
-                  {/* Staff Role Badge - only show for admin/event_director */}
-                  {(member.role === 'admin' || member.role === 'event_director') && (
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        member.role === 'admin'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}
-                    >
-                      {member.role.replace('_', ' ')}
+                  {/* Staff Badge */}
+                  {(member.is_staff || member.role === 'admin') && (
+                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                      Staff
+                    </span>
+                  )}
+                  {/* Event Director Badge */}
+                  {member.role === 'event_director' && (
+                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                      Event Director
                     </span>
                   )}
                   {/* Status Badge */}
@@ -1006,6 +998,19 @@ export default function MemberDetailPage() {
 
             {/* Quick Actions */}
             <div className="flex flex-wrap gap-2">
+              {hasPermission('manage_users') && (
+                <button
+                  onClick={() => setShowStaffModal(true)}
+                  className={`px-3 sm:px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2 text-sm ${
+                    member.is_staff || member.role === 'admin'
+                      ? 'bg-red-700 text-white hover:bg-red-600'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                  }`}
+                >
+                  <Shield className="h-4 w-4" />
+                  {member.is_staff || member.role === 'admin' ? 'Staff Member' : 'Grant Staff Access'}
+                </button>
+              )}
               {hasPermission('manage_users') && (
                 <button
                   onClick={async () => {
@@ -1195,6 +1200,134 @@ export default function MemberDetailPage() {
           {activeTab === 'communications' && <CommunicationsTab member={member} />}
           {activeTab === 'permissions' && <PermissionsTab member={member} onUpdate={setMember} />}
         </div>
+
+        {/* Staff Access Modal */}
+        {showStaffModal && (() => {
+          const isCurrentlyStaff = member.is_staff || member.role === 'admin';
+          const isProtected = String(member.meca_id) === '202401';
+          return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl shadow-xl w-full max-w-md border border-slate-700">
+              <div className="p-6 border-b border-slate-700">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-orange-500" />
+                  Staff Access
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  {member.first_name} {member.last_name} ({member.email})
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Membership type: <span className="text-white">{member.role || 'user'}</span> | MECA ID: <span className="text-white">{member.meca_id || 'N/A'}</span>
+                </p>
+              </div>
+              <div className="p-6">
+                {isCurrentlyStaff ? (
+                  <>
+                    <div className="flex items-center gap-3 p-4 bg-green-900/20 border border-green-700/30 rounded-lg mb-4">
+                      <Shield className="h-8 w-8 text-green-500" />
+                      <div>
+                        <p className="text-green-300 font-medium">This user has staff access (Admin)</p>
+                        <p className="text-slate-400 text-xs mt-1">
+                          Full access to Admin Dashboard and all management features.
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-slate-300 text-sm font-medium mb-2">Current staff permissions:</p>
+                    <ul className="text-slate-400 text-sm space-y-1 ml-4 list-disc mb-4">
+                      <li>Full Admin Dashboard access</li>
+                      <li>Manage members, events, and memberships</li>
+                      <li>View billing, orders, and reports</li>
+                      <li>Manage support tickets and notifications</li>
+                      <li>All admin tools and settings</li>
+                    </ul>
+
+                    {!isProtected && (
+                      <div className="p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
+                        <p className="text-yellow-300 text-sm font-medium mb-1">About removing staff access</p>
+                        <p className="text-yellow-200/70 text-xs">
+                          Removing staff access will <strong>only</strong> revoke admin panel access. Their membership, competition results, event registrations, and all other data remain untouched. They go back to being a regular {member.role === 'admin' ? 'user' : member.role || 'user'}.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 p-4 bg-slate-700 rounded-lg mb-4">
+                      <Shield className="h-8 w-8 text-slate-500" />
+                      <div>
+                        <p className="text-white font-medium">Grant staff access to this user</p>
+                        <p className="text-slate-400 text-xs mt-1">
+                          Add admin permissions without changing their membership type.
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-slate-300 text-sm font-medium mb-2">Staff access will allow them to:</p>
+                    <ul className="text-slate-400 text-sm space-y-1 ml-4 list-disc mb-4">
+                      <li>Access the Admin Dashboard</li>
+                      <li>Manage members, events, and memberships</li>
+                      <li>View billing, orders, and reports</li>
+                      <li>Manage support tickets and notifications</li>
+                      <li>All admin tools and settings</li>
+                    </ul>
+
+                    <div className="p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
+                      <p className="text-blue-300 text-sm font-medium mb-1">No changes to their account</p>
+                      <p className="text-blue-200/70 text-xs">
+                        Their membership stays as <strong>{member.role || 'user'}</strong>. They keep all competitor capabilities: event registration, competition results, leaderboard standings, team membership, and everything else.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowStaffModal(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors"
+                >
+                  {isCurrentlyStaff && isProtected ? 'Close' : 'Cancel'}
+                </button>
+                {!(isCurrentlyStaff && isProtected) && (
+                  <button
+                    onClick={async () => {
+                      setTogglingStaff(true);
+                      const granting = !isCurrentlyStaff;
+                      try {
+                        const updates: any = { is_staff: granting };
+                        if (!granting && member.role === 'admin') {
+                          updates.role = 'user';
+                        }
+                        await profilesApi.update(member.id, updates);
+                        setMember({ ...member, ...updates });
+                        setShowStaffModal(false);
+                      } catch (err: any) {
+                        console.error('Error toggling staff:', err);
+                        alert(err?.response?.data?.message || 'Failed to update staff access');
+                      } finally {
+                        setTogglingStaff(false);
+                      }
+                    }}
+                    disabled={togglingStaff}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                      isCurrentlyStaff
+                        ? 'bg-red-600 hover:bg-red-500 text-white'
+                        : 'bg-green-600 hover:bg-green-500 text-white'
+                    }`}
+                  >
+                    {togglingStaff
+                      ? 'Saving...'
+                      : isCurrentlyStaff
+                      ? 'Remove Staff Access'
+                      : 'Grant Staff Access'
+                    }
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+          );
+        })()}
 
         {/* Send Message Modal */}
         {showMessageModal && (

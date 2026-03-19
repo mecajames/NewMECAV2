@@ -182,6 +182,11 @@ export default function AdminUserWizard({
   const [selectedMembershipType, setSelectedMembershipType] = useState<MembershipTypeConfig | null>(null);
   const [loadingMembershipTypes, setLoadingMembershipTypes] = useState(false);
 
+  // Existing user detection
+  const [existingUser, setExistingUser] = useState<Profile | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const emailCheckTimeout = useState<ReturnType<typeof setTimeout> | null>(null);
+
   // Master search for secondary memberships
   const [masterSearchQuery, setMasterSearchQuery] = useState('');
   const [masterSearchResults, setMasterSearchResults] = useState<MasterMembershipSearch[]>([]);
@@ -195,6 +200,7 @@ export default function AdminUserWizard({
       setStep('user-type');
       setError(null);
       setSelectedMembershipType(null);
+      setExistingUser(null);
       setMasterSearchQuery('');
       setMasterSearchResults([]);
       setSelectedMaster(null);
@@ -350,6 +356,37 @@ export default function AdminUserWizard({
   const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setError(null);
+
+    // Check for existing user when email changes
+    if (field === 'email') {
+      setExistingUser(null);
+      const email = (value as string).trim().toLowerCase();
+      if (email && email.includes('@')) {
+        if (emailCheckTimeout[0]) clearTimeout(emailCheckTimeout[0]);
+        emailCheckTimeout[1](setTimeout(async () => {
+          setCheckingEmail(true);
+          try {
+            const results = await profilesApi.searchProfiles(email);
+            const match = results.find((p: Profile) => p.email?.toLowerCase() === email);
+            if (match) {
+              setExistingUser(match);
+              // Auto-fill form fields from existing user
+              setFormData(prev => ({
+                ...prev,
+                firstName: match.first_name || prev.firstName,
+                lastName: match.last_name || prev.lastName,
+                phone: match.phone || prev.phone,
+                mecaId: match.meca_id ? String(match.meca_id) : prev.mecaId,
+              }));
+            }
+          } catch {
+            // Ignore search errors
+          } finally {
+            setCheckingEmail(false);
+          }
+        }, 500));
+      }
+    }
   };
 
   const handleMembershipTypeSelect = (type: MembershipTypeConfig) => {
@@ -610,6 +647,17 @@ export default function AdminUserWizard({
         role = formData.staffRole;
       }
 
+      // If existing user detected and this is a staff assignment, just grant staff access
+      if (existingUser && formData.userType === 'staff') {
+        await profilesApi.update(existingUser.id, { is_staff: true } as any);
+        onSuccess({
+          user: { ...existingUser, is_staff: true },
+          message: `${existingUser.first_name} ${existingUser.last_name} has been granted staff access. Their membership role (${existingUser.role || 'user'}) is unchanged.`,
+        });
+        onClose();
+        return;
+      }
+
       // First, create the user
       const userDto: CreateUserWithPasswordDto = {
         email: formData.email.toLowerCase().trim(),
@@ -837,14 +885,84 @@ export default function AdminUserWizard({
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Email Address *
                 </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder="user@example.com"
-                />
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                      existingUser ? 'border-yellow-500' : 'border-slate-600'
+                    }`}
+                    placeholder="user@example.com"
+                  />
+                  {checkingEmail && (
+                    <div className="absolute right-3 top-3.5">
+                      <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Existing user detected */}
+              {existingUser && (
+                <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-yellow-300 font-medium text-sm">
+                        This email belongs to an existing user
+                      </p>
+                      <div className="mt-2 bg-slate-800 rounded-lg p-3">
+                        <p className="text-white text-sm font-medium">
+                          {existingUser.first_name} {existingUser.last_name}
+                        </p>
+                        <p className="text-slate-400 text-xs">{existingUser.email}</p>
+                        <p className="text-slate-400 text-xs">
+                          MECA ID: {existingUser.meca_id || 'N/A'} | Current Role: <span className="text-white font-medium">{existingUser.role}</span>
+                        </p>
+                      </div>
+                      {formData.userType === 'staff' && (
+                        <div className="mt-3">
+                          <p className="text-yellow-200 text-xs mb-2">
+                            You can update this user's role to a staff role directly:
+                          </p>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setLoading(true);
+                              try {
+                                await profilesApi.update(existingUser.id, { is_staff: true } as any);
+                                onSuccess({
+                                  user: { ...existingUser, is_staff: true },
+                                  message: `${existingUser.first_name} ${existingUser.last_name} has been granted staff access. Their membership role (${existingUser.role || 'user'}) is unchanged.`,
+                                });
+                                onClose();
+                              } catch (err: any) {
+                                setError(err?.response?.data?.message || 'Failed to grant staff access');
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                            disabled={loading}
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+                          >
+                            <Shield className="h-4 w-4" />
+                            {loading ? 'Updating...' : 'Grant Staff Access'}
+                          </button>
+                          <p className="text-green-300 text-xs mt-2">
+                            Their membership role ({existingUser.role || 'user'}) will not change. They keep all competitor capabilities.
+                          </p>
+                        </div>
+                      )}
+                      {formData.userType === 'membership' && (
+                        <p className="text-yellow-200 text-xs mt-2">
+                          To add a membership to this existing user, go to their profile page at Admin {'>'} Members and use the membership tools there.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -15,6 +15,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { EventDirectorsService } from './event-directors.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import {
   CreateEventDirectorApplicationDto,
   AdminQuickCreateEventDirectorApplicationDto,
@@ -167,9 +168,9 @@ export class EventDirectorsController {
     }
 
     // Check if user is admin
-    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role', 'is_staff', 'meca_id'] });
 
-    if (!profile || profile.role !== UserRole.ADMIN) {
+    if (!profile || !isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 
@@ -399,9 +400,9 @@ export class EventDirectorsController {
     const assignment = await this.eventDirectorsService.getAssignment(id);
 
     // Check if user is admin or the assigned ED
-    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role', 'is_staff', 'meca_id'] });
 
-    if (profile?.role !== UserRole.ADMIN && assignment.eventDirector.user.id !== user.id) {
+    if (!isAdminUser(profile) && assignment.eventDirector.user.id !== user.id) {
       throw new ForbiddenException('Access denied');
     }
 

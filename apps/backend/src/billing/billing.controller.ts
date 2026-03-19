@@ -36,6 +36,7 @@ import { EventRegistration } from '../event-registrations/event-registrations.en
 import { Order } from '../orders/orders.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 
 /**
@@ -74,7 +75,7 @@ export class BillingController {
     const user = await this.getCurrentUser(authHeader);
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return user;

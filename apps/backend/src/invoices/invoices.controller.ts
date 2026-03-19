@@ -30,6 +30,7 @@ import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 
 @Controller('api/invoices')
 export class InvoicesController {
@@ -52,7 +53,7 @@ export class InvoicesController {
     }
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };

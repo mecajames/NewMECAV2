@@ -61,6 +61,7 @@ import { SplWorldRecordsModule } from './spl-world-records/spl-world-records.mod
 import { HallOfFameModule } from './hall-of-fame/hall-of-fame.module';
 import { UserActivityModule } from './user-activity/user-activity.module';
 import { TaxModule } from './tax/tax.module';
+import { QaModule } from './qa/qa.module';
 
 @Module({
   imports: [
@@ -135,6 +136,7 @@ import { TaxModule } from './tax/tax.module';
     HallOfFameModule,
     UserActivityModule,
     TaxModule,
+    QaModule,
   ],
   controllers: [AppController],
   providers: [

@@ -18,6 +18,7 @@ import { PaymentsService } from './payments.service';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { PaymentMethod, CreatePaymentDto, UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 
@@ -51,7 +52,7 @@ export class PaymentsController {
   private async requireAdminOrOwner(authHeader: string | undefined, targetUserId: string) {
     const { user, profile } = await this.getAuthenticatedUser(authHeader);
 
-    if (profile?.role === UserRole.ADMIN) {
+    if (isAdminUser(profile)) {
       return { user, profile, isAdmin: true };
     }
 
@@ -66,7 +67,7 @@ export class PaymentsController {
   private async requireAdmin(authHeader?: string) {
     const { user, profile } = await this.getAuthenticatedUser(authHeader);
 
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
 

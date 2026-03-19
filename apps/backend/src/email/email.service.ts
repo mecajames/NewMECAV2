@@ -2849,9 +2849,9 @@ ${this.getEmailHeaderHtml(headerText, "Don't lose your membership benefits")}
       </p>
     </div>
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
-      <p style="margin: 0 0 10px 0;"><strong>MECA ID:</strong> #${dto.mecaId}</p>
-      <p style="margin: 0;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
+    <table role="presentation" width="100%" cellpadding="20" cellspacing="0" border="1" bordercolor="#e2e8f0" style="margin: 20px 0; border-collapse: collapse; border: 1px solid #e2e8f0;"><tr><td style="background-color: #f8fafc;">
+      <p style="margin: 0 0 10px 0; font-size: 15px;"><strong>MECA ID:</strong> #${dto.mecaId}</p>
+      <p style="margin: 0; font-size: 15px;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
     </td></tr></table>
 
     <p>Renew now to maintain uninterrupted access to:</p>

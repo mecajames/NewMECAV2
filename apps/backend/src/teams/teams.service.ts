@@ -4,6 +4,7 @@ import { MembershipCategory, PaymentStatus, RegistrationStatus } from '@newmeca/
 import { Team } from './team.entity';
 import { TeamMember, TeamMemberRole, TeamMemberStatus } from './team-member.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { Membership } from '../memberships/memberships.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
@@ -349,7 +350,7 @@ export class TeamsService {
       // Pre-load requester profile to check admin
       const profileMap = await this.loadProfileMap(em, [requesterId]);
       const requester = profileMap.get(requesterId);
-      const isAdmin = requester?.role === 'admin';
+      const isAdmin = isAdminUser(requester);
 
       if (requesterRole === 'owner' || requesterRole === 'co_owner' || isAdmin) {
         pendingRequests = await em.find(TeamMember, { teamId: team.id, status: 'pending_approval' });
@@ -406,7 +407,7 @@ export class TeamsService {
 
     // Also check if user is admin
     const requester = await em.findOne(Profile, { id: userId });
-    if (requester?.role === 'admin') {
+    if (isAdminUser(requester)) {
       return 'owner'; // Admins have owner-level access
     }
 
@@ -654,7 +655,7 @@ export class TeamsService {
     // Only owner or admin can delete the team
     const requester = await em.findOne(Profile, { id: requesterId });
     const isOwner = team.captainId === requesterId;
-    const isAdmin = requester?.role === 'admin';
+    const isAdmin = isAdminUser(requester);
 
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException('Only the team owner or an admin can delete the team');
@@ -713,7 +714,7 @@ export class TeamsService {
     }
 
     const requester = await em.findOne(Profile, { id: requesterId });
-    const isAdmin = requester?.role === 'admin';
+    const isAdmin = isAdminUser(requester);
     const isSelf = userId === requesterId;
 
     // Get requester's role in the team
@@ -801,7 +802,7 @@ export class TeamsService {
 
     // Co-owners cannot promote to co-owner (only owner can)
     const requester = await em.findOne(Profile, { id: requesterId });
-    const isAdmin = requester?.role === 'admin';
+    const isAdmin = isAdminUser(requester);
     if (newRole === 'co_owner' && requesterRole !== 'owner' && !isAdmin) {
       throw new ForbiddenException('Only the team owner or an admin can promote members to co-owner');
     }
@@ -823,7 +824,7 @@ export class TeamsService {
     // Only current owner or admin can transfer ownership
     const requester = await em.findOne(Profile, { id: requesterId });
     const isOwner = team.captainId === requesterId;
-    const isAdmin = requester?.role === 'admin';
+    const isAdmin = isAdminUser(requester);
 
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException('Only the current team owner or an admin can transfer ownership');

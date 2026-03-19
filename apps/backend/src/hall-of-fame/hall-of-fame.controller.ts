@@ -16,6 +16,7 @@ import {
 import { EntityManager } from '@mikro-orm/postgresql';
 import { HallOfFameService } from './hall-of-fame.service';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Public } from '../auth/public.decorator';
@@ -39,7 +40,7 @@ export class HallOfFameController {
     }
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
-    if (profile?.role !== UserRole.ADMIN && profile?.role !== UserRole.EVENT_DIRECTOR) {
+    if (!isAdminUser(profile) && profile?.role !== UserRole.EVENT_DIRECTOR) {
       throw new ForbiddenException('Admin or Event Director access required');
     }
     return { user, profile };

@@ -16,6 +16,7 @@ import { BusinessListingsService } from './business-listings.service';
 import { RetailerListing, GalleryImage } from './retailer-listing.entity';
 import { ManufacturerListing } from './manufacturer-listing.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Public } from '../auth/public.decorator';
@@ -79,7 +80,7 @@ export class BusinessListingsController {
     const userId = await this.requireAuth(authHeader);
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: userId });
-    if (profile?.role !== UserRole.ADMIN) {
+    if (!isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
     }
     return userId;
