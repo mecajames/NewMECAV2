@@ -213,8 +213,8 @@ export class ProfilesService {
       account_type: AccountType.MEMBER,
       is_staff: false,
       force_password_change: false,
-      canApplyJudge: false,
-      canApplyEventDirector: false,
+      can_apply_judge: false,
+      can_apply_event_director: false,
       member_since: now,
       created_at: now,
       updated_at: now,
@@ -418,8 +418,8 @@ export class ProfilesService {
       Profile,
       {
         $or: [
-          { isSecondaryAccount: null },
-          { isSecondaryAccount: false },
+          { is_secondary_account: null },
+          { is_secondary_account: false },
         ],
       },
       {
@@ -430,7 +430,7 @@ export class ProfilesService {
 
     // Load master profiles separately with only needed fields (avoids loading ALL 40+ Profile columns)
     const masterIds = [...new Set(
-      results.map(p => (p.masterProfile as any)?.id || p.masterProfile).filter(Boolean)
+      results.map(p => (p.master_profile as any)?.id || p.master_profile).filter(Boolean)
     )] as string[];
 
     let masterMap = new Map<string, { id: string; first_name?: string; last_name?: string; email?: string }>();
@@ -449,9 +449,9 @@ export class ProfilesService {
     // Serialize and attach master profile data
     const serialized = results.map(p => {
       const obj = (p as any).toJSON ? (p as any).toJSON() : { ...p };
-      const masterId = (p.masterProfile as any)?.id || p.masterProfile;
+      const masterId = (p.master_profile as any)?.id || p.master_profile;
       if (masterId && masterMap.has(masterId)) {
-        obj.masterProfile = masterMap.get(masterId);
+        obj.master_profile = masterMap.get(masterId);
       }
       return obj;
     });
@@ -533,8 +533,8 @@ export class ProfilesService {
         is_staff: dto.role === 'admin',
         force_password_change: dto.forcePasswordChange ?? false,
         account_type: AccountType.MEMBER,
-        canApplyJudge: false,
-        canApplyEventDirector: false,
+        can_apply_judge: false,
+        can_apply_event_director: false,
         member_since: now,
         created_at: now,
         updated_at: now,
@@ -880,12 +880,12 @@ export class ProfilesService {
     }
 
     // Update permission fields
-    profile.canApplyJudge = data.enabled;
+    profile.can_apply_judge = data.enabled;
 
     if (data.enabled) {
       // Set audit trail when enabling
-      profile.judgePermissionGrantedAt = new Date();
-      profile.judgePermissionGrantedBy = admin;
+      profile.judge_permission_granted_at = new Date();
+      profile.judge_permission_granted_by = admin;
     } else {
       // Clear audit trail when disabling (but keep the last values for history)
       // We don't clear grantedAt/grantedBy - they serve as historical record
@@ -893,7 +893,7 @@ export class ProfilesService {
 
     // Update expiration date
     if (data.expirationDate !== undefined) {
-      profile.judgeCertificationExpires = data.expirationDate || undefined;
+      profile.judge_certification_expires = data.expirationDate || undefined;
     }
 
     await em.flush();
@@ -905,8 +905,8 @@ export class ProfilesService {
       resourceType: 'profile',
       resourceId: profileId,
       description: `${data.enabled ? 'Enabled' : 'Disabled'} judge permission for ${profile.email}`,
-      oldValues: { canApplyJudge: !data.enabled },
-      newValues: { canApplyJudge: data.enabled, expirationDate: data.expirationDate },
+      oldValues: { can_apply_judge: !data.enabled },
+      newValues: { can_apply_judge: data.enabled, expirationDate: data.expirationDate },
     });
 
     return profile;
@@ -937,17 +937,17 @@ export class ProfilesService {
     }
 
     // Update permission fields
-    profile.canApplyEventDirector = data.enabled;
+    profile.can_apply_event_director = data.enabled;
 
     if (data.enabled) {
       // Set audit trail when enabling
-      profile.edPermissionGrantedAt = new Date();
-      profile.edPermissionGrantedBy = admin;
+      profile.ed_permission_granted_at = new Date();
+      profile.ed_permission_granted_by = admin;
     }
 
     // Update expiration date
     if (data.expirationDate !== undefined) {
-      profile.edCertificationExpires = data.expirationDate || undefined;
+      profile.ed_certification_expires = data.expirationDate || undefined;
     }
 
     await em.flush();
@@ -959,8 +959,8 @@ export class ProfilesService {
       resourceType: 'profile',
       resourceId: profileId,
       description: `${data.enabled ? 'Enabled' : 'Disabled'} event director permission for ${profile.email}`,
-      oldValues: { canApplyEventDirector: !data.enabled },
-      newValues: { canApplyEventDirector: data.enabled, expirationDate: data.expirationDate },
+      oldValues: { can_apply_event_director: !data.enabled },
+      newValues: { can_apply_event_director: data.enabled, expirationDate: data.expirationDate },
     });
 
     return profile;
@@ -996,7 +996,7 @@ export class ProfilesService {
 
     // Get profile with permission granted by relationships
     const profile = await em.findOne(Profile, { id: profileId }, {
-      populate: ['judgePermissionGrantedBy', 'edPermissionGrantedBy'],
+      populate: ['judge_permission_granted_by', 'ed_permission_granted_by'],
     });
 
     if (!profile) {
@@ -1053,34 +1053,34 @@ export class ProfilesService {
 
     // Calculate judge status
     const judgeStatus = this.calculateJudgeStatus(
-      profile.canApplyJudge,
-      profile.judgeCertificationExpires,
+      profile.can_apply_judge,
+      profile.judge_certification_expires,
       judgeRecord[0],
       judgeApplication[0],
     );
 
     // Calculate ED status
     const edStatus = this.calculateEdStatus(
-      profile.canApplyEventDirector,
-      profile.edCertificationExpires,
+      profile.can_apply_event_director,
+      profile.ed_certification_expires,
       edRecord[0],
       edApplication[0],
     );
 
     return {
       judge: {
-        permissionEnabled: profile.canApplyJudge,
+        permissionEnabled: profile.can_apply_judge,
         status: judgeStatus,
-        grantedAt: profile.judgePermissionGrantedAt || null,
-        grantedBy: profile.judgePermissionGrantedBy
+        grantedAt: profile.judge_permission_granted_at || null,
+        grantedBy: profile.judge_permission_granted_by
           ? {
-              id: profile.judgePermissionGrantedBy.id,
-              name: profile.judgePermissionGrantedBy.full_name ||
-                    `${profile.judgePermissionGrantedBy.first_name || ''} ${profile.judgePermissionGrantedBy.last_name || ''}`.trim() ||
+              id: profile.judge_permission_granted_by.id,
+              name: profile.judge_permission_granted_by.full_name ||
+                    `${profile.judge_permission_granted_by.first_name || ''} ${profile.judge_permission_granted_by.last_name || ''}`.trim() ||
                     'Unknown',
             }
           : null,
-        expirationDate: profile.judgeCertificationExpires || null,
+        expirationDate: profile.judge_certification_expires || null,
         judgeRecord: judgeRecord[0]
           ? {
               id: judgeRecord[0].id,
@@ -1097,18 +1097,18 @@ export class ProfilesService {
           : null,
       },
       eventDirector: {
-        permissionEnabled: profile.canApplyEventDirector,
+        permissionEnabled: profile.can_apply_event_director,
         status: edStatus,
-        grantedAt: profile.edPermissionGrantedAt || null,
-        grantedBy: profile.edPermissionGrantedBy
+        grantedAt: profile.ed_permission_granted_at || null,
+        grantedBy: profile.ed_permission_granted_by
           ? {
-              id: profile.edPermissionGrantedBy.id,
-              name: profile.edPermissionGrantedBy.full_name ||
-                    `${profile.edPermissionGrantedBy.first_name || ''} ${profile.edPermissionGrantedBy.last_name || ''}`.trim() ||
+              id: profile.ed_permission_granted_by.id,
+              name: profile.ed_permission_granted_by.full_name ||
+                    `${profile.ed_permission_granted_by.first_name || ''} ${profile.ed_permission_granted_by.last_name || ''}`.trim() ||
                     'Unknown',
             }
           : null,
-        expirationDate: profile.edCertificationExpires || null,
+        expirationDate: profile.ed_certification_expires || null,
         edRecord: edRecord[0]
           ? {
               id: edRecord[0].id,

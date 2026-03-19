@@ -166,22 +166,16 @@ export default function MembersPage() {
         membershipsApi.getMembersList(),
       ]);
 
-      // Map backend camelCase response to snake_case shape for compatibility with existing processing code
+      // Map backend response - most fields are already snake_case from the API
       const profilesData = backendProfiles.map((p: any) => ({
         ...p,
-        is_secondary_account: p.isSecondaryAccount,
-        master_profile_id: typeof p.masterProfile === 'string' ? p.masterProfile : p.masterProfile?.id,
-        can_apply_judge: p.canApplyJudge,
-        can_apply_event_director: p.canApplyEventDirector,
-        can_login: p.canLogin,
-        force_password_change: p.force_password_change,
-        profile_picture_url: p.profile_picture_url,
-        // Map the masterProfile join data to the shape the UI expects
-        masterProfile: p.masterProfile && typeof p.masterProfile === 'object' ? {
-          id: p.masterProfile.id,
-          first_name: p.masterProfile.first_name,
-          last_name: p.masterProfile.last_name,
-          email: p.masterProfile.email,
+        master_profile_id: typeof p.master_profile === 'string' ? p.master_profile : p.master_profile?.id,
+        // Map the master_profile join data to the shape the UI expects
+        master_profile: p.master_profile && typeof p.master_profile === 'object' ? {
+          id: p.master_profile.id,
+          first_name: p.master_profile.first_name,
+          last_name: p.master_profile.last_name,
+          email: p.master_profile.email,
         } : null,
       }));
 
@@ -374,8 +368,8 @@ export default function MembersPage() {
         full_name: member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim(),
         membershipInfo: membershipMap.get(member.id),
         // Add master profile info for display
-        masterProfileName: member.masterProfile
-          ? `${member.masterProfile.first_name || ''} ${member.masterProfile.last_name || ''}`.trim()
+        masterProfileName: member.master_profile
+          ? `${member.master_profile.first_name || ''} ${member.master_profile.last_name || ''}`.trim()
           : undefined,
       }));
 

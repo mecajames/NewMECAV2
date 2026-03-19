@@ -179,7 +179,7 @@ export class JudgesController {
     const user = await this.getCurrentUser(authHeader);
 
     // Get profile to check role
-    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role', 'is_staff', 'meca_id'] });
 
     if (!profile || !isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
@@ -388,7 +388,7 @@ export class JudgesController {
     const judge = await this.judgesService.getJudge(id);
 
     // Check if user is admin or the judge
-    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role', 'is_staff', 'meca_id'] });
 
     if (!isAdminUser(profile) && judge.user.id !== user.id) {
       throw new ForbiddenException('Access denied');
@@ -451,7 +451,7 @@ export class JudgesController {
     const assignment = await this.judgesService.getAssignment(id);
 
     // Check if user is admin or the assigned judge
-    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role', 'is_staff', 'meca_id'] });
 
     if (!isAdminUser(profile) && assignment.judge.user.id !== user.id) {
       throw new ForbiddenException('Access denied');

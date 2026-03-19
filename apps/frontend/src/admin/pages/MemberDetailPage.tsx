@@ -174,24 +174,12 @@ export default function MemberDetailPage() {
     try {
       const backendData = await profilesApi.getById(memberId!);
 
-      // Map backend camelCase response to snake_case shape for compatibility
+      // All fields are now snake_case from the API
       const data: any = {
         ...backendData,
-        is_secondary_account: (backendData as any).isSecondaryAccount,
-        can_login: (backendData as any).canLogin,
-        master_profile_id: typeof (backendData as any).masterProfile === 'string'
-          ? (backendData as any).masterProfile
-          : (backendData as any).masterProfile?.id,
-        can_apply_judge: (backendData as any).canApplyJudge ?? backendData.can_apply_judge,
-        can_apply_event_director: (backendData as any).canApplyEventDirector ?? backendData.can_apply_event_director,
-        judge_permission_granted_at: (backendData as any).judgePermissionGrantedAt ?? backendData.judge_permission_granted_at,
-        judge_permission_granted_by: (backendData as any).judgePermissionGrantedBy ?? backendData.judge_permission_granted_by,
-        ed_permission_granted_at: (backendData as any).edPermissionGrantedAt ?? backendData.ed_permission_granted_at,
-        ed_permission_granted_by: (backendData as any).edPermissionGrantedBy ?? backendData.ed_permission_granted_by,
-        judge_certification_expires: (backendData as any).judgeCertificationExpires ?? backendData.judge_certification_expires,
-        ed_certification_expires: (backendData as any).edCertificationExpires ?? backendData.ed_certification_expires,
-        force_password_change: (backendData as any).force_password_change,
-        account_type: (backendData as any).account_type,
+        master_profile_id: typeof (backendData as any).master_profile === 'string'
+          ? (backendData as any).master_profile
+          : (backendData as any).master_profile?.id,
       };
 
       // Add computed full_name

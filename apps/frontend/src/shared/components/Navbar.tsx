@@ -252,8 +252,8 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Members Dropdown */}
-            <div className="relative"
+            {/* Members Dropdown - only show when logged in */}
+            {user && <div className="relative"
               onMouseEnter={() => setMembersMenuOpen(true)}
               onMouseLeave={() => setMembersMenuOpen(false)}
             >
@@ -295,7 +295,7 @@ export default function Navbar() {
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
 
             {/* Rulebooks Dropdown */}
             <div className="relative"
@@ -729,34 +729,38 @@ export default function Navbar() {
                 Members
               </div>
             </div>
-            <button
-              onClick={() => {
-                navigate('/members');
-                setMobileMenuOpen(false);
-              }}
-              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
-                currentPage === 'members'
-                  ? 'bg-orange-600 text-white'
-                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
-              }`}
-            >
-              <Users className="h-5 w-5" />
-              Members Directory
-            </button>
-            <button
-              onClick={() => {
-                navigate('/teams');
-                setMobileMenuOpen(false);
-              }}
-              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
-                currentPage === 'teams'
-                  ? 'bg-orange-600 text-white'
-                  : 'text-gray-300 hover:bg-slate-700 hover:text-white'
-              }`}
-            >
-              <Shield className="h-5 w-5" />
-              Teams Directory
-            </button>
+            {user && (
+              <>
+                <button
+                  onClick={() => {
+                    navigate('/members');
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                    currentPage === 'members'
+                      ? 'bg-orange-600 text-white'
+                      : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Users className="h-5 w-5" />
+                  Members Directory
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/teams');
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                    currentPage === 'teams'
+                      ? 'bg-orange-600 text-white'
+                      : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Shield className="h-5 w-5" />
+                  Teams Directory
+                </button>
+              </>
+            )}
 
             {/* Rulebooks Section */}
             <div className="border-t border-slate-700 mt-2 pt-2">

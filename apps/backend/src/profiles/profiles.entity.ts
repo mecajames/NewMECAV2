@@ -93,32 +93,32 @@ export class Profile {
 
   // Permission to access judge features and apply to be a judge
   @Property({ type: 'boolean', default: false, fieldName: 'can_apply_judge' })
-  canApplyJudge: boolean = false;
+  can_apply_judge: boolean = false;
 
   // Permission to access event director features and apply to be an ED
   @Property({ type: 'boolean', default: false, fieldName: 'can_apply_event_director' })
-  canApplyEventDirector: boolean = false;
+  can_apply_event_director: boolean = false;
 
   // Audit trail for judge permission
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'judge_permission_granted_at' })
-  judgePermissionGrantedAt?: Date;
+  judge_permission_granted_at?: Date;
 
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'judge_permission_granted_by' })
-  judgePermissionGrantedBy?: Profile;
+  judge_permission_granted_by?: Profile;
 
   // Audit trail for event director permission
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'ed_permission_granted_at' })
-  edPermissionGrantedAt?: Date;
+  ed_permission_granted_at?: Date;
 
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'ed_permission_granted_by' })
-  edPermissionGrantedBy?: Profile;
+  ed_permission_granted_by?: Profile;
 
   // Optional certification expiration dates
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'judge_certification_expires' })
-  judgeCertificationExpires?: Date;
+  judge_certification_expires?: Date;
 
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'ed_certification_expires' })
-  edCertificationExpires?: Date;
+  ed_certification_expires?: Date;
 
   @Property({ type: 'text', nullable: true, fieldName: 'membership_status' })
   membership_status?: string;
@@ -163,20 +163,20 @@ export class Profile {
   // Whether this profile is a secondary account (managed by a master)
   // Secondary accounts have restricted access (no billing, limited management)
   @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'is_secondary_account' })
-  isSecondaryAccount?: boolean = false;
+  is_secondary_account?: boolean = false;
 
   // Whether this profile can log in (false for secondaries without their own login)
   // All profiles exist for MECA ID and competition tracking, but not all can log in
   @Property({ type: 'boolean', nullable: true, default: true, fieldName: 'can_login' })
-  canLogin?: boolean = true;
+  can_login?: boolean = true;
 
   // For secondary accounts: the master profile that controls this account
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'master_profile_id' })
-  masterProfile?: Profile;
+  master_profile?: Profile;
 
   // For master profiles: collection of secondary profiles they control
-  @OneToMany(() => Profile, profile => profile.masterProfile)
-  secondaryProfiles = new Collection<Profile>(this);
+  @OneToMany(() => Profile, profile => profile.master_profile)
+  secondary_profiles = new Collection<Profile>(this);
 
   // Original membership date (preserved from V1 migration or set on profile creation)
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'member_since' })

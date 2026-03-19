@@ -49,7 +49,7 @@ export class UploadsController {
 
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id }, {
-      fields: ['id', 'email', 'role'] as any,
+      fields: ['id', 'email', 'role', 'is_staff', 'meca_id'] as any,
     });
 
     if (!profile) {

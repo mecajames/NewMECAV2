@@ -339,10 +339,10 @@ export class JudgesService {
         application.user.role = UserRole.JUDGE;
       }
 
-      // Auto-enable canApplyJudge permission on approval
-      application.user.canApplyJudge = true;
-      application.user.judgePermissionGrantedAt = new Date();
-      application.user.judgePermissionGrantedBy = reviewer;
+      // Auto-enable can_apply_judge permission on approval
+      application.user.can_apply_judge = true;
+      application.user.judge_permission_granted_at = new Date();
+      application.user.judge_permission_granted_by = reviewer;
     }
 
     await em.flush();
@@ -603,9 +603,9 @@ export class JudgesService {
 
     // Only enable permission if explicitly requested
     if (dto.enable_permission) {
-      user.canApplyJudge = true;
-      user.judgePermissionGrantedAt = new Date();
-      user.judgePermissionGrantedBy = admin;
+      user.can_apply_judge = true;
+      user.judge_permission_granted_at = new Date();
+      user.judge_permission_granted_by = admin;
 
       // Update user role to JUDGE if not already admin
       if (!isAdminUser(user)) {
@@ -707,7 +707,7 @@ export class JudgesService {
     }
 
     // Check if judge has permission enabled on their profile
-    if (!judge.user.canApplyJudge) {
+    if (!judge.user.can_apply_judge) {
       throw new BadRequestException('Cannot assign judge - judge permission is not enabled on their profile');
     }
 

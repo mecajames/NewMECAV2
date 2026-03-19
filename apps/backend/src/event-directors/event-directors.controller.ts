@@ -168,7 +168,7 @@ export class EventDirectorsController {
     }
 
     // Check if user is admin
-    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role', 'is_staff', 'meca_id'] });
 
     if (!profile || !isAdminUser(profile)) {
       throw new ForbiddenException('Admin access required');
@@ -400,7 +400,7 @@ export class EventDirectorsController {
     const assignment = await this.eventDirectorsService.getAssignment(id);
 
     // Check if user is admin or the assigned ED
-    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role'] });
+    const profile = await this.em.findOne(Profile, { id: user.id }, { fields: ['role', 'is_staff', 'meca_id'] });
 
     if (!isAdminUser(profile) && assignment.eventDirector.user.id !== user.id) {
       throw new ForbiddenException('Access denied');

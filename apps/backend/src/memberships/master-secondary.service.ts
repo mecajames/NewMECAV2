@@ -199,9 +199,9 @@ export class MasterSecondaryService {
     secondaryProfile.first_name = competitorName.split(' ')[0];
     secondaryProfile.last_name = competitorName.split(' ').slice(1).join(' ') || '';
     secondaryProfile.full_name = competitorName;
-    secondaryProfile.isSecondaryAccount = true;
-    secondaryProfile.masterProfile = masterMembership.user;
-    secondaryProfile.canLogin = dto.createLogin; // New field to track if they can log in
+    secondaryProfile.is_secondary_account = true;
+    secondaryProfile.master_profile = masterMembership.user;
+    secondaryProfile.can_login = dto.createLogin; // New field to track if they can log in
 
     if (dto.createLogin) {
       secondaryProfile.force_password_change = true; // They'll need to set their password
@@ -345,7 +345,7 @@ export class MasterSecondaryService {
     // Send welcome email to secondary member
     try {
       const secondaryProfile = secondary.user;
-      const masterProfile = secondary.masterMembership?.user;
+      const master_profile = secondary.masterMembership?.user;
       const membershipConfig = secondary.membershipTypeConfig;
 
       // Only send if secondary has their own valid email (not a placeholder)
@@ -355,7 +355,7 @@ export class MasterSecondaryService {
           secondaryMemberName: secondary.competitorName || secondaryProfile.full_name || secondaryProfile.first_name || 'Member',
           mecaId: secondary.mecaId!,
           membershipType: membershipConfig?.name || 'MECA Membership',
-          masterMemberName: masterProfile?.full_name || masterProfile?.first_name || 'Primary Member',
+          masterMemberName: master_profile?.full_name || master_profile?.first_name || 'Primary Member',
           expiryDate: secondary.endDate!,
         });
         this.logger.log(`Sent secondary member welcome email for membership ${secondaryMembershipId} to ${secondaryProfile.email}`);
@@ -484,8 +484,8 @@ export class MasterSecondaryService {
     if (secondary.hasOwnLogin) {
       const secondaryProfile = await em.findOne(Profile, { id: secondary.user.id });
       if (secondaryProfile) {
-        secondaryProfile.isSecondaryAccount = false;
-        secondaryProfile.masterProfile = undefined;
+        secondaryProfile.is_secondary_account = false;
+        secondaryProfile.master_profile = undefined;
       }
     }
 
@@ -523,8 +523,8 @@ export class MasterSecondaryService {
     if (secondary.hasOwnLogin) {
       const secondaryProfile = await em.findOne(Profile, { id: secondary.user.id });
       if (secondaryProfile) {
-        secondaryProfile.isSecondaryAccount = false;
-        secondaryProfile.masterProfile = undefined;
+        secondaryProfile.is_secondary_account = false;
+        secondaryProfile.master_profile = undefined;
       }
     }
 
@@ -634,7 +634,7 @@ export class MasterSecondaryService {
   async isSecondaryProfile(profileId: string): Promise<boolean> {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: profileId });
-    return profile?.isSecondaryAccount === true;
+    return profile?.is_secondary_account === true;
   }
 
   /**
@@ -643,9 +643,9 @@ export class MasterSecondaryService {
   async getMasterProfile(secondaryProfileId: string): Promise<Profile | null> {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: secondaryProfileId }, {
-      populate: ['masterProfile'],
+      populate: ['master_profile'],
     });
-    return profile?.masterProfile || null;
+    return profile?.master_profile || null;
   }
 
   /**
@@ -680,7 +680,7 @@ export class MasterSecondaryService {
           const lastName = nameParts.slice(1).join(' ') || '';
 
           // Create a Supabase user first (required due to FK constraint)
-          // Generate a secure random password - they won't use it since canLogin=false
+          // Generate a secure random password - they won't use it since can_login=false
           const randomPassword = this.supabaseAdminService.generatePassword(16);
 
           const createResult = await this.supabaseAdminService.createUserWithPassword({
