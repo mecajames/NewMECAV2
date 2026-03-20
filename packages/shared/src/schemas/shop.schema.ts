@@ -152,6 +152,7 @@ export const ShopOrderSchema = z.object({
   notes: z.string().nullable().optional(),
   adminNotes: z.string().nullable().optional(),
   trackingNumber: z.string().nullable().optional(),
+  billingOrderId: z.string().uuid().nullable().optional(),
   shippedAt: z.coerce.date().nullable().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),

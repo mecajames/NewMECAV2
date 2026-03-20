@@ -256,6 +256,7 @@ export class OrdersService {
     guestEmail?: string;
     guestName?: string;
     tax?: string;
+    shipping?: string;
     shopOrderReference?: { shopOrderId: string; shopOrderNumber: string };
   }): Promise<Order> {
     const em = this.em.fork();
@@ -278,13 +279,28 @@ export class OrdersService {
       throw new BadRequestException('Either userId or guestEmail is required to create an order');
     }
 
+    // Idempotency: if shopOrderReference provided, check for existing order with same shop order
+    if (data.shopOrderReference?.shopOrderId) {
+      const existing = await em.getConnection().execute(
+        `SELECT id FROM orders WHERE shop_order_reference->>'shopOrderId' = $1`,
+        [data.shopOrderReference.shopOrderId],
+      );
+      if (existing.length > 0) {
+        const existingOrder = await em.findOne(Order, { id: existing[0].id });
+        if (existingOrder) return existingOrder;
+      }
+    }
+
     // Generate order number
     const orderNumber = await this.generateOrderNumber(em);
 
     // Calculate totals
     const { subtotal } = this.calculateTotals(data.items);
     const tax = data.tax || '0.00';
-    const total = (parseFloat(subtotal) + parseFloat(tax)).toFixed(2);
+    const shipping = data.shipping || '0.00';
+    // Include shipping in total if provided (Order entity doesn't have a shipping column,
+    // so shipping is embedded in total and noted in the notes field)
+    const total = (parseFloat(subtotal) + parseFloat(tax) + parseFloat(shipping)).toFixed(2);
 
     // Create order - for guest orders, member can be null but we set guestEmail
     const orderData: Partial<Order> = {

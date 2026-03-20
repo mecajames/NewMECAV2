@@ -256,6 +256,22 @@ export const shopApi = {
     const response = await axios.put(`/api/shop/admin/orders/${id}/refund`, { reason });
     return response.data;
   },
+
+  /**
+   * Get PAID shop orders missing billing orders/invoices (admin)
+   */
+  adminGetMissingInvoiceOrders: async (): Promise<ShopOrder[]> => {
+    const response = await axios.get('/api/shop/admin/orders/missing-invoices');
+    return response.data;
+  },
+
+  /**
+   * Create billing order and invoice for a PAID shop order (admin recovery)
+   */
+  adminCreateInvoiceForOrder: async (orderId: string): Promise<{ order: any; invoice: any }> => {
+    const response = await axios.post(`/api/shop/admin/orders/${orderId}/create-invoice`);
+    return response.data;
+  },
 };
 
 export default shopApi;

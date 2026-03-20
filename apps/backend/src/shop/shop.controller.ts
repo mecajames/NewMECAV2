@@ -249,6 +249,23 @@ export class ShopController {
     });
   }
 
+  @Get('admin/orders/missing-invoices')
+  async adminGetOrdersMissingInvoices(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.findPaidOrdersMissingInvoices();
+  }
+
+  @Post('admin/orders/:id/create-invoice')
+  async adminCreateInvoiceForOrder(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.createBillingOrderAndInvoice(id);
+  }
+
   @Get('admin/orders/:id')
   async adminGetOrder(
     @Headers('authorization') authHeader: string,

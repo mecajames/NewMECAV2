@@ -7,6 +7,8 @@ import {
   UpdateShopProductDto,
   ShopAddress,
   OrderStatus,
+  OrderType,
+  OrderItemType,
 } from '@newmeca/shared';
 import { ShopProduct } from './entities/shop-product.entity';
 import { ShopOrder } from './entities/shop-order.entity';
@@ -18,6 +20,10 @@ import {
   ShopOrderItemDto,
   ShopAddressDto,
 } from '../email/email.service';
+import { OrdersService } from '../orders/orders.service';
+import { Order } from '../orders/orders.entity';
+import { InvoicesService } from '../invoices/invoices.service';
+import { Invoice } from '../invoices/invoices.entity';
 
 interface CartItem {
   productId: string;
@@ -42,6 +48,8 @@ export class ShopService {
     private readonly shippingService: ShippingService,
     private readonly taxService: TaxService,
     private readonly emailService: EmailService,
+    private readonly ordersService: OrdersService,
+    private readonly invoicesService: InvoicesService,
   ) {}
 
   // =============================================================================
@@ -804,5 +812,120 @@ export class ShopService {
     } catch (error) {
       this.logger.error(`Failed to send delivery confirmation email for order ${order.orderNumber}: ${error}`);
     }
+  }
+
+  // =============================================================================
+  // BILLING ORDER & INVOICE METHODS
+  // =============================================================================
+
+  /**
+   * Find shop orders that have been paid but are missing a billing order/invoice.
+   * Checks PAID, PROCESSING, SHIPPED, and DELIVERED statuses.
+   */
+  async findPaidOrdersMissingInvoices(): Promise<ShopOrder[]> {
+    const em = this.em.fork();
+    return em.find(ShopOrder, {
+      status: { $in: [ShopOrderStatus.PAID, ShopOrderStatus.PROCESSING, ShopOrderStatus.SHIPPED, ShopOrderStatus.DELIVERED] },
+      billingOrderId: { $eq: null },
+    }, { populate: ['items', 'items.product', 'user'] });
+  }
+
+  /**
+   * Create a billing Order and Invoice for a paid shop order.
+   * Idempotent: returns early if billingOrderId is already set.
+   * Can be called from webhook handler or admin recovery endpoint.
+   */
+  async createBillingOrderAndInvoice(shopOrderId: string, stripeEmail?: string): Promise<{ order: Order; invoice: Invoice }> {
+    // Use a single forked EM for the entire operation to avoid detached entity issues
+    const em = this.em.fork();
+    const shopOrder = await em.findOne(ShopOrder, { id: shopOrderId }, {
+      populate: ['items', 'items.product', 'user'],
+    });
+
+    if (!shopOrder) {
+      throw new NotFoundException(`Shop order ${shopOrderId} not found`);
+    }
+
+    const paidStatuses = [ShopOrderStatus.PAID, ShopOrderStatus.PROCESSING, ShopOrderStatus.SHIPPED, ShopOrderStatus.DELIVERED];
+    if (!paidStatuses.includes(shopOrder.status as ShopOrderStatus)) {
+      throw new BadRequestException(
+        `Cannot create invoice for shop order ${shopOrderId} with status ${shopOrder.status} - order must be PAID or later`,
+      );
+    }
+
+    // Idempotent: if billing order already exists, return early
+    if (shopOrder.billingOrderId) {
+      this.logger.log(`Shop order ${shopOrder.orderNumber} already has billing order ${shopOrder.billingOrderId}`);
+      const existingInvoice = await this.invoicesService.findByOrderId(shopOrder.billingOrderId);
+      return { order: { id: shopOrder.billingOrderId } as any, invoice: existingInvoice as any };
+    }
+
+    // Build order items from shop order items
+    const items = shopOrder.items.getItems().map((item) => ({
+      description: item.productName,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice).toFixed(2),
+      itemType: OrderItemType.SHOP_PRODUCT,
+      referenceId: item.product?.id,
+      metadata: {
+        shopOrderId: shopOrder.id,
+        productSku: item.productSku,
+      },
+    }));
+
+    // Build billing address from shop order (use stripeEmail as fallback)
+    const customerEmail = shopOrder.guestEmail || stripeEmail || '';
+    const billingAddress = shopOrder.billingAddress
+      ? {
+          name: shopOrder.billingAddress.name,
+          email: customerEmail,
+          phone: shopOrder.billingAddress.phone,
+          address1: shopOrder.billingAddress.line1,
+          address2: shopOrder.billingAddress.line2,
+          city: shopOrder.billingAddress.city,
+          state: shopOrder.billingAddress.state,
+          postalCode: shopOrder.billingAddress.postalCode,
+          country: shopOrder.billingAddress.country || 'US',
+        }
+      : undefined;
+
+    // Determine user ID and guest info (use stripeEmail as fallback)
+    const userId = shopOrder.user?.id;
+    const guestEmail = !userId ? (shopOrder.guestEmail || stripeEmail) : undefined;
+    const guestName = !userId ? (shopOrder.guestName || shopOrder.billingAddress?.name) : undefined;
+
+    // Create the billing order with cross-reference (includes shipping in total via notes)
+    const order = await this.ordersService.createFromPayment({
+      userId,
+      guestEmail,
+      guestName,
+      orderType: OrderType.SHOP,
+      items,
+      billingAddress,
+      tax: Number(shopOrder.taxAmount).toFixed(2),
+      shipping: Number(shopOrder.shippingAmount).toFixed(2),
+      notes: `Shop Order: ${shopOrder.orderNumber} | Stripe: ${shopOrder.stripePaymentIntentId} | Shipping: $${Number(shopOrder.shippingAmount).toFixed(2)}`,
+      shopOrderReference: {
+        shopOrderId: shopOrder.id,
+        shopOrderNumber: shopOrder.orderNumber,
+      },
+    });
+
+    this.logger.log(`Billing order ${order.orderNumber} created for shop order ${shopOrder.orderNumber}`);
+
+    // Update shop order with billing order reference (using same EM to avoid detached entity)
+    shopOrder.billingOrderId = order.id;
+    await em.flush();
+
+    // Create invoice from order
+    const invoice = await this.invoicesService.createFromOrder(order.id);
+    this.logger.log(`Invoice ${invoice.invoiceNumber} created for billing order ${order.orderNumber}`);
+
+    // Send invoice email (async, non-blocking)
+    this.invoicesService.sendInvoice(invoice.id).catch((error) => {
+      this.logger.error(`Failed to send shop invoice email: ${error}`);
+    });
+
+    return { order, invoice };
   }
 }
