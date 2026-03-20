@@ -9,6 +9,7 @@ import { EntityManager, wrap } from '@mikro-orm/core';
 import {
   InvoiceStatus,
   InvoiceItemType,
+  OrderStatus,
   CreateInvoiceDto,
   UpdateInvoiceStatusDto,
   InvoiceListQuery,
@@ -113,6 +114,14 @@ export class InvoicesService {
       { invoiceNumber },
       { populate: ['user', 'items'] },
     );
+  }
+
+  /**
+   * Find invoice by billing order ID
+   */
+  async findByOrderId(orderId: string): Promise<Invoice | null> {
+    const em = this.em.fork();
+    return em.findOne(Invoice, { order: orderId }, { populate: ['items'] });
   }
 
   /**
@@ -280,6 +289,13 @@ export class InvoicesService {
 
     if (!order) {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
+    }
+
+    // Validate order is completed before creating a PAID invoice
+    if (order.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Cannot create invoice for order ${orderId} with status ${order.status} - order must be COMPLETED`,
+      );
     }
 
     // Check if invoice already exists for this order

@@ -14,6 +14,7 @@ import {
   RotateCcw,
   ExternalLink,
   ArrowLeft,
+  FileText,
 } from 'lucide-react';
 import { ShopOrder } from '@newmeca/shared';
 import { shopApi, ShopStats } from '@/shop/shop.api-client';
@@ -68,6 +69,9 @@ export function AdminShopOrdersPage() {
   const [refundOrderId, setRefundOrderId] = useState<string | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [processingRefund, setProcessingRefund] = useState(false);
+
+  // Invoice creation recovery
+  const [creatingInvoiceForOrderId, setCreatingInvoiceForOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -187,6 +191,19 @@ export function AdminShopOrdersPage() {
 
   const canRefund = (order: ShopOrder) => {
     return order.status === 'paid' || order.status === 'processing';
+  };
+
+  const createInvoiceForOrder = async (orderId: string) => {
+    setCreatingInvoiceForOrderId(orderId);
+    try {
+      await shopApi.adminCreateInvoiceForOrder(orderId);
+      loadData();
+    } catch (err) {
+      console.error('Error creating invoice:', err);
+      alert('Failed to create invoice. Check console for details.');
+    } finally {
+      setCreatingInvoiceForOrderId(null);
+    }
   };
 
   return (
@@ -372,15 +389,28 @@ export function AdminShopOrdersPage() {
                               <RotateCcw className="h-4 w-4" />
                             </button>
                           )}
-                          {(order as any).billingOrderId && (
+                          {order.billingOrderId ? (
                             <a
-                              href={`/dashboard/admin/billing/orders/${(order as any).billingOrderId}`}
+                              href={`/dashboard/admin/billing/orders/${order.billingOrderId}`}
                               className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded-lg transition-colors"
                               title="View Billing Order"
                             >
                               <ExternalLink className="h-4 w-4" />
                             </a>
-                          )}
+                          ) : (order.status === 'paid' || order.status === 'processing' || order.status === 'shipped' || order.status === 'delivered') ? (
+                            <button
+                              onClick={() => createInvoiceForOrder(order.id)}
+                              disabled={creatingInvoiceForOrderId === order.id}
+                              className="p-2 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-900/20 rounded-lg transition-colors disabled:opacity-50"
+                              title="Create Missing Invoice"
+                            >
+                              {creatingInvoiceForOrderId === order.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FileText className="h-4 w-4" />
+                              )}
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -409,6 +439,40 @@ export function AdminShopOrdersPage() {
               </div>
 
               <div className="p-6 space-y-6">
+                {/* Invoice Warning/Info Banner */}
+                {(selectedOrder.status === 'paid' || selectedOrder.status === 'processing' || selectedOrder.status === 'shipped' || selectedOrder.status === 'delivered') && !selectedOrder.billingOrderId && (
+                  <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-5 w-5 text-yellow-400" />
+                      <span className="text-yellow-300 text-sm font-medium">Invoice missing for this paid order</span>
+                    </div>
+                    <button
+                      onClick={() => createInvoiceForOrder(selectedOrder.id)}
+                      disabled={creatingInvoiceForOrderId === selectedOrder.id}
+                      className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {creatingInvoiceForOrderId === selectedOrder.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : null}
+                      Create Invoice
+                    </button>
+                  </div>
+                )}
+                {selectedOrder.billingOrderId && (
+                  <div className="bg-slate-700/50 rounded-lg p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-5 w-5 text-blue-400" />
+                      <span className="text-gray-300 text-sm">Billing Order: <span className="text-white font-medium">{selectedOrder.billingOrderId}</span></span>
+                    </div>
+                    <a
+                      href={`/dashboard/admin/billing/orders/${selectedOrder.billingOrderId}`}
+                      className="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1"
+                    >
+                      View <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
+
                 {/* Customer Info */}
                 <div>
                   <h3 className="text-sm font-medium text-gray-400 mb-2">Customer</h3>
