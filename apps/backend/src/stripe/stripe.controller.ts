@@ -1099,102 +1099,23 @@ export class StripeController {
 
       console.log(`Shop order ${order.orderNumber} marked as paid via Stripe payment ${paymentIntent.id}`);
 
-      // Create Order and Invoice for the shop purchase (async, non-blocking)
-      this.createShopOrderAndInvoice(paymentIntent, metadata).catch((error) => {
-        console.error('Order/Invoice creation failed for shop order (non-critical):', error);
-      });
+      // Create billing Order and Invoice for the shop purchase
+      // Pass email from Stripe metadata as fallback for guest orders
+      // Note: awaited to ensure invoice is created before webhook returns,
+      // but wrapped in try/catch so failure doesn't break the webhook response
+      try {
+        await this.shopService.createBillingOrderAndInvoice(orderId, metadata.email);
+      } catch (invoiceError) {
+        console.error(`CRITICAL: Order/Invoice creation failed for shop order ${orderId}. ` +
+          `Admin can recover via POST /api/shop/admin/orders/${orderId}/create-invoice`, invoiceError);
+      }
     } catch (error) {
       console.error('Error handling shop payment:', error);
       throw error;
     }
   }
 
-  /**
-   * Create a billing Order and Invoice from a shop payment
-   * Handles both authenticated and guest checkout
-   */
-  private async createShopOrderAndInvoice(
-    paymentIntent: Stripe.PaymentIntent,
-    metadata: Stripe.Metadata,
-  ): Promise<void> {
-    try {
-      // Get the shop order with items
-      const shopOrder = await this.shopService.findOrderById(metadata.orderId);
-
-      // Build order items from shop order items
-      const items = shopOrder.items.getItems().map((item) => ({
-        description: item.productName,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice).toFixed(2),
-        itemType: OrderItemType.SHOP_PRODUCT,
-        referenceId: item.product?.id,
-        metadata: {
-          shopOrderId: shopOrder.id,
-          productSku: item.productSku,
-        },
-      }));
-
-      // Build billing address from shop order
-      const billingAddress = shopOrder.billingAddress
-        ? {
-            name: shopOrder.billingAddress.name,
-            email: shopOrder.guestEmail || metadata.email,
-            phone: shopOrder.billingAddress.phone,
-            address1: shopOrder.billingAddress.line1,
-            address2: shopOrder.billingAddress.line2,
-            city: shopOrder.billingAddress.city,
-            state: shopOrder.billingAddress.state,
-            postalCode: shopOrder.billingAddress.postalCode,
-            country: shopOrder.billingAddress.country || 'US',
-          }
-        : undefined;
-
-      // Determine user ID and guest info
-      const userId = metadata.userId || shopOrder.user?.id;
-      const guestEmail = !userId ? (shopOrder.guestEmail || metadata.email) : undefined;
-      const guestName = !userId ? (shopOrder.guestName || shopOrder.billingAddress?.name) : undefined;
-
-      // Create the billing order with cross-reference
-      const order = await this.ordersService.createFromPayment({
-        userId,
-        guestEmail,
-        guestName,
-        orderType: OrderType.SHOP,
-        items,
-        billingAddress,
-        tax: Number(shopOrder.taxAmount).toFixed(2),
-        notes: `Shop Order: ${shopOrder.orderNumber} | Stripe: ${paymentIntent.id}`,
-        shopOrderReference: {
-          shopOrderId: shopOrder.id,
-          shopOrderNumber: shopOrder.orderNumber,
-        },
-      });
-
-      console.log(`Billing order ${order.orderNumber} created for shop order ${shopOrder.orderNumber}`);
-
-      // Update shop order with billing order reference
-      const em = this.em.fork();
-      const shopOrderToUpdate = await em.findOne('ShopOrder', { id: shopOrder.id });
-      if (shopOrderToUpdate) {
-        (shopOrderToUpdate as any).billingOrderId = order.id;
-        await em.flush();
-      }
-
-      // Create invoice from order
-      const invoice = await this.invoicesService.createFromOrder(order.id);
-      console.log(`Invoice ${invoice.invoiceNumber} created for billing order ${order.orderNumber}`);
-
-      // Send invoice email (async, non-blocking)
-      if (invoice) {
-        this.invoicesService.sendInvoice(invoice.id).catch((error) => {
-          console.error('Failed to send shop invoice email:', error);
-        });
-      }
-    } catch (error) {
-      console.error('Failed to create order/invoice for shop order:', error);
-      throw error;
-    }
-  }
+  // NOTE: createShopOrderAndInvoice() logic has been moved to ShopService.createBillingOrderAndInvoice()
 
   private async activatePendingMembershipForInvoice(
     invoiceId: string,
