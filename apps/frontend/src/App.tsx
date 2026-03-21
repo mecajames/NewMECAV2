@@ -123,6 +123,7 @@ const AdminAuditPage = lazy(() => import('@/admin/pages/AdminAuditPage'));
 const QAChecklistPage = lazy(() => import('@/admin/pages/QAChecklistPage'));
 const QARoundDetailPage = lazy(() => import('@/admin/pages/QARoundDetailPage'));
 const QAReviewPage = lazy(() => import('@/admin/pages/QAReviewPage'));
+const ScoreSheetEditorPage = lazy(() => import('@/admin/pages/ScoreSheetEditorPage'));
 
 // Lazy-loaded pages - Admin billing
 const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDashboardPage'));
@@ -343,6 +344,7 @@ function App() {
               <Route path="/admin/qa-checklist" element={<L><QAChecklistPage /></L>} />
               <Route path="/admin/qa-checklist/rounds/:roundId" element={<L><QARoundDetailPage /></L>} />
               <Route path="/admin/qa-checklist/review/:assignmentId" element={<L><QAReviewPage /></L>} />
+              <Route path="/admin/score-sheet-editor" element={<L><ScoreSheetEditorPage /></L>} />
 
               {/* Card QR Code Redirect */}
               <Route path="/card/:membershipId" element={<L><CardRedirectPage /></L>} />

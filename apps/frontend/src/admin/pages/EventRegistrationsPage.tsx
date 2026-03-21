@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ClipboardList,
@@ -17,9 +17,13 @@ import {
   Ban,
   ChevronLeft,
   ChevronRight,
+  Printer,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { usePermissions } from '@/auth';
 import { eventsApi, Event } from '@/events/events.api-client';
+import { seasonsApi, Season } from '@/seasons';
 import {
   eventRegistrationsApi,
   EventRegistration,
@@ -34,35 +38,94 @@ export default function EventRegistrationsPage() {
   // Data state
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [seasonFilter, setSeasonFilter] = useState(searchParams.get('seasonId') || '');
   const [eventFilter, setEventFilter] = useState(searchParams.get('eventId') || 'all');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
   const [paymentFilter, setPaymentFilter] = useState(searchParams.get('paymentStatus') || 'all');
   const [checkInFilter, setCheckInFilter] = useState(searchParams.get('checkedIn') || 'all');
+  const [registrationType, setRegistrationType] = useState(searchParams.get('registrationType') || 'all');
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
   const [limit] = useState(20);
 
+  // Searchable event dropdown state
+  const [eventSearchText, setEventSearchText] = useState('');
+  const [eventDropdownOpen, setEventDropdownOpen] = useState(false);
+  const eventDropdownRef = useRef<HTMLDivElement>(null);
+
   // Action state
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [scoreSheetLoading, setScoreSheetLoading] = useState(false);
+
+  const handleViewScoreSheets = async () => {
+    if (eventFilter === 'all') return;
+    setScoreSheetLoading(true);
+    try {
+      await eventRegistrationsApi.viewEventScoreSheets(eventFilter);
+    } catch (error) {
+      console.error('Error loading score sheets:', error);
+      alert('Failed to load score sheets');
+    } finally {
+      setScoreSheetLoading(false);
+    }
+  };
 
   useEffect(() => {
+    fetchSeasons();
     fetchEvents();
   }, []);
+
+  // Re-fetch events when season changes
+  useEffect(() => {
+    fetchEvents();
+    setEventFilter('all');
+    setEventSearchText('');
+  }, [seasonFilter]);
 
   useEffect(() => {
     if (!permLoading) {
       fetchRegistrations();
     }
-  }, [permLoading, eventFilter, statusFilter, paymentFilter, checkInFilter, page, searchTerm]);
+  }, [permLoading, seasonFilter, eventFilter, statusFilter, paymentFilter, checkInFilter, registrationType, page, searchTerm]);
+
+  // Close event dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (eventDropdownRef.current && !eventDropdownRef.current.contains(e.target as Node)) {
+        setEventDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchSeasons = async () => {
+    try {
+      const data = await seasonsApi.getAll();
+      setSeasons(data);
+      // Default to current season if no season selected from URL
+      if (!searchParams.get('seasonId')) {
+        const current = data.find((s: Season) => s.isCurrent || s.is_current);
+        if (current) {
+          setSeasonFilter(current.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching seasons:', error);
+    }
+  };
 
   const fetchEvents = async () => {
     try {
-      const data = await eventsApi.getAll(1, 100);
+      const data = (seasonFilter && seasonFilter !== 'all')
+        ? await eventsApi.getAllBySeason(seasonFilter)
+        : await eventsApi.getAll(1, 200);
       setEvents(data);
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -73,23 +136,14 @@ export default function EventRegistrationsPage() {
     try {
       setLoading(true);
 
-      const filters: {
-        eventId?: string;
-        status?: string;
-        paymentStatus?: string;
-        checkedIn?: boolean;
-        search?: string;
-        page: number;
-        limit: number;
-      } = {
-        page,
-        limit,
-      };
+      const filters: any = { page, limit };
 
+      if (seasonFilter && seasonFilter !== 'all') filters.seasonId = seasonFilter;
       if (eventFilter !== 'all') filters.eventId = eventFilter;
       if (statusFilter !== 'all') filters.status = statusFilter;
       if (paymentFilter !== 'all') filters.paymentStatus = paymentFilter;
       if (checkInFilter !== 'all') filters.checkedIn = checkInFilter === 'checked_in';
+      if (registrationType !== 'all') filters.registrationType = registrationType;
       if (searchTerm) filters.search = searchTerm;
 
       const result: AdminListResponse = await eventRegistrationsApi.adminList(filters);
@@ -99,10 +153,12 @@ export default function EventRegistrationsPage() {
 
       // Update URL params
       const newParams = new URLSearchParams();
+      if (seasonFilter && seasonFilter !== 'all') newParams.set('seasonId', seasonFilter);
       if (eventFilter !== 'all') newParams.set('eventId', eventFilter);
       if (statusFilter !== 'all') newParams.set('status', statusFilter);
       if (paymentFilter !== 'all') newParams.set('paymentStatus', paymentFilter);
       if (checkInFilter !== 'all') newParams.set('checkedIn', checkInFilter);
+      if (registrationType !== 'all') newParams.set('registrationType', registrationType);
       if (searchTerm) newParams.set('search', searchTerm);
       if (page > 1) newParams.set('page', String(page));
       setSearchParams(newParams);
@@ -111,12 +167,6 @@ export default function EventRegistrationsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    fetchRegistrations();
   };
 
   const handleCancel = async (id: string) => {
@@ -250,19 +300,35 @@ export default function EventRegistrationsPage() {
               Manage competitor registrations for all events
             </p>
           </div>
-          <button
-            onClick={() => navigate('/dashboard/admin')}
-            className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Back to Dashboard
-          </button>
+          <div className="flex items-center gap-3">
+            {eventFilter !== 'all' && (
+              <button
+                onClick={handleViewScoreSheets}
+                disabled={scoreSheetLoading}
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors"
+              >
+                {scoreSheetLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Printer className="h-5 w-5" />
+                )}
+                Score Sheets
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Dashboard
+            </button>
+          </div>
         </div>
 
         {/* Filters and Search */}
         <div className="bg-slate-800 rounded-lg shadow-sm p-6 mb-6">
-          <form onSubmit={handleSearch}>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               {/* Search */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -280,29 +346,87 @@ export default function EventRegistrationsPage() {
                 </div>
               </div>
 
-              {/* Event Filter */}
+              {/* Season Filter */}
               <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Season
+                </label>
+                <select
+                  value={seasonFilter}
+                  onChange={(e) => {
+                    setSeasonFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="all">All Seasons</option>
+                  {seasons.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name || s.year}{s.isCurrent || s.is_current ? ' (Current)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Event Filter - Searchable Dropdown */}
+              <div ref={eventDropdownRef} className="relative">
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Event
                 </label>
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <select
-                    value={eventFilter}
-                    onChange={(e) => {
-                      setEventFilter(e.target.value);
-                      setPage(1);
-                    }}
-                    className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none"
-                  >
-                    <option value="all">All Events</option>
-                    {events.map((event) => (
-                      <option key={event.id} value={event.id}>
-                        {event.title}
-                      </option>
-                    ))}
-                  </select>
+                <div
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg cursor-pointer flex items-center justify-between"
+                  onClick={() => setEventDropdownOpen(!eventDropdownOpen)}
+                >
+                  <span className="truncate text-sm">
+                    {eventFilter === 'all'
+                      ? 'All Events'
+                      : events.find(e => e.id === eventFilter)?.title || 'Select...'}
+                  </span>
+                  {eventFilter !== 'all' ? (
+                    <X
+                      className="h-4 w-4 text-gray-400 hover:text-white flex-shrink-0"
+                      onClick={(e) => { e.stopPropagation(); setEventFilter('all'); setEventSearchText(''); setPage(1); }}
+                    />
+                  ) : (
+                    <Filter className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
                 </div>
+                {eventDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-slate-700 border border-slate-600 rounded-lg shadow-xl max-h-64 overflow-hidden">
+                    <div className="p-2 border-b border-slate-600">
+                      <input
+                        type="text"
+                        value={eventSearchText}
+                        onChange={(e) => setEventSearchText(e.target.value)}
+                        placeholder="Type to search events..."
+                        className="w-full px-3 py-1.5 text-sm bg-slate-600 text-white placeholder-gray-400 rounded border border-slate-500 focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="overflow-y-auto max-h-48">
+                      <button
+                        type="button"
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-600 ${eventFilter === 'all' ? 'text-orange-400 bg-slate-600/50' : 'text-white'}`}
+                        onClick={() => { setEventFilter('all'); setEventDropdownOpen(false); setEventSearchText(''); setPage(1); }}
+                      >
+                        All Events
+                      </button>
+                      {events
+                        .filter(e => !eventSearchText || e.title.toLowerCase().includes(eventSearchText.toLowerCase()))
+                        .map((event) => (
+                          <button
+                            type="button"
+                            key={event.id}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-600 ${eventFilter === event.id ? 'text-orange-400 bg-slate-600/50' : 'text-white'}`}
+                            onClick={() => { setEventFilter(event.id); setEventDropdownOpen(false); setEventSearchText(''); setPage(1); }}
+                          >
+                            {event.title}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Status Filter */}
@@ -394,19 +518,49 @@ export default function EventRegistrationsPage() {
                   Not Checked In
                 </button>
               </div>
-              <button
-                type="submit"
-                className="ml-auto px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-              >
-                Search
-              </button>
+              <span className="text-sm font-medium text-gray-300 ml-6">Type:</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setRegistrationType('all'); setPage(1); }}
+                  className={`px-3 py-1 rounded-lg text-sm ${
+                    registrationType === 'all'
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRegistrationType('registrations'); setPage(1); }}
+                  className={`px-3 py-1 rounded-lg text-sm ${
+                    registrationType === 'registrations'
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Registrations
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRegistrationType('interests'); setPage(1); }}
+                  className={`px-3 py-1 rounded-lg text-sm ${
+                    registrationType === 'interests'
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Interests
+                </button>
+              </div>
             </div>
-          </form>
+          </div>
         </div>
 
         {/* Results Count */}
         <div className="mb-4 text-sm text-gray-400">
-          Showing {registrations.length} of {total} registrations
+          Showing {registrations.length} of {total} {registrationType === 'interests' ? 'interests' : registrationType === 'registrations' ? 'registrations' : 'records'}
         </div>
 
         {/* Registrations Table */}

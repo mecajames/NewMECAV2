@@ -14,10 +14,14 @@ import {
   Headers,
   UnauthorizedException,
   ForbiddenException,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { EventRegistrationsService, CreateRegistrationDto, AdminListFilters, CheckInResponse } from './event-registrations.service';
+import { ScoreSheetService } from './score-sheets/score-sheet.service';
 import { EventRegistration } from './event-registrations.entity';
 import { RegistrationStatus, PaymentStatus, UserRole } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
@@ -29,6 +33,7 @@ import { isAdminUser } from '../auth/is-admin.helper';
 export class EventRegistrationsController {
   constructor(
     private readonly eventRegistrationsService: EventRegistrationsService,
+    private readonly scoreSheetService: ScoreSheetService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -236,9 +241,11 @@ export class EventRegistrationsController {
   async adminList(
     @Headers('authorization') authHeader: string,
     @Query('eventId') eventId?: string,
+    @Query('seasonId') seasonId?: string,
     @Query('status') status?: RegistrationStatus,
     @Query('paymentStatus') paymentStatus?: PaymentStatus,
     @Query('checkedIn') checkedIn?: string,
+    @Query('registrationType') registrationType?: string,
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -246,14 +253,89 @@ export class EventRegistrationsController {
     await this.requireAdmin(authHeader);
     const filters: AdminListFilters = {
       eventId,
+      seasonId,
       status,
       paymentStatus,
       checkedIn: checkedIn !== undefined ? checkedIn === 'true' : undefined,
+      registrationType: registrationType as any,
       search,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     };
     return this.eventRegistrationsService.adminList(filters);
+  }
+
+  // ========================
+  // Score Sheet Template Editor (must be before admin/:id)
+  // ========================
+
+  @Get('admin/score-sheet-templates')
+  async getScoreSheetTemplates(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.scoreSheetService.getTemplateConfigs();
+  }
+
+  @Get('admin/score-sheet-image/:key')
+  async getScoreSheetTemplateImage(
+    @Headers('authorization') authHeader: string,
+    @Param('key') key: string,
+    @Res() res: Response,
+  ) {
+    await this.requireAdmin(authHeader);
+    const image = this.scoreSheetService.getTemplateImage(key);
+    if (!image) {
+      res.status(404).json({ message: 'Template not found' });
+      return;
+    }
+    res.set({ 'Content-Type': 'image/png', 'Content-Length': String(image.length) });
+    res.end(image);
+  }
+
+  @Put('admin/score-sheet-coords/:key')
+  async saveScoreSheetCoords(
+    @Headers('authorization') authHeader: string,
+    @Param('key') key: string,
+    @Body() coords: any,
+  ) {
+    await this.requireAdmin(authHeader);
+    this.scoreSheetService.saveTemplateCoords(key, coords);
+    return { success: true };
+  }
+
+  @Post('admin/score-sheet-upload')
+  @UseInterceptors(FileInterceptor('image'))
+  async uploadScoreSheetTemplate(
+    @Headers('authorization') authHeader: string,
+    @UploadedFile() file: any,
+    @Body('key') key: string,
+    @Body('name') name: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    if (!file || !key) {
+      return { success: false, message: 'Image file and template key are required' };
+    }
+    this.scoreSheetService.uploadTemplateImage(key, file.buffer, name);
+    return { success: true, key };
+  }
+
+  @Get('admin/score-sheet-mappings')
+  async getScoreSheetMappings(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.scoreSheetService.getMappings();
+  }
+
+  @Put('admin/score-sheet-mappings')
+  async saveScoreSheetMappings(
+    @Headers('authorization') authHeader: string,
+    @Body() mappings: any,
+  ) {
+    await this.requireAdmin(authHeader);
+    this.scoreSheetService.saveMappings(mappings);
+    return { success: true };
   }
 
   @Get('admin/:id')
@@ -299,6 +381,51 @@ export class EventRegistrationsController {
   ): Promise<EventRegistration[]> {
     await this.requireAdmin(authHeader);
     return this.eventRegistrationsService.findByEvent(eventId);
+  }
+
+  // ========================
+  // Score Sheet Endpoints
+  // ========================
+
+  @Get('admin/event/:eventId/score-sheets')
+  async getEventScoreSheets(
+    @Headers('authorization') authHeader: string,
+    @Param('eventId') eventId: string,
+    @Query('format') format: string | undefined,
+    @Res() res: Response,
+  ) {
+    await this.requireAdmin(authHeader);
+    const pdf = await this.scoreSheetService.generateForEvent(eventId, format);
+    const filename = format
+      ? `score-sheets-event-${eventId.slice(0, 8)}-${format}.pdf`
+      : `score-sheets-event-${eventId.slice(0, 8)}.pdf`;
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': pdf.length,
+    });
+    res.end(pdf);
+  }
+
+  @Get('admin/:id/score-sheets')
+  async getRegistrationScoreSheets(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    await this.requireAdmin(authHeader);
+    try {
+      const pdf = await this.scoreSheetService.generateForRegistration(id);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="score-sheets-${id.slice(0, 8)}.pdf"`,
+        'Content-Length': String(pdf.length),
+      });
+      res.end(pdf);
+    } catch (err: any) {
+      console.error('Score sheet generation error:', err?.message, err?.stack);
+      res.status(err?.status || 500).json({ message: err?.message || 'Score sheet generation failed' });
+    }
   }
 
   // ========================

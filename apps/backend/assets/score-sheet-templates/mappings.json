@@ -1,0 +1,36 @@
+{
+  "classNameRules": [
+    { "pattern": "Dueling Demos", "template": "dd", "priority": 1 },
+    { "pattern": "Install", "template": "install", "priority": 2 },
+    { "pattern": "Park and Pound", "template": "spl", "priority": 3 },
+    { "pattern": "Park And Pound", "template": "spl", "priority": 4 },
+    { "pattern": "Music Authority", "template": "music-authority", "priority": 5 }
+  ],
+  "formatRules": [
+    { "pattern": "Show and Shine", "template": "ss" },
+    { "pattern": "Show & Shine", "template": "ss" },
+    { "pattern": "Ride the Light", "template": "rtl" },
+    { "pattern": "RTL", "template": "rtl" },
+    { "pattern": "SQL", "template": "sq" },
+    { "pattern": "SQ", "template": "sq" },
+    { "pattern": "Sound Quality", "template": "sq" },
+    { "pattern": "SPL", "template": "spl" },
+    { "pattern": "Sound Pressure", "template": "spl" }
+  ],
+  "mecaKidsRules": [
+    { "pattern": "Dueling", "template": "dd" },
+    { "pattern": "Demo", "template": "dd" },
+    { "pattern": "Sound Pressure", "template": "spl" },
+    { "pattern": "Park", "template": "spl" },
+    { "pattern": "Pound", "template": "spl" },
+    { "pattern": "SPL", "template": "spl" },
+    { "pattern": "Show", "template": "ss" },
+    { "pattern": "Shine", "template": "ss" }
+  ],
+  "defaultTemplate": "spl",
+  "worldFinals": {
+    "classNameRules": [],
+    "formatRules": [],
+    "defaultTemplate": "spl"
+  }
+}

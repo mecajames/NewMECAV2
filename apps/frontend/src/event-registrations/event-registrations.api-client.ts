@@ -230,18 +230,22 @@ export const eventRegistrationsApi = {
   // Admin methods
   adminList: async (filters: {
     eventId?: string;
+    seasonId?: string;
     status?: string;
     paymentStatus?: string;
     checkedIn?: boolean;
+    registrationType?: string;
     search?: string;
     page?: number;
     limit?: number;
   }): Promise<AdminListResponse> => {
     const params = new URLSearchParams();
     if (filters.eventId) params.append('eventId', filters.eventId);
+    if (filters.seasonId) params.append('seasonId', filters.seasonId);
     if (filters.status) params.append('status', filters.status);
     if (filters.paymentStatus) params.append('paymentStatus', filters.paymentStatus);
     if (filters.checkedIn !== undefined) params.append('checkedIn', String(filters.checkedIn));
+    if (filters.registrationType) params.append('registrationType', filters.registrationType);
     if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', String(filters.page));
     if (filters.limit) params.append('limit', String(filters.limit));
@@ -289,5 +293,25 @@ export const eventRegistrationsApi = {
   checkInterest: async (eventId: string, userId: string): Promise<{ interested: boolean }> => {
     const response = await axios.get(`/api/event-registrations/interest/check?eventId=${eventId}&userId=${userId}`);
     return response.data;
+  },
+
+  // Score sheet methods - opens PDF in new tab for preview/print
+  viewScoreSheets: async (registrationId: string): Promise<void> => {
+    const response = await axios.get(`/api/event-registrations/admin/${registrationId}/score-sheets`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  },
+
+  viewEventScoreSheets: async (eventId: string, format?: string): Promise<void> => {
+    const params = format ? `?format=${encodeURIComponent(format)}` : '';
+    const response = await axios.get(`/api/event-registrations/admin/event/${eventId}/score-sheets${params}`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   },
 };

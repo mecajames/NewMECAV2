@@ -174,6 +174,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/check-in',
         },
         {
+          icon: FileText,
+          title: 'Score Sheet Editor',
+          description: 'Position fields on score sheet templates',
+          action: 'score-sheet-editor',
+          color: 'orange',
+          navigateTo: '/admin/score-sheet-editor',
+        },
+        {
           icon: Trophy,
           title: 'SPL World Records',
           description: 'Manage SPL world record holders per class',
