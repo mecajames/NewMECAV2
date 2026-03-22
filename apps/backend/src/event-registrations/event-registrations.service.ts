@@ -49,9 +49,11 @@ export interface RegistrationPricing {
 
 export interface AdminListFilters {
   eventId?: string;
+  seasonId?: string;
   status?: RegistrationStatus;
   paymentStatus?: PaymentStatus;
   checkedIn?: boolean;
+  registrationType?: 'registrations' | 'interests';
   search?: string;
   page?: number;
   limit?: number;
@@ -499,8 +501,24 @@ export class EventRegistrationsService {
     if (filters.eventId) {
       where.event = filters.eventId;
     }
+    // Season filter: find events in the season, then filter registrations by those events
+    if (filters.seasonId && !filters.eventId) {
+      const seasonEvents = await em.find(Event, { season: filters.seasonId }, { fields: ['id'] });
+      const eventIds = seasonEvents.map(e => e.id);
+      if (eventIds.length > 0) {
+        where.event = { $in: eventIds };
+      } else {
+        return { registrations: [], total: 0, page, limit, totalPages: 0 };
+      }
+    }
     if (filters.status) {
       where.registrationStatus = filters.status;
+    }
+    // Registration type filter
+    if (filters.registrationType === 'registrations') {
+      where.registrationStatus = { $ne: RegistrationStatus.INTERESTED };
+    } else if (filters.registrationType === 'interests') {
+      where.registrationStatus = RegistrationStatus.INTERESTED;
     }
     if (filters.paymentStatus) {
       where.paymentStatus = filters.paymentStatus;

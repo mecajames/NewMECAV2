@@ -16,6 +16,7 @@ import {
   CreditCard,
   Loader2,
   AlertCircle,
+  Printer,
 } from 'lucide-react';
 import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
 
@@ -27,6 +28,20 @@ export default function EventRegistrationDetailPage() {
   const [qrData, setQrData] = useState<{ checkInCode: string; qrCodeData: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scoreSheetLoading, setScoreSheetLoading] = useState(false);
+
+  const handleViewScoreSheets = async () => {
+    if (!id) return;
+    setScoreSheetLoading(true);
+    try {
+      await eventRegistrationsApi.viewScoreSheets(id);
+    } catch (err) {
+      console.error('Error loading score sheets:', err);
+      alert('Failed to load score sheets');
+    } finally {
+      setScoreSheetLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -166,13 +181,27 @@ export default function EventRegistrationDetailPage() {
               {getPaymentBadge(registration.paymentStatus)}
             </div>
           </div>
-          <button
-            onClick={() => navigate('/admin/event-registrations')}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Back to Registrations
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleViewScoreSheets}
+              disabled={scoreSheetLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors"
+            >
+              {scoreSheetLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Printer className="h-5 w-5" />
+              )}
+              Score Sheets
+            </button>
+            <button
+              onClick={() => navigate('/admin/event-registrations')}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Registrations
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
