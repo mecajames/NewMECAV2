@@ -284,7 +284,7 @@ export class EventRegistrationsController {
     @Res() res: Response,
   ) {
     await this.requireAdmin(authHeader);
-    const image = this.scoreSheetService.getTemplateImage(key);
+    const image = await this.scoreSheetService.getTemplateImage(key);
     if (!image) {
       res.status(404).json({ message: 'Template not found' });
       return;
