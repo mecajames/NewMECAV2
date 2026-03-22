@@ -300,7 +300,7 @@ export class EventRegistrationsController {
     @Body() coords: any,
   ) {
     await this.requireAdmin(authHeader);
-    this.scoreSheetService.saveTemplateCoords(key, coords);
+    await this.scoreSheetService.saveTemplateCoords(key, coords);
     return { success: true };
   }
 
@@ -316,7 +316,7 @@ export class EventRegistrationsController {
     if (!file || !key) {
       return { success: false, message: 'Image file and template key are required' };
     }
-    this.scoreSheetService.uploadTemplateImage(key, file.buffer, name);
+    await this.scoreSheetService.uploadTemplateImage(key, file.buffer, name);
     return { success: true, key };
   }
 
@@ -334,7 +334,7 @@ export class EventRegistrationsController {
     @Body() mappings: any,
   ) {
     await this.requireAdmin(authHeader);
-    this.scoreSheetService.saveMappings(mappings);
+    await this.scoreSheetService.saveMappings(mappings);
     return { success: true };
   }
 

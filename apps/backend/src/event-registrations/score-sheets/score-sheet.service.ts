@@ -9,8 +9,8 @@ import { Event } from '../../events/events.entity';
 import { Profile } from '../../profiles/profiles.entity';
 import { TeamMember } from '../../teams/team-member.entity';
 import { Team } from '../../teams/team.entity';
-
-type TemplateKey = 'dd' | 'install' | 'music-authority' | 'rtl' | 'sq' | 'ss' | 'spl';
+import { ScoreSheetTemplate } from './score-sheet-template.entity';
+import { ScoreSheetConfig } from './score-sheet-config.entity';
 
 const TEMPLATE_FILES: Record<string, string> = {
   dd: 'dd.png',
@@ -32,18 +32,6 @@ const TEMPLATE_NAMES: Record<string, string> = {
   'music-authority': 'Music Authority',
 };
 
-// PDF page dimensions (US Letter)
-const PAGE_WIDTH = 612;
-const PAGE_HEIGHT = 792;
-
-// Template PNG dimensions
-const PNG_W = 1545;
-const PNG_H = 2000;
-
-// Convert PNG pixel coords to PDF points
-const toPdfX = (pngX: number) => (pngX / PNG_W) * PAGE_WIDTH;
-const toPdfY = (pngY: number) => PAGE_HEIGHT - ((pngY / PNG_H) * PAGE_HEIGHT);
-
 export interface FieldCoord {
   x: number;
   y: number;
@@ -62,6 +50,36 @@ export interface TemplateCoords {
   state: FieldCoord;
   phone: FieldCoord;
 }
+
+export interface MappingRule {
+  pattern: string;
+  template: string;
+  priority?: number;
+}
+
+export interface TemplateMappings {
+  classNameRules: MappingRule[];
+  formatRules: MappingRule[];
+  mecaKidsRules: MappingRule[];
+  defaultTemplate: string;
+  worldFinals: {
+    classNameRules: MappingRule[];
+    formatRules: MappingRule[];
+    defaultTemplate: string;
+  };
+}
+
+// PDF page dimensions (US Letter)
+const PAGE_WIDTH = 612;
+const PAGE_HEIGHT = 792;
+
+// Template PNG dimensions
+const PNG_W = 1545;
+const PNG_H = 2000;
+
+// Convert PNG pixel coords to PDF points
+const toPdfX = (pngX: number) => (pngX / PNG_W) * PAGE_WIDTH;
+const toPdfY = (pngY: number) => PAGE_HEIGHT - ((pngY / PNG_H) * PAGE_HEIGHT);
 
 // Default font sizes per field type
 const DEFAULT_FONT_SIZES: Record<keyof TemplateCoords, number> = {
@@ -90,144 +108,192 @@ const DEFAULT_COORDS: TemplateCoords = {
   phone: { x: 870, y: 1966, fontSize: 14 },
 };
 
-export interface MappingRule {
-  pattern: string;
-  template: string;
-  priority?: number;
-}
-
-export interface TemplateMappings {
-  classNameRules: MappingRule[];
-  formatRules: MappingRule[];
-  mecaKidsRules: MappingRule[];
-  defaultTemplate: string;
-  worldFinals: {
-    classNameRules: MappingRule[];
-    formatRules: MappingRule[];
-    defaultTemplate: string;
-  };
-}
+const DEFAULT_MAPPINGS: TemplateMappings = {
+  classNameRules: [],
+  formatRules: [],
+  mecaKidsRules: [],
+  defaultTemplate: 'spl',
+  worldFinals: { classNameRules: [], formatRules: [], defaultTemplate: 'spl' },
+};
 
 @Injectable()
 export class ScoreSheetService implements OnModuleInit {
   private readonly logger = new Logger(ScoreSheetService.name);
-  private templateCache = new Map<string, Uint8Array>();
-  private coordsMap = new Map<string, TemplateCoords>();
-  private mappings!: TemplateMappings;
-  private assetsDir: string;
+
+  // In-memory cache loaded from DB on startup, refreshed on writes
+  private templateCache = new Map<string, { imageData: Buffer; coords: TemplateCoords; displayName: string }>();
+  private mappings: TemplateMappings = DEFAULT_MAPPINGS;
 
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
-  ) {
-    this.assetsDir = path.join(__dirname, '..', '..', '..', 'assets', 'score-sheet-templates');
-  }
+  ) {}
 
   async onModuleInit() {
-    this.loadTemplates();
-    this.loadCoords();
-    this.loadMappings();
+    await this.seedFromAssetsIfEmpty();
+    await this.loadFromDatabase();
   }
 
-  private loadTemplates() {
+  /**
+   * On first startup (or after migration), seed the database from filesystem assets
+   * if the tables are empty. This is a one-time operation — once data is in the DB,
+   * the assets directory is no longer needed.
+   */
+  private async seedFromAssetsIfEmpty() {
+    const em = this.em.fork();
+
+    const templateCount = await em.count(ScoreSheetTemplate, {});
+    if (templateCount > 0) return; // Already seeded
+
+    // Find the assets directory
+    const possibleDirs = [
+      path.join(__dirname, '..', '..', '..', 'assets', 'score-sheet-templates'),
+      path.join(__dirname, '..', '..', 'assets', 'score-sheet-templates'),
+      path.join(process.cwd(), 'assets', 'score-sheet-templates'),
+    ];
+
+    let assetsDir: string | null = null;
+    for (const dir of possibleDirs) {
+      if (fs.existsSync(dir)) {
+        assetsDir = dir;
+        break;
+      }
+    }
+
+    if (!assetsDir) {
+      this.logger.warn('No score sheet assets directory found for seeding. Templates must be uploaded via admin UI.');
+      return;
+    }
+
+    this.logger.log(`Seeding score sheet templates from ${assetsDir}`);
+
+    // Load coords
+    let coordsData: Record<string, any> = {};
+    const coordsPath = path.join(assetsDir, 'coords.json');
+    if (fs.existsSync(coordsPath)) {
+      coordsData = JSON.parse(fs.readFileSync(coordsPath, 'utf-8'));
+    }
+
+    // Seed templates
     for (const [key, filename] of Object.entries(TEMPLATE_FILES)) {
-      const filePath = path.join(this.assetsDir, filename);
-      try {
-        const data = fs.readFileSync(filePath);
-        this.templateCache.set(key, new Uint8Array(data));
-        this.logger.log(`Loaded score sheet template: ${filename}`);
-      } catch (err) {
-        this.logger.warn(`Could not load score sheet template ${filename}: ${err}`);
+      const filePath = path.join(assetsDir, filename);
+      if (fs.existsSync(filePath)) {
+        const imageBuffer = fs.readFileSync(filePath);
+        const coords = coordsData[key] ? { ...DEFAULT_COORDS, ...coordsData[key] } : DEFAULT_COORDS;
+
+        const template = new ScoreSheetTemplate();
+        template.templateKey = key;
+        template.displayName = TEMPLATE_NAMES[key] || key;
+        template.imageData = imageBuffer;
+        template.coords = coords as any;
+        em.persist(template);
+
+        this.logger.log(`Seeded template: ${key} (${imageBuffer.length} bytes)`);
       }
     }
-  }
 
-  private loadCoords() {
-    const coordsPath = path.join(this.assetsDir, 'coords.json');
-    try {
-      const raw = fs.readFileSync(coordsPath, 'utf-8');
-      const data = JSON.parse(raw);
-      for (const [key, coords] of Object.entries(data)) {
-        this.coordsMap.set(key, { ...DEFAULT_COORDS, ...(coords as any) });
+    // Seed mappings
+    const mappingCount = await em.count(ScoreSheetConfig, {});
+    if (mappingCount === 0) {
+      let mappingsData: any = DEFAULT_MAPPINGS;
+      const mappingsPath = path.join(assetsDir, 'mappings.json');
+      if (fs.existsSync(mappingsPath)) {
+        mappingsData = JSON.parse(fs.readFileSync(mappingsPath, 'utf-8'));
       }
-      this.logger.log(`Loaded score sheet coordinates for ${this.coordsMap.size} templates`);
-    } catch (err) {
-      this.logger.warn(`Could not load coords.json, using defaults: ${err}`);
+
+      const config = new ScoreSheetConfig();
+      config.configKey = 'mappings';
+      config.configValue = mappingsData;
+      em.persist(config);
+
+      this.logger.log('Seeded score sheet mappings');
     }
+
+    await em.flush();
+    this.logger.log('Score sheet database seeding complete');
   }
 
-  private loadMappings() {
-    const mappingsPath = path.join(this.assetsDir, 'mappings.json');
-    try {
-      const raw = fs.readFileSync(mappingsPath, 'utf-8');
-      this.mappings = JSON.parse(raw);
-      this.logger.log(`Loaded score sheet mappings`);
-    } catch (err) {
-      this.logger.warn(`Could not load mappings.json, using defaults: ${err}`);
-      this.mappings = {
-        classNameRules: [],
-        formatRules: [],
-        mecaKidsRules: [],
-        defaultTemplate: 'spl',
-        worldFinals: { classNameRules: [], formatRules: [], defaultTemplate: 'spl' },
-      };
-    }
-  }
+  private async loadFromDatabase() {
+    const em = this.em.fork();
 
-  private getCoordsForTemplate(key: string): TemplateCoords {
-    return this.coordsMap.get(key) || DEFAULT_COORDS;
+    // Load all templates
+    const templates = await em.find(ScoreSheetTemplate, {});
+    this.templateCache.clear();
+    for (const t of templates) {
+      this.templateCache.set(t.templateKey, {
+        imageData: Buffer.isBuffer(t.imageData) ? t.imageData : Buffer.from(t.imageData),
+        coords: { ...DEFAULT_COORDS, ...(t.coords as any) },
+        displayName: t.displayName,
+      });
+    }
+    this.logger.log(`Loaded ${templates.length} score sheet templates from database`);
+
+    // Load mappings
+    const mappingConfig = await em.findOne(ScoreSheetConfig, { configKey: 'mappings' });
+    if (mappingConfig) {
+      this.mappings = mappingConfig.configValue as any;
+      this.logger.log('Loaded score sheet mappings from database');
+    } else {
+      this.mappings = DEFAULT_MAPPINGS;
+      this.logger.warn('No score sheet mappings found in database, using defaults');
+    }
   }
 
   // ---- Public API for template editor ----
 
-  getTemplateList(): string[] {
-    return [...this.templateCache.keys()];
-  }
-
   getTemplateConfigs(): Array<{ key: string; name: string; coords: TemplateCoords }> {
-    const keys = new Set([...Object.keys(TEMPLATE_FILES), ...this.templateCache.keys()]);
-    return [...keys].map(key => ({
+    return [...this.templateCache.entries()].map(([key, data]) => ({
       key,
-      name: TEMPLATE_NAMES[key] || key,
-      coords: this.getCoordsForTemplate(key),
+      name: data.displayName,
+      coords: data.coords,
     }));
   }
 
-  getTemplateImage(key: string): Uint8Array | null {
-    return this.templateCache.get(key) || null;
+  getTemplateImage(key: string): Buffer | null {
+    const entry = this.templateCache.get(key);
+    return entry ? entry.imageData : null;
   }
 
-  saveTemplateCoords(key: string, coords: TemplateCoords) {
-    this.coordsMap.set(key, coords);
-
-    // Persist to JSON file
-    const coordsPath = path.join(this.assetsDir, 'coords.json');
-    const allCoords: Record<string, TemplateCoords> = {};
-    for (const [k, v] of this.coordsMap.entries()) {
-      allCoords[k] = v;
+  async saveTemplateCoords(key: string, coords: TemplateCoords) {
+    const em = this.em.fork();
+    const template = await em.findOne(ScoreSheetTemplate, { templateKey: key });
+    if (!template) {
+      throw new NotFoundException(`Template '${key}' not found`);
     }
-    fs.writeFileSync(coordsPath, JSON.stringify(allCoords, null, 2));
+    template.coords = coords as any;
+    await em.flush();
+
+    // Update cache
+    const cached = this.templateCache.get(key);
+    if (cached) {
+      cached.coords = { ...DEFAULT_COORDS, ...coords };
+    }
     this.logger.log(`Saved coordinates for template: ${key}`);
   }
 
-  uploadTemplateImage(key: string, imageBuffer: Buffer, displayName?: string) {
-    // Save image to assets directory
-    const filename = `${key}.png`;
-    const filePath = path.join(this.assetsDir, filename);
-    fs.writeFileSync(filePath, imageBuffer);
+  async uploadTemplateImage(key: string, imageBuffer: Buffer, displayName?: string) {
+    const em = this.em.fork();
+    let template = await em.findOne(ScoreSheetTemplate, { templateKey: key });
 
-    // Update caches
-    this.templateCache.set(key, new Uint8Array(imageBuffer));
-    TEMPLATE_FILES[key] = filename;
-    if (displayName) {
-      TEMPLATE_NAMES[key] = displayName;
+    if (template) {
+      template.imageData = imageBuffer;
+      if (displayName) template.displayName = displayName;
+    } else {
+      template = new ScoreSheetTemplate();
+      template.templateKey = key;
+      template.displayName = displayName || key;
+      template.imageData = imageBuffer;
+      template.coords = DEFAULT_COORDS as any;
+      em.persist(template);
     }
+    await em.flush();
 
-    // Initialize default coords if new template
-    if (!this.coordsMap.has(key)) {
-      this.coordsMap.set(key, { ...DEFAULT_COORDS });
-      this.saveTemplateCoords(key, DEFAULT_COORDS);
-    }
+    // Update cache
+    this.templateCache.set(key, {
+      imageData: imageBuffer,
+      coords: template.coords ? { ...DEFAULT_COORDS, ...(template.coords as any) } : { ...DEFAULT_COORDS },
+      displayName: template.displayName,
+    });
 
     this.logger.log(`Uploaded template image: ${key} (${imageBuffer.length} bytes)`);
   }
@@ -236,11 +302,22 @@ export class ScoreSheetService implements OnModuleInit {
     return this.mappings;
   }
 
-  saveMappings(mappings: TemplateMappings) {
+  async saveMappings(mappings: TemplateMappings) {
+    const em = this.em.fork();
+    let config = await em.findOne(ScoreSheetConfig, { configKey: 'mappings' });
+
+    if (config) {
+      config.configValue = mappings as any;
+    } else {
+      config = new ScoreSheetConfig();
+      config.configKey = 'mappings';
+      config.configValue = mappings as any;
+      em.persist(config);
+    }
+    await em.flush();
+
     this.mappings = mappings;
-    const mappingsPath = path.join(this.assetsDir, 'mappings.json');
-    fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2));
-    this.logger.log('Saved score sheet mappings');
+    this.logger.log('Saved score sheet mappings to database');
   }
 
   // ---- Template resolution ----
@@ -249,7 +326,6 @@ export class ScoreSheetService implements OnModuleInit {
     const cn = className.toLowerCase();
     const fmt = format.toLowerCase();
 
-    // Use world finals rules if applicable
     const rules = isWorldFinals && this.mappings.worldFinals
       ? this.mappings.worldFinals
       : this.mappings;
@@ -376,8 +452,8 @@ export class ScoreSheetService implements OnModuleInit {
       if (!templateData) throw new Error('No score sheet templates loaded');
     }
 
-    const coords = this.getCoordsForTemplate(templateKey);
-    const pngImage = await pdfDoc.embedPng(templateData);
+    const coords = templateData.coords;
+    const pngImage = await pdfDoc.embedPng(new Uint8Array(templateData.imageData));
     const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     page.drawImage(pngImage, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
 
