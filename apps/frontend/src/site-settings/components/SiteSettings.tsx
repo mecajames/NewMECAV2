@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, Eye, EyeOff, CreditCard } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, Eye, EyeOff, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
+
+interface HeroSlide {
+  url: string;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+  buttonUrl: string;
+}
 import { useAuth } from '@/auth';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { mediaFilesApi, MediaFile } from '@/media-files';
@@ -38,7 +46,7 @@ export default function SiteSettings() {
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   const [formData, setFormData] = useState({
-    hero_image_urls: [] as string[],
+    hero_image_urls: [] as HeroSlide[],
     hero_title: '',
     hero_subtitle: '',
     hero_button_text: '',
@@ -120,16 +128,22 @@ export default function SiteSettings() {
         settingsMap[setting.setting_key] = setting.setting_value;
       });
 
-      // Parse hero_image_urls as JSON array
-      let imageUrls: string[] = [];
+      // Parse hero_image_urls as JSON array of HeroSlide objects (backward compat with string[])
+      let heroSlides: HeroSlide[] = [];
       try {
         const urlsValue = settingsMap['hero_image_urls'] || '[]';
-        imageUrls = JSON.parse(urlsValue);
-        if (!Array.isArray(imageUrls)) {
-          imageUrls = [urlsValue];
+        const parsed = JSON.parse(urlsValue);
+        if (Array.isArray(parsed)) {
+          heroSlides = parsed.map((item: any) =>
+            typeof item === 'string'
+              ? { url: item, title: '', subtitle: '', buttonText: '', buttonUrl: '' }
+              : { url: item.url || '', title: item.title || '', subtitle: item.subtitle || '', buttonText: item.buttonText || '', buttonUrl: item.buttonUrl || '' }
+          );
         }
       } catch {
-        imageUrls = settingsMap['hero_image_urls'] ? [settingsMap['hero_image_urls']] : [];
+        if (settingsMap['hero_image_urls']) {
+          heroSlides = [{ url: settingsMap['hero_image_urls'], title: '', subtitle: '', buttonText: '', buttonUrl: '' }];
+        }
       }
 
       // Helper to parse JSON arrays safely
@@ -144,7 +158,7 @@ export default function SiteSettings() {
       };
 
       setFormData({
-        hero_image_urls: imageUrls,
+        hero_image_urls: heroSlides,
         hero_title: settingsMap['hero_title'] || 'MECACARAUDIO.COM',
         hero_subtitle: settingsMap['hero_subtitle'] || 'The Premier Platform for Car Audio Competition Management',
         hero_button_text: settingsMap['hero_button_text'] || 'View Events',
@@ -321,22 +335,44 @@ export default function SiteSettings() {
     }
   };
 
+  const [expandedSlides, setExpandedSlides] = useState<Set<number>>(new Set());
+
+  const toggleSlideExpanded = (index: number) => {
+    setExpandedSlides(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
   const addImageUrl = () => {
     setFormData({
       ...formData,
-      hero_image_urls: [...formData.hero_image_urls, '']
+      hero_image_urls: [...formData.hero_image_urls, { url: '', title: '', subtitle: '', buttonText: '', buttonUrl: '' }]
     });
   };
 
   const updateImageUrl = (index: number, url: string) => {
-    const newUrls = [...formData.hero_image_urls];
-    newUrls[index] = url;
-    setFormData({ ...formData, hero_image_urls: newUrls });
+    const newSlides = [...formData.hero_image_urls];
+    newSlides[index] = { ...newSlides[index], url };
+    setFormData({ ...formData, hero_image_urls: newSlides });
+  };
+
+  const updateSlideField = (index: number, field: keyof HeroSlide, value: string) => {
+    const newSlides = [...formData.hero_image_urls];
+    newSlides[index] = { ...newSlides[index], [field]: value };
+    setFormData({ ...formData, hero_image_urls: newSlides });
   };
 
   const removeImageUrl = (index: number) => {
-    const newUrls = formData.hero_image_urls.filter((_, i) => i !== index);
-    setFormData({ ...formData, hero_image_urls: newUrls });
+    const newSlides = formData.hero_image_urls.filter((_, i) => i !== index);
+    setFormData({ ...formData, hero_image_urls: newSlides });
+    setExpandedSlides(prev => {
+      const next = new Set<number>();
+      prev.forEach(i => { if (i < index) next.add(i); else if (i > index) next.add(i - 1); });
+      return next;
+    });
   };
 
   const selectMedia = (url: string) => {
@@ -345,7 +381,7 @@ export default function SiteSettings() {
     } else {
       setFormData({
         ...formData,
-        hero_image_urls: [...formData.hero_image_urls, url]
+        hero_image_urls: [...formData.hero_image_urls, { url, title: '', subtitle: '', buttonText: '', buttonUrl: '' }]
       });
     }
     setShowMediaPicker(false);
@@ -624,47 +660,117 @@ export default function SiteSettings() {
           </p>
 
           <div className="space-y-3">
-            {formData.hero_image_urls.map((url, index) => (
-              <div key={index} className="flex gap-2">
-                <input
-                  type="url"
-                  value={url}
-                  onChange={(e) => updateImageUrl(index, e.target.value)}
-                  placeholder="https://example.com/image.jpg"
-                  className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-                <button
-                  onClick={() => openMediaPicker(index)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
-                  title="Choose from Media Library"
-                >
-                  <ImageIcon className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => removeImageUrl(index)}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
-                  title="Remove Image"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            ))}
+            {formData.hero_image_urls.map((slide, index) => {
+              const hasCustomContent = !!(slide.title || slide.subtitle || slide.buttonText || slide.buttonUrl);
+              const isExpanded = expandedSlides.has(index);
+              return (
+                <div key={index} className="bg-slate-700/30 rounded-lg border border-slate-600/50">
+                  <div className="flex gap-2 p-2">
+                    <span className="flex items-center text-xs text-gray-500 font-mono w-6 justify-center">{index + 1}</span>
+                    <input
+                      type="url"
+                      value={slide.url}
+                      onChange={(e) => updateImageUrl(index, e.target.value)}
+                      placeholder="https://example.com/image.jpg"
+                      className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    <button
+                      onClick={() => openMediaPicker(index)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                      title="Choose from Media Library"
+                    >
+                      <ImageIcon className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => removeImageUrl(index)}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+                      title="Remove Image"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => toggleSlideExpanded(index)}
+                    className="w-full flex items-center gap-2 px-4 py-1.5 text-xs hover:bg-slate-700/50 transition-colors rounded-b-lg"
+                  >
+                    {isExpanded ? <ChevronUp className="h-3 w-3 text-gray-400" /> : <ChevronDown className="h-3 w-3 text-gray-400" />}
+                    <span className={hasCustomContent ? 'text-orange-400 font-medium' : 'text-gray-500'}>
+                      {hasCustomContent ? 'Custom slide content (active)' : 'Custom slide content (optional)'}
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 pt-1 space-y-2 border-t border-slate-600/30">
+                      <p className="text-xs text-gray-500">Leave blank to use the default title, subtitle, and button below.</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-400">Title</label>
+                          <input
+                            type="text"
+                            value={slide.title}
+                            onChange={(e) => updateSlideField(index, 'title', e.target.value)}
+                            placeholder={formData.hero_title || 'Use default'}
+                            className="w-full px-3 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400">Subtitle</label>
+                          <input
+                            type="text"
+                            value={slide.subtitle}
+                            onChange={(e) => updateSlideField(index, 'subtitle', e.target.value)}
+                            placeholder={formData.hero_subtitle || 'Use default'}
+                            className="w-full px-3 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400">Button Text</label>
+                          <input
+                            type="text"
+                            value={slide.buttonText}
+                            onChange={(e) => updateSlideField(index, 'buttonText', e.target.value)}
+                            placeholder={formData.hero_button_text || 'Use default'}
+                            className="w-full px-3 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400">Button URL</label>
+                          <input
+                            type="text"
+                            value={slide.buttonUrl}
+                            onChange={(e) => updateSlideField(index, 'buttonUrl', e.target.value)}
+                            placeholder="/events"
+                            className="w-full px-3 py-1.5 text-sm bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {formData.hero_image_urls.length > 0 && (
             <div className="mt-4">
               <p className="text-sm text-gray-400 mb-2">Preview:</p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {formData.hero_image_urls.filter(url => url).map((url, index) => (
-                  <img
-                    key={index}
-                    src={url}
-                    alt={`Hero preview ${index + 1}`}
-                    className="w-full h-32 object-cover rounded-lg"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://via.placeholder.com/1920x1080?text=Image+Not+Found';
-                    }}
-                  />
+                {formData.hero_image_urls.filter(s => s.url).map((slide, index) => (
+                  <div key={index} className="relative">
+                    <img
+                      src={slide.url}
+                      alt={`Hero preview ${index + 1}`}
+                      className="w-full h-32 object-cover rounded-lg"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://via.placeholder.com/1920x1080?text=Image+Not+Found';
+                      }}
+                    />
+                    {(slide.title || slide.buttonText) && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-2 py-1 rounded-b-lg">
+                        <p className="text-white text-[10px] truncate">{slide.title || 'Default title'}</p>
+                        {slide.buttonText && <p className="text-orange-400 text-[10px] truncate">{slide.buttonText}</p>}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -706,9 +812,14 @@ export default function SiteSettings() {
           </div>
         </div>
 
+        <div className="border-t border-slate-700 pt-4">
+          <h4 className="text-sm font-semibold text-gray-300 mb-3">Default Hero Content</h4>
+          <p className="text-xs text-gray-500 mb-4">These values are used for all slides unless a slide has custom content set above.</p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            Hero Title
+            Default Title
           </label>
           <input
             type="text"
@@ -720,7 +831,7 @@ export default function SiteSettings() {
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            Hero Subtitle
+            Default Subtitle
           </label>
           <input
             type="text"
@@ -732,7 +843,7 @@ export default function SiteSettings() {
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            Hero Button Text
+            Default Button Text
           </label>
           <input
             type="text"
