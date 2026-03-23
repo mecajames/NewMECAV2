@@ -33,28 +33,37 @@ export default function HomePage() {
   const { banners: homepageBottomBanners } = useBanners(BannerPosition.HOMEPAGE_BOTTOM);
 
   // Derive hero settings from cached context
-  const heroSettings = useMemo(() => {
-    const defaultImages = ['https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920'];
+  interface HeroSlide { url: string; title: string; subtitle: string; buttonText: string; buttonUrl: string; }
 
-    let imageUrls: string[] = defaultImages;
+  const heroSettings = useMemo(() => {
+    const defaultImages: HeroSlide[] = [{ url: 'https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=1920', title: '', subtitle: '', buttonText: '', buttonUrl: '' }];
+
+    const defaultTitle = getSetting('hero_title') || 'MECACARAUDIO.COM';
+    const defaultSubtitle = getSetting('hero_subtitle') || 'The Premier Platform for Car Audio Competition Management';
+    const defaultButtonText = getSetting('hero_button_text') || 'View Events';
+
+    let slides: HeroSlide[] = defaultImages;
     try {
       const urlsValue = getSetting('hero_image_urls') || '[]';
-      imageUrls = JSON.parse(urlsValue);
-      if (!Array.isArray(imageUrls)) {
-        imageUrls = [urlsValue];
+      const parsed = JSON.parse(urlsValue);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        slides = parsed.map((item: any) =>
+          typeof item === 'string'
+            ? { url: item, title: '', subtitle: '', buttonText: '', buttonUrl: '' }
+            : { url: item.url || '', title: item.title || '', subtitle: item.subtitle || '', buttonText: item.buttonText || '', buttonUrl: item.buttonUrl || '' }
+        );
       }
     } catch {
       const heroImageUrls = getSetting('hero_image_urls');
-      imageUrls = heroImageUrls ? [heroImageUrls] : defaultImages;
+      if (heroImageUrls) slides = [{ url: heroImageUrls, title: '', subtitle: '', buttonText: '', buttonUrl: '' }];
     }
 
     return {
-      image_urls: imageUrls.length > 0 ? imageUrls : defaultImages,
-      title: getSetting('hero_title') || 'MECACARAUDIO.COM',
-      subtitle: getSetting('hero_subtitle') || 'The Premier Platform for Car Audio Competition Management',
-      button_text: getSetting('hero_button_text') || 'View Events',
+      slides: slides.length > 0 ? slides : defaultImages,
+      defaultTitle,
+      defaultSubtitle,
+      defaultButtonText,
       carousel_speed: parseInt(getSetting('hero_carousel_speed') || '5000'),
-      carousel_direction: (getSetting('hero_carousel_direction') || 'left') as 'left' | 'right' | 'top' | 'bottom',
     };
   }, [getSetting]);
 
@@ -97,14 +106,14 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (heroSettings.image_urls.length <= 1) return;
+    if (heroSettings.slides.length <= 1) return;
 
     const interval = setInterval(() => {
-      setCurrentImageIndex((prev) => (prev + 1) % heroSettings.image_urls.length);
+      setCurrentImageIndex((prev) => (prev + 1) % heroSettings.slides.length);
     }, heroSettings.carousel_speed);
 
     return () => clearInterval(interval);
-  }, [heroSettings.image_urls.length, heroSettings.carousel_speed]);
+  }, [heroSettings.slides.length, heroSettings.carousel_speed]);
 
   // Auto-slide events carousel every 5 seconds
   useEffect(() => {
@@ -192,46 +201,62 @@ export default function HomePage() {
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       <div className="relative h-[400px] sm:h-[450px] md:h-[500px] lg:h-[600px] flex items-center justify-center overflow-hidden">
         {/* Carousel Images */}
-        {heroSettings.image_urls.map((url, index) => (
+        {heroSettings.slides.map((slide, index) => (
           <div
             key={index}
             className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${
               index === currentImageIndex ? 'opacity-100' : 'opacity-0'
             }`}
             style={{
-              backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${getStorageUrl(url)})`,
+              backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${getStorageUrl(slide.url)})`,
             }}
           />
         ))}
 
-        {/* Content Overlay */}
-        <div className="relative z-10 text-center text-white px-6 sm:px-8 md:px-12 max-w-4xl mx-auto">
-          <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold mb-3 sm:mb-6">
-            {heroSettings.title}
-          </h1>
-          <p className="text-base sm:text-lg md:text-xl lg:text-2xl mb-4 sm:mb-8 text-gray-200">
-            {heroSettings.subtitle}
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center">
-            <button
-              onClick={() => navigate('/events')}
-              className="px-5 sm:px-8 py-2.5 sm:py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-105 shadow-lg"
+        {/* Content Overlay — per-slide with fallback to defaults */}
+        {heroSettings.slides.map((slide, index) => {
+          const slideTitle = slide.title || heroSettings.defaultTitle;
+          const slideSubtitle = slide.subtitle || heroSettings.defaultSubtitle;
+          const slideButtonText = slide.buttonText || heroSettings.defaultButtonText;
+          const slideButtonUrl = slide.buttonUrl || '/events';
+
+          return (
+            <div
+              key={`content-${index}`}
+              className={`absolute inset-0 flex items-center justify-center z-10 transition-opacity duration-700 ${
+                index === currentImageIndex ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
             >
-              {heroSettings.button_text}
-            </button>
-            <button
-              onClick={() => navigate('/membership')}
-              className="px-5 sm:px-8 py-2.5 sm:py-4 bg-white hover:bg-gray-100 text-slate-900 font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-105 shadow-lg"
-            >
-              Become a Member
-            </button>
-          </div>
-        </div>
+              <div className="text-center text-white px-6 sm:px-8 md:px-12 max-w-4xl mx-auto">
+                <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold mb-3 sm:mb-6">
+                  {slideTitle}
+                </h1>
+                <p className="text-base sm:text-lg md:text-xl lg:text-2xl mb-4 sm:mb-8 text-gray-200">
+                  {slideSubtitle}
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center">
+                  <button
+                    onClick={() => navigate(slideButtonUrl)}
+                    className="px-5 sm:px-8 py-2.5 sm:py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-105 shadow-lg"
+                  >
+                    {slideButtonText}
+                  </button>
+                  <button
+                    onClick={() => navigate('/membership')}
+                    className="px-5 sm:px-8 py-2.5 sm:py-4 bg-white hover:bg-gray-100 text-slate-900 font-semibold rounded-lg text-base sm:text-lg transition-all transform hover:scale-105 shadow-lg"
+                  >
+                    Become a Member
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
         {/* Carousel Indicators */}
-        {heroSettings.image_urls.length > 1 && (
+        {heroSettings.slides.length > 1 && (
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 flex gap-2">
-            {heroSettings.image_urls.map((_, index) => (
+            {heroSettings.slides.map((_, index) => (
               <button
                 key={index}
                 onClick={() => setCurrentImageIndex(index)}
