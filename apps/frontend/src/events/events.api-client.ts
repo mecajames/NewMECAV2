@@ -44,15 +44,45 @@ export interface Event {
   result_count?: number;
 }
 
+/**
+ * Normalize numeric fields on Event objects coming from the API.
+ * PostgreSQL decimal/numeric columns may arrive as strings depending on
+ * the driver, connection, or how the database was restored. This ensures
+ * every consumer gets proper JavaScript numbers so === comparisons and
+ * arithmetic work correctly everywhere.
+ */
+function normalizeEvent(e: any): Event {
+  if (!e) return e;
+  const num = (v: any): number | undefined =>
+    v == null ? undefined : Number(v);
+  return {
+    ...e,
+    registration_fee: num(e.registration_fee) ?? 0,
+    member_entry_fee: num(e.member_entry_fee),
+    non_member_entry_fee: num(e.non_member_entry_fee),
+    gate_fee: num(e.gate_fee),
+    points_multiplier: num(e.points_multiplier),
+    max_participants: num(e.max_participants),
+    day_number: num(e.day_number),
+    latitude: num(e.latitude),
+    longitude: num(e.longitude),
+    result_count: num(e.result_count),
+  };
+}
+
+function normalizeEvents(events: any[]): Event[] {
+  return events.map(normalizeEvent);
+}
+
 export const eventsApi = {
   getAll: async (page: number = 1, limit: number = 100): Promise<Event[]> => {
     const response = await axios.get(`/api/events?page=${page}&limit=${limit}`);
-    return response.data;
+    return normalizeEvents(response.data);
   },
 
   getAllBySeason: async (seasonId: string, page: number = 1, limit: number = 100): Promise<Event[]> => {
     const response = await axios.get(`/api/events?season_id=${seasonId}&page=${page}&limit=${limit}`);
-    return response.data;
+    return normalizeEvents(response.data);
   },
 
   /**
@@ -72,7 +102,7 @@ export const eventsApi = {
     if (options?.status) params.append('status', options.status);
 
     const response = await axios.get(`/api/events/public?${params.toString()}`);
-    return response.data;
+    return { ...response.data, events: normalizeEvents(response.data.events) };
   },
 
   /**
@@ -89,23 +119,23 @@ export const eventsApi = {
     if (options?.seasonId) params.append('season_id', options.seasonId);
 
     const response = await axios.get(`/api/events/completed-with-results?${params.toString()}`);
-    return response.data;
+    return { ...response.data, events: normalizeEvents(response.data.events) };
   },
 
   getByDirector: async (directorId: string): Promise<Event[]> => {
     const response = await axios.get(`/api/events/by-director/${directorId}`);
-    return response.data;
+    return normalizeEvents(response.data);
   },
 
   getById: async (id: string): Promise<Event> => {
     const response = await axios.get(`/api/events/${id}`);
-    return response.data;
+    return normalizeEvent(response.data);
   },
 
   create: async (data: Partial<Event>): Promise<Event> => {
     try {
       const response = await axios.post(`/api/events`, data);
-      return response.data;
+      return normalizeEvent(response.data);
     } catch (error: any) {
       console.error('Event creation failed:', error.response?.status, error.response?.data);
       throw new Error(`Failed to create event: ${error.response?.data?.message || error.message}`);
@@ -114,12 +144,12 @@ export const eventsApi = {
 
   update: async (id: string, data: Partial<Event>): Promise<Event> => {
     const response = await axios.put(`/api/events/${id}`, data);
-    return response.data;
+    return normalizeEvent(response.data);
   },
 
   updateFlyerImagePosition: async (id: string, position: { x: number; y: number }): Promise<Event> => {
     const response = await axios.put(`/api/events/${id}`, { flyer_image_position: position });
-    return response.data;
+    return normalizeEvent(response.data);
   },
 
   delete: async (id: string): Promise<void> => {
@@ -146,7 +176,7 @@ export const eventsApi = {
         dayMultipliers,
         multiDayResultsMode,
       });
-      return response.data;
+      return normalizeEvents(response.data);
     } catch (error: any) {
       console.error('Multi-day event creation failed:', error.response?.status, error.response?.data);
       throw new Error(`Failed to create multi-day event: ${error.response?.data?.message || error.message}`);
@@ -155,7 +185,7 @@ export const eventsApi = {
 
   getByMultiDayGroup: async (groupId: string): Promise<Event[]> => {
     const response = await axios.get(`/api/events/multi-day-group/${groupId}`);
-    return response.data;
+    return normalizeEvents(response.data);
   },
 
   sendRatingEmails: async (eventId: string): Promise<{ sent: number; failed: number; errors: string[] }> => {
