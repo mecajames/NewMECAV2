@@ -130,8 +130,16 @@ export class ScoreSheetService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.seedFromAssetsIfEmpty();
-    await this.loadFromDatabase();
+    try {
+      await this.seedFromAssetsIfEmpty();
+    } catch (err: any) {
+      this.logger.error(`Score sheet seeding failed: ${err?.message}`, err?.stack);
+    }
+    try {
+      await this.loadFromDatabase();
+    } catch (err: any) {
+      this.logger.error(`Score sheet DB load failed: ${err?.message}`, err?.stack);
+    }
   }
 
   /**
@@ -152,11 +160,14 @@ export class ScoreSheetService implements OnModuleInit {
       path.join(process.cwd(), 'assets', 'score-sheet-templates'),
     ];
 
+    this.logger.log(`Score sheet seed: __dirname=${__dirname}, cwd=${process.cwd()}`);
+
     let assetsDir: string | null = null;
     for (const dir of possibleDirs) {
-      if (fs.existsSync(dir)) {
+      const exists = fs.existsSync(dir);
+      this.logger.log(`Score sheet seed: checking ${dir} → ${exists ? 'FOUND' : 'not found'}`);
+      if (exists && !assetsDir) {
         assetsDir = dir;
-        break;
       }
     }
 
@@ -249,9 +260,25 @@ export class ScoreSheetService implements OnModuleInit {
     }));
   }
 
-  getTemplateImage(key: string): Buffer | null {
+  async getTemplateImage(key: string): Promise<Buffer | null> {
+    // Try cache first
     const entry = this.templateCache.get(key);
-    return entry ? entry.imageData : null;
+    if (entry) return entry.imageData;
+
+    // Fallback: query DB directly (in case cache wasn't loaded)
+    const em = this.em.fork();
+    const template = await em.findOne(ScoreSheetTemplate, { templateKey: key });
+    if (template) {
+      const buf = Buffer.isBuffer(template.imageData) ? template.imageData : Buffer.from(template.imageData);
+      // Populate cache for next time
+      this.templateCache.set(key, {
+        imageData: buf,
+        coords: { ...DEFAULT_COORDS, ...(template.coords as any) },
+        displayName: template.displayName,
+      });
+      return buf;
+    }
+    return null;
   }
 
   async saveTemplateCoords(key: string, coords: TemplateCoords) {
