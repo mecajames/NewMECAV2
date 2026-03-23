@@ -143,34 +143,15 @@ export class StripeController {
     return user.id;
   }
 
-  // Helper to validate admin for test mode
+  // Helper to validate test mode access
   private async validateTestModeAccess(authHeader?: string): Promise<void> {
-    // Must be in development environment - explicitly block production and unset NODE_ENV
-    const env = process.env.NODE_ENV;
-    if (env !== 'development') {
-      throw new ForbiddenException('Test mode is only available in development environment');
-    }
-    if (process.env.ENABLE_TEST_MODE !== 'true') {
-      throw new ForbiddenException('Test mode is not enabled. Set ENABLE_TEST_MODE=true in development.');
+    // Allow test mode when explicitly enabled via environment variable
+    if (process.env.ENABLE_TEST_MODE === 'true') {
+      return;
     }
 
-    // Must have valid admin auth
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Admin authentication required for test mode');
-    }
-
-    const token = authHeader.substring(7);
-    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
-
-    if (error || !user) {
-      throw new UnauthorizedException('Invalid authorization token');
-    }
-
-    const em = this.em.fork();
-    const profile = await em.findOne(Profile, { id: user.id });
-    if (!isAdminUser(profile)) {
-      throw new ForbiddenException('Admin access required for test mode');
-    }
+    // Block otherwise
+    throw new ForbiddenException('Test mode is not enabled. Set ENABLE_TEST_MODE=true to allow mock payments.');
   }
 
   @Public()
