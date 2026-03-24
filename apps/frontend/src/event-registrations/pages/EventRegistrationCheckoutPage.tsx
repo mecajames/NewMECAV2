@@ -183,18 +183,44 @@ export default function EventRegistrationCheckoutPage() {
     };
   }, [selectedClasses.length, isMember, includeMembership, selectedMembershipId, membershipOptions, memberEntryFee, nonMemberEntryFee]);
 
-  // Group classes by format
+  // Determine sub-category for a class based on its name
+  const getSubCategory = (cls: CompetitionClass): string => {
+    const name = cls.name;
+    if (name.startsWith('Single Position Dueling Demos')) return 'Single Position Dueling Demos';
+    if (name.startsWith('Dueling Demos')) return 'Dueling Demos';
+    if (name.startsWith('Park and Pound') || name.startsWith('Park And Pound')) return 'Park and Pound';
+    if (name.startsWith('Radical X')) return 'Radical X';
+    if (name.startsWith('MECA Kids')) return 'MECA Kids';
+    if (name.startsWith('Show N Shine') || name.startsWith('Show and Shine')) return 'Show and Shine';
+    return '';
+  };
+
+  // Group classes by format, then by sub-category within each format
   const classesByFormat = useMemo(() => {
-    const grouped: Record<string, CompetitionClass[]> = {};
+    const grouped: Record<string, { subCategory: string; classes: CompetitionClass[] }[]> = {};
     for (const cls of availableClasses) {
       if (!grouped[cls.format]) {
         grouped[cls.format] = [];
       }
-      grouped[cls.format].push(cls);
+      const sub = getSubCategory(cls);
+      let subGroup = grouped[cls.format].find(g => g.subCategory === sub);
+      if (!subGroup) {
+        subGroup = { subCategory: sub, classes: [] };
+        grouped[cls.format].push(subGroup);
+      }
+      subGroup.classes.push(cls);
     }
-    // Sort each group by display order
+    // Sort classes within each sub-group by display order
     for (const format of Object.keys(grouped)) {
-      grouped[format].sort((a, b) => a.display_order - b.display_order);
+      for (const subGroup of grouped[format]) {
+        subGroup.classes.sort((a, b) => a.display_order - b.display_order);
+      }
+      // Sort sub-groups: unnamed (core) first, then alphabetically
+      grouped[format].sort((a, b) => {
+        if (!a.subCategory) return -1;
+        if (!b.subCategory) return 1;
+        return a.subCategory.localeCompare(b.subCategory);
+      });
     }
     return grouped;
   }, [availableClasses]);
@@ -1233,38 +1259,49 @@ export default function EventRegistrationCheckoutPage() {
                       </div>
                     ) : (
                       <div className="space-y-6">
-                        {Object.entries(classesByFormat).map(([format, classes]) => (
+                        {Object.entries(classesByFormat).map(([format, subGroups]) => (
                           <div key={format}>
                             <h4 className="text-sm font-semibold text-orange-400 uppercase tracking-wide mb-3">
                               {format}
                             </h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {classes.map((cls) => (
-                                <label
-                                  key={cls.id}
-                                  className={`flex items-center p-3 rounded-lg border cursor-pointer transition-colors ${
-                                    isClassSelected(cls.id)
-                                      ? 'bg-orange-500/20 border-orange-500'
-                                      : 'bg-slate-700 border-slate-600 hover:border-slate-500'
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isClassSelected(cls.id)}
-                                    onChange={() => toggleClassSelection(cls)}
-                                    className="sr-only"
-                                  />
-                                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center mr-3 ${
-                                    isClassSelected(cls.id)
-                                      ? 'bg-orange-500 border-orange-500'
-                                      : 'border-slate-500'
-                                  }`}>
-                                    {isClassSelected(cls.id) && (
-                                      <Check className="h-3 w-3 text-white" />
-                                    )}
+                            <div className="space-y-4">
+                              {subGroups.map((subGroup) => (
+                                <div key={subGroup.subCategory || '__core'}>
+                                  {subGroup.subCategory && (
+                                    <h5 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 pl-1 border-l-2 border-slate-600 ml-1">
+                                      {subGroup.subCategory}
+                                    </h5>
+                                  )}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {subGroup.classes.map((cls) => (
+                                      <label
+                                        key={cls.id}
+                                        className={`flex items-center p-3 rounded-lg border cursor-pointer transition-colors ${
+                                          isClassSelected(cls.id)
+                                            ? 'bg-orange-500/20 border-orange-500'
+                                            : 'bg-slate-700 border-slate-600 hover:border-slate-500'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isClassSelected(cls.id)}
+                                          onChange={() => toggleClassSelection(cls)}
+                                          className="sr-only"
+                                        />
+                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center mr-3 ${
+                                          isClassSelected(cls.id)
+                                            ? 'bg-orange-500 border-orange-500'
+                                            : 'border-slate-500'
+                                        }`}>
+                                          {isClassSelected(cls.id) && (
+                                            <Check className="h-3 w-3 text-white" />
+                                          )}
+                                        </div>
+                                        <span className="text-white">{cls.name}</span>
+                                      </label>
+                                    ))}
                                   </div>
-                                  <span className="text-white">{cls.name}</span>
-                                </label>
+                                </div>
                               ))}
                             </div>
                           </div>

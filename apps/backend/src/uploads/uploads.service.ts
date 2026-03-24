@@ -108,6 +108,13 @@ const UPLOAD_DESTINATIONS: Record<string, UploadDestination> = {
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     maxSizeBytes: 5 * 1024 * 1024, // 5MB
   },
+  'forever-member-images': {
+    bucket: 'documents',
+    folder: 'forever-members',
+    adminOnly: true,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    maxSizeBytes: 5 * 1024 * 1024, // 5MB
+  },
   'team-gallery': {
     bucket: 'profile-images',
     folder: 'team-gallery',

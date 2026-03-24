@@ -315,4 +315,76 @@ export const worldFinalsApi = {
     const response = await axios.get(`${API_BASE}/votes/category/${encodeURIComponent(category)}`);
     return response.data;
   },
+
+  // =============================================
+  // Pre-Registration API
+  // =============================================
+
+  getRegistrationConfig: async (seasonId: string): Promise<any> => {
+    const response = await axios.get(`${API_BASE}/registration-config/${seasonId}`);
+    return response.data;
+  },
+
+  upsertRegistrationConfig: async (seasonId: string, data: any): Promise<any> => {
+    const response = await axios.put(`${API_BASE}/registration-config/${seasonId}`, data);
+    return response.data;
+  },
+
+  getPackages: async (seasonId: string): Promise<any[]> => {
+    const response = await axios.get(`${API_BASE}/packages/${seasonId}`);
+    return response.data;
+  },
+
+  createPackage: async (data: any): Promise<any> => {
+    const response = await axios.post(`${API_BASE}/packages`, data);
+    return response.data;
+  },
+
+  updatePackage: async (id: string, data: any): Promise<any> => {
+    const response = await axios.put(`${API_BASE}/packages/update/${id}`, data);
+    return response.data;
+  },
+
+  deletePackage: async (id: string): Promise<void> => {
+    await axios.delete(`${API_BASE}/packages/delete/${id}`);
+  },
+
+  getAddonItems: async (seasonId: string): Promise<any[]> => {
+    const response = await axios.get(`${API_BASE}/addon-items/${seasonId}`);
+    return response.data;
+  },
+
+  createAddonItem: async (data: any): Promise<any> => {
+    const response = await axios.post(`${API_BASE}/addon-items`, data);
+    return response.data;
+  },
+
+  updateAddonItem: async (id: string, data: any): Promise<any> => {
+    const response = await axios.put(`${API_BASE}/addon-items/${id}`, data);
+    return response.data;
+  },
+
+  deleteAddonItem: async (id: string): Promise<void> => {
+    await axios.delete(`${API_BASE}/addon-items/${id}`);
+  },
+
+  getPreRegistrationStats: async (seasonId: string): Promise<any> => {
+    const response = await axios.get(`${API_BASE}/preregistration-stats/${seasonId}`);
+    return response.data;
+  },
+
+  validatePreRegistration: async (token: string): Promise<any> => {
+    const response = await axios.get(`${API_BASE}/preregister/validate?token=${encodeURIComponent(token)}`);
+    return response.data;
+  },
+
+  submitPreRegistration: async (data: any): Promise<any> => {
+    const response = await axios.post(`${API_BASE}/preregister/checkout`, data);
+    return response.data;
+  },
+
+  getPreRegistrationConfirmation: async (id: string): Promise<any> => {
+    const response = await axios.get(`${API_BASE}/preregister/confirmation/${id}`);
+    return response.data;
+  },
 };

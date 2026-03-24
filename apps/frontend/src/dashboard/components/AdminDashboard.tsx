@@ -5,7 +5,7 @@ import {
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
   ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe,
-  Shield, Wifi, ClipboardCheck
+  Shield, Wifi, ClipboardCheck, Flame
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -189,14 +189,6 @@ export default function AdminDashboard() {
           color: 'yellow',
           navigateTo: '/admin/world-records',
         },
-        {
-          icon: Star,
-          title: 'Hall of Fame',
-          description: 'Manage Hall of Fame inductees by category and year',
-          action: 'hall-of-fame',
-          color: 'amber',
-          navigateTo: '/admin/hall-of-fame',
-        },
       ],
     },
     {
@@ -235,6 +227,22 @@ export default function AdminDashboard() {
           action: 'billing',
           color: 'lime',
           navigateTo: '/admin/billing',
+        },
+        {
+          icon: Star,
+          title: 'Hall of Fame',
+          description: 'Manage Hall of Fame inductees by category and year',
+          action: 'hall-of-fame',
+          color: 'amber',
+          navigateTo: '/admin/hall-of-fame',
+        },
+        {
+          icon: Flame,
+          title: 'Forever Members',
+          description: 'Manage memorial pages for members who have passed away',
+          action: 'forever-members',
+          color: 'amber',
+          navigateTo: '/admin/forever-members',
         },
       ],
     },

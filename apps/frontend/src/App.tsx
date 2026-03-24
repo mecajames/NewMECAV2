@@ -95,6 +95,7 @@ const AdminEventDirectorDetailPage = lazy(() => import('@/admin/pages/EventDirec
 const RatingsAdminPage = lazy(() => import('@/admin/pages/RatingsAdminPage'));
 const NotificationsAdminPage = lazy(() => import('@/admin/pages/NotificationsAdminPage'));
 const WorldFinalsAdminPage = lazy(() => import('@/admin/pages/WorldFinalsAdminPage'));
+const WorldFinalsPreRegisterPage = lazy(() => import('@/world-finals/pages/WorldFinalsPreRegisterPage'));
 const AchievementsAdminPage = lazy(() => import('@/achievements/pages/AchievementsAdminPage'));
 const AuditLogAdminPage = lazy(() => import('@/admin/pages/AuditLogAdminPage'));
 const SeasonManagementPage = lazy(() => import('@/seasons/pages/SeasonManagementPage'));
@@ -118,6 +119,9 @@ const SEOSettingsPage = lazy(() => import('@/admin/pages/SEOSettingsPage'));
 const WorldRecordsPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsPage'));
 const WorldRecordsAdminPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsAdminPage'));
 const HallOfFameAdminPage = lazy(() => import('@/hall-of-fame/pages/HallOfFameAdminPage'));
+const ForeverMembersPage = lazy(() => import('@/forever-members/pages/ForeverMembersPage'));
+const ForeverMemberDetailPage = lazy(() => import('@/forever-members/pages/ForeverMemberDetailPage'));
+const ForeverMembersAdminPage = lazy(() => import('@/forever-members/pages/ForeverMembersAdminPage'));
 const LoginAuditPage = lazy(() => import('@/admin/pages/LoginAuditPage'));
 const AdminAuditPage = lazy(() => import('@/admin/pages/AdminAuditPage'));
 const QAChecklistPage = lazy(() => import('@/admin/pages/QAChecklistPage'));
@@ -193,6 +197,9 @@ function App() {
               <Route path="/host-event" element={<HostEventPage />} />
               <Route path="/class-calculator" element={<ClassCalculatorPage />} />
               <Route path="/hall-of-fame" element={<HallOfFamePage />} />
+              <Route path="/world-finals/register" element={<L><WorldFinalsPreRegisterPage /></L>} />
+              <Route path="/forever-members" element={<L><ForeverMembersPage /></L>} />
+              <Route path="/forever-members/:id" element={<L><ForeverMemberDetailPage /></L>} />
               <Route path="/championship-archives" element={<ChampionshipArchivesPage />} />
               <Route path="/championship-archives/:year" element={<ChampionshipArchiveYearPage />} />
               <Route path="/member-support" element={<MemberSupportPage />} />
@@ -335,6 +342,7 @@ function App() {
 
               {/* Admin Hall of Fame */}
               <Route path="/admin/hall-of-fame" element={<L><HallOfFameAdminPage /></L>} />
+              <Route path="/admin/forever-members" element={<L><ForeverMembersAdminPage /></L>} />
 
               {/* Admin Login Audit */}
               <Route path="/admin/login-audit" element={<L><LoginAuditPage /></L>} />

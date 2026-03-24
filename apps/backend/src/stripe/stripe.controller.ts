@@ -36,6 +36,7 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
 import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
+import { WorldFinalsService } from '../world-finals/world-finals.service';
 import Stripe from 'stripe';
 
 interface CreateMembershipPaymentIntentDto {
@@ -126,6 +127,7 @@ export class StripeController {
     private readonly taxService: TaxService,
     private readonly mecaIdService: MecaIdService,
     private readonly membershipSyncService: MembershipSyncService,
+    private readonly worldFinalsService: WorldFinalsService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -826,6 +828,9 @@ export class StripeController {
       case StripePaymentType.SHOP:
         await this.handleShopPayment(paymentIntent);
         break;
+      case StripePaymentType.WORLD_FINALS_REGISTRATION:
+        await this.handleWorldFinalsRegistrationPayment(paymentIntent);
+        break;
       case StripePaymentType.MEMBERSHIP:
       default:
         // Default to membership payment (for backwards compatibility)
@@ -1092,6 +1097,32 @@ export class StripeController {
       }
     } catch (error) {
       console.error('Error handling shop payment:', error);
+      throw error;
+    }
+  }
+
+  private async handleWorldFinalsRegistrationPayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    const metadata = paymentIntent.metadata;
+    const registrationId = metadata.registrationId;
+
+    if (!registrationId) {
+      console.error('Missing registrationId in World Finals payment:', paymentIntent.id);
+      return;
+    }
+
+    try {
+      const registration = await this.worldFinalsService.markPreRegistrationPaid(
+        registrationId,
+        paymentIntent.id,
+      );
+
+      console.log(`World Finals registration ${registrationId} marked as paid via Stripe payment ${paymentIntent.id}`, {
+        mecaId: metadata.mecaId,
+        packageId: metadata.packageId,
+        amount: paymentIntent.amount / 100,
+      });
+    } catch (error) {
+      console.error('Error handling World Finals registration payment:', error);
       throw error;
     }
   }
