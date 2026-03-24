@@ -10,6 +10,7 @@ import { EventsModule } from './events/events.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { EventRegistrationsModule } from './event-registrations/event-registrations.module';
 import { RulebooksModule } from './rulebooks/rulebooks.module';
+import { ForeverMembersModule } from './forever-members/forever-members.module';
 import { CompetitionResultsModule } from './competition-results/competition-results.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MediaFilesModule } from './media-files/media-files.module';
@@ -90,6 +91,7 @@ import { QaModule } from './qa/qa.module';
     PaymentsModule,
     EventRegistrationsModule,
     RulebooksModule,
+    ForeverMembersModule,
     CompetitionResultsModule,
     NotificationsModule,
     MediaFilesModule,

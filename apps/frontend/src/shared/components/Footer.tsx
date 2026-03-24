@@ -53,6 +53,14 @@ export default function Footer() {
                   Hall of Fame
                 </Link>
               </li>
+              <li>
+                <Link
+                  to="/forever-members"
+                  className="text-gray-400 hover:text-amber-400 transition-colors"
+                >
+                  Forever Members
+                </Link>
+              </li>
             </ul>
           </div>
 

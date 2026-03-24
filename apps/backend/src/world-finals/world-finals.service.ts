@@ -4,6 +4,10 @@ import { randomUUID } from 'crypto';
 import { WorldFinalsQualification } from './world-finals-qualification.entity';
 import { FinalsRegistration } from './finals-registration.entity';
 import { FinalsVote } from './finals-vote.entity';
+import { WorldFinalsPackage } from './world-finals-package.entity';
+import { WorldFinalsPackageClass } from './world-finals-package-class.entity';
+import { WorldFinalsAddonItem } from './world-finals-addon-item.entity';
+import { WorldFinalsRegistrationConfig } from './world-finals-registration-config.entity';
 import { Season } from '../seasons/seasons.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
@@ -975,6 +979,391 @@ export class WorldFinalsService {
     return {
       totalVotes: votes.length,
       byCategory,
+    };
+  }
+
+  // =============================================
+  // World Finals Pre-Registration (Multi-Package)
+  // =============================================
+
+  // --- Registration Config (season-level dates/toggles) ---
+
+  async getRegistrationConfig(seasonId: string): Promise<WorldFinalsRegistrationConfig | null> {
+    const em = this.em.fork();
+    return em.findOne(WorldFinalsRegistrationConfig, { seasonId });
+  }
+
+  async upsertRegistrationConfig(seasonId: string, data: Partial<WorldFinalsRegistrationConfig>): Promise<WorldFinalsRegistrationConfig> {
+    const em = this.em.fork();
+    let config = await em.findOne(WorldFinalsRegistrationConfig, { seasonId });
+    if (config) {
+      em.assign(config, data);
+    } else {
+      config = new WorldFinalsRegistrationConfig();
+      config.seasonId = seasonId;
+      em.assign(config, data);
+      em.persist(config);
+    }
+    await em.flush();
+    return config;
+  }
+
+  // --- Packages (multiple per season) ---
+
+  async getPackages(seasonId: string): Promise<WorldFinalsPackage[]> {
+    const em = this.em.fork();
+    return em.find(WorldFinalsPackage, { seasonId }, { orderBy: { displayOrder: 'ASC' } });
+  }
+
+  async getPackageWithClasses(packageId: string) {
+    const em = this.em.fork();
+    const pkg = await em.findOne(WorldFinalsPackage, { id: packageId });
+    if (!pkg) throw new NotFoundException('Package not found');
+    const classes = await em.find(WorldFinalsPackageClass, { packageId }, { orderBy: { className: 'ASC' } });
+    return { ...JSON.parse(JSON.stringify(pkg)), classes: JSON.parse(JSON.stringify(classes)) };
+  }
+
+  async createPackage(data: any): Promise<WorldFinalsPackage> {
+    const em = this.em.fork();
+    const pkg = new WorldFinalsPackage();
+    em.assign(pkg, {
+      seasonId: data.seasonId,
+      name: data.name,
+      description: data.description,
+      basePriceEarly: data.basePriceEarly,
+      basePriceRegular: data.basePriceRegular,
+      includedClasses: data.includedClasses,
+      additionalClassPriceEarly: data.additionalClassPriceEarly,
+      additionalClassPriceRegular: data.additionalClassPriceRegular,
+      displayOrder: data.displayOrder || 0,
+      isActive: data.isActive ?? true,
+    });
+    await em.persistAndFlush(pkg);
+
+    // Save eligible classes
+    if (data.classes && Array.isArray(data.classes)) {
+      for (const cls of data.classes) {
+        const pc = new WorldFinalsPackageClass();
+        pc.packageId = pkg.id;
+        pc.className = cls.className;
+        pc.format = cls.format;
+        pc.isPremium = cls.isPremium || false;
+        pc.premiumPrice = cls.premiumPrice;
+        em.persist(pc);
+      }
+      await em.flush();
+    }
+
+    return pkg;
+  }
+
+  async updatePackage(packageId: string, data: any): Promise<WorldFinalsPackage> {
+    const em = this.em.fork();
+    const pkg = await em.findOne(WorldFinalsPackage, { id: packageId });
+    if (!pkg) throw new NotFoundException('Package not found');
+
+    em.assign(pkg, {
+      name: data.name ?? pkg.name,
+      description: data.description ?? pkg.description,
+      basePriceEarly: data.basePriceEarly ?? pkg.basePriceEarly,
+      basePriceRegular: data.basePriceRegular ?? pkg.basePriceRegular,
+      includedClasses: data.includedClasses ?? pkg.includedClasses,
+      additionalClassPriceEarly: data.additionalClassPriceEarly ?? pkg.additionalClassPriceEarly,
+      additionalClassPriceRegular: data.additionalClassPriceRegular ?? pkg.additionalClassPriceRegular,
+      displayOrder: data.displayOrder ?? pkg.displayOrder,
+      isActive: data.isActive ?? pkg.isActive,
+    });
+
+    // Replace eligible classes if provided
+    if (data.classes && Array.isArray(data.classes)) {
+      const existing = await em.find(WorldFinalsPackageClass, { packageId });
+      for (const e of existing) em.remove(e);
+      await em.flush();
+
+      for (const cls of data.classes) {
+        const pc = new WorldFinalsPackageClass();
+        pc.packageId = packageId;
+        pc.className = cls.className;
+        pc.format = cls.format;
+        pc.isPremium = cls.isPremium || false;
+        pc.premiumPrice = cls.premiumPrice;
+        em.persist(pc);
+      }
+    }
+
+    await em.flush();
+    return pkg;
+  }
+
+  async deletePackage(packageId: string): Promise<void> {
+    const em = this.em.fork();
+    const pkg = await em.findOne(WorldFinalsPackage, { id: packageId });
+    if (!pkg) throw new NotFoundException('Package not found');
+    // Cascade deletes package_classes via FK
+    await em.removeAndFlush(pkg);
+  }
+
+  // --- Add-on Items ---
+
+  async getAddonItems(seasonId: string): Promise<WorldFinalsAddonItem[]> {
+    const em = this.em.fork();
+    return em.find(WorldFinalsAddonItem, { seasonId }, { orderBy: { displayOrder: 'ASC' } });
+  }
+
+  async createAddonItem(data: Partial<WorldFinalsAddonItem>): Promise<WorldFinalsAddonItem> {
+    const em = this.em.fork();
+    const item = new WorldFinalsAddonItem();
+    em.assign(item, data);
+    await em.persistAndFlush(item);
+    return item;
+  }
+
+  async updateAddonItem(id: string, data: Partial<WorldFinalsAddonItem>): Promise<WorldFinalsAddonItem> {
+    const em = this.em.fork();
+    const item = await em.findOne(WorldFinalsAddonItem, { id });
+    if (!item) throw new NotFoundException('Add-on item not found');
+    em.assign(item, data);
+    await em.flush();
+    return item;
+  }
+
+  async deleteAddonItem(id: string): Promise<void> {
+    const em = this.em.fork();
+    const item = await em.findOne(WorldFinalsAddonItem, { id });
+    if (!item) throw new NotFoundException('Add-on item not found');
+    await em.removeAndFlush(item);
+  }
+
+  // --- Token Validation ---
+
+  async validatePreRegistrationToken(token: string, packageId?: string) {
+    const em = this.em.fork();
+
+    const qualification = await em.findOne(WorldFinalsQualification, { invitationToken: token });
+    if (!qualification) {
+      throw new BadRequestException('Invalid or expired registration link');
+    }
+
+    const seasonId = typeof qualification.season === 'string'
+      ? qualification.season : (qualification.season as any)?.id;
+
+    // Load registration config
+    const config = await em.findOne(WorldFinalsRegistrationConfig, { seasonId, isActive: true });
+    if (!config) {
+      throw new BadRequestException('World Finals pre-registration is not currently open');
+    }
+
+    const now = new Date();
+    if (now < config.registrationOpenDate) throw new BadRequestException('Pre-registration has not opened yet');
+    if (now > config.registrationCloseDate) throw new BadRequestException('Pre-registration has closed');
+
+    // Get all qualified classes for this competitor
+    const allQualifications = await em.find(WorldFinalsQualification, {
+      mecaId: qualification.mecaId, season: seasonId,
+    });
+    const qualifiedClassNames = allQualifications.map(q => q.competitionClass);
+
+    // Load all packages for this season
+    const packages = await em.find(WorldFinalsPackage, { seasonId, isActive: true }, { orderBy: { displayOrder: 'ASC' } });
+
+    // For each package, load its eligible classes and filter to only those the competitor qualified in
+    const packagesWithClasses = await Promise.all(packages.map(async (pkg) => {
+      const allPkgClasses = await em.find(WorldFinalsPackageClass, { packageId: pkg.id });
+      const eligibleClasses = allPkgClasses.filter(pc => qualifiedClassNames.includes(pc.className));
+
+      // Check if competitor already registered for this package
+      const existingReg = await em.findOne(FinalsRegistration, {
+        mecaId: String(qualification.mecaId), season: seasonId, packageId: pkg.id,
+        registrationStatus: { $ne: 'cancelled' },
+      });
+
+      return {
+        ...JSON.parse(JSON.stringify(pkg)),
+        eligibleClasses: JSON.parse(JSON.stringify(eligibleClasses)),
+        alreadyRegistered: !!existingReg,
+      };
+    }));
+
+    // Load profile and add-on items
+    const profile = qualification.user
+      ? await this.loadProfile(em, typeof qualification.user === 'string' ? qualification.user : (qualification.user as any).id)
+      : null;
+    const addonItems = await em.find(WorldFinalsAddonItem, { seasonId, isActive: true }, { orderBy: { displayOrder: 'ASC' } });
+
+    const pricingTier = now < config.earlyBirdDeadline ? 'early_bird' : 'regular';
+
+    return {
+      competitor: {
+        mecaId: String(qualification.mecaId),
+        name: qualification.competitorName,
+        email: profile?.email || '',
+        firstName: profile?.first_name || '',
+        lastName: profile?.last_name || '',
+      },
+      qualifiedClasses: allQualifications.map(q => ({ className: q.competitionClass, totalPoints: q.totalPoints })),
+      packages: packagesWithClasses,
+      config: JSON.parse(JSON.stringify(config)),
+      addonItems: JSON.parse(JSON.stringify(addonItems)),
+      pricingTier,
+      earlyBirdDeadline: config.earlyBirdDeadline,
+      registrationCloseDate: config.registrationCloseDate,
+    };
+  }
+
+  // --- Pricing Calculation ---
+
+  calculatePreRegistrationPricing(
+    pkg: any,
+    pricingTier: string,
+    standardClassCount: number,
+    premiumSelections: { className: string; price: number }[],
+    addonSelections: { itemId: string; price: number; quantity: number }[],
+  ) {
+    const basePrice = pricingTier === 'early_bird'
+      ? Number(pkg.base_price_early || pkg.basePriceEarly) : Number(pkg.base_price_regular || pkg.basePriceRegular);
+    const additionalPrice = pricingTier === 'early_bird'
+      ? Number(pkg.additional_class_price_early || pkg.additionalClassPriceEarly)
+      : Number(pkg.additional_class_price_regular || pkg.additionalClassPriceRegular);
+    const includedClasses = Number(pkg.included_classes || pkg.includedClasses);
+
+    const extraClasses = Math.max(0, standardClassCount - includedClasses);
+    const classTotal = standardClassCount > 0 ? basePrice + (extraClasses * additionalPrice) : 0;
+    const premiumTotal = premiumSelections.reduce((sum, p) => sum + Number(p.price), 0);
+    const addonsTotal = addonSelections.reduce((sum, a) => sum + (Number(a.price) * a.quantity), 0);
+
+    return {
+      basePrice, additionalPrice, includedClasses,
+      standardClassCount, extraClasses, classTotal,
+      premiumTotal, addonsTotal,
+      total: classTotal + premiumTotal + addonsTotal,
+      pricingTier,
+    };
+  }
+
+  // --- Registration ---
+
+  async createPreRegistration(data: {
+    token: string;
+    packageId: string;
+    seasonId: string;
+    mecaId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    classes: any[];
+    addonItems: any[];
+    tshirtSize?: string;
+    ringSize?: string;
+    hotelNeeded?: boolean;
+    hotelNotes?: string;
+    guestCount?: number;
+    pricingTier: string;
+    baseAmount: number;
+    addonsAmount: number;
+    totalAmount: number;
+    notes?: string;
+    userId?: string;
+  }): Promise<FinalsRegistration> {
+    const em = this.em.fork();
+
+    const registration = new FinalsRegistration();
+    registration.mecaId = data.mecaId;
+    registration.email = data.email;
+    registration.firstName = data.firstName;
+    registration.lastName = data.lastName;
+    registration.phone = data.phone;
+    registration.packageId = data.packageId;
+    registration.classes = data.classes;
+    registration.addonItems = data.addonItems;
+    registration.tshirtSize = data.tshirtSize;
+    registration.ringSize = data.ringSize;
+    registration.hotelNeeded = data.hotelNeeded;
+    registration.hotelNotes = data.hotelNotes;
+    registration.guestCount = data.guestCount || 0;
+    registration.pricingTier = data.pricingTier;
+    registration.baseAmount = data.baseAmount;
+    registration.addonsAmount = data.addonsAmount;
+    registration.totalAmount = data.totalAmount;
+    registration.notes = data.notes;
+    registration.registeredAt = new Date();
+    registration.paymentStatus = 'pending';
+    registration.registrationStatus = 'pending';
+
+    if (data.userId) registration.user = em.getReference(Profile, data.userId);
+    if (data.seasonId) registration.season = em.getReference(Season, data.seasonId);
+
+    await em.persistAndFlush(registration);
+    return registration;
+  }
+
+  async markPreRegistrationPaid(registrationId: string, paymentIntentId: string): Promise<FinalsRegistration> {
+    const em = this.em.fork();
+    const reg = await em.findOne(FinalsRegistration, { id: registrationId });
+    if (!reg) throw new NotFoundException('Registration not found');
+    reg.paymentStatus = 'paid';
+    reg.registrationStatus = 'confirmed';
+    reg.stripePaymentIntentId = paymentIntentId;
+    await em.flush();
+    return reg;
+  }
+
+  // --- Stats ---
+
+  async getPreRegistrationStats(seasonId: string) {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+
+    const [stats] = await conn.execute(
+      `SELECT
+        COUNT(*) as total_registrations,
+        COUNT(*) FILTER (WHERE payment_status = 'paid') as paid_registrations,
+        COUNT(*) FILTER (WHERE payment_status = 'pending') as pending_registrations,
+        COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'paid'), 0) as total_revenue,
+        COALESCE(AVG(total_amount) FILTER (WHERE payment_status = 'paid'), 0) as avg_amount
+      FROM finals_registrations
+      WHERE season_id = ? AND registration_status != 'cancelled'`,
+      [seasonId]
+    );
+
+    const classBreakdown = await conn.execute(
+      `SELECT cls->>'className' as class_name, COUNT(*) as count
+      FROM finals_registrations, jsonb_array_elements(classes) as cls
+      WHERE season_id = ? AND payment_status = 'paid'
+      GROUP BY cls->>'className' ORDER BY count DESC`,
+      [seasonId]
+    );
+
+    const addonBreakdown = await conn.execute(
+      `SELECT item->>'name' as addon_name,
+        SUM((item->>'quantity')::int) as total_quantity,
+        SUM((item->>'price')::numeric * (item->>'quantity')::int) as total_revenue
+      FROM finals_registrations, jsonb_array_elements(addon_items) as item
+      WHERE season_id = ? AND payment_status = 'paid'
+      GROUP BY item->>'name' ORDER BY total_quantity DESC`,
+      [seasonId]
+    );
+
+    // Per-package breakdown
+    const packageBreakdown = await conn.execute(
+      `SELECT fr.package_id, p.name as package_name, COUNT(*) as count,
+        COALESCE(SUM(fr.total_amount) FILTER (WHERE fr.payment_status = 'paid'), 0) as revenue
+      FROM finals_registrations fr
+      LEFT JOIN world_finals_packages p ON p.id = fr.package_id
+      WHERE fr.season_id = ? AND fr.registration_status != 'cancelled'
+      GROUP BY fr.package_id, p.name ORDER BY count DESC`,
+      [seasonId]
+    );
+
+    return {
+      totalRegistrations: Number(stats?.total_registrations || 0),
+      paidRegistrations: Number(stats?.paid_registrations || 0),
+      pendingRegistrations: Number(stats?.pending_registrations || 0),
+      totalRevenue: Number(stats?.total_revenue || 0),
+      avgAmount: Number(stats?.avg_amount || 0),
+      classBreakdown: classBreakdown.map((r: any) => ({ className: r.class_name, count: Number(r.count) })),
+      addonBreakdown: addonBreakdown.map((r: any) => ({ name: r.addon_name, quantity: Number(r.total_quantity), revenue: Number(r.total_revenue) })),
+      packageBreakdown: packageBreakdown.map((r: any) => ({ packageId: r.package_id, packageName: r.package_name, count: Number(r.count), revenue: Number(r.revenue) })),
     };
   }
 }

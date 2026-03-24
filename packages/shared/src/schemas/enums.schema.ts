@@ -129,6 +129,7 @@ export enum StripePaymentType {
   TEAM_UPGRADE = 'team_upgrade',
   INVOICE_PAYMENT = 'invoice_payment',
   SHOP = 'shop',
+  WORLD_FINALS_REGISTRATION = 'world_finals_registration',
 }
 
 export enum HostType {
