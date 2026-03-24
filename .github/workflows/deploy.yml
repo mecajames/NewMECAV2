@@ -115,6 +115,7 @@ jobs:
             --arg cc_refresh_token "${{ secrets.CONSTANT_CONTACT_REFRESH_TOKEN }}" \
             --arg cc_list_id "${{ secrets.CONSTANT_CONTACT_LIST_ID }}" \
             --arg contact_form_email "${{ secrets.CONTACT_FORM_EMAIL }}" \
+            --arg enable_test_mode "${{ secrets.ENABLE_TEST_MODE }}" \
             '
             .containers.backend.image = $backend |
             .containers.nginx.image = $nginx |
@@ -140,7 +141,8 @@ jobs:
             .containers.backend.environment.CONSTANT_CONTACT_ACCESS_TOKEN = $cc_access_token |
             .containers.backend.environment.CONSTANT_CONTACT_REFRESH_TOKEN = $cc_refresh_token |
             .containers.backend.environment.CONSTANT_CONTACT_LIST_ID = $cc_list_id |
-            .containers.backend.environment.CONTACT_FORM_EMAIL = $contact_form_email
+            .containers.backend.environment.CONTACT_FORM_EMAIL = $contact_form_email |
+            .containers.backend.environment.ENABLE_TEST_MODE = $enable_test_mode
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"
