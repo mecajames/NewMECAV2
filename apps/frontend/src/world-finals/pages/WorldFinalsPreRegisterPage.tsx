@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Trophy, CheckCircle, AlertCircle, ShoppingCart, Minus, Plus, Package } from 'lucide-react';
+import { Trophy, CheckCircle, AlertCircle, ShoppingCart, Minus, Plus, Package, MapPin, Calendar } from 'lucide-react';
 import { worldFinalsApi } from '@/api-client/world-finals.api-client';
 
 const TSHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
@@ -9,6 +9,9 @@ const RING_SIZES = ['5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', 
 export default function WorldFinalsPreRegisterPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
+  const isPreview = searchParams.get('preview') === 'true';
+  const previewSeasonId = searchParams.get('seasonId') || '';
+  const previewEventId = searchParams.get('eventId') || '';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +19,8 @@ export default function WorldFinalsPreRegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmation, setConfirmation] = useState<any>(null);
 
-  // Form state
+  // Selection state
+  const [selectedGroupIdx, setSelectedGroupIdx] = useState<number>(-1);
   const [selectedPackageId, setSelectedPackageId] = useState<string>('');
   const [selectedClasses, setSelectedClasses] = useState<any[]>([]);
   const [addonSelections, setAddonSelections] = useState<Record<string, number>>({});
@@ -28,26 +32,66 @@ export default function WorldFinalsPreRegisterPage() {
   });
 
   useEffect(() => {
+    if (isPreview && previewSeasonId) {
+      worldFinalsApi.getPreRegistrationPreview(previewSeasonId, previewEventId || undefined)
+        .then(data => {
+          setValidation(data);
+          setForm(prev => ({ ...prev, firstName: data.competitor.firstName || '', lastName: data.competitor.lastName || '', email: data.competitor.email || '' }));
+          if (data.eventGroups?.length === 1) setSelectedGroupIdx(0);
+        })
+        .catch(err => setError(err?.response?.data?.message || 'No pre-registration config found for this season. Set up packages first.'))
+        .finally(() => setLoading(false));
+      return;
+    }
+    if (isPreview) { setError('Season ID required for preview. Use ?preview=true&seasonId=xxx'); setLoading(false); return; }
     if (!token) { setError('No registration token provided. Please use the link from your invitation email.'); setLoading(false); return; }
     worldFinalsApi.validatePreRegistration(token)
       .then(data => {
         setValidation(data);
         setForm(prev => ({ ...prev, firstName: data.competitor.firstName || '', lastName: data.competitor.lastName || '', email: data.competitor.email || '' }));
-        // Auto-select first available package
-        const available = (data.packages || []).filter((p: any) => !p.alreadyRegistered && p.eligibleClasses?.length > 0);
-        if (available.length === 1) setSelectedPackageId(available[0].id);
+        if (data.eventGroups?.length === 1) setSelectedGroupIdx(0);
       })
       .catch(err => setError(err?.response?.data?.message || 'Invalid or expired registration link.'))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, isPreview, previewSeasonId, previewEventId]);
 
-  // Reset class selection when package changes
+  // Reset package/class when group changes
+  useEffect(() => { setSelectedPackageId(''); setSelectedClasses([]); setAddonSelections({}); }, [selectedGroupIdx]);
   useEffect(() => { setSelectedClasses([]); }, [selectedPackageId]);
 
-  const selectedPkg = validation?.packages?.find((p: any) => p.id === selectedPackageId);
-  const eligibleClasses = selectedPkg?.eligibleClasses || [];
+  const eventGroups: any[] = validation?.eventGroups || [];
+  const selectedGroup = selectedGroupIdx >= 0 ? eventGroups[selectedGroupIdx] : null;
   const config = validation?.config;
-  const isEarlyBird = validation?.pricingTier === 'early_bird';
+
+  // Flatten all packages from all events in the selected group
+  const availablePackages = useMemo(() => {
+    if (!selectedGroup) return [];
+    const pkgs: any[] = [];
+    for (const evt of selectedGroup.events) {
+      for (const pkg of evt.packages) {
+        if (pkg.eligibleClasses?.length > 0) {
+          pkgs.push({ ...pkg, _eventId: evt.id, _eventName: evt.name, _pricingTier: evt.pricingTier });
+        }
+      }
+    }
+    return pkgs;
+  }, [selectedGroup]);
+
+  // Auto-select if only one package
+  useEffect(() => {
+    const unregistered = availablePackages.filter(p => !p.alreadyRegistered);
+    if (unregistered.length === 1) setSelectedPackageId(unregistered[0].id);
+  }, [availablePackages]);
+
+  const selectedPkg = availablePackages.find(p => p.id === selectedPackageId);
+  const eligibleClasses = selectedPkg?.eligibleClasses || [];
+  const isEarlyBird = selectedPkg?._pricingTier === 'early_bird';
+  const addonItems = selectedGroup?.addonItems || [];
+
+  // Find the event for pricing tier display
+  const selectedEvent = selectedGroup?.events?.find((e: any) =>
+    e.packages?.some((p: any) => p.id === selectedPackageId)
+  );
 
   const toggleClass = (cls: any) => {
     setSelectedClasses(prev => {
@@ -72,23 +116,25 @@ export default function WorldFinalsPreRegisterPage() {
     const extraStandard = Math.max(0, standardClasses.length - includedClasses);
     const classTotal = standardClasses.length > 0 ? basePrice + (extraStandard * additionalPrice) : 0;
     const premiumTotal = premiumClasses.reduce((sum: number, c: any) => sum + Number(c.premium_price || 0), 0);
-    const addonsTotal = (validation?.addonItems || []).reduce((sum: number, item: any) => sum + Number(item.price) * (addonSelections[item.id] || 0), 0);
+    const addonsTotal = addonItems.reduce((sum: number, item: any) => sum + Number(item.price) * (addonSelections[item.id] || 0), 0);
 
     return { basePrice, additionalPrice, includedClasses, standardCount: standardClasses.length, extraStandard, classTotal, premiumTotal, addonsTotal, total: classTotal + premiumTotal + addonsTotal };
-  }, [selectedPkg, selectedClasses, addonSelections, isEarlyBird, validation]);
+  }, [selectedPkg, selectedClasses, addonSelections, isEarlyBird, addonItems]);
 
   const handleSubmit = async () => {
+    if (isPreview) { alert('This is a preview. Submission is disabled.'); return; }
     if (!selectedPackageId) { alert('Please select a package.'); return; }
     if (selectedClasses.length === 0) { alert('Please select at least one class.'); return; }
     if (!form.email) { alert('Email is required.'); return; }
     setSubmitting(true);
     try {
-      const addonItems = (validation?.addonItems || []).filter((item: any) => (addonSelections[item.id] || 0) > 0)
+      const selectedAddonItems = addonItems.filter((item: any) => (addonSelections[item.id] || 0) > 0)
         .map((item: any) => ({ itemId: item.id, name: item.name, quantity: addonSelections[item.id], price: Number(item.price) }));
       const result = await worldFinalsApi.submitPreRegistration({
         token, packageId: selectedPackageId,
+        eventId: selectedPkg?._eventId,
         classes: selectedClasses.map((c: any) => ({ className: c.class_name, format: c.format || '', isPremium: c.is_premium, premiumPrice: c.is_premium ? Number(c.premium_price) : 0 })),
-        addonItems, email: form.email, firstName: form.firstName, lastName: form.lastName, phone: form.phone,
+        addonItems: selectedAddonItems, email: form.email, firstName: form.firstName, lastName: form.lastName, phone: form.phone,
         tshirtSize: form.tshirtSize || undefined, ringSize: form.ringSize || undefined,
         hotelNeeded: form.hotelNeeded, hotelNotes: form.hotelNotes || undefined, guestCount: form.guestCount, notes: form.notes || undefined,
       });
@@ -120,14 +166,17 @@ export default function WorldFinalsPreRegisterPage() {
   );
 
   const competitor = validation?.competitor;
-  const availablePackages = (validation?.packages || []).filter((p: any) => p.eligibleClasses?.length > 0);
-  const addonItems = validation?.addonItems || [];
-  const earlyDeadline = validation?.earlyBirdDeadline ? new Date(validation.earlyBirdDeadline) : null;
-  const closeDate = validation?.registrationCloseDate ? new Date(validation.registrationCloseDate) : null;
 
   return (
     <div className="min-h-screen bg-slate-900">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        {/* Preview Banner */}
+        {isPreview && (
+          <div className="bg-amber-500/20 border border-amber-500/40 rounded-lg px-4 py-3 mb-6 text-center">
+            <p className="text-amber-300 font-semibold text-sm">PREVIEW MODE — This is a preview with sample data. Submission is disabled.</p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center mb-8">
           <Trophy className="h-12 w-12 text-yellow-500 mx-auto mb-3" />
@@ -136,42 +185,84 @@ export default function WorldFinalsPreRegisterPage() {
           {config?.custom_message && <p className="text-amber-200/70 mt-3 max-w-2xl mx-auto">{config.custom_message}</p>}
         </div>
 
-        {/* Pricing Tier */}
-        <div className="flex justify-center mb-8">
-          {isEarlyBird ? (
-            <div className="bg-green-500/20 border border-green-500/30 rounded-lg px-4 py-2 text-center">
-              <p className="text-green-400 font-semibold">Early Bird Pricing</p>
-              {earlyDeadline && <p className="text-green-300/60 text-xs">Until {earlyDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
+        {/* Event Group Selection (if multiple groups) */}
+        {eventGroups.length > 1 && (
+          <div className="bg-slate-800 rounded-xl p-6 mb-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Select Event</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {eventGroups.map((group, idx) => {
+                const firstEvent = group.events[0];
+                const eventNames = group.events.map((e: any) => e.name).join(' + ');
+                const location = [firstEvent?.venue_name, firstEvent?.city, firstEvent?.state].filter(Boolean).join(', ');
+                const eventDate = firstEvent?.event_date ? new Date(firstEvent.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null;
+                return (
+                  <button key={idx} onClick={() => setSelectedGroupIdx(idx)}
+                    className={`p-4 rounded-lg border text-left transition-all ${
+                      selectedGroupIdx === idx ? 'bg-orange-500/20 border-orange-500' : 'bg-slate-700 border-slate-600 hover:border-slate-500'}`}>
+                    <h4 className="text-white font-semibold">{eventNames}</h4>
+                    {location && <p className="text-gray-400 text-sm mt-1 flex items-center gap-1"><MapPin className="h-3 w-3" />{location}</p>}
+                    {eventDate && <p className="text-gray-400 text-sm flex items-center gap-1"><Calendar className="h-3 w-3" />{eventDate}</p>}
+                    {firstEvent?.custom_message && <p className="text-amber-200/60 text-xs mt-2">{firstEvent.custom_message}</p>}
+                  </button>
+                );
+              })}
             </div>
-          ) : (
-            <div className="bg-orange-500/20 border border-orange-500/30 rounded-lg px-4 py-2 text-center">
-              <p className="text-orange-400 font-semibold">Regular Pricing</p>
-              {closeDate && <p className="text-orange-300/60 text-xs">Closes {closeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Event Info (when group selected) */}
+        {selectedGroup && selectedGroup.events.length > 0 && (
+          <div className="mb-6">
+            {selectedGroup.events.map((evt: any) => {
+              const location = [evt.venue_name, evt.city, evt.state].filter(Boolean).join(', ');
+              const eventDate = evt.event_date ? new Date(evt.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null;
+              const earlyDeadline = evt.early_bird_deadline ? new Date(evt.early_bird_deadline) : null;
+              const closeDate = evt.registration_close_date ? new Date(evt.registration_close_date) : null;
+              const tierIsEarly = evt.pricingTier === 'early_bird';
+              return (
+                <div key={evt.id} className="bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 mb-2 flex flex-wrap items-center gap-4 text-sm">
+                  <span className="text-white font-semibold">{evt.name}</span>
+                  {location && <span className="text-gray-400 flex items-center gap-1"><MapPin className="h-3 w-3" />{location}</span>}
+                  {eventDate && <span className="text-gray-400 flex items-center gap-1"><Calendar className="h-3 w-3" />{eventDate}</span>}
+                  {tierIsEarly
+                    ? <span className="text-green-400 text-xs bg-green-500/20 px-2 py-0.5 rounded">Early Bird{earlyDeadline ? ` until ${earlyDeadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}</span>
+                    : <span className="text-orange-400 text-xs bg-orange-500/20 px-2 py-0.5 rounded">Regular{closeDate ? ` — closes ${closeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}</span>}
+                  {evt.formats?.length > 0 && evt.formats.map((f: string) => (
+                    <span key={f} className="px-2 py-0.5 bg-slate-700 rounded text-xs text-gray-300">{f}</span>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Package Selection */}
-        <div className="bg-slate-800 rounded-xl p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Package className="h-5 w-5 text-orange-400" />Select Package</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {availablePackages.map((pkg: any) => (
-              <button key={pkg.id} onClick={() => setSelectedPackageId(pkg.id)} disabled={pkg.alreadyRegistered}
-                className={`p-4 rounded-lg border text-left transition-all ${
-                  pkg.alreadyRegistered ? 'opacity-50 cursor-not-allowed border-slate-600' :
-                  selectedPackageId === pkg.id ? 'bg-orange-500/20 border-orange-500' : 'bg-slate-700 border-slate-600 hover:border-slate-500'}`}>
-                <h4 className="text-white font-semibold">{pkg.name}</h4>
-                {pkg.description && <p className="text-gray-400 text-sm mt-1">{pkg.description}</p>}
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-green-400 font-bold text-lg">${Number(isEarlyBird ? pkg.base_price_early : pkg.base_price_regular).toFixed(2)}</span>
-                  <span className="text-gray-500 text-xs">for {pkg.included_classes} classes</span>
-                </div>
-                <p className="text-gray-500 text-xs mt-1">{pkg.eligibleClasses?.length} classes you qualified in</p>
-                {pkg.alreadyRegistered && <p className="text-amber-400 text-xs mt-1 font-medium">Already registered</p>}
-              </button>
-            ))}
+        {selectedGroup && availablePackages.length > 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 mb-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><Package className="h-5 w-5 text-orange-400" />Select Package</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {availablePackages.map((pkg: any) => {
+                const tierIsEarly = pkg._pricingTier === 'early_bird';
+                return (
+                  <button key={pkg.id} onClick={() => setSelectedPackageId(pkg.id)} disabled={pkg.alreadyRegistered}
+                    className={`p-4 rounded-lg border text-left transition-all ${
+                      pkg.alreadyRegistered ? 'opacity-50 cursor-not-allowed border-slate-600' :
+                      selectedPackageId === pkg.id ? 'bg-orange-500/20 border-orange-500' : 'bg-slate-700 border-slate-600 hover:border-slate-500'}`}>
+                    <h4 className="text-white font-semibold">{pkg.name}</h4>
+                    {selectedGroup.events.length > 1 && <p className="text-gray-500 text-xs">{pkg._eventName}</p>}
+                    {pkg.description && <p className="text-gray-400 text-sm mt-1">{pkg.description}</p>}
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-green-400 font-bold text-lg">${Number(tierIsEarly ? pkg.base_price_early : pkg.base_price_regular).toFixed(2)}</span>
+                      <span className="text-gray-500 text-xs">for {pkg.included_classes} classes</span>
+                    </div>
+                    <p className="text-gray-500 text-xs mt-1">{pkg.eligibleClasses?.length} classes you qualified in</p>
+                    {pkg.alreadyRegistered && <p className="text-amber-400 text-xs mt-1 font-medium">Already registered</p>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Class Selection */}
         {selectedPkg && (
@@ -201,7 +292,7 @@ export default function WorldFinalsPreRegisterPage() {
         )}
 
         {/* Add-Ons */}
-        {addonItems.length > 0 && (
+        {addonItems.length > 0 && selectedPkg && (
           <div className="bg-slate-800 rounded-xl p-6 mb-6">
             <h3 className="text-lg font-semibold text-white mb-4">Add-On Items</h3>
             <div className="space-y-3">
@@ -225,6 +316,7 @@ export default function WorldFinalsPreRegisterPage() {
         )}
 
         {/* Personal Info */}
+        {selectedPkg && (
         <div className="bg-slate-800 rounded-xl p-6 mb-6 space-y-4">
           <h3 className="text-lg font-semibold text-white">Your Information</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -256,6 +348,7 @@ export default function WorldFinalsPreRegisterPage() {
             <input type="number" min="0" max="20" value={form.guestCount} onChange={e => setForm({ ...form, guestCount: parseInt(e.target.value) || 0 })}
               className="w-32 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>}
         </div>
+        )}
 
         {/* Pricing Summary */}
         {pricing && (
@@ -263,7 +356,7 @@ export default function WorldFinalsPreRegisterPage() {
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-orange-400" />Order Summary</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-gray-300"><span>{selectedPkg?.name} ({pricing.includedClasses} included)</span><span>${pricing.basePrice.toFixed(2)}</span></div>
-              {pricing.extraStandard > 0 && <div className="flex justify-between text-gray-300"><span>{pricing.extraStandard} extra × ${pricing.additionalPrice.toFixed(2)}</span><span>${(pricing.extraStandard * pricing.additionalPrice).toFixed(2)}</span></div>}
+              {pricing.extraStandard > 0 && <div className="flex justify-between text-gray-300"><span>{pricing.extraStandard} extra x ${pricing.additionalPrice.toFixed(2)}</span><span>${(pricing.extraStandard * pricing.additionalPrice).toFixed(2)}</span></div>}
               {pricing.premiumTotal > 0 && <div className="flex justify-between text-amber-400"><span>Premium classes</span><span>${pricing.premiumTotal.toFixed(2)}</span></div>}
               {pricing.addonsTotal > 0 && <div className="flex justify-between text-gray-300"><span>Add-ons</span><span>${pricing.addonsTotal.toFixed(2)}</span></div>}
               <div className="border-t border-slate-700 pt-2 flex justify-between text-white font-bold text-lg"><span>Total</span><span className="text-green-400">${pricing.total.toFixed(2)}</span></div>
@@ -272,11 +365,13 @@ export default function WorldFinalsPreRegisterPage() {
         )}
 
         {/* Submit */}
+        {selectedPkg && (
         <button onClick={handleSubmit} disabled={submitting || selectedClasses.length === 0 || !selectedPackageId}
           className="w-full py-4 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-bold text-lg rounded-xl transition-colors flex items-center justify-center gap-2">
           {submitting ? <><div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white" />Processing...</>
             : <><Trophy className="h-5 w-5" />Complete Pre-Registration{pricing ? ` — $${pricing.total.toFixed(2)}` : ''}</>}
         </button>
+        )}
       </div>
     </div>
   );

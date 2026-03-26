@@ -41,6 +41,9 @@ export class FinalsRegistration {
   @Property({ type: 'uuid', nullable: true, fieldName: 'package_id', serializedName: 'package_id' })
   packageId?: string;
 
+  @Property({ type: 'uuid', nullable: true, fieldName: 'wf_event_id', serializedName: 'wf_event_id' })
+  wfEventId?: string;
+
   @Property({ type: 'jsonb', nullable: true, fieldName: 'addon_items', serializedName: 'addon_items' })
   addonItems?: any[];
 
