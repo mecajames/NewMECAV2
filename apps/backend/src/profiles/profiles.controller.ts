@@ -190,6 +190,43 @@ export class ProfilesController {
     @Headers('authorization') authHeader: string,
     @Body() data: Partial<Profile>,
   ): Promise<Profile> {
+    // Log staff access grants/revocations
+    if ('is_staff' in data || ('_logStaffAccess' in (data as any))) {
+      delete (data as any)._logStaffAccess;
+      try {
+        let grantedByEmail = 'unknown';
+        let grantedById = 'unknown';
+        if (authHeader?.startsWith('Bearer ')) {
+          const token = authHeader.substring(7);
+          const { data: { user } } = await this.supabaseAdmin.getClient().auth.getUser(token);
+          if (user) {
+            grantedByEmail = user.email || 'unknown';
+            grantedById = user.id;
+          }
+        }
+        const targetProfile = await this.profilesService.findById(id);
+        const action = data.is_staff ? 'GRANTED' : 'REVOKED';
+        const logEntry = {
+          action: `STAFF_ACCESS_${action}`,
+          grantedBy: { id: grantedById, email: grantedByEmail },
+          targetUser: { id, email: targetProfile?.email, name: `${targetProfile?.first_name || ''} ${targetProfile?.last_name || ''}`.trim(), mecaId: targetProfile?.meca_id },
+          timestamp: new Date().toISOString(),
+        };
+        console.log(`[STAFF ACCESS AUDIT] ${action} staff access: ${grantedByEmail} ${action.toLowerCase()} access for ${targetProfile?.email || id} at ${logEntry.timestamp}`);
+
+        // Persist to audit log table
+        const em = this.em.fork();
+        const conn = em.getConnection();
+        await conn.execute(
+          `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, created_at)
+           VALUES (gen_random_uuid(), ?, ?, 'profile', ?, ?, now())`,
+          [grantedById, `staff_access_${action.toLowerCase()}`, id, JSON.stringify(logEntry)]
+        );
+      } catch (err) {
+        console.error('[STAFF ACCESS AUDIT] Failed to log:', err);
+      }
+    }
+
     // If meca_id is being changed, verify the caller is a super admin
     if ('meca_id' in data) {
       let allowed = false;

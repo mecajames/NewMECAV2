@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Trophy, Mail, Bell, Send, CheckCircle2, Clock, ArrowLeft, RefreshCw,
   Users, MailCheck, TicketCheck, Settings, Package, Plus, Trash2, Save, DollarSign, BarChart3,
-  ChevronDown, ChevronUp, Edit2, X
+  ChevronDown, ChevronUp, Edit2, X, Eye
 } from 'lucide-react';
 import {
   worldFinalsApi,
@@ -14,6 +14,48 @@ import { seasonsApi } from '@/seasons/seasons.api-client';
 import { competitionClassesApi, type CompetitionClass } from '@/competition-classes/competition-classes.api-client';
 
 type AdminTab = 'qualifications' | 'config' | 'packages' | 'addons' | 'stats';
+
+const KNOWN_FORMATS = ['SPL', 'SQL', 'SQ', 'MECA', 'Install'];
+
+const FORMAT_COLORS: Record<string, string> = {
+  SPL: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  SQL: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  SQ: 'bg-green-500/20 text-green-400 border-green-500/30',
+  MECA: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  Install: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+};
+
+const toLocal = (d: string) => d ? d.split('.')[0].slice(0, 16) : '';
+
+// Sub-group prefixes for class categorization within a format (order matters — longest match first)
+const CLASS_SUBGROUP_PREFIXES = [
+  'Single Position Dueling Demos',
+  'Dueling Demos',
+  'MECA Kids',
+  'Park and Pound', 'Park And Pound',
+  'Radical X Mod', 'Radical X Street/Trunk', 'Radical X',
+  'X Modified', 'X Street',
+  'Modified Street',
+];
+
+function getClassSubgroup(className: string): string {
+  for (const prefix of CLASS_SUBGROUP_PREFIXES) {
+    if (className.startsWith(prefix)) return prefix.replace('And', 'and');
+  }
+  const match = className.match(/^(Modified|Street|Trunk|Extreme|Motorcycle)\b/);
+  if (match) return match[1];
+  return 'Other';
+}
+
+function groupClassesBySubgroup(classes: CompetitionClass[]): Record<string, CompetitionClass[]> {
+  const groups: Record<string, CompetitionClass[]> = {};
+  for (const cls of classes) {
+    const subgroup = getClassSubgroup(cls.name);
+    if (!groups[subgroup]) groups[subgroup] = [];
+    groups[subgroup].push(cls);
+  }
+  return groups;
+}
 
 export default function WorldFinalsAdminPage() {
   const navigate = useNavigate();
@@ -29,13 +71,18 @@ export default function WorldFinalsAdminPage() {
   const [sendingAllInvitations, setSendingAllInvitations] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
 
-  // Registration config state
+  // Registration config state (slimmed - no date fields)
   const [configForm, setConfigForm] = useState({
-    registrationOpenDate: '', earlyBirdDeadline: '', registrationCloseDate: '',
     collectTshirtSize: true, collectRingSize: true, collectHotelInfo: true, collectGuestCount: true,
     customMessage: '', isActive: false,
   });
   const [savingConfig, setSavingConfig] = useState(false);
+
+  // World Finals events loaded from events system (event_type='world_finals')
+  const [events, setEvents] = useState<any[]>([]);
+
+  // Selected event for packages/addons/stats filtering
+  const [selectedEventId, setSelectedEventId] = useState<string>('');
 
   // Packages state
   const [packages, setPackages] = useState<any[]>([]);
@@ -65,12 +112,21 @@ export default function WorldFinalsAdminPage() {
     if (selectedSeasonId) {
       fetchData();
       fetchConfig();
+      fetchEvents();
       fetchPackages();
       fetchAddonItems();
       fetchPreRegStats();
       fetchSeasonClasses();
     }
   }, [selectedSeasonId]);
+
+  useEffect(() => {
+    if (selectedSeasonId) {
+      fetchPackages();
+      fetchAddonItems();
+      fetchPreRegStats();
+    }
+  }, [selectedEventId]);
 
   const fetchSeasons = async () => {
     try {
@@ -98,11 +154,7 @@ export default function WorldFinalsAdminPage() {
     try {
       const data = await worldFinalsApi.getRegistrationConfig(selectedSeasonId);
       if (data) {
-        const toLocal = (d: string) => d ? d.split('.')[0].slice(0, 16) : '';
         setConfigForm({
-          registrationOpenDate: toLocal(data.registration_open_date),
-          earlyBirdDeadline: toLocal(data.early_bird_deadline),
-          registrationCloseDate: toLocal(data.registration_close_date),
           collectTshirtSize: data.collect_tshirt_size ?? true,
           collectRingSize: data.collect_ring_size ?? true,
           collectHotelInfo: data.collect_hotel_info ?? true,
@@ -114,8 +166,12 @@ export default function WorldFinalsAdminPage() {
     } catch { /* no config yet */ }
   };
 
+  const fetchEvents = async () => {
+    try { setEvents(await worldFinalsApi.getWorldFinalsEvents(selectedSeasonId)); } catch { /* ignore */ }
+  };
+
   const fetchPackages = async () => {
-    try { setPackages(await worldFinalsApi.getPackages(selectedSeasonId)); } catch { /* ignore */ }
+    try { setPackages(await worldFinalsApi.getPackages(selectedSeasonId, selectedEventId || undefined)); } catch { /* ignore */ }
   };
 
   const fetchSeasonClasses = async () => {
@@ -126,11 +182,11 @@ export default function WorldFinalsAdminPage() {
   };
 
   const fetchAddonItems = async () => {
-    try { setAddonItems(await worldFinalsApi.getAddonItems(selectedSeasonId)); } catch { /* ignore */ }
+    try { setAddonItems(await worldFinalsApi.getAddonItems(selectedSeasonId, selectedEventId || undefined)); } catch { /* ignore */ }
   };
 
   const fetchPreRegStats = async () => {
-    try { setPreRegStats(await worldFinalsApi.getPreRegistrationStats(selectedSeasonId)); } catch { /* ignore */ }
+    try { setPreRegStats(await worldFinalsApi.getPreRegistrationStats(selectedSeasonId, selectedEventId || undefined)); } catch { /* ignore */ }
   };
 
   // --- Qualification handlers ---
@@ -154,9 +210,6 @@ export default function WorldFinalsAdminPage() {
     setSavingConfig(true);
     try {
       await worldFinalsApi.upsertRegistrationConfig(selectedSeasonId, {
-        registrationOpenDate: configForm.registrationOpenDate ? new Date(configForm.registrationOpenDate) : new Date(),
-        earlyBirdDeadline: configForm.earlyBirdDeadline ? new Date(configForm.earlyBirdDeadline) : new Date(),
-        registrationCloseDate: configForm.registrationCloseDate ? new Date(configForm.registrationCloseDate) : new Date(),
         collectTshirtSize: configForm.collectTshirtSize, collectRingSize: configForm.collectRingSize,
         collectHotelInfo: configForm.collectHotelInfo, collectGuestCount: configForm.collectGuestCount,
         customMessage: configForm.customMessage || null, isActive: configForm.isActive,
@@ -220,6 +273,7 @@ export default function WorldFinalsAdminPage() {
         additionalClassPriceEarly: parseFloat(pkgForm.additionalClassPriceEarly),
         additionalClassPriceRegular: parseFloat(pkgForm.additionalClassPriceRegular),
         displayOrder: parseInt(pkgForm.displayOrder), isActive: pkgForm.isActive,
+        wfEventId: selectedEventId || null,
         classes: pkgForm.selectedClasses.map(c => ({
           className: c.className, format: c.format, isPremium: c.isPremium, premiumPrice: c.isPremium ? parseFloat(c.premiumPrice) : null,
         })),
@@ -242,7 +296,8 @@ export default function WorldFinalsAdminPage() {
     setSavingAddon(true);
     try {
       const payload = { seasonId: selectedSeasonId, name: addonForm.name, description: addonForm.description || null,
-        price: parseFloat(addonForm.price), maxQuantity: parseInt(addonForm.maxQuantity), displayOrder: parseInt(addonForm.displayOrder), isActive: addonForm.isActive };
+        price: parseFloat(addonForm.price), maxQuantity: parseInt(addonForm.maxQuantity), displayOrder: parseInt(addonForm.displayOrder), isActive: addonForm.isActive,
+        wfEventId: selectedEventId || null };
       if (editingAddon) await worldFinalsApi.updateAddonItem(editingAddon, payload);
       else await worldFinalsApi.createAddonItem(payload);
       setEditingAddon(null);
@@ -267,9 +322,35 @@ export default function WorldFinalsAdminPage() {
     classesByFormat[cls.format].push(cls);
   }
 
+  // Event selector component used in packages, addons, stats tabs
+  // Shows events from the Event Management system (event_type='world_finals')
+  const EventSelector = () => (
+    <div className="bg-slate-800 rounded-xl p-4 mb-6">
+      <div className="flex items-center gap-4 flex-wrap">
+        <label className="text-gray-400 text-sm font-medium">Filter by Event:</label>
+        <select value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)}
+          className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-orange-500 min-w-[250px]">
+          <option value="">All Events</option>
+          {events.map(evt => (
+            <option key={evt.id} value={evt.id}>
+              {evt.title}
+              {evt.venue_city || evt.venue_state ? ` - ${[evt.venue_city, evt.venue_state].filter(Boolean).join(', ')}` : ''}
+              {evt.event_date ? ` (${new Date(evt.event_date).toLocaleDateString()})` : ''}
+            </option>
+          ))}
+        </select>
+        {selectedEventId && (
+          <button onClick={() => setSelectedEventId('')} className="text-gray-400 hover:text-white text-sm flex items-center gap-1">
+            <X className="h-3 w-3" /> Clear filter
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   const TABS: { id: AdminTab; label: string; icon: any }[] = [
     { id: 'qualifications', label: 'Qualifications', icon: Trophy },
-    { id: 'config', label: 'Dates & Settings', icon: Settings },
+    { id: 'config', label: 'Settings', icon: Settings },
     { id: 'packages', label: 'Packages', icon: Package },
     { id: 'addons', label: 'Add-Ons', icon: DollarSign },
     { id: 'stats', label: 'Stats', icon: BarChart3 },
@@ -300,7 +381,7 @@ export default function WorldFinalsAdminPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-slate-700 overflow-x-auto">
+        <div className="flex gap-1 mb-6 border-b border-slate-700 overflow-x-auto items-center">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-5 py-3 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors ${
@@ -308,6 +389,21 @@ export default function WorldFinalsAdminPage() {
               <tab.icon className="h-4 w-4" />{tab.label}
             </button>
           ))}
+          <div className="ml-auto flex gap-2 pb-1">
+            {events.length > 1 ? events.map(evt => (
+              <a key={evt.id} href={`/world-finals/register?preview=true&seasonId=${selectedSeasonId}&eventId=${evt.id}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-white rounded-lg text-xs whitespace-nowrap transition-colors">
+                <Eye className="h-3.5 w-3.5" />Preview {evt.title?.replace(/^MECA\s+/i, '').replace(/\s+World Finals.*$/i, '') || 'Form'}
+              </a>
+            )) : (
+              <a href={`/world-finals/register?preview=true&seasonId=${selectedSeasonId}${events[0]?.id ? `&eventId=${events[0].id}` : ''}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 hover:text-white rounded-lg text-xs whitespace-nowrap transition-colors">
+                <Eye className="h-3.5 w-3.5" />Preview Registration Form
+              </a>
+            )}
+          </div>
         </div>
 
         {/* ==================== QUALIFICATIONS ==================== */}
@@ -376,22 +472,15 @@ export default function WorldFinalsAdminPage() {
           </>
         )}
 
-        {/* ==================== DATES & SETTINGS ==================== */}
+        {/* ==================== SETTINGS ==================== */}
         {activeTab === 'config' && (
           <div className="bg-slate-800 rounded-xl p-6 space-y-6">
-            <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">Registration Dates & Settings</h3>
+            <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">Season-Level Settings</h3>
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={configForm.isActive} onChange={e => setConfigForm({ ...configForm, isActive: e.target.checked })}
                 className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
               <span className="text-white font-medium">Pre-Registration Active</span>
             </label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[['Open Date', 'registrationOpenDate'], ['Early Bird Deadline', 'earlyBirdDeadline'], ['Close Date', 'registrationCloseDate']].map(([label, key]) => (
-                <div key={key}><label className="block text-sm text-gray-400 mb-1">{label}</label>
-                  <input type="datetime-local" value={(configForm as any)[key]} onChange={e => setConfigForm({ ...configForm, [key]: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>
-              ))}
-            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[['collectTshirtSize', 'T-Shirt Size'], ['collectRingSize', 'Ring Size'], ['collectHotelInfo', 'Hotel Info'], ['collectGuestCount', 'Guest Count']].map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer">
@@ -413,13 +502,35 @@ export default function WorldFinalsAdminPage() {
         {/* ==================== PACKAGES ==================== */}
         {activeTab === 'packages' && (
           <div className="space-y-6">
+            <EventSelector />
             {/* Package List */}
             {!editingPackage && (
               <>
                 <div className="flex justify-between items-center">
                   <h3 className="text-xl font-semibold text-white">Registration Packages</h3>
-                  <button onClick={startNewPackage} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg">
-                    <Plus className="h-4 w-4" />Add Package</button>
+                  <div className="flex gap-2">
+                    {selectedEventId ? (
+                      <a href={`/world-finals/register?preview=true&seasonId=${selectedSeasonId}&eventId=${selectedEventId}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg text-sm">
+                        <Eye className="h-4 w-4" />Preview Form</a>
+                    ) : events.length > 0 ? (
+                      events.map(evt => (
+                        <a key={evt.id} href={`/world-finals/register?preview=true&seasonId=${selectedSeasonId}&eventId=${evt.id}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg text-xs">
+                          <Eye className="h-3 w-3" />Preview {evt.title?.replace('MECA ', '').replace(' World Finals', '').replace(/ \d{4}$/, '') || 'Form'}
+                        </a>
+                      ))
+                    ) : (
+                      <a href={`/world-finals/register?preview=true&seasonId=${selectedSeasonId}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg text-sm">
+                        <Eye className="h-4 w-4" />Preview Form</a>
+                    )}
+                    <button onClick={startNewPackage} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg">
+                      <Plus className="h-4 w-4" />Add Package</button>
+                  </div>
                 </div>
                 {packages.length === 0 ? (
                   <div className="bg-slate-800 rounded-xl p-12 text-center"><Package className="h-12 w-12 text-gray-500 mx-auto mb-3" /><p className="text-gray-400">No packages configured. Add one to get started.</p></div>
@@ -491,39 +602,47 @@ export default function WorldFinalsAdminPage() {
                 <div>
                   <h4 className="text-sm font-semibold text-orange-400 mb-2">Eligible Classes ({pkgForm.selectedClasses.length} selected)</h4>
                   <p className="text-xs text-gray-500 mb-3">Select which competition classes belong in this package. Mark premium classes that cost extra and aren't included in the base price.</p>
-                  {Object.entries(classesByFormat).map(([format, classes]) => (
-                    <div key={format} className="mb-4">
-                      <h5 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{format}</h5>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
-                        {classes.map(cls => {
-                          const selected = pkgForm.selectedClasses.find(c => c.className === cls.name);
-                          return (
-                            <div key={cls.id} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                              selected ? 'bg-orange-500/10 border-orange-500/40' : 'bg-slate-700/30 border-slate-600/30 hover:border-slate-500'}`}>
-                              <input type="checkbox" checked={!!selected} onChange={() => toggleClassInPackage(cls)}
-                                className="w-4 h-4 rounded border-slate-500 text-orange-500 bg-slate-700 flex-shrink-0" />
-                              <span className="text-white text-sm flex-1 truncate">{cls.name}</span>
-                              {selected && (
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <button onClick={(e) => { e.stopPropagation(); toggleClassPremium(cls.name); }}
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${selected.isPremium ? 'bg-amber-500/30 text-amber-400' : 'bg-slate-600 text-gray-500 hover:text-gray-300'}`}>
-                                    {selected.isPremium ? 'PREMIUM' : 'Std'}
-                                  </button>
-                                  {selected.isPremium && (
-                                    <input type="number" step="1" value={selected.premiumPrice}
-                                      onChange={e => { e.stopPropagation(); updatePremiumPrice(cls.name, e.target.value); }}
-                                      onClick={e => e.stopPropagation()}
-                                      className="w-14 px-1 py-0.5 text-[10px] bg-slate-700 border border-amber-500/30 rounded text-amber-400 text-right"
-                                      placeholder="$" />
-                                  )}
-                                </div>
-                              )}
+                  {Object.entries(classesByFormat).map(([format, classes]) => {
+                    const subgroups = groupClassesBySubgroup(classes);
+                    return (
+                      <div key={format} className="mb-5">
+                        <h5 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3 border-b border-slate-700 pb-1">{format}</h5>
+                        {Object.entries(subgroups).map(([subgroup, subClasses]) => (
+                          <div key={subgroup} className="mb-3">
+                            <h6 className="text-xs font-medium text-gray-500 mb-1 ml-1">{subgroup}</h6>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                              {subClasses.map(cls => {
+                                const selected = pkgForm.selectedClasses.find(c => c.className === cls.name);
+                                return (
+                                  <div key={cls.id} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                                    selected ? 'bg-orange-500/10 border-orange-500/40' : 'bg-slate-700/30 border-slate-600/30 hover:border-slate-500'}`}>
+                                    <input type="checkbox" checked={!!selected} onChange={() => toggleClassInPackage(cls)}
+                                      className="w-4 h-4 rounded border-slate-500 text-orange-500 bg-slate-700 flex-shrink-0" />
+                                    <span className="text-white text-sm flex-1 truncate">{cls.name}</span>
+                                    {selected && (
+                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button onClick={(e) => { e.stopPropagation(); toggleClassPremium(cls.name); }}
+                                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${selected.isPremium ? 'bg-amber-500/30 text-amber-400' : 'bg-slate-600 text-gray-500 hover:text-gray-300'}`}>
+                                          {selected.isPremium ? 'PREMIUM' : 'Std'}
+                                        </button>
+                                        {selected.isPremium && (
+                                          <input type="number" step="1" value={selected.premiumPrice}
+                                            onChange={e => { e.stopPropagation(); updatePremiumPrice(cls.name, e.target.value); }}
+                                            onClick={e => e.stopPropagation()}
+                                            className="w-14 px-1 py-0.5 text-[10px] bg-slate-700 border border-amber-500/30 rounded text-amber-400 text-right"
+                                            placeholder="$" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-3 pt-2">
@@ -540,6 +659,7 @@ export default function WorldFinalsAdminPage() {
         {/* ==================== ADD-ONS ==================== */}
         {activeTab === 'addons' && (
           <div className="space-y-6">
+            <EventSelector />
             <div className="bg-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">{editingAddon ? 'Edit' : 'Add'} Item</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -587,6 +707,7 @@ export default function WorldFinalsAdminPage() {
         {/* ==================== STATS ==================== */}
         {activeTab === 'stats' && (
           <div className="space-y-6">
+            <EventSelector />
             {preRegStats && preRegStats.totalRegistrations > 0 ? (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
