@@ -40,11 +40,12 @@ const V1_CONFIG = {
 };
 
 const V2_CONFIG = {
-  host: '127.0.0.1',
-  port: 54322,
+  host: process.env.V2_DB_HOST || '127.0.0.1',
+  port: parseInt(process.env.V2_DB_PORT || '54322'),
   database: 'postgres',
   user: 'postgres',
-  password: 'postgres',
+  password: process.env.V2_DB_PASSWORD || 'postgres',
+  ssl: false as any,
 };
 
 // ============================================
