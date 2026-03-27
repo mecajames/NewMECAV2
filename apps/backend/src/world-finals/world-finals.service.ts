@@ -119,13 +119,10 @@ export class WorldFinalsService {
 
     em.persist(qualification);
 
-    // Send in-app notification if we have a user ID
+    // Create in-app notification only — email is sent via "Send Invite" / "Send All Pending"
     if (userId) {
       await this.sendQualificationNotification(em, qualification, userId, season, competitionClass);
     }
-
-    // Send email notification
-    await this.sendQualificationEmail(em, qualification, season, competitionClass);
 
     await em.flush();
 
@@ -187,50 +184,14 @@ export class WorldFinalsService {
     }
 
     try {
-      await this.emailService.sendEmail({
+      await this.emailService.sendWorldFinalsQualificationEmail({
         to: email,
-        subject: `Congratulations! You've Qualified for MECA World Finals in ${competitionClass}!`,
-        from: 'events@mecacaraudio.com',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #1a1a2e;">Congratulations, ${firstName}!</h1>
-
-            <p style="font-size: 18px; color: #333;">
-              You have officially qualified for the <strong>MECA World Finals</strong> in <strong>${competitionClass}</strong>!
-            </p>
-
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
-              <h2 style="margin: 0 0 10px 0;">Your Achievement</h2>
-              <p style="margin: 0; font-size: 24px;"><strong>${qualification.totalPoints} Points</strong></p>
-              <p style="margin: 5px 0 0 0;">in ${competitionClass}</p>
-              <p style="margin: 5px 0 0 0; font-size: 14px;">${season.name}</p>
-            </div>
-
-            <p style="color: #333;">
-              By earning ${qualification.totalPoints} points in ${competitionClass}, you have met the ${season.qualificationPointsThreshold}-point
-              threshold required to compete at the highest level of car audio competition.
-            </p>
-
-            <h3 style="color: #1a1a2e;">What's Next?</h3>
-            <ul style="color: #333;">
-              <li>You will receive an exclusive pre-registration invitation for World Finals</li>
-              <li>Pre-registration gives you priority access before general registration opens</li>
-              <li>Keep competing to qualify in more classes!</li>
-            </ul>
-
-            <p style="color: #333;">
-              View your competition stats and track your progress on your
-              <a href="https://mecacaraudio.com/my-meca" style="color: #667eea;">MyMECA Dashboard</a>.
-            </p>
-
-            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-
-            <p style="color: #666; font-size: 12px;">
-              Mobile Electronics Competition Association<br>
-              <a href="https://mecacaraudio.com" style="color: #667eea;">mecacaraudio.com</a>
-            </p>
-          </div>
-        `,
+        firstName: firstName || qualification.competitorName.split(' ')[0],
+        competitorName: qualification.competitorName,
+        competitionClass,
+        totalPoints: qualification.totalPoints,
+        qualificationThreshold: season.qualificationPointsThreshold || 0,
+        seasonName: season.name,
       });
 
       // Update qualification record (will be flushed by caller)
@@ -391,61 +352,13 @@ export class WorldFinalsService {
     const registrationUrl = `https://mecacaraudio.com/world-finals/register?token=${qualification.invitationToken}`;
 
     try {
-      await this.emailService.sendEmail({
+      await this.emailService.sendWorldFinalsInvitationEmail({
         to: email,
-        subject: `Your Exclusive MECA World Finals Pre-Registration Invitation - ${qualification.competitionClass}`,
-        from: 'events@mecacaraudio.com',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #1a1a2e;">Your World Finals Invitation</h1>
-
-            <p style="font-size: 18px; color: #333;">
-              Dear ${firstName},
-            </p>
-
-            <p style="color: #333;">
-              As a qualified competitor with <strong>${qualification.totalPoints} points</strong> in
-              <strong>${qualification.competitionClass}</strong> during the ${(season as Season).name},
-              you are invited to pre-register for the MECA World Finals!
-            </p>
-
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${registrationUrl}" style="
-                display: inline-block;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 15px 40px;
-                text-decoration: none;
-                border-radius: 8px;
-                font-size: 18px;
-                font-weight: bold;
-              ">
-                Pre-Register for ${qualification.competitionClass}
-              </a>
-            </div>
-
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-              <h3 style="margin: 0 0 10px 0; color: #1a1a2e;">Pre-Registration Benefits:</h3>
-              <ul style="color: #333; margin: 0;">
-                <li>Priority registration before general public</li>
-                <li>Guaranteed competition spot in ${qualification.competitionClass}</li>
-                <li>Early bird pricing (if applicable)</li>
-              </ul>
-            </div>
-
-            <p style="color: #666; font-size: 14px;">
-              This invitation is exclusive to you and cannot be transferred. If you have any questions,
-              please contact us at support@mecacaraudio.com.
-            </p>
-
-            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-
-            <p style="color: #666; font-size: 12px;">
-              Mobile Electronics Competition Association<br>
-              <a href="https://mecacaraudio.com" style="color: #667eea;">mecacaraudio.com</a>
-            </p>
-          </div>
-        `,
+        firstName: firstName || qualification.competitorName.split(' ')[0],
+        competitionClass: qualification.competitionClass,
+        totalPoints: qualification.totalPoints,
+        seasonName: (season as Season).name,
+        registrationUrl,
       });
     } catch (error) {
       console.error(`[WorldFinals] Failed to send invitation email to ${email}:`, error);
@@ -650,11 +563,10 @@ export class WorldFinalsService {
         em.persist(qualification);
         newQualifications++;
 
-        // Send notifications for new qualifications
+        // Create in-app notification only — email is sent via "Send Invite" / "Send All Pending"
         if (data.userId) {
           await this.sendQualificationNotification(em, qualification, data.userId, season, data.className);
         }
-        await this.sendQualificationEmail(em, qualification, season, data.className);
       }
     }
 
