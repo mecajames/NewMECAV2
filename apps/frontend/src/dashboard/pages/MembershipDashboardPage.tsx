@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/auth';
-import { membershipsApi, Membership, MemberCancelMembershipModal } from '@/memberships';
+import { membershipsApi, Membership, MemberCancelMembershipModal, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 
 export default function MembershipDashboardPage() {
   const navigate = useNavigate();
@@ -29,6 +29,9 @@ export default function MembershipDashboardPage() {
   const [disableAutoRenewalLoading, setDisableAutoRenewalLoading] = useState(false);
   const [disableAutoRenewalReason, setDisableAutoRenewalReason] = useState('');
   const [showCancelMembershipModal, setShowCancelMembershipModal] = useState(false);
+  const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
+  const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
+  const [editingSecondary, setEditingSecondary] = useState<SecondaryMembershipInfo | null>(null);
 
   useEffect(() => {
     const fetchMembershipData = async () => {
@@ -41,6 +44,12 @@ export default function MembershipDashboardPage() {
         // Fetch active membership
         const active = await membershipsApi.getUserActiveMembership(profile.id);
         setActiveMembership(active);
+
+        // Fetch secondary memberships
+        try {
+          const secondaries = await membershipsApi.getSecondaryMemberships();
+          setSecondaryMemberships(secondaries);
+        } catch { /* ignore */ }
 
         // Fetch subscription status if there's an active membership
         if (active) {
@@ -354,6 +363,15 @@ export default function MembershipDashboardPage() {
               </div>
             )}
 
+            {/* View Membership Card */}
+            <button
+              onClick={() => navigate('/dashboard/mymeca?tab=card')}
+              className="px-5 py-2.5 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+            >
+              <CreditCard className="h-4 w-4" />
+              View Membership Card
+            </button>
+
             {/* Cancel Membership Button - always available */}
             <button
               onClick={() => setShowCancelMembershipModal(true)}
@@ -363,6 +381,69 @@ export default function MembershipDashboardPage() {
               Cancel Membership
             </button>
           </div>
+        </div>
+
+        {/* Secondary Memberships */}
+        <div className="mt-6 bg-slate-800 rounded-xl p-6 shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-400" />
+              Secondary Memberships ({secondaryMemberships.length})
+            </h2>
+            <button
+              onClick={() => setShowAddSecondaryModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Secondary Member
+            </button>
+          </div>
+          {secondaryMemberships.length > 0 ? (
+            <div className="space-y-3">
+              {secondaryMemberships.map((secondary) => (
+                <div key={secondary.id} className="p-4 bg-slate-700/50 rounded-lg border border-slate-600/50">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <p className="text-white font-medium">{secondary.competitorName}</p>
+                        {secondary.relationshipToMaster && (
+                          <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded">
+                            {RELATIONSHIP_TYPES.find(r => r.value === secondary.relationshipToMaster)?.label || secondary.relationshipToMaster}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <p className="text-gray-400 text-xs">Membership</p>
+                          <p className="text-gray-200">{secondary.membershipType?.name || 'Membership'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 text-xs">MECA ID</p>
+                          <p className="text-orange-400 font-medium font-mono">{secondary.mecaId ? `#${secondary.mecaId}` : 'Pending'}</p>
+                        </div>
+                        {(secondary.vehicleMake || secondary.vehicleModel) && (
+                          <div>
+                            <p className="text-gray-400 text-xs flex items-center gap-1"><Car className="h-3 w-3" /> Vehicle</p>
+                            <p className="text-gray-200">{[secondary.vehicleMake, secondary.vehicleModel].filter(Boolean).join(' ')}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      <span className={`px-2 py-1 text-xs rounded-full ${secondary.paymentStatus === 'paid' ? 'bg-green-900/50 text-green-400' : 'bg-yellow-900/50 text-yellow-400'}`}>
+                        {secondary.paymentStatus === 'paid' ? 'Active' : 'Payment Pending'}
+                      </span>
+                      <button onClick={() => setEditingSecondary(secondary)} className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors" title="Edit">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm">No secondary memberships. Add family members or team members to your account.</p>
+          )}
         </div>
 
         {/* Renew Early Section */}
@@ -431,6 +512,32 @@ export default function MembershipDashboardPage() {
           membership={activeMembership}
           onClose={() => setShowCancelMembershipModal(false)}
           onCancelled={handleMembershipCancelled}
+        />
+      )}
+
+      {/* Add Secondary Modal */}
+      <AddSecondaryModal
+        isOpen={showAddSecondaryModal}
+        onClose={() => setShowAddSecondaryModal(false)}
+        onSuccess={async () => {
+          setShowAddSecondaryModal(false);
+          const secondaries = await membershipsApi.getSecondaryMemberships();
+          setSecondaryMemberships(secondaries);
+        }}
+        masterMembershipId={activeMembership?.id || ''}
+      />
+
+      {/* Edit Secondary Modal */}
+      {editingSecondary && (
+        <EditSecondaryModal
+          isOpen={true}
+          onClose={() => setEditingSecondary(null)}
+          onSuccess={async () => {
+            setEditingSecondary(null);
+            const secondaries = await membershipsApi.getSecondaryMemberships();
+            setSecondaryMemberships(secondaries);
+          }}
+          secondary={editingSecondary}
         />
       )}
     </div>

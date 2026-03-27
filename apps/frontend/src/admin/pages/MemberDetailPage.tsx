@@ -1253,27 +1253,34 @@ export default function MemberDetailPage() {
                   </>
                 ) : (
                   <>
-                    <div className="flex items-center gap-3 p-4 bg-slate-700 rounded-lg mb-4">
-                      <Shield className="h-8 w-8 text-slate-500" />
-                      <div>
-                        <p className="text-white font-medium">Grant staff access to this user</p>
-                        <p className="text-slate-400 text-xs mt-1">
-                          Add admin permissions without changing their membership type.
-                        </p>
+                    <div className="p-4 bg-red-900/30 border-2 border-red-500/50 rounded-lg mb-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <AlertTriangle className="h-6 w-6 text-red-400 flex-shrink-0" />
+                        <p className="text-red-400 font-bold text-lg">CAUTION: Full Admin Access</p>
                       </div>
+                      <p className="text-red-200/80 text-sm">
+                        This grants <strong>FULL ADMINISTRATOR ACCESS</strong> to the entire system. This is <strong>NOT</strong> Event Director or Judge access — it gives this user access to <strong>EVERYTHING</strong> including member management, billing, site settings, and all admin tools.
+                      </p>
                     </div>
 
-                    <p className="text-slate-300 text-sm font-medium mb-2">Staff access will allow them to:</p>
+                    <p className="text-slate-300 text-sm font-medium mb-2">This will give them access to:</p>
                     <ul className="text-slate-400 text-sm space-y-1 ml-4 list-disc mb-4">
-                      <li>Access the Admin Dashboard</li>
-                      <li>Manage members, events, and memberships</li>
-                      <li>View billing, orders, and reports</li>
+                      <li>Full Admin Dashboard access</li>
+                      <li>Manage ALL members, events, and memberships</li>
+                      <li>View and modify billing, orders, and financial reports</li>
                       <li>Manage support tickets and notifications</li>
-                      <li>All admin tools and settings</li>
+                      <li>ALL admin tools, site settings, and system configuration</li>
                     </ul>
 
+                    <div className="p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg mb-3">
+                      <p className="text-amber-300 text-sm font-medium mb-1">This is NOT for Judges or Event Directors</p>
+                      <p className="text-amber-200/70 text-xs">
+                        To grant Judge or Event Director access, use the Judge Applications or Event Director Applications pages instead. Those provide limited, role-specific access.
+                      </p>
+                    </div>
+
                     <div className="p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
-                      <p className="text-blue-300 text-sm font-medium mb-1">No changes to their account</p>
+                      <p className="text-blue-300 text-sm font-medium mb-1">No changes to their membership</p>
                       <p className="text-blue-200/70 text-xs">
                         Their membership stays as <strong>{member.role || 'user'}</strong>. They keep all competitor capabilities: event registration, competition results, leaderboard standings, team membership, and everything else.
                       </p>
@@ -1291,14 +1298,20 @@ export default function MemberDetailPage() {
                 {!(isCurrentlyStaff && isProtected) && (
                   <button
                     onClick={async () => {
-                      setTogglingStaff(true);
                       const granting = !isCurrentlyStaff;
+                      if (granting) {
+                        const confirmed = window.confirm(
+                          `LAST WARNING!\n\nYou are about to grant FULL ADMIN ACCESS to ${member.first_name || ''} ${member.last_name || ''} (${member.email}).\n\nThis gives them access to EVERYTHING in the system including member management, billing, site settings, and all admin tools.\n\nAre you absolutely sure?`
+                        );
+                        if (!confirmed) return;
+                      }
+                      setTogglingStaff(true);
                       try {
                         const updates: any = { is_staff: granting };
                         if (!granting && member.role === 'admin') {
                           updates.role = 'user';
                         }
-                        await profilesApi.update(member.id, updates);
+                        await profilesApi.update(member.id, { ...updates, _logStaffAccess: true });
                         setMember({ ...member, ...updates });
                         setShowStaffModal(false);
                       } catch (err: any) {
@@ -5162,15 +5175,6 @@ function MembershipsTab({ member }: { member: Profile }) {
                           <span className={`${isExpired(membership.endDate || '') ? 'text-red-400' : 'text-gray-200'}`}>
                             {membership.endDate ? formatDate(membership.endDate) : 'N/A'}
                           </span>
-                          {canEdit && (
-                            <button
-                              onClick={() => handleStartEditEndDate(membership)}
-                              className="p-1 text-gray-400 hover:text-orange-400 transition-colors"
-                              title="Edit end date"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                          )}
                         </>
                       )}
                       {endDateError && editingEndDateId === membership.id && (

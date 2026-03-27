@@ -429,7 +429,7 @@ export default function MyMecaDashboardPage() {
     const action = searchParams.get('action');
 
     // Set active tab from URL parameter
-    if (tab && ['overview', 'profile', 'gallery', 'team', 'events', 'results', 'analytics'].includes(tab)) {
+    if (tab && ['overview', 'profile', 'gallery', 'team', 'card', 'events', 'results', 'analytics'].includes(tab)) {
       setActiveTab(tab as TabType);
     }
 
@@ -1893,45 +1893,6 @@ export default function MyMecaDashboardPage() {
               </div>
             </div>
           </button>
-
-          {/* Recent Invoices */}
-          {recentInvoices.length > 0 && (
-            <div className="bg-slate-700 rounded-xl p-6 col-span-full">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-semibold text-lg">Recent Invoices</h3>
-                <button
-                  onClick={() => navigate('/billing')}
-                  className="text-purple-400 hover:text-purple-300 text-sm font-medium"
-                >
-                  View All
-                </button>
-              </div>
-              <div className="space-y-3">
-                {recentInvoices.map((invoice) => (
-                  <div key={invoice.id} className="flex items-center justify-between bg-slate-600/50 rounded-lg px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-4 w-4 text-gray-400" />
-                      <span className="text-white text-sm font-medium">{invoice.invoiceNumber}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        invoice.status === 'paid' ? 'bg-green-500/20 text-green-400' :
-                        invoice.status === 'sent' ? 'bg-blue-500/20 text-blue-400' :
-                        invoice.status === 'overdue' ? 'bg-red-500/20 text-red-400' :
-                        'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-white text-sm font-medium">${Number(invoice.total).toFixed(2)}</span>
-                      <span className="text-gray-400 text-xs">
-                        {invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString() : ''}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           <button
             onClick={() => navigate(activeMembership ? '/dashboard/membership' : '/membership')}
