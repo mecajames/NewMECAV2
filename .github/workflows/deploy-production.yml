@@ -1,24 +1,24 @@
-name: Deploy to Staging
+name: Deploy to Production
 
 on:
   push:
-    branches: [test]
+    branches: [main]
     paths:
       - 'apps/**'
       - 'packages/**'
       - 'deploy/**'
       - 'rush.json'
       - 'common/config/rush/**'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/deploy-production.yml'
   workflow_dispatch:
 
 env:
-  SERVICE_NAME: v2-container-service-1
+  SERVICE_NAME: meca-v2-production
   AWS_REGION: us-east-1
 
 jobs:
   deploy:
-    name: Build & Deploy
+    name: Build & Deploy Production
     runs-on: ubuntu-latest
 
     steps:
@@ -48,13 +48,13 @@ jobs:
         run: |
           docker build \
             -f deploy/nginx.Dockerfile \
-            --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
-            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            --build-arg VITE_SUPABASE_URL="${{ secrets.PROD_VITE_SUPABASE_URL }}" \
+            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.PROD_VITE_SUPABASE_ANON_KEY }}" \
             --build-arg VITE_API_URL="" \
-            --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
-            --build-arg VITE_STRIPE_PUBLISHABLE_KEY="${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}" \
-            --build-arg VITE_GA4_MEASUREMENT_ID="${{ secrets.VITE_GA4_MEASUREMENT_ID }}" \
-            --build-arg VITE_GOOGLE_MAPS_API_KEY="${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}" \
+            --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.PROD_VITE_RECAPTCHA_SITE_KEY }}" \
+            --build-arg VITE_STRIPE_PUBLISHABLE_KEY="${{ secrets.PROD_VITE_STRIPE_PUBLISHABLE_KEY }}" \
+            --build-arg VITE_GA4_MEASUREMENT_ID="${{ secrets.PROD_VITE_GA4_MEASUREMENT_ID }}" \
+            --build-arg VITE_GOOGLE_MAPS_API_KEY="${{ secrets.PROD_VITE_GOOGLE_MAPS_API_KEY }}" \
             -t newmeca-nginx:latest \
             .
 
@@ -84,39 +84,41 @@ jobs:
 
       - name: Build deployment config from template and deploy
         env:
-          GA4_CREDENTIALS_JSON: ${{ secrets.GA4_CREDENTIALS_JSON }}
+          GA4_CREDENTIALS_JSON: ${{ secrets.PROD_GA4_CREDENTIALS_JSON }}
         run: |
           echo "Backend image: ${{ steps.push-backend.outputs.image }}"
           echo "Nginx image: ${{ steps.push-nginx.outputs.image }}"
 
           # Build deployment.json from template + GitHub Secrets
+          # Override serviceName for production
           jq \
+            --arg svc "${{ env.SERVICE_NAME }}" \
             --arg backend "${{ steps.push-backend.outputs.image }}" \
             --arg nginx "${{ steps.push-nginx.outputs.image }}" \
-            --arg database_url "${{ secrets.DATABASE_URL }}" \
-            --arg supabase_url "${{ secrets.SUPABASE_URL }}" \
-            --arg supabase_anon_key "${{ secrets.SUPABASE_ANON_KEY }}" \
-            --arg supabase_service_role_key "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            --arg stripe_secret_key "${{ secrets.STRIPE_SECRET_KEY }}" \
-            --arg stripe_webhook_secret "${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
-            --arg cors_origin "${{ secrets.CORS_ORIGIN }}" \
-            --arg recaptcha_secret_key "${{ secrets.RECAPTCHA_SECRET_KEY }}" \
-            --arg super_admin_password "${{ secrets.SUPER_ADMIN_PASSWORD }}" \
-            --arg ga4_property_id "${{ secrets.GA4_PROPERTY_ID }}" \
-            --arg usps_consumer_key "${{ secrets.USPS_CONSUMER_KEY }}" \
-            --arg usps_consumer_secret "${{ secrets.USPS_CONSUMER_SECRET }}" \
-            --arg google_maps_api_key "${{ secrets.GOOGLE_MAPS_API_KEY }}" \
-            --arg mailgun_domain "${{ secrets.MAILGUN_DOMAIN }}" \
-            --arg mailgun_api_key "${{ secrets.MAILGUN_API_KEY }}" \
-            --arg frontend_url "${{ secrets.FRONTEND_URL }}" \
-            --arg cc_api_key "${{ secrets.CONSTANT_CONTACT_API_KEY }}" \
-            --arg cc_client_secret "${{ secrets.CONSTANT_CONTACT_CLIENT_SECRET }}" \
-            --arg cc_access_token "${{ secrets.CONSTANT_CONTACT_ACCESS_TOKEN }}" \
-            --arg cc_refresh_token "${{ secrets.CONSTANT_CONTACT_REFRESH_TOKEN }}" \
-            --arg cc_list_id "${{ secrets.CONSTANT_CONTACT_LIST_ID }}" \
-            --arg contact_form_email "${{ secrets.CONTACT_FORM_EMAIL }}" \
-            --arg enable_test_mode "${{ secrets.ENABLE_TEST_MODE }}" \
+            --arg database_url "${{ secrets.PROD_DATABASE_URL }}" \
+            --arg supabase_url "${{ secrets.PROD_SUPABASE_URL }}" \
+            --arg supabase_anon_key "${{ secrets.PROD_SUPABASE_ANON_KEY }}" \
+            --arg supabase_service_role_key "${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}" \
+            --arg stripe_secret_key "${{ secrets.PROD_STRIPE_SECRET_KEY }}" \
+            --arg stripe_webhook_secret "${{ secrets.PROD_STRIPE_WEBHOOK_SECRET }}" \
+            --arg cors_origin "${{ secrets.PROD_CORS_ORIGIN }}" \
+            --arg recaptcha_secret_key "${{ secrets.PROD_RECAPTCHA_SECRET_KEY }}" \
+            --arg super_admin_password "${{ secrets.PROD_SUPER_ADMIN_PASSWORD }}" \
+            --arg ga4_property_id "${{ secrets.PROD_GA4_PROPERTY_ID }}" \
+            --arg usps_consumer_key "${{ secrets.PROD_USPS_CONSUMER_KEY }}" \
+            --arg usps_consumer_secret "${{ secrets.PROD_USPS_CONSUMER_SECRET }}" \
+            --arg google_maps_api_key "${{ secrets.PROD_GOOGLE_MAPS_API_KEY }}" \
+            --arg mailgun_domain "${{ secrets.PROD_MAILGUN_DOMAIN }}" \
+            --arg mailgun_api_key "${{ secrets.PROD_MAILGUN_API_KEY }}" \
+            --arg frontend_url "${{ secrets.PROD_FRONTEND_URL }}" \
+            --arg cc_api_key "${{ secrets.PROD_CONSTANT_CONTACT_API_KEY }}" \
+            --arg cc_client_secret "${{ secrets.PROD_CONSTANT_CONTACT_CLIENT_SECRET }}" \
+            --arg cc_access_token "${{ secrets.PROD_CONSTANT_CONTACT_ACCESS_TOKEN }}" \
+            --arg cc_refresh_token "${{ secrets.PROD_CONSTANT_CONTACT_REFRESH_TOKEN }}" \
+            --arg cc_list_id "${{ secrets.PROD_CONSTANT_CONTACT_LIST_ID }}" \
+            --arg contact_form_email "${{ secrets.PROD_CONTACT_FORM_EMAIL }}" \
             '
+            .serviceName = $svc |
             .containers.backend.image = $backend |
             .containers.nginx.image = $nginx |
             .containers.backend.environment.DATABASE_URL = $database_url |
@@ -141,8 +143,7 @@ jobs:
             .containers.backend.environment.CONSTANT_CONTACT_ACCESS_TOKEN = $cc_access_token |
             .containers.backend.environment.CONSTANT_CONTACT_REFRESH_TOKEN = $cc_refresh_token |
             .containers.backend.environment.CONSTANT_CONTACT_LIST_ID = $cc_list_id |
-            .containers.backend.environment.CONTACT_FORM_EMAIL = $contact_form_email |
-            .containers.backend.environment.ENABLE_TEST_MODE = $enable_test_mode
+            .containers.backend.environment.CONTACT_FORM_EMAIL = $contact_form_email
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"
@@ -155,7 +156,7 @@ jobs:
 
       - name: Verify deployment started
         run: |
-          echo "Deployment initiated. Checking status..."
+          echo "Production deployment initiated. Checking status..."
           aws lightsail get-container-services \
             --service-name ${{ env.SERVICE_NAME }} \
             --region ${{ env.AWS_REGION }} \
