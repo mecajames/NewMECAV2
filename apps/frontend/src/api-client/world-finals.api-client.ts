@@ -320,6 +320,15 @@ export const worldFinalsApi = {
   // Pre-Registration API
   // =============================================
 
+  // --- World Finals Events (from events table) ---
+
+  getWorldFinalsEvents: async (seasonId: string): Promise<any[]> => {
+    const response = await axios.get(`${API_BASE}/wf-events/${seasonId}`);
+    return response.data;
+  },
+
+  // --- Config ---
+
   getRegistrationConfig: async (seasonId: string): Promise<any> => {
     const response = await axios.get(`${API_BASE}/registration-config/${seasonId}`);
     return response.data;
@@ -330,8 +339,9 @@ export const worldFinalsApi = {
     return response.data;
   },
 
-  getPackages: async (seasonId: string): Promise<any[]> => {
-    const response = await axios.get(`${API_BASE}/packages/${seasonId}`);
+  getPackages: async (seasonId: string, eventId?: string): Promise<any[]> => {
+    const params = eventId ? `?eventId=${eventId}` : '';
+    const response = await axios.get(`${API_BASE}/packages/${seasonId}${params}`);
     return response.data;
   },
 
@@ -349,8 +359,9 @@ export const worldFinalsApi = {
     await axios.delete(`${API_BASE}/packages/delete/${id}`);
   },
 
-  getAddonItems: async (seasonId: string): Promise<any[]> => {
-    const response = await axios.get(`${API_BASE}/addon-items/${seasonId}`);
+  getAddonItems: async (seasonId: string, eventId?: string): Promise<any[]> => {
+    const params = eventId ? `?eventId=${eventId}` : '';
+    const response = await axios.get(`${API_BASE}/addon-items/${seasonId}${params}`);
     return response.data;
   },
 
@@ -368,8 +379,15 @@ export const worldFinalsApi = {
     await axios.delete(`${API_BASE}/addon-items/${id}`);
   },
 
-  getPreRegistrationStats: async (seasonId: string): Promise<any> => {
-    const response = await axios.get(`${API_BASE}/preregistration-stats/${seasonId}`);
+  getPreRegistrationStats: async (seasonId: string, eventId?: string): Promise<any> => {
+    const params = eventId ? `?eventId=${eventId}` : '';
+    const response = await axios.get(`${API_BASE}/preregistration-stats/${seasonId}${params}`);
+    return response.data;
+  },
+
+  getPreRegistrationPreview: async (seasonId: string, eventId?: string): Promise<any> => {
+    const params = eventId ? `?eventId=${eventId}` : '';
+    const response = await axios.get(`${API_BASE}/preregister/preview/${seasonId}${params}`);
     return response.data;
   },
 

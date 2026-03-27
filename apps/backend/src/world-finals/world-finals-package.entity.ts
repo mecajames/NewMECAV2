@@ -9,6 +9,9 @@ export class WorldFinalsPackage {
   @Property({ type: 'uuid', fieldName: 'season_id', serializedName: 'season_id' })
   seasonId!: string;
 
+  @Property({ type: 'uuid', nullable: true, fieldName: 'wf_event_id', serializedName: 'wf_event_id' })
+  wfEventId?: string;
+
   @Property({ type: 'text' })
   name!: string;
 

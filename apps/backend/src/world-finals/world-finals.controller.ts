@@ -318,13 +318,27 @@ export class WorldFinalsController {
     return this.worldFinalsService.upsertRegistrationConfig(seasonId, data);
   }
 
-  @Get('packages/:seasonId')
-  async getPackages(
+  // --- World Finals Events (reads from events table) ---
+
+  @Get('wf-events/:seasonId')
+  async getWorldFinalsEvents(
     @Headers('authorization') authHeader: string,
     @Param('seasonId') seasonId: string,
   ) {
     await this.requireAdmin(authHeader);
-    const packages = await this.worldFinalsService.getPackages(seasonId);
+    return this.worldFinalsService.getWorldFinalsEvents(seasonId);
+  }
+
+  // --- Packages ---
+
+  @Get('packages/:seasonId')
+  async getPackages(
+    @Headers('authorization') authHeader: string,
+    @Param('seasonId') seasonId: string,
+    @Query('eventId') eventId?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const packages = await this.worldFinalsService.getPackages(seasonId, eventId);
     // Load classes for each package
     return Promise.all(packages.map(pkg => this.worldFinalsService.getPackageWithClasses(pkg.id)));
   }
@@ -363,9 +377,10 @@ export class WorldFinalsController {
   async getAddonItems(
     @Headers('authorization') authHeader: string,
     @Param('seasonId') seasonId: string,
+    @Query('eventId') eventId?: string,
   ) {
     await this.requireAdmin(authHeader);
-    return this.worldFinalsService.getAddonItems(seasonId);
+    return this.worldFinalsService.getAddonItems(seasonId, eventId);
   }
 
   @Post('addon-items')
@@ -402,14 +417,26 @@ export class WorldFinalsController {
   async getPreRegistrationStats(
     @Headers('authorization') authHeader: string,
     @Param('seasonId') seasonId: string,
+    @Query('eventId') eventId?: string,
   ) {
     await this.requireAdmin(authHeader);
-    return this.worldFinalsService.getPreRegistrationStats(seasonId);
+    return this.worldFinalsService.getPreRegistrationStats(seasonId, eventId);
   }
 
   // =============================================
   // Pre-Registration: Public (Token-Gated) Endpoints
   // =============================================
+
+  @Public()
+  @Get('preregister/preview/:seasonId')
+  async previewPreRegistration(
+    @Param('seasonId') seasonId: string,
+    @Query('eventId') eventId?: string,
+  ) {
+    const data = await this.worldFinalsService.getPreRegistrationPreview(seasonId, eventId);
+    if (!data) throw new ForbiddenException('No registration config found for this season');
+    return data;
+  }
 
   @Public()
   @Get('preregister/validate')
@@ -427,7 +454,23 @@ export class WorldFinalsController {
 
     // Validate token
     const validation = await this.worldFinalsService.validatePreRegistrationToken(data.token);
-    const selectedPkg = validation.packages.find((p: any) => p.id === data.packageId);
+
+    // Find the selected package across all event groups
+    let selectedPkg: any = null;
+    let selectedEvent: any = null;
+    let pricingTier = 'regular';
+    for (const group of validation.eventGroups) {
+      for (const evt of group.events) {
+        const pkg = evt.packages.find((p: any) => p.id === data.packageId);
+        if (pkg) {
+          selectedPkg = pkg;
+          selectedEvent = evt;
+          pricingTier = evt.pricingTier;
+          break;
+        }
+      }
+      if (selectedPkg) break;
+    }
     if (!selectedPkg) throw new ForbiddenException('Invalid package selection');
     if (selectedPkg.alreadyRegistered) throw new ForbiddenException('You have already registered for this package');
 
@@ -438,7 +481,7 @@ export class WorldFinalsController {
     // Calculate pricing
     const pricing = this.worldFinalsService.calculatePreRegistrationPricing(
       selectedPkg,
-      validation.pricingTier,
+      pricingTier,
       standardClasses.length,
       premiumClasses.map((c: any) => ({ className: c.className, price: c.premiumPrice || 0 })),
       data.addonItems || [],
@@ -446,9 +489,11 @@ export class WorldFinalsController {
 
     // Create registration
     const email = data.email || validation.competitor.email;
+    const eventId = data.eventId || selectedEvent?.id;
     const registration = await this.worldFinalsService.createPreRegistration({
       token: data.token,
       packageId: data.packageId,
+      wfEventId: eventId,
       seasonId: validation.config.season_id,
       mecaId: validation.competitor.mecaId,
       email,
@@ -462,7 +507,7 @@ export class WorldFinalsController {
       hotelNeeded: data.hotelNeeded,
       hotelNotes: data.hotelNotes,
       guestCount: data.guestCount,
-      pricingTier: validation.pricingTier,
+      pricingTier,
       baseAmount: pricing.classTotal + pricing.premiumTotal,
       addonsAmount: pricing.addonsTotal,
       totalAmount: pricing.total,
@@ -482,9 +527,10 @@ export class WorldFinalsController {
         paymentType: StripePaymentType.WORLD_FINALS_REGISTRATION,
         registrationId: registration.id,
         seasonId: validation.config.season_id,
+        eventId: eventId || '',
         mecaId: validation.competitor.mecaId,
         packageId: data.packageId,
-        pricingTier: validation.pricingTier,
+        pricingTier,
         classCount: String((data.classes || []).length),
       },
     });
