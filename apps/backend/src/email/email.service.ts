@@ -3608,4 +3608,146 @@ Fun, Fair, Loud and Clear!
 © 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
     `.trim();
   }
+
+  // ==========================================================================
+  // World Finals Qualification Email
+  // ==========================================================================
+
+  async sendWorldFinalsInvitationEmail(dto: {
+    to: string;
+    firstName: string;
+    competitionClass: string;
+    totalPoints: number;
+    seasonName: string;
+    registrationUrl: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const subject = `Your Exclusive MECA World Finals Pre-Registration Invitation - ${dto.competitionClass}`;
+
+    const html = `
+${this.getEmailHeaderHtml('World Finals Invitation', `Pre-Register for ${dto.competitionClass}`)}
+    <p style="font-size: 16px;">Dear ${dto.firstName},</p>
+
+    <p>As a qualified competitor with <strong>${dto.totalPoints} points</strong> in <strong>${dto.competitionClass}</strong> during the ${dto.seasonName}, you are invited to pre-register for the MECA World Finals!</p>
+
+    ${this.getEmailButton(`Pre-Register for ${dto.competitionClass}`, dto.registrationUrl)}
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #f0fdf4; border: 1px solid #22c55e; padding: 20px; border-radius: 8px;">
+      <h3 style="margin: 0 0 10px 0; color: #166534;">Pre-Registration Benefits:</h3>
+      <ul style="color: #15803d; margin: 0;">
+        <li>Priority registration before general public</li>
+        <li>Guaranteed competition spot in ${dto.competitionClass}</li>
+        <li>Early bird pricing (if applicable)</li>
+      </ul>
+    </td></tr></table>
+
+    <p style="color: #64748b; font-size: 14px;">
+      This invitation is exclusive to you and cannot be transferred. If you have any questions,
+      please contact us at <a href="mailto:support@mecacaraudio.com" style="color: #f97316;">support@mecacaraudio.com</a>.
+    </p>
+${this.getEmailFooterHtml()}
+    `.trim();
+
+    const text = `
+Dear ${dto.firstName},
+
+As a qualified competitor with ${dto.totalPoints} points in ${dto.competitionClass} during the ${dto.seasonName}, you are invited to pre-register for the MECA World Finals!
+
+PRE-REGISTER NOW: ${dto.registrationUrl}
+
+PRE-REGISTRATION BENEFITS:
+- Priority registration before general public
+- Guaranteed competition spot in ${dto.competitionClass}
+- Early bird pricing (if applicable)
+
+This invitation is exclusive to you and cannot be transferred.
+
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.events,
+    });
+  }
+
+  async sendWorldFinalsQualificationEmail(dto: {
+    to: string;
+    firstName: string;
+    competitorName: string;
+    competitionClass: string;
+    totalPoints: number;
+    qualificationThreshold: number;
+    seasonName: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const subject = `Congratulations! You've Qualified for MECA World Finals in ${dto.competitionClass}!`;
+
+    const html = `
+${this.getEmailHeaderHtml('World Finals Qualification!', `You've Qualified in ${dto.competitionClass}`)}
+    <p style="font-size: 16px;">Congratulations, ${dto.firstName}!</p>
+
+    <p>You have officially qualified for the <strong>MECA World Finals</strong> in <strong>${dto.competitionClass}</strong>!</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px;">
+      <h3 style="margin: 0 0 10px 0; color: #92400e;">Your Achievement</h3>
+      <p style="margin: 5px 0; font-size: 28px; font-weight: bold; color: #92400e;">${dto.totalPoints} Points</p>
+      <p style="margin: 5px 0; color: #92400e;">in ${dto.competitionClass}</p>
+      <p style="margin: 5px 0 0 0; font-size: 14px; color: #a16207;">${dto.seasonName}</p>
+    </td></tr></table>
+
+    <p>By earning ${dto.totalPoints} points in ${dto.competitionClass}, you have met the ${dto.qualificationThreshold}-point threshold required to compete at the highest level of car audio competition.</p>
+
+    <h3 style="color: #1e293b;">What's Next?</h3>
+    <ul style="color: #333;">
+      <li>You will receive an exclusive pre-registration invitation for World Finals</li>
+      <li>Pre-registration gives you priority access before general registration opens</li>
+      <li>Keep competing to qualify in more classes!</li>
+    </ul>
+
+    ${this.getEmailButton('View Your Dashboard', 'https://mecacaraudio.com/dashboard/mymeca')}
+
+    <p style="color: #64748b; font-size: 14px;">
+      View your competition stats and track your progress on your MyMECA Dashboard.
+    </p>
+${this.getEmailFooterHtml()}
+    `.trim();
+
+    const text = `
+Congratulations, ${dto.firstName}!
+
+You have officially qualified for the MECA World Finals in ${dto.competitionClass}!
+
+YOUR ACHIEVEMENT
+----------------
+${dto.totalPoints} Points in ${dto.competitionClass}
+${dto.seasonName}
+
+By earning ${dto.totalPoints} points, you have met the ${dto.qualificationThreshold}-point threshold required to compete at the highest level of car audio competition.
+
+WHAT'S NEXT?
+- You will receive an exclusive pre-registration invitation for World Finals
+- Pre-registration gives you priority access before general registration opens
+- Keep competing to qualify in more classes!
+
+View your dashboard: https://mecacaraudio.com/dashboard/mymeca
+
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.events,
+    });
+  }
 }
