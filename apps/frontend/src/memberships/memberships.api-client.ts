@@ -709,7 +709,7 @@ export const membershipsApi = {
   },
 
   /**
-   * Super Admin: Renew membership but keep old MECA ID (bypass 90-day rule)
+   * Super Admin: Renew membership but keep old MECA ID (bypass grace period rule)
    * Requires admin role + super admin password
    */
   superAdminRenewKeepMecaId: async (

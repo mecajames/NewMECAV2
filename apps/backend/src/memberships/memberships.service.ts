@@ -373,8 +373,19 @@ export class MembershipsService {
     // Use transaction for membership creation + MECA ID assignment
     const membership = await em.transactional(async (txEm) => {
       const startDate = new Date();
-      const endDate = new Date();
+      let endDate = new Date();
       endDate.setFullYear(endDate.getFullYear() + 1); // 1 year membership
+
+      // If renewing within grace period, extend from original expiration date
+      const GRACE_PERIOD_DAYS = 45;
+      const prevMembForGrace = await this.mecaIdService.findPreviousMembership(data.userId, config.category);
+      if (prevMembForGrace?.endDate) {
+        const daysSinceExpiry = (Date.now() - prevMembForGrace.endDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceExpiry > 0 && daysSinceExpiry <= GRACE_PERIOD_DAYS) {
+          endDate = new Date(prevMembForGrace.endDate.getTime() + 365 * 24 * 60 * 60 * 1000);
+          this.logger.log(`Grace period renewal: extending from original end date ${prevMembForGrace.endDate.toISOString()} to ${endDate.toISOString()}`);
+        }
+      }
 
       const newMembership = new Membership();
       newMembership.user = txEm.getReference(Profile, data.userId);
@@ -508,7 +519,20 @@ export class MembershipsService {
     newMembership.user = em.getReference(Profile, userId);
     newMembership.membershipTypeConfig = config;
     newMembership.startDate = new Date();
-    newMembership.endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year from now
+
+    // If renewing within grace period, extend from original expiration date (not today)
+    const GRACE_PERIOD_DAYS = 45;
+    if (previousMembership?.endDate) {
+      const daysSinceExpiry = (Date.now() - previousMembership.endDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceExpiry > 0 && daysSinceExpiry <= GRACE_PERIOD_DAYS) {
+        // Renewing within grace period: 365 days from original expiration
+        newMembership.endDate = new Date(previousMembership.endDate.getTime() + 365 * 24 * 60 * 60 * 1000);
+      } else {
+        newMembership.endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      }
+    } else {
+      newMembership.endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    }
     newMembership.amountPaid = 0; // Will be set when payment is processed
     newMembership.paymentStatus = PaymentStatus.PENDING;
 
@@ -1412,7 +1436,7 @@ export class MembershipsService {
 
   /**
    * Super Admin: Renew a membership but force keeping the old MECA ID
-   * This bypasses the 90-day rule that would normally assign a new ID
+   * This bypasses the grace period rule that would normally assign a new ID
    */
   async renewMembershipKeepMecaId(
     userId: string,
@@ -1491,7 +1515,7 @@ export class MembershipsService {
     return {
       success: true,
       membership: newMembership,
-      message: `Membership created with MECA ID ${forcedMecaId} (90-day rule bypassed)`,
+      message: `Membership created with MECA ID ${forcedMecaId} (grace period rule bypassed)`,
     };
   }
 

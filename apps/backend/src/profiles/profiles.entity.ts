@@ -13,6 +13,9 @@ export class Profile {
   @Property({ type: 'text', nullable: true, unique: true, fieldName: 'meca_id' })
   meca_id?: string;
 
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'meca_id_invalidated_at' })
+  meca_id_invalidated_at?: Date;
+
   @Property({ type: 'text', nullable: true, fieldName: 'first_name' })
   first_name?: string;
 

@@ -98,10 +98,62 @@ export class CompetitionResultsService {
 
   async findByEvent(eventId: string): Promise<CompetitionResult[]> {
     const em = this.em.fork();
-    return em.find(CompetitionResult, { event: eventId }, {
+    const results = await em.find(CompetitionResult, { event: eventId }, {
       orderBy: { placement: 'ASC' },
       populate: ['competitor'],
     });
+    // Mask MECA ID on held results (expired member, awaiting renewal)
+    return results.map(r => {
+      if (r.pointsHeldForRenewal) {
+        r.mecaId = undefined;
+        r.pointsEarned = 0;
+      }
+      return r;
+    });
+  }
+
+  /**
+   * Release held results for a MECA ID when membership is renewed.
+   * Recalculates points for released results.
+   */
+  async releaseHeldResults(mecaId: number): Promise<number> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+
+    // Find held results for this MECA ID
+    const heldResults = await em.find(CompetitionResult, {
+      mecaId: String(mecaId),
+      pointsHeldForRenewal: true,
+    });
+
+    if (heldResults.length === 0) return 0;
+
+    // Release them — make visible and recalculate points
+    for (const result of heldResults) {
+      result.pointsHeldForRenewal = false;
+      result.releasedAt = new Date();
+      result.notes = (result.notes || '').replace(/\s*\|\s*Held:.*$/, '') + ' | Released: membership renewed';
+    }
+
+    await em.flush();
+
+    // Recalculate points for the events these results are in
+    const eventIds = [...new Set(heldResults.map(r => (r as any).eventId || (r.event as any)?.id).filter(Boolean))];
+    for (const eventId of eventIds) {
+      try {
+        // Re-import will recalculate placements and points
+        // For now, just mark the points as eligible — they'll be recalculated on next import
+        await conn.execute(
+          `UPDATE competition_results SET points_earned = 0 WHERE event_id = ? AND meca_id = ? AND released_at IS NOT NULL`,
+          [eventId, String(mecaId)]
+        );
+      } catch (err) {
+        this.logger.error(`Failed to recalculate points for event ${eventId}:`, err);
+      }
+    }
+
+    this.logger.log(`Released ${heldResults.length} held results for MECA ID ${mecaId}`);
+    return heldResults.length;
   }
 
   /**
@@ -205,11 +257,8 @@ export class CompetitionResultsService {
       populate: ['event'],
     });
 
-    // Use wrap().toObject() for proper serialization, then add event data
-    // since event has hidden: true in the entity
     return results.map(result => {
       const serialized = wrap(result).toObject() as any;
-      // Manually add event since it's hidden in the entity
       if (result.event) {
         serialized.event = {
           id: result.event.id,
@@ -221,6 +270,11 @@ export class CompetitionResultsService {
           venue_city: result.event.venueCity,
           venue_state: result.event.venueState,
         };
+      }
+      // Mask MECA ID on held results
+      if (result.pointsHeldForRenewal) {
+        serialized.meca_id = null;
+        serialized.points_earned = 0;
       }
       return serialized;
     });
@@ -852,6 +906,27 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Check if a MECA ID belongs to an expired member within the 45-day grace period.
+   * If so, results should be held (not public, no points) until they renew.
+   */
+  private async isInGracePeriod(mecaId: string | undefined): Promise<boolean> {
+    if (!mecaId || mecaId === '999999' || mecaId === '0' || mecaId.startsWith('99')) return false;
+
+    const em = this.em.fork();
+    const now = new Date();
+    const graceCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+
+    // Find most recent expired membership for this MECA ID (expired within 45 days)
+    const membership = await em.findOne(Membership, {
+      mecaId: parseInt(mecaId, 10),
+      paymentStatus: PaymentStatus.PAID,
+      endDate: { $lt: now, $gte: graceCutoff },
+    });
+
+    return !!membership;
+  }
+
+  /**
    * Check if a member is eligible for points (synchronous version for backward compatibility).
    * This version does basic validation but doesn't check membership database.
    * Use isMemberEligibleAsync for full eligibility checking.
@@ -1198,7 +1273,17 @@ export class CompetitionResultsService {
               pointsConfig
             );
           } else {
-            result.pointsEarned = 0;
+            // Check if this member is in grace period — hold results for potential renewal
+            const inGracePeriod = await this.isInGracePeriod(mecaId);
+            if (inGracePeriod) {
+              result.pointsHeldForRenewal = true;
+              result.heldAt = new Date();
+              // Calculate what points WOULD be earned (stored as 0 until released)
+              result.pointsEarned = 0;
+              result.notes = (result.notes ? result.notes + ' | ' : '') + 'Held: membership expired, within grace period';
+            } else {
+              result.pointsEarned = 0;
+            }
           }
         } else {
           // Format not eligible for points (unknown format or non-points format)

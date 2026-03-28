@@ -88,6 +88,15 @@ export class CompetitionResult {
   @Property({ type: 'timestamptz', onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
   updatedAt?: Date;
 
+  @Property({ type: 'boolean', default: false, fieldName: 'points_held_for_renewal', serializedName: 'points_held_for_renewal' })
+  pointsHeldForRenewal: boolean = false;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'held_at', serializedName: 'held_at' })
+  heldAt?: Date;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'released_at', serializedName: 'released_at' })
+  releasedAt?: Date;
+
   @Property({ type: 'integer', default: 0, fieldName: 'revision_count', serializedName: 'revision_count' })
   revisionCount: number = 0;
 

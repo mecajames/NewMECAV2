@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, Eye, EyeOff, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, Eye, EyeOff, CreditCard, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 
 interface HeroSlide {
   url: string;
@@ -1844,6 +1844,26 @@ export default function SiteSettings() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Membership Grace Period */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
+          <Shield className="h-6 w-6 text-blue-500" />
+          <div>
+            <h3 className="text-xl font-semibold text-white">Membership Grace Period</h3>
+            <p className="text-sm text-gray-400">MECA ID retention policy after membership expiration</p>
+          </div>
+        </div>
+        <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-5 space-y-3">
+          <p className="text-white text-sm"><strong>Grace Period:</strong> <span className="text-blue-400 font-bold text-lg">30 days</span></p>
+          <p className="text-gray-300 text-sm">Once the 30-day grace period has expired, there will be an additional <strong>7-day redemption period</strong>.</p>
+          <p className="text-gray-300 text-sm">Once a membership has expired beyond the grace and redemption periods, the associated MECA ID will become <strong>invalid indefinitely</strong>. There will be no redemption and the MECA ID will <strong>not be re-issued or re-used</strong> by any member.</p>
+          <p className="text-gray-300 text-sm">A member may renew their membership after this period, but a <strong>new MECA ID will be issued</strong> if they renew using the same email address.</p>
+        </div>
+        {(user?.email === 'james@mecacaraudio.com' || user?.email === 'jryan99@gmail.com') && (
+          <p className="text-gray-500 text-xs italic">Only james@mecacaraudio.com and jryan99@gmail.com can modify this setting. Contact system administrator for changes.</p>
+        )}
       </div>
 
         </>
