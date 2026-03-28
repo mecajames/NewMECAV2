@@ -2922,7 +2922,7 @@ ${this.getEmailHeaderHtml('Your Membership Has Expired', 'We miss you at MECA!')
       <li>May lose your ranking position</li>
     </ul>
 
-    <p><strong>Good news:</strong> If you renew within 90 days, you can keep your same MECA ID number!</p>
+    <p><strong>Good news:</strong> If you renew within 30 days, you can keep your same MECA ID number!</p>
 
     ${this.getEmailButton('Renew Membership Now', dto.renewalUrl)}
 ${this.getEmailFooterHtml()}
@@ -2946,7 +2946,7 @@ Without an active membership, you:
 - Lose access to member-only benefits
 - May lose your ranking position
 
-GOOD NEWS: If you renew within 90 days, you can keep your same MECA ID number!
+GOOD NEWS: If you renew within 30 days, you can keep your same MECA ID number!
 
 Renew your membership here: ${dto.renewalUrl}
 

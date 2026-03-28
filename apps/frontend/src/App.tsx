@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider, ForcePasswordChangeGuard, IdleTimeoutGuard, MaintenanceModeGuard } from '@/auth';
+import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
@@ -173,6 +173,7 @@ function App() {
             <Navbar />
             <IdleTimeoutGuard>
             <ForcePasswordChangeGuard>
+            <ExpiredMembershipGuard>
             <div className="flex-1">
               <Routes>
               {/* Public Routes */}
@@ -370,6 +371,7 @@ function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
+            </ExpiredMembershipGuard>
             </ForcePasswordChangeGuard>
             </IdleTimeoutGuard>
           <Footer />

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/auth';
 import { membershipsApi, Membership, MemberCancelMembershipModal, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 
@@ -208,6 +208,35 @@ export default function MembershipDashboardPage() {
           </button>
         </div>
 
+        {/* Expired Membership Warning */}
+        {profile?.membership_status === 'expired' && (
+          <div className="bg-red-900/30 border-2 border-red-500/50 rounded-xl p-6 mb-6">
+            <div className="flex items-start gap-4">
+              <AlertTriangle className="h-8 w-8 text-red-400 flex-shrink-0 mt-1" />
+              <div>
+                <h2 className="text-xl font-bold text-red-400 mb-2">Your Membership Has Expired</h2>
+                {profile.meca_id_invalidated_at ? (
+                  <>
+                    <p className="text-red-200/80 mb-3">Your MECA ID has been permanently invalidated due to expired membership. Your previous competition results are preserved for historical records.</p>
+                    <p className="text-red-200/80 mb-4">You may renew your membership below, but a <strong>new MECA ID will be issued</strong>. All future results will be recorded under your new MECA ID.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-red-200/80 mb-3">Your account access is limited until you renew. You cannot register for events or compete.</p>
+                    <p className="text-amber-300 font-semibold mb-4">Renew now to keep your same MECA ID! After the grace period, a new MECA ID will be issued.</p>
+                  </>
+                )}
+                <button
+                  onClick={() => navigate('/membership')}
+                  className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-lg transition-colors"
+                >
+                  Renew Membership Now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center">
@@ -276,9 +305,16 @@ export default function MembershipDashboardPage() {
             {/* MECA ID */}
             <div className="bg-slate-700/50 rounded-lg p-4">
               <p className="text-gray-400 text-sm mb-1">MECA ID</p>
-              <p className="text-orange-400 font-mono text-lg font-semibold">
-                #{activeMembership.mecaId || profile?.meca_id || 'N/A'}
-              </p>
+              {profile?.meca_id_invalidated_at ? (
+                <div>
+                  <p className="text-red-400 font-mono text-lg font-semibold line-through">#{profile.meca_id || 'N/A'}</p>
+                  <p className="text-red-400 text-xs mt-1">Invalidated</p>
+                </div>
+              ) : (
+                <p className="text-orange-400 font-mono text-lg font-semibold">
+                  #{activeMembership.mecaId || profile?.meca_id || 'N/A'}
+                </p>
+              )}
             </div>
           </div>
 

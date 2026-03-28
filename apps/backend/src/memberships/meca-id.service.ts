@@ -16,8 +16,8 @@ import { UserRole, MembershipCategory, PaymentStatus } from '@newmeca/shared';
  * - IDs start at 700500
  * - Each membership gets its own MECA ID
  * - A user can have multiple memberships, each with different MECA IDs
- * - 90-day reactivation window: Renewing within 90 days keeps the same ID
- * - After 90 days, a new MECA ID is assigned
+ * - Grace period reactivation window: Renewing within the grace period keeps the same ID
+ * - After the grace period, a new MECA ID is assigned
  */
 @Injectable()
 export class MecaIdService {
@@ -41,7 +41,7 @@ export class MecaIdService {
 
   /**
    * Assign a MECA ID to a membership.
-   * Handles 90-day reactivation window for renewals.
+   * Handles grace period reactivation window for renewals.
    *
    * @param membership The membership to assign a MECA ID to
    * @param previousMembership Optional previous membership for renewal tracking
@@ -56,11 +56,13 @@ export class MecaIdService {
     // Use caller's EM if provided, otherwise fork our own
     const em = callerEm || this.em.fork();
 
-    // Check if this is a renewal within 90-day window
+    // Check if this is a renewal within the grace period window
+    // Hard cutoff: 45 days (30-day grace + 7-day redemption + internal buffer)
+    const GRACE_PERIOD_HARD_CUTOFF_DAYS = 45;
     if (previousMembership?.mecaId && previousMembership.endDate) {
       const daysSinceExpiry = this.getDaysSinceExpiry(previousMembership.endDate);
 
-      if (daysSinceExpiry <= 90) {
+      if (daysSinceExpiry <= GRACE_PERIOD_HARD_CUTOFF_DAYS) {
         // Reactivate the same MECA ID
         const mecaId = previousMembership.mecaId;
         membership.mecaId = mecaId;
@@ -138,7 +140,7 @@ export class MecaIdService {
 
   /**
    * Find a previous membership for the same user that could be renewed.
-   * Used to check 90-day reactivation window.
+   * Used to check grace period reactivation window.
    *
    * @param userId The user's ID
    * @param category The membership category to look for
@@ -384,7 +386,7 @@ export class MecaIdService {
     if (existingHistory) {
       existingHistory.reactivatedAt = new Date();
       existingHistory.previousEndDate = previousEndDate;
-      existingHistory.notes = `Reactivated within 90-day window (previous end: ${previousEndDate.toISOString().split('T')[0]})`;
+      existingHistory.notes = `Reactivated within grace period (previous end: ${previousEndDate.toISOString().split('T')[0]})`;
       await em.flush();
     } else {
       // Create new history record for reactivation
@@ -395,7 +397,7 @@ export class MecaIdService {
       history.assignedAt = new Date();
       history.reactivatedAt = new Date();
       history.previousEndDate = previousEndDate;
-      history.notes = 'Reactivated MECA ID within 90-day window';
+      history.notes = 'Reactivated MECA ID within grace period';
 
       // Just persist, don't flush - let the caller control when to flush
       em.persist(history);

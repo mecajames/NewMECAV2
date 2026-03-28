@@ -37,7 +37,7 @@ export class MecaIdHistory {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'expired_at' })
   expiredAt?: Date;
 
-  // When this MECA ID was reactivated (renewed within 90-day window)
+  // When this MECA ID was reactivated (renewed within grace period)
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'reactivated_at' })
   reactivatedAt?: Date;
 
@@ -63,12 +63,12 @@ export class MecaIdHistory {
   }
 
   /**
-   * Check if this MECA ID can be reactivated (within 90-day window)
+   * Check if this MECA ID can be reactivated (within grace period)
    */
   canReactivate(): boolean {
     if (!this.expiredAt || this.reactivatedAt) return false;
     const now = new Date();
     const daysSinceExpiry = (now.getTime() - this.expiredAt.getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceExpiry <= 90;
+    return daysSinceExpiry <= 45;
   }
 }

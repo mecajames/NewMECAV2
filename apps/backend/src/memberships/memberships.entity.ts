@@ -181,6 +181,9 @@ export class Membership {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'card_created_at' })
   cardCreatedAt?: Date;
 
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'meca_id_invalidated_at' })
+  mecaIdInvalidatedAt?: Date;
+
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'card_assigned_at' })
   cardAssignedAt?: Date;
 
@@ -233,13 +236,13 @@ export class Membership {
   cancelledBy?: string;
 
   /**
-   * Check if this membership's MECA ID can be reactivated (within 90-day window)
+   * Check if this membership's MECA ID can be reactivated (within grace period)
    */
   canReactivateMecaId(): boolean {
     if (!this.endDate) return false;
     const now = new Date();
     const daysSinceExpiry = (now.getTime() - this.endDate.getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceExpiry <= 90;
+    return daysSinceExpiry <= 45;
   }
 
   /**

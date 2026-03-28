@@ -685,7 +685,7 @@ export class MembershipsController {
    * Super Admin: Override MECA ID on a membership
    * Requires admin role + special password
    * Used for:
-   * - Reassigning an old MECA ID to a member (after 90 days)
+   * - Reassigning an old MECA ID to a member (after grace period)
    * - Manually correcting MECA ID assignment errors
    */
   @Put(':id/admin/override-meca-id')
@@ -728,9 +728,9 @@ export class MembershipsController {
   }
 
   /**
-   * Super Admin: Force keep same MECA ID when renewing after 90 days
+   * Super Admin: Force keep same MECA ID when renewing after grace period
    * Requires admin role + special password
-   * Bypasses the 90-day rule that normally assigns a new MECA ID
+   * Bypasses the grace period rule that normally assigns a new MECA ID
    */
   @Post('admin/renew-keep-meca-id')
   @HttpCode(HttpStatus.CREATED)
@@ -757,7 +757,7 @@ export class MembershipsController {
     }
 
     if (!data.reason || data.reason.trim().length < 10) {
-      throw new BadRequestException('A reason (at least 10 characters) is required for 90-day rule override');
+      throw new BadRequestException('A reason (at least 10 characters) is required for grace period rule override');
     }
 
     this.logger.warn(`SUPER ADMIN OVERRIDE: Admin ${profile?.email} creating renewal with forced MECA ID ${data.previousMecaId} for user ${data.userId}. Reason: ${data.reason}`);
