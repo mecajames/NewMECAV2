@@ -285,12 +285,19 @@ export class StripeController {
       throw new BadRequestException('Event not found');
     }
 
-    // Check if user is a member (for pricing)
+    // Check if user is a member (for pricing) and validate MECA ID
     let isMember = false;
     if (data.userId) {
       const user = await em.findOne(Profile, { id: data.userId });
       if (user) {
         isMember = user.membership_status === 'active';
+
+        // Block registration if MECA ID has been permanently invalidated
+        if (user.meca_id_invalidated_at && data.mecaId) {
+          throw new BadRequestException(
+            'Your MECA ID has been invalidated due to expired membership. Please renew your membership first — a new MECA ID will be issued upon renewal.'
+          );
+        }
       }
     }
 
@@ -915,7 +922,7 @@ export class StripeController {
       const amountPaid = paymentIntent.amount / 100;
 
       // Create membership for logged-in user using the new MECA ID-based system
-      await this.membershipsService.createMembership({
+      const membership = await this.membershipsService.createMembership({
         userId,
         membershipTypeConfigId,
         amountPaid,
@@ -946,6 +953,33 @@ export class StripeController {
       });
 
       console.log('Membership created successfully for:', email);
+
+      // Clear MECA ID invalidation flag on profile if it was set
+      if (membership.mecaId) {
+        const profileEm = this.em.fork();
+        try {
+          await profileEm.getConnection().execute(
+            `UPDATE profiles SET meca_id_invalidated_at = NULL, meca_id = ?, updated_at = NOW() WHERE id = ?`,
+            [String(membership.mecaId), userId]
+          );
+        } catch (err) {
+          console.error('Failed to clear MECA ID invalidation:', err);
+        }
+
+        // Release any held competition results for this MECA ID
+        try {
+          const releaseResult = await profileEm.getConnection().execute(
+            `UPDATE competition_results SET points_held_for_renewal = false, released_at = NOW(), notes = COALESCE(notes, '') || ' | Released: membership renewed' WHERE meca_id = ? AND points_held_for_renewal = true`,
+            [String(membership.mecaId)]
+          );
+          const released = releaseResult.affectedRows || 0;
+          if (released > 0) {
+            console.log(`Released ${released} held competition results for MECA ID ${membership.mecaId}`);
+          }
+        } catch (err) {
+          console.error('Failed to release held results:', err);
+        }
+      }
 
       // Create Order and Invoice (async, non-blocking)
       const membershipTaxAmount = metadata.taxAmount || '0.00';

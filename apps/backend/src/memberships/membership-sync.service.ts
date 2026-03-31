@@ -141,12 +141,68 @@ export class MembershipSyncService {
         )
     `);
 
+    // Invalidate MECA IDs for memberships expired > 45 days (hard cutoff)
+    // The MECA ID stays on the profile for historical reference but is marked as invalidated
+    const invalidateResult = await connection.execute(`
+      UPDATE profiles p
+      SET
+        meca_id_invalidated_at = NOW(),
+        updated_at = NOW()
+      WHERE p.meca_id IS NOT NULL
+        AND p.meca_id_invalidated_at IS NULL
+        AND p.membership_status = 'expired'
+        AND NOT EXISTS (
+          SELECT 1 FROM memberships m
+          WHERE m.user_id = p.id
+            AND m.payment_status = 'paid'
+            AND (m.end_date >= CURRENT_DATE OR m.end_date IS NULL)
+        )
+        AND EXISTS (
+          SELECT 1 FROM memberships m
+          WHERE m.user_id = p.id
+            AND m.payment_status = 'paid'
+            AND m.end_date < CURRENT_DATE - INTERVAL '45 days'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM memberships m
+          WHERE m.user_id = p.id
+            AND m.payment_status = 'paid'
+            AND m.end_date >= CURRENT_DATE - INTERVAL '45 days'
+        )
+    `);
+
+    const invalidated = invalidateResult.affectedRows || 0;
+    if (invalidated > 0) {
+      this.logger.warn(`MECA ID INVALIDATION: ${invalidated} MECA IDs permanently invalidated (expired > 45 days)`);
+    }
+
+    // For results that were held for renewal and the grace period has passed (45+ days),
+    // permanently strip the MECA ID from those results (results stay visible, just no ID or points)
+    const stripResult = await connection.execute(`
+      UPDATE competition_results cr
+      SET
+        meca_id = NULL,
+        points_earned = 0,
+        points_held_for_renewal = false,
+        notes = COALESCE(notes, '') || ' | Grace period expired: MECA ID removed'
+      WHERE cr.points_held_for_renewal = true
+        AND cr.held_at IS NOT NULL
+        AND cr.held_at < CURRENT_DATE - INTERVAL '45 days'
+    `);
+
+    const stripped = stripResult.affectedRows || 0;
+    if (stripped > 0) {
+      this.logger.warn(`HELD RESULTS EXPIRED: ${stripped} held results had MECA ID permanently removed (grace period expired)`);
+    }
+
     const result = {
       activated: activateResult.affectedRows || 0,
       expired: expireResult.affectedRows || 0,
+      invalidated,
+      heldResultsExpired: stripped,
     };
 
-    this.logger.log(`Manual sync complete: ${result.activated} activated, ${result.expired} expired`);
+    this.logger.log(`Manual sync complete: ${result.activated} activated, ${result.expired} expired, ${result.invalidated} MECA IDs invalidated, ${result.heldResultsExpired} held results expired`);
     return result;
   }
 }
