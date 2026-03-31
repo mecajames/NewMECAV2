@@ -200,13 +200,6 @@ export default function BillingPage() {
                     </div>
                   )}
                 </div>
-                <button
-                  onClick={() => navigate(`/membership/checkout/${membership.membershipTypeConfig?.id}?renew=true`)}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-                >
-                  Renew
-                  <ChevronRight className="h-4 w-4" />
-                </button>
               </div>
 
             </div>
