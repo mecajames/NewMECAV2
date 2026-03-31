@@ -3,6 +3,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { GlobalAuthGuard } from './auth/global-auth.guard';
+import { MaintenanceModeGuard } from './auth/maintenance-mode.guard';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -152,6 +153,11 @@ import { QaModule } from './qa/qa.module';
     {
       provide: APP_GUARD,
       useClass: GlobalAuthGuard,
+    },
+    // Block all non-admin requests when maintenance_mode_enabled is true in site_settings
+    {
+      provide: APP_GUARD,
+      useClass: MaintenanceModeGuard,
     },
   ],
 })
