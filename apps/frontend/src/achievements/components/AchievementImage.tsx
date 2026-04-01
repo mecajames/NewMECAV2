@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Award } from 'lucide-react';
 import { MemberAchievement } from '@newmeca/shared';
+import { getStorageUrl } from '@/lib/storage';
 
 interface AchievementImageProps {
   achievement: MemberAchievement;
@@ -137,7 +138,9 @@ export function AchievementImage({ achievement, className = '' }: AchievementIma
   };
 
   // Use template image if available, otherwise fall back to pre-generated image_url
-  const imageUrl = achievement.template_base_image_url || achievement.image_url;
+  // Run through getStorageUrl to handle environment-specific Supabase URLs
+  const rawImageUrl = achievement.template_base_image_url || achievement.image_url;
+  const imageUrl = rawImageUrl ? getStorageUrl(rawImageUrl) : null;
 
   if (!imageUrl) {
     // No image available - show placeholder
@@ -152,7 +155,7 @@ export function AchievementImage({ achievement, className = '' }: AchievementIma
   if (achievement.image_url && !achievement.template_base_image_url) {
     return (
       <img
-        src={achievement.image_url}
+        src={getStorageUrl(achievement.image_url)}
         alt={achievement.achievement_name}
         className={`w-full h-full object-contain ${className}`}
       />

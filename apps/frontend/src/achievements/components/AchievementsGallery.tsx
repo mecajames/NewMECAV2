@@ -3,6 +3,7 @@ import { Trophy, X, Loader2, ExternalLink } from 'lucide-react';
 import { achievementsApi, MemberAchievementsResponse } from '../achievements.api-client';
 import { MemberAchievement } from '@newmeca/shared';
 import { AchievementImage } from './AchievementImage';
+import { getStorageUrl } from '@/lib/storage';
 
 interface AchievementsGalleryProps {
   profileId?: string;
@@ -182,7 +183,7 @@ export function AchievementsGallery({
               )}
               {selectedAchievement.image_url && (
                 <a
-                  href={selectedAchievement.image_url}
+                  href={getStorageUrl(selectedAchievement.image_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-4 inline-flex items-center text-orange-400 hover:text-orange-300 text-sm"

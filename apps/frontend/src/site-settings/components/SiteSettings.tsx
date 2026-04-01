@@ -88,6 +88,7 @@ export default function SiteSettings() {
     // Maintenance Mode settings
     maintenance_mode_enabled: false,
     maintenance_mode_message: '',
+    maintenance_mode_display: 'maintenance' as 'maintenance' | 'coming_soon',
     // Invoice Auto-Cancel setting
     invoice_auto_cancel_days: '0',
     // Shop Configuration settings
@@ -200,6 +201,7 @@ export default function SiteSettings() {
         // Maintenance Mode settings
         maintenance_mode_enabled: settingsMap['maintenance_mode_enabled'] === 'true',
         maintenance_mode_message: settingsMap['maintenance_mode_message'] || '',
+        maintenance_mode_display: (settingsMap['maintenance_mode_display'] || 'maintenance') as any,
         // Invoice Auto-Cancel setting
         invoice_auto_cancel_days: settingsMap['invoice_auto_cancel_days'] || '0',
         // Shop Configuration settings
@@ -285,6 +287,7 @@ export default function SiteSettings() {
         // Maintenance Mode settings
         { key: 'maintenance_mode_enabled', value: formData.maintenance_mode_enabled.toString(), type: 'boolean', description: 'Enable maintenance mode to block non-admin users' },
         { key: 'maintenance_mode_message', value: formData.maintenance_mode_message, type: 'text', description: 'Custom maintenance message shown to users' },
+        { key: 'maintenance_mode_display', value: formData.maintenance_mode_display, type: 'text', description: 'Display mode: maintenance or coming_soon' },
         // Invoice Auto-Cancel setting
         { key: 'invoice_auto_cancel_days', value: formData.invoice_auto_cancel_days, type: 'number', description: 'Days after due date before overdue invoices are auto-cancelled (0 = disabled)' },
       ].map(s => ({ ...s, updatedBy: user.id }));
@@ -761,7 +764,7 @@ export default function SiteSettings() {
                       alt={`Hero preview ${index + 1}`}
                       className="w-full h-32 object-cover rounded-lg"
                       onError={(e) => {
-                        e.currentTarget.src = 'https://via.placeholder.com/1920x1080?text=Image+Not+Found';
+                        e.currentTarget.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="225" viewBox="0 0 400 225"><rect fill="%23334155" width="400" height="225"/><text fill="%2394a3b8" font-family="Arial" font-size="14" x="50%" y="50%" text-anchor="middle" dy=".3em">Image Not Found</text></svg>');
                       }}
                     />
                     {(slide.title || slide.buttonText) && (
@@ -1502,10 +1505,39 @@ export default function SiteSettings() {
 
         {formData.maintenance_mode_enabled && (
           <div className="space-y-5 ml-2 border-l-2 border-orange-600 pl-5">
+            {/* Display Mode */}
+            <div>
+              <label className="block text-sm font-medium text-orange-200 mb-2">Display Mode</label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, maintenance_mode_display: 'maintenance'})}
+                  className={`flex-1 p-4 rounded-lg border-2 text-left transition-all ${
+                    formData.maintenance_mode_display === 'maintenance'
+                      ? 'border-orange-500 bg-orange-500/10'
+                      : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'}`}
+                >
+                  <p className="text-white font-semibold">System Maintenance</p>
+                  <p className="text-gray-400 text-xs mt-1">Show maintenance message with wrench icon. Users see "check back later".</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, maintenance_mode_display: 'coming_soon'})}
+                  className={`flex-1 p-4 rounded-lg border-2 text-left transition-all ${
+                    formData.maintenance_mode_display === 'coming_soon'
+                      ? 'border-blue-500 bg-blue-500/10'
+                      : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'}`}
+                >
+                  <p className="text-white font-semibold">Coming Soon</p>
+                  <p className="text-gray-400 text-xs mt-1">Show "New Website Coming Soon!" with rocket icon. For launches and redesigns.</p>
+                </button>
+              </div>
+            </div>
+
             {/* Custom Message */}
             <div>
               <label className="block text-sm font-medium text-orange-200 mb-2">
-                Maintenance Message (shown to users)
+                {formData.maintenance_mode_display === 'coming_soon' ? 'Coming Soon Message' : 'Maintenance Message'} (shown to users)
               </label>
               <textarea
                 value={formData.maintenance_mode_message}

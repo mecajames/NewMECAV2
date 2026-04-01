@@ -1,5 +1,5 @@
 import { useState, useEffect, ReactNode } from 'react';
-import { Wrench, AlertTriangle } from 'lucide-react';
+import { Wrench, AlertTriangle, Rocket } from 'lucide-react';
 import axios from '@/lib/axios';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -10,6 +10,7 @@ interface MaintenanceModeGuardProps {
 interface MaintenanceSettings {
   enabled: boolean;
   message: string;
+  displayMode: 'maintenance' | 'coming_soon';
 }
 
 export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardProps) {
@@ -17,6 +18,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
   const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings>({
     enabled: false,
     message: '',
+    displayMode: 'maintenance',
   });
   const [loading, setLoading] = useState(true);
 
@@ -31,8 +33,8 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
 
         setMaintenanceSettings({
           enabled: settingsMap['maintenance_mode_enabled'] === 'true',
-          message: settingsMap['maintenance_mode_message'] ||
-            'The system is currently undergoing scheduled maintenance. Please check back later.',
+          message: settingsMap['maintenance_mode_message'] || '',
+          displayMode: (settingsMap['maintenance_mode_display'] as any) || 'maintenance',
         });
       } catch (error) {
         console.error('Error checking maintenance mode:', error);
@@ -61,39 +63,57 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
 
   // Check if maintenance mode is enabled and user is not an admin
   const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
-  const showMaintenancePage = maintenanceSettings.enabled && !isAdmin;
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+  const isLoginPage = currentPath === '/login' || currentPath.startsWith('/auth/');
+  const showMaintenancePage = maintenanceSettings.enabled && !isAdmin && !isLoginPage;
 
   if (showMaintenancePage) {
+    const isComingSoon = maintenanceSettings.displayMode === 'coming_soon';
+    const defaultMessage = isComingSoon
+      ? 'We are building something amazing! Our new website is under construction and will be launching soon.'
+      : 'The system is currently undergoing scheduled maintenance. Please check back later.';
+    const displayMessage = maintenanceSettings.message || defaultMessage;
+
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="max-w-lg w-full">
-          {/* Maintenance Icon */}
+          {/* Icon */}
           <div className="flex justify-center mb-8">
             <div className="relative">
-              <div className="w-32 h-32 bg-orange-600/20 rounded-full flex items-center justify-center">
-                <Wrench className="h-16 w-16 text-orange-500 animate-pulse" />
-              </div>
-              <div className="absolute -top-2 -right-2 bg-yellow-500 rounded-full p-2">
-                <AlertTriangle className="h-6 w-6 text-black" />
-              </div>
+              {isComingSoon ? (
+                <div className="w-32 h-32 bg-blue-600/20 rounded-full flex items-center justify-center">
+                  <Rocket className="h-16 w-16 text-blue-400 animate-bounce" />
+                </div>
+              ) : (
+                <>
+                  <div className="w-32 h-32 bg-orange-600/20 rounded-full flex items-center justify-center">
+                    <Wrench className="h-16 w-16 text-orange-500 animate-pulse" />
+                  </div>
+                  <div className="absolute -top-2 -right-2 bg-yellow-500 rounded-full p-2">
+                    <AlertTriangle className="h-6 w-6 text-black" />
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Maintenance Card */}
-          <div className="bg-slate-800 rounded-2xl p-8 shadow-2xl border border-slate-700">
+          {/* Card */}
+          <div className={`bg-slate-800 rounded-2xl p-8 shadow-2xl border ${isComingSoon ? 'border-blue-500/30' : 'border-slate-700'}`}>
             <h1 className="text-3xl font-bold text-white text-center mb-4">
-              System Maintenance
+              {isComingSoon ? 'New Website Coming Soon!' : 'System Maintenance'}
             </h1>
 
-            <div className="bg-orange-900/30 border border-orange-600 rounded-lg p-4 mb-6">
-              <p className="text-orange-200 text-center">
-                {maintenanceSettings.message}
+            <div className={`rounded-lg p-4 mb-6 ${isComingSoon ? 'bg-blue-900/30 border border-blue-500/40' : 'bg-orange-900/30 border border-orange-600'}`}>
+              <p className={`text-center ${isComingSoon ? 'text-blue-200' : 'text-orange-200'}`}>
+                {displayMessage}
               </p>
             </div>
 
             <div className="space-y-4 text-gray-400 text-sm">
               <p className="text-center">
-                We apologize for any inconvenience. Our team is working hard to improve your experience.
+                {isComingSoon
+                  ? 'Stay tuned for an exciting new experience. We can\'t wait to show you what we\'ve been working on!'
+                  : 'We apologize for any inconvenience. Our team is working hard to improve your experience.'}
               </p>
 
               <div className="border-t border-slate-700 pt-4">
@@ -101,7 +121,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
                   If you need immediate assistance, please contact us at{' '}
                   <a
                     href="mailto:support@mecacaraudio.com"
-                    className="text-orange-400 hover:text-orange-300"
+                    className={`hover:opacity-80 ${isComingSoon ? 'text-blue-400' : 'text-orange-400'}`}
                   >
                     support@mecacaraudio.com
                   </a>
@@ -123,7 +143,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
               Administrator?{' '}
               <a
                 href="/login"
-                className="text-orange-400 hover:text-orange-300 underline"
+                className={`underline ${isComingSoon ? 'text-blue-400 hover:text-blue-300' : 'text-orange-400 hover:text-orange-300'}`}
               >
                 Login here
               </a>
