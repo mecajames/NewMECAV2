@@ -45,11 +45,13 @@ export default function MembershipDashboardPage() {
         const active = await membershipsApi.getUserActiveMembership(profile.id);
         setActiveMembership(active);
 
-        // Fetch secondary memberships
-        try {
-          const secondaries = await membershipsApi.getSecondaryMemberships();
-          setSecondaryMemberships(secondaries);
-        } catch { /* ignore */ }
+        // Fetch secondary memberships if there's an active membership
+        if (active?.id) {
+          try {
+            const secondaries = await membershipsApi.getSecondaryMemberships(active.id);
+            setSecondaryMemberships(secondaries);
+          } catch { /* ignore */ }
+        }
 
         // Fetch subscription status if there's an active membership
         if (active) {
@@ -566,8 +568,10 @@ export default function MembershipDashboardPage() {
         onClose={() => setShowAddSecondaryModal(false)}
         onSuccess={async () => {
           setShowAddSecondaryModal(false);
-          const secondaries = await membershipsApi.getSecondaryMemberships();
-          setSecondaryMemberships(secondaries);
+          if (activeMembership?.id) {
+            const secondaries = await membershipsApi.getSecondaryMemberships(activeMembership.id);
+            setSecondaryMemberships(secondaries);
+          }
         }}
         masterMembershipId={activeMembership?.id || ''}
       />
@@ -579,8 +583,10 @@ export default function MembershipDashboardPage() {
           onClose={() => setEditingSecondary(null)}
           onSuccess={async () => {
             setEditingSecondary(null);
-            const secondaries = await membershipsApi.getSecondaryMemberships();
-            setSecondaryMemberships(secondaries);
+            if (activeMembership?.id) {
+              const secondaries = await membershipsApi.getSecondaryMemberships(activeMembership.id);
+              setSecondaryMemberships(secondaries);
+            }
           }}
           secondary={editingSecondary}
         />
