@@ -60,7 +60,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
   }
 
   // Check if maintenance mode is enabled and user is not an admin
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
   const showMaintenancePage = maintenanceSettings.enabled && !isAdmin;
 
   if (showMaintenancePage) {

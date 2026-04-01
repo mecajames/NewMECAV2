@@ -36,6 +36,7 @@ export interface Profile {
   profile_images?: string[];
   cover_image_position?: { x: number; y: number };
   force_password_change?: boolean;
+  is_staff?: boolean;
   is_trainer?: boolean;
   // Judge and Event Director permissions
   can_apply_judge?: boolean;
