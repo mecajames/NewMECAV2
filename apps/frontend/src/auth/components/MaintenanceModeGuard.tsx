@@ -3,6 +3,9 @@ import { Wrench, AlertTriangle } from 'lucide-react';
 import axios from '@/lib/axios';
 import { useAuth } from '../contexts/AuthContext';
 
+// Routes that must remain accessible during maintenance mode so admins can log in
+const MAINTENANCE_EXEMPT_PATHS = ['/login', '/auth/callback', '/change-password'];
+
 interface MaintenanceModeGuardProps {
   children: ReactNode;
 }
@@ -61,7 +64,8 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
 
   // Check if maintenance mode is enabled and user is not an admin
   const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
-  const showMaintenancePage = maintenanceSettings.enabled && !isAdmin;
+  const isExemptPath = MAINTENANCE_EXEMPT_PATHS.some(p => window.location.pathname.startsWith(p));
+  const showMaintenancePage = maintenanceSettings.enabled && !isAdmin && !isExemptPath;
 
   if (showMaintenancePage) {
     return (

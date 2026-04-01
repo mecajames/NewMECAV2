@@ -1,5 +1,5 @@
-// MECA ID that can never have admin/staff access removed
-const PROTECTED_MECA_ID = '202401';
+// MECA IDs that can never have admin/staff access removed
+const PROTECTED_MECA_IDS = ['202401', '700947'];
 
 /**
  * Checks if a profile has admin/staff access.
@@ -11,8 +11,8 @@ const PROTECTED_MECA_ID = '202401';
  */
 export function isAdminUser(profile: { role?: string; is_staff?: boolean; meca_id?: string } | null | undefined): boolean {
   if (!profile) return false;
-  // Protected account always has admin access
-  if (String(profile.meca_id) === PROTECTED_MECA_ID) return true;
+  // Protected accounts always have admin access
+  if (PROTECTED_MECA_IDS.includes(String(profile.meca_id))) return true;
   return profile.role === 'admin' || profile.is_staff === true;
 }
 
@@ -21,5 +21,5 @@ export function isAdminUser(profile: { role?: string; is_staff?: boolean; meca_i
  */
 export function isProtectedAccount(profile: { meca_id?: string } | null | undefined): boolean {
   if (!profile) return false;
-  return String(profile.meca_id) === PROTECTED_MECA_ID;
+  return PROTECTED_MECA_IDS.includes(String(profile.meca_id));
 }
