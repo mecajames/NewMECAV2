@@ -18,6 +18,8 @@ interface MaintenanceSettings {
 
 export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardProps) {
   const { profile, loading: authLoading } = useAuth();
+  // Capture the initial pathname on mount so re-renders don't lose the exempt check
+  const [initialPath] = useState(() => window.location.pathname);
   const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings>({
     enabled: false,
     message: '',
@@ -66,7 +68,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
 
   // Check if maintenance mode is enabled and user is not an admin
   const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
-  const isExemptPath = MAINTENANCE_EXEMPT_PATHS.some(p => window.location.pathname.startsWith(p));
+  const isExemptPath = MAINTENANCE_EXEMPT_PATHS.some(p => initialPath.startsWith(p));
   const showMaintenancePage = maintenanceSettings.enabled && !isAdmin && !isExemptPath;
 
   if (showMaintenancePage) {
