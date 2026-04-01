@@ -403,7 +403,9 @@ export default function MembershipDashboardPage() {
 
             {/* Renew Membership */}
             <button
-              onClick={() => navigate('/membership')}
+              onClick={() => navigate(activeMembership.membershipTypeConfig?.id
+                ? `/membership/checkout/${activeMembership.membershipTypeConfig.id}`
+                : '/membership')}
               className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
             >
               <RefreshCw className="h-4 w-4" />
