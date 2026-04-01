@@ -3,6 +3,9 @@ import { Wrench, AlertTriangle, Rocket } from 'lucide-react';
 import axios from '@/lib/axios';
 import { useAuth } from '../contexts/AuthContext';
 
+// Routes that must remain accessible during maintenance mode so admins can log in
+const MAINTENANCE_EXEMPT_PATHS = ['/login', '/auth/callback', '/change-password'];
+
 interface MaintenanceModeGuardProps {
   children: ReactNode;
 }
@@ -39,7 +42,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
       } catch (error) {
         console.error('Error checking maintenance mode:', error);
         // On error, assume not in maintenance mode to avoid blocking users
-        setMaintenanceSettings({ enabled: false, message: '' });
+        setMaintenanceSettings({ enabled: false, message: '', displayMode: 'maintenance' });
       } finally {
         setLoading(false);
       }
@@ -63,9 +66,8 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
 
   // Check if maintenance mode is enabled and user is not an admin
   const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-  const isLoginPage = currentPath === '/login' || currentPath.startsWith('/auth/');
-  const showMaintenancePage = maintenanceSettings.enabled && !isAdmin && !isLoginPage;
+  const isExemptPath = MAINTENANCE_EXEMPT_PATHS.some(p => window.location.pathname.startsWith(p));
+  const showMaintenancePage = maintenanceSettings.enabled && !isAdmin && !isExemptPath;
 
   if (showMaintenancePage) {
     const isComingSoon = maintenanceSettings.displayMode === 'coming_soon';
