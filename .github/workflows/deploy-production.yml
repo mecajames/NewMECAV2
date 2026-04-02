@@ -110,6 +110,7 @@ jobs:
             --arg google_maps_api_key "${{ secrets.PROD_GOOGLE_MAPS_API_KEY }}" \
             --arg mailgun_domain "${{ secrets.PROD_MAILGUN_DOMAIN }}" \
             --arg mailgun_api_key "${{ secrets.PROD_MAILGUN_API_KEY }}" \
+            --arg mailgun_from_email "noreply@mecacaraudio.com" \
             --arg frontend_url "${{ secrets.PROD_FRONTEND_URL }}" \
             --arg cc_api_key "${{ secrets.PROD_CONSTANT_CONTACT_API_KEY }}" \
             --arg cc_client_secret "${{ secrets.PROD_CONSTANT_CONTACT_CLIENT_SECRET }}" \
@@ -135,8 +136,11 @@ jobs:
             .containers.backend.environment.USPS_CONSUMER_KEY = $usps_consumer_key |
             .containers.backend.environment.USPS_CONSUMER_SECRET = $usps_consumer_secret |
             .containers.backend.environment.GOOGLE_MAPS_API_KEY = $google_maps_api_key |
+            .containers.backend.environment.EMAIL_PROVIDER = "mailgun" |
             .containers.backend.environment.MAILGUN_DOMAIN = $mailgun_domain |
             .containers.backend.environment.MAILGUN_API_KEY = $mailgun_api_key |
+            .containers.backend.environment.MAILGUN_API_URL = "https://api.mailgun.net" |
+            .containers.backend.environment.MAILGUN_FROM_EMAIL = $mailgun_from_email |
             .containers.backend.environment.FRONTEND_URL = $frontend_url |
             .containers.backend.environment.CONSTANT_CONTACT_API_KEY = $cc_api_key |
             .containers.backend.environment.CONSTANT_CONTACT_CLIENT_SECRET = $cc_client_secret |
