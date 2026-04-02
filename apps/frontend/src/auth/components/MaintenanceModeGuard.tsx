@@ -1,4 +1,5 @@
 import { useState, useEffect, ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Wrench, AlertTriangle, Rocket } from 'lucide-react';
 import axios from '@/lib/axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,8 +19,8 @@ interface MaintenanceSettings {
 
 export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardProps) {
   const { profile, loading: authLoading } = useAuth();
-  // Capture the initial pathname on mount so re-renders don't lose the exempt check
-  const [initialPath] = useState(() => window.location.pathname);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings>({
     enabled: false,
     message: '',
@@ -68,7 +69,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
 
   // Check if maintenance mode is enabled and user is not an admin
   const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
-  const isExemptPath = MAINTENANCE_EXEMPT_PATHS.some(p => initialPath.startsWith(p));
+  const isExemptPath = MAINTENANCE_EXEMPT_PATHS.some(p => location.pathname.startsWith(p));
   const showMaintenancePage = maintenanceSettings.enabled && !isAdmin && !isExemptPath;
 
   if (showMaintenancePage) {
@@ -145,12 +146,12 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">
               Administrator?{' '}
-              <a
-                href="/login"
+              <button
+                onClick={() => navigate('/login')}
                 className={`underline ${isComingSoon ? 'text-blue-400 hover:text-blue-300' : 'text-orange-400 hover:text-orange-300'}`}
               >
                 Login here
-              </a>
+              </button>
             </p>
           </div>
         </div>
