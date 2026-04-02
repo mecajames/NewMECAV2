@@ -160,12 +160,12 @@ function App() {
     <HelmetProvider>
       <StagingNoIndex />
       <AuthProvider>
+        <BrowserRouter>
         <MaintenanceModeGuard>
         <SiteSettingsProvider>
           <SeasonsProvider>
             <CartProvider>
               <ReCaptchaProvider version="v2">
-                <BrowserRouter>
                   <ScrollToTop />
                   <PageTracker />
           <ImpersonationBanner />
@@ -376,12 +376,12 @@ function App() {
             </IdleTimeoutGuard>
           <Footer />
         </div>
-                </BrowserRouter>
               </ReCaptchaProvider>
             </CartProvider>
           </SeasonsProvider>
         </SiteSettingsProvider>
         </MaintenanceModeGuard>
+        </BrowserRouter>
       </AuthProvider>
     </HelmetProvider>
   );
