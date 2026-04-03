@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { CheckCircle, Mail, X } from 'lucide-react';
 import { TicketDetail } from '../components/TicketDetail';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();

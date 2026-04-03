@@ -5,7 +5,7 @@ import {
   MapPin, User, Building2, Users2, Eye, Send, Lock, ChevronRight,
   RefreshCw, FileText, Phone, Mail, DollarSign, Zap, Printer, ArrowLeft
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import {
   eventHostingRequestsApi,
   EventHostingRequest,

@@ -16,7 +16,7 @@ import {
   TicketRoutingRules,
   TicketSystemSettings,
 } from '@/tickets';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 type TabId = 'tickets' | 'staff' | 'departments' | 'routing' | 'settings';
 

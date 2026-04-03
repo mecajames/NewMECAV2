@@ -5,7 +5,7 @@ import {
   Calendar, MapPin, Send, AlertCircle, CheckCircle,
   Clock, FileText, DollarSign, Users, Zap, ArrowLeft
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { getMyEventDirectorProfile, EventDirector } from '@/event-directors';
 import { eventHostingRequestsApi, EventHostingRequestStatus, HostType, IndoorOutdoor, EventTypeOption, EDAssignmentStatus } from '@/event-hosting-requests/event-hosting-requests.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';

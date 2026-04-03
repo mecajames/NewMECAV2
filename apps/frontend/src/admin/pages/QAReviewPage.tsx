@@ -6,7 +6,7 @@ import {
   CheckCheck, X
 } from 'lucide-react';
 import { qaApi, uploadQaScreenshot } from '@/api-client/qa.api-client';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 export default function QAReviewPage() {
   const { assignmentId } = useParams<{ assignmentId: string }>();

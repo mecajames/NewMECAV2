@@ -6,7 +6,7 @@ import {
   TrendingUp, TrendingDown, Minus, Star, Bell, Check, Heart
 } from 'lucide-react';
 import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import axios from '@/lib/axios';
 import { eventRegistrationsApi } from '@/event-registrations';

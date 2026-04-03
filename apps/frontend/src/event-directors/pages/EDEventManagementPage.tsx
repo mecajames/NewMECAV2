@@ -7,7 +7,7 @@ import {
   CheckSquare, Square, CameraOff, X, HelpCircle
 } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { Pagination } from '@/shared/components';
 
 // Local storage key for ED's completed assignments tracking (shared with EventDirectorAssignments)

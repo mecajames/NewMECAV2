@@ -15,7 +15,7 @@ import {
   Check,
 } from 'lucide-react';
 import { getManufacturerById, updateMyManufacturerListing, adminUpdateManufacturer, ManufacturerListing } from '@/business-listings';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 export default function ManufacturerProfilePage() {
   const { id } = useParams<{ id: string }>();

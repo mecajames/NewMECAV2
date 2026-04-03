@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertCircle, AlertTriangle } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { membershipsApi, Membership, MemberCancelMembershipModal, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 
 export default function MembershipDashboardPage() {

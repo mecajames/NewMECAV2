@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Trophy, Calendar } from 'lucide-react';
 import { championshipArchivesApi, ChampionshipArchive } from '@/championship-archives';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 
 export default function ChampionshipArchivesPage() {

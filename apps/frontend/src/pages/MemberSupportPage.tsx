@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Ticket, BookOpen, Calculator, FileText, HelpCircle, MessageSquare, Phone } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 export default function MemberSupportPage() {
   const { profile } = useAuth();

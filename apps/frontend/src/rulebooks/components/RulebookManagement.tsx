@@ -3,7 +3,7 @@ import { Upload, Trash2, Edit2, FileText, Archive, Eye, EyeOff, FolderOpen, X, E
 import { getStorageUrl } from '@/lib/storage';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { seasonsApi, Season } from '@/seasons';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { useMediaFiles, useCreateMediaFile } from '@/media-files';
 import { uploadFile } from '@/api-client/uploads.api-client';
 

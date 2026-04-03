@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft, Users } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { profilesApi, Profile as ProfileType } from '@/profiles';
 import { membershipsApi, ControlledMecaId, Membership, RELATIONSHIP_TYPES } from '@/memberships';
 import { MecaIdSwitcher } from '@/shared/components';
