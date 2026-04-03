@@ -37,6 +37,8 @@ import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
 import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
 import { WorldFinalsService } from '../world-finals/world-finals.service';
+import { PaymentFulfillmentService } from '../payments/payment-fulfillment.service';
+import { PaymentMethod } from '@newmeca/shared';
 import Stripe from 'stripe';
 
 interface CreateMembershipPaymentIntentDto {
@@ -128,6 +130,7 @@ export class StripeController {
     private readonly mecaIdService: MecaIdService,
     private readonly membershipSyncService: MembershipSyncService,
     private readonly worldFinalsService: WorldFinalsService,
+    private readonly paymentFulfillmentService: PaymentFulfillmentService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -847,493 +850,68 @@ export class StripeController {
   }
 
   private async handleTeamUpgradePayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    const metadata = paymentIntent.metadata;
-    const membershipId = metadata.membershipId;
-    const teamName = metadata.teamName;
-    const teamDescription = metadata.teamDescription;
-
-    if (!membershipId || !teamName) {
-      console.error('Missing required metadata for team upgrade:', paymentIntent.id);
-      return;
-    }
-
-    try {
-      // Apply the team upgrade
-      const membership = await this.membershipsService.applyTeamUpgrade(
-        membershipId,
-        teamName,
-        teamDescription,
-      );
-
-      console.log(`Team upgrade applied to membership ${membershipId}:`, {
-        teamName,
-        paymentIntentId: paymentIntent.id,
-        amount: paymentIntent.amount / 100,
-      });
-
-      // Create order for the upgrade
-      const taxAmount = metadata.taxAmount || '0.00';
-      const subtotalCents = paymentIntent.amount - Math.round(parseFloat(taxAmount) * 100);
-      const subtotalPaid = (subtotalCents / 100).toFixed(2);
-      const order = await this.ordersService.createFromPayment({
-        userId: metadata.userId,
-        orderType: OrderType.MEMBERSHIP,
-        tax: taxAmount,
-        items: [{
-          itemType: OrderItemType.TEAM_ADDON,
-          description: `Team Add-on Upgrade: ${teamName}`,
-          quantity: 1,
-          unitPrice: subtotalPaid,
-          metadata: {
-            membershipId,
-            teamName,
-            originalPrice: metadata.originalPrice,
-            proRatedPrice: metadata.proRatedPrice,
-            daysRemaining: metadata.daysRemaining,
-          },
-        }],
-        notes: `Stripe Payment Intent: ${paymentIntent.id}`,
-      });
-
-      console.log(`Created order ${order.id} for team upgrade`);
-
-    } catch (error) {
-      console.error('Error applying team upgrade:', error);
-      throw error;
-    }
+    await this.paymentFulfillmentService.fulfillTeamUpgradePayment({
+      transactionId: paymentIntent.id,
+      paymentMethod: PaymentMethod.STRIPE,
+      amountCents: paymentIntent.amount,
+      metadata: paymentIntent.metadata as Record<string, string>,
+    });
   }
 
   private async handleMembershipPayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    const metadata = paymentIntent.metadata;
-    const email = metadata.email;
-    const membershipTypeConfigId = metadata.membershipTypeConfigId;
-    const userId = metadata.userId;
-
-    if (!email || !membershipTypeConfigId || !userId) {
-      console.error('Missing required metadata in payment intent:', paymentIntent.id);
-      if (!userId) {
-        console.error('Guest memberships are no longer supported - userId is required');
-      }
-      return;
-    }
-
-    try {
-      // Amount is in cents, convert to dollars
-      const amountPaid = paymentIntent.amount / 100;
-
-      // Create membership for logged-in user using the new MECA ID-based system
-      const membership = await this.membershipsService.createMembership({
-        userId,
-        membershipTypeConfigId,
-        amountPaid,
-        stripePaymentIntentId: paymentIntent.id,
-        transactionId: paymentIntent.id,
-        // Competitor info
-        competitorName: metadata.competitorName,
-        vehicleLicensePlate: metadata.vehicleLicensePlate,
-        vehicleColor: metadata.vehicleColor,
-        vehicleMake: metadata.vehicleMake,
-        vehicleModel: metadata.vehicleModel,
-        // Team info
-        hasTeamAddon: metadata.hasTeamAddon === 'true',
-        teamName: metadata.teamName,
-        teamDescription: metadata.teamDescription,
-        // Business info
-        businessName: metadata.businessName,
-        businessWebsite: metadata.businessWebsite,
-        // Billing info
-        billingFirstName: metadata.billingFirstName,
-        billingLastName: metadata.billingLastName,
-        billingPhone: metadata.billingPhone,
-        billingAddress: metadata.billingAddress,
-        billingCity: metadata.billingCity,
-        billingState: metadata.billingState,
-        billingPostalCode: metadata.billingPostalCode,
-        billingCountry: metadata.billingCountry || 'USA',
-      });
-
-      console.log('Membership created successfully for:', email);
-
-      // Clear MECA ID invalidation flag on profile if it was set
-      if (membership.mecaId) {
-        const profileEm = this.em.fork();
-        try {
-          await profileEm.getConnection().execute(
-            `UPDATE profiles SET meca_id_invalidated_at = NULL, meca_id = ?, updated_at = NOW() WHERE id = ?`,
-            [String(membership.mecaId), userId]
-          );
-        } catch (err) {
-          console.error('Failed to clear MECA ID invalidation:', err);
-        }
-
-        // Release any held competition results for this MECA ID
-        try {
-          const releaseResult = await profileEm.getConnection().execute(
-            `UPDATE competition_results SET points_held_for_renewal = false, released_at = NOW(), notes = COALESCE(notes, '') || ' | Released: membership renewed' WHERE meca_id = ? AND points_held_for_renewal = true`,
-            [String(membership.mecaId)]
-          );
-          const released = releaseResult.affectedRows || 0;
-          if (released > 0) {
-            console.log(`Released ${released} held competition results for MECA ID ${membership.mecaId}`);
-          }
-        } catch (err) {
-          console.error('Failed to release held results:', err);
-        }
-      }
-
-      // Create Order and Invoice (async, non-blocking)
-      const membershipTaxAmount = metadata.taxAmount || '0.00';
-      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'membership', membershipTaxAmount).catch((error) => {
-        console.error('Order/Invoice creation failed (non-critical):', error);
-      });
-
-      // Create QuickBooks sales receipt (async, non-blocking)
-      this.createQuickBooksSalesReceipt(paymentIntent, metadata, amountPaid).catch((qbError) => {
-        console.error('QuickBooks sales receipt creation failed (non-critical):', qbError);
-      });
-    } catch (error) {
-      console.error('Error creating membership after payment:', error);
-      // In production, you might want to alert admin or queue for retry
-    }
+    await this.paymentFulfillmentService.fulfillMembershipPayment({
+      transactionId: paymentIntent.id,
+      paymentMethod: PaymentMethod.STRIPE,
+      amountCents: paymentIntent.amount,
+      metadata: paymentIntent.metadata as Record<string, string>,
+    });
   }
 
   private async handleEventRegistrationPayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    const metadata = paymentIntent.metadata;
-    const registrationId = metadata.registrationId;
-    const email = metadata.email;
-
-    if (!registrationId) {
-      console.error('Missing registrationId in event registration payment:', paymentIntent.id);
-      return;
-    }
-
-    try {
-      // Amount is in cents, convert to dollars
-      const amountPaid = paymentIntent.amount / 100;
-
-      let membershipId: string | undefined;
-
-      // If membership was included in the purchase, create it first
-      // Note: Membership purchase during event registration now requires a logged-in user
-      if (metadata.includeMembership === 'true' && metadata.membershipTypeConfigId && metadata.userId) {
-        const membershipPrice = parseFloat(metadata.membershipPrice || '0');
-
-        // Create membership for logged-in user using the new MECA ID-based system
-        const membership = await this.membershipsService.createMembership({
-          userId: metadata.userId,
-          membershipTypeConfigId: metadata.membershipTypeConfigId,
-          amountPaid: membershipPrice,
-          stripePaymentIntentId: paymentIntent.id,
-          transactionId: paymentIntent.id,
-          // Use provided competitor info or defaults
-          competitorName: metadata.competitorName,
-          vehicleLicensePlate: metadata.vehicleLicensePlate,
-          vehicleColor: metadata.vehicleColor,
-          vehicleMake: metadata.vehicleMake,
-          vehicleModel: metadata.vehicleModel,
-        });
-        membershipId = membership.id;
-
-        console.log('Membership created as part of event registration for:', email);
-      } else if (metadata.includeMembership === 'true' && !metadata.userId) {
-        console.error('Cannot create membership without userId - user must be logged in');
-      }
-
-      // Complete the event registration
-      await this.eventRegistrationsService.completeRegistration(
-        registrationId,
-        paymentIntent.id,
-        amountPaid,
-        membershipId,
-      );
-
-      console.log('Event registration completed successfully for:', email);
-
-      // Create Order and Invoice (async, non-blocking)
-      const eventTaxAmount = metadata.taxAmount || '0.00';
-      this.createOrderAndInvoice(paymentIntent, metadata, amountPaid, 'event_registration', eventTaxAmount).catch((error) => {
-        console.error('Order/Invoice creation failed (non-critical):', error);
-      });
-    } catch (error) {
-      console.error('Error completing event registration after payment:', error);
-      // In production, you might want to alert admin or queue for retry
-    }
+    await this.paymentFulfillmentService.fulfillEventRegistrationPayment({
+      transactionId: paymentIntent.id,
+      paymentMethod: PaymentMethod.STRIPE,
+      amountCents: paymentIntent.amount,
+      metadata: paymentIntent.metadata as Record<string, string>,
+    });
   }
 
   private async handleInvoicePayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    const metadata = paymentIntent.metadata;
-    const invoiceId = metadata.invoiceId;
-
-    if (!invoiceId) {
-      console.error('Missing invoiceId in invoice payment:', paymentIntent.id);
-      return;
-    }
-
-    try {
-      // Mark the invoice as paid
-      const invoice = await this.invoicesService.markAsPaid(invoiceId);
-      console.log(`Invoice ${invoice.invoiceNumber} marked as paid via Stripe payment ${paymentIntent.id}`);
-
-      // Check if there's an associated order that needs to be marked complete
-      if (invoice.order?.id) {
-        try {
-          await this.ordersService.updateStatus(invoice.order.id, {
-            status: OrderStatus.COMPLETED,
-            notes: `Paid via Stripe: ${paymentIntent.id}`,
-          });
-          console.log(`Order ${invoice.order.id} marked as completed`);
-        } catch (orderError) {
-          console.error('Error updating order status:', orderError);
-        }
-      }
-
-      // Try to activate any pending membership associated with this invoice
-      // The membership would be linked through the order that was created during admin assignment
-      await this.activatePendingMembershipForInvoice(invoiceId, metadata.userId, invoice.total);
-
-      console.log(`Invoice payment processed successfully for ${invoiceId}`);
-    } catch (error) {
-      console.error('Error handling invoice payment:', error);
-      throw error;
-    }
+    await this.paymentFulfillmentService.fulfillInvoicePayment({
+      transactionId: paymentIntent.id,
+      paymentMethod: PaymentMethod.STRIPE,
+      amountCents: paymentIntent.amount,
+      metadata: paymentIntent.metadata as Record<string, string>,
+    });
   }
 
   private async handleShopPayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    const metadata = paymentIntent.metadata;
-    const orderId = metadata.orderId;
-
-    if (!orderId) {
-      console.error('Missing orderId in shop payment:', paymentIntent.id);
-      return;
-    }
-
-    try {
-      // Get the charge ID for the successful payment
-      const chargeId = paymentIntent.latest_charge as string;
-
-      // Process the payment success - marks order as paid and decrements stock
-      const order = await this.shopService.processPaymentSuccess(
-        paymentIntent.id,
-        chargeId,
-      );
-
-      console.log(`Shop order ${order.orderNumber} marked as paid via Stripe payment ${paymentIntent.id}`);
-
-      // Create billing Order and Invoice for the shop purchase
-      // Pass email from Stripe metadata as fallback for guest orders
-      // Note: awaited to ensure invoice is created before webhook returns,
-      // but wrapped in try/catch so failure doesn't break the webhook response
-      try {
-        await this.shopService.createBillingOrderAndInvoice(orderId, metadata.email);
-      } catch (invoiceError) {
-        console.error(`CRITICAL: Order/Invoice creation failed for shop order ${orderId}. ` +
-          `Admin can recover via POST /api/shop/admin/orders/${orderId}/create-invoice`, invoiceError);
-      }
-    } catch (error) {
-      console.error('Error handling shop payment:', error);
-      throw error;
-    }
+    const metadata = paymentIntent.metadata as Record<string, string>;
+    // Pass chargeId in metadata for shop service
+    metadata.chargeId = paymentIntent.latest_charge as string;
+    await this.paymentFulfillmentService.fulfillShopPayment({
+      transactionId: paymentIntent.id,
+      paymentMethod: PaymentMethod.STRIPE,
+      amountCents: paymentIntent.amount,
+      metadata,
+    });
   }
 
   private async handleWorldFinalsRegistrationPayment(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    const metadata = paymentIntent.metadata;
-    const registrationId = metadata.registrationId;
-
-    if (!registrationId) {
-      console.error('Missing registrationId in World Finals payment:', paymentIntent.id);
-      return;
-    }
-
-    try {
-      const registration = await this.worldFinalsService.markPreRegistrationPaid(
-        registrationId,
-        paymentIntent.id,
-      );
-
-      console.log(`World Finals registration ${registrationId} marked as paid via Stripe payment ${paymentIntent.id}`, {
-        mecaId: metadata.mecaId,
-        packageId: metadata.packageId,
-        amount: paymentIntent.amount / 100,
-      });
-    } catch (error) {
-      console.error('Error handling World Finals registration payment:', error);
-      throw error;
-    }
+    await this.paymentFulfillmentService.fulfillWorldFinalsPayment({
+      transactionId: paymentIntent.id,
+      paymentMethod: PaymentMethod.STRIPE,
+      amountCents: paymentIntent.amount,
+      metadata: paymentIntent.metadata as Record<string, string>,
+    });
   }
 
   // NOTE: createShopOrderAndInvoice() logic has been moved to ShopService.createBillingOrderAndInvoice()
 
-  private async activatePendingMembershipForInvoice(
-    invoiceId: string,
-    userId: string,
-    amountPaid: string,
-  ): Promise<void> {
-    try {
-      const { Invoice } = await import('../invoices/invoices.entity');
-      const { Membership } = await import('../memberships/memberships.entity');
-      const { PaymentStatus, MembershipAccountType, OrderType, OrderItemType } = await import('@newmeca/shared');
-      const em = this.em.fork();
-
-      // Load the invoice with its items and any linked secondary memberships
-      const invoice = await em.findOne(Invoice, { id: invoiceId }, {
-        populate: ['items', 'items.secondaryMembership', 'items.secondaryMembership.user', 'items.secondaryMembership.membershipTypeConfig', 'user'],
-      });
-
-      if (!invoice) {
-        console.log(`Invoice ${invoiceId} not found for membership activation`);
-        return;
-      }
-
-      // Check for secondary memberships in invoice items
-      for (const item of invoice.items.getItems()) {
-        if (item.secondaryMembership) {
-          const secondary = item.secondaryMembership;
-
-          // Skip if already paid
-          if (secondary.paymentStatus === PaymentStatus.PAID) {
-            console.log(`Secondary membership ${secondary.id} already paid, skipping`);
-            continue;
-          }
-
-          // Use markSecondaryPaid to properly assign MECA ID
-          try {
-            const amount = parseFloat(item.total || amountPaid);
-            await this.masterSecondaryService.markSecondaryPaid(
-              secondary.id,
-              amount,
-              `Invoice-${invoice.invoiceNumber}`,
-            );
-            console.log(`Secondary membership ${secondary.id} activated with MECA ID via invoice payment`);
-
-            // Create an Order for the secondary membership (async, non-blocking)
-            this.createOrderForSecondaryMembership(secondary, invoice, amount).catch((orderError) => {
-              console.error(`Error creating order for secondary membership ${secondary.id}:`, orderError);
-            });
-          } catch (secondaryError) {
-            console.error(`Error activating secondary membership ${secondary.id}:`, secondaryError);
-          }
-        }
-      }
-
-      // Also check for regular (non-secondary) pending memberships for this user
-      if (userId) {
-        const pendingMembership = await em.findOne(Membership, {
-          user: userId,
-          paymentStatus: PaymentStatus.PENDING,
-          accountType: { $ne: MembershipAccountType.SECONDARY },
-        });
-
-        if (pendingMembership) {
-          // For non-secondary memberships, update payment status
-          // MECA ID should already be assigned during creation for admin-assigned memberships
-          pendingMembership.paymentStatus = PaymentStatus.PAID;
-          pendingMembership.amountPaid = parseFloat(amountPaid);
-          await em.flush();
-          console.log(`Membership ${pendingMembership.id} activated after invoice payment`);
-        } else {
-          console.log(`No pending non-secondary membership found for user ${userId}`);
-        }
-      }
-    } catch (error) {
-      console.error('Error activating pending membership:', error);
-      // Don't throw - this is non-critical
-    }
-  }
-
-  /**
-   * Create an order for a secondary membership after invoice payment
-   */
-  private async createOrderForSecondaryMembership(
-    secondary: any,
-    invoice: any,
-    amount: number,
-  ): Promise<void> {
-    try {
-      const { OrderType, OrderItemType } = await import('@newmeca/shared');
-
-      // Get the master's billing info from the invoice
-      const billingAddress = invoice.billingAddress || {};
-
-      // Create order for the secondary membership
-      // Bill to the master account (invoice.user is the master)
-      const order = await this.ordersService.createFromPayment({
-        userId: invoice.user?.id,
-        orderType: OrderType.MEMBERSHIP,
-        items: [{
-          description: `${secondary.membershipTypeConfig?.name || 'Membership'} - Secondary (${secondary.competitorName})`,
-          quantity: 1,
-          unitPrice: amount.toFixed(2),
-          itemType: OrderItemType.MEMBERSHIP,
-          referenceId: secondary.id,
-          metadata: {
-            membershipId: secondary.id,
-            isSecondary: true,
-            competitorName: secondary.competitorName,
-            mecaId: secondary.mecaId,
-            invoiceNumber: invoice.invoiceNumber,
-          },
-        }],
-        billingAddress: {
-          name: billingAddress.name || '',
-          address1: billingAddress.address1 || '',
-          city: billingAddress.city || '',
-          state: billingAddress.state || '',
-          postalCode: billingAddress.postalCode || '',
-          country: billingAddress.country || 'USA',
-        },
-        notes: `Secondary membership for ${secondary.competitorName} - Invoice ${invoice.invoiceNumber}`,
-      });
-
-      console.log(`Order ${order.orderNumber} created for secondary membership ${secondary.id}`);
-    } catch (error) {
-      console.error('Error creating order for secondary membership:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Create a QuickBooks sales receipt for the payment
-   * This is done asynchronously to not block the webhook response
-   */
-  private async createQuickBooksSalesReceipt(
-    paymentIntent: Stripe.PaymentIntent,
-    metadata: Stripe.Metadata,
-    amountPaid: number,
-  ): Promise<void> {
-    try {
-      // Check if QuickBooks is connected
-      const connectionStatus = await this.quickBooksService.getConnectionStatus();
-      if (!connectionStatus) {
-        console.log('QuickBooks not connected, skipping sales receipt creation');
-        return;
-      }
-
-      const customerName = metadata.billingFirstName && metadata.billingLastName
-        ? `${metadata.billingFirstName} ${metadata.billingLastName}`
-        : metadata.email;
-
-      await this.quickBooksService.createSalesReceipt({
-        customerEmail: metadata.email,
-        customerName,
-        membershipTypeConfigId: metadata.membershipTypeConfigId,
-        amount: amountPaid,
-        paymentDate: new Date(),
-        stripePaymentIntentId: paymentIntent.id,
-        billingAddress: metadata.billingAddress ? {
-          line1: metadata.billingAddress,
-          city: metadata.billingCity || '',
-          state: metadata.billingState || '',
-          postalCode: metadata.billingPostalCode || '',
-          country: metadata.billingCountry || 'USA',
-        } : undefined,
-      });
-
-      console.log('QuickBooks sales receipt created for:', metadata.email);
-    } catch (error) {
-      // Log but don't throw - QuickBooks errors shouldn't affect the main payment flow
-      console.error('Failed to create QuickBooks sales receipt:', error);
-    }
-  }
+  // NOTE: activatePendingMembershipForInvoice, createOrderForSecondaryMembership,
+  // createQuickBooksSalesReceipt, handleMembershipPayment, handleEventRegistrationPayment,
+  // handleInvoicePayment, handleShopPayment, handleWorldFinalsRegistrationPayment,
+  // and handleTeamUpgradePayment have been moved to PaymentFulfillmentService.
 
   private async handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
     console.log('Payment failed:', paymentIntent.id);
@@ -1653,15 +1231,24 @@ export class StripeController {
       const paymentIntentId = typeof invoice?.payment_intent === 'string' ? invoice.payment_intent : invoice?.payment_intent?.id;
 
       if (paymentIntentId) {
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         // Build metadata for order/invoice creation
-        const orderMetadata: Stripe.Metadata = {
+        const orderMetadata: Record<string, string> = {
           ...metadata,
           membershipId: membership.id,
           mecaId: String(mecaId),
         };
         const subTax = await this.taxService.calculateTax(membershipConfig.price);
-        await this.createOrderAndInvoice(paymentIntent, orderMetadata, membershipConfig.price, 'membership', subTax.taxAmount.toFixed(2));
+        await this.paymentFulfillmentService.createOrderAndInvoice(
+          {
+            transactionId: paymentIntentId,
+            paymentMethod: PaymentMethod.STRIPE,
+            amountCents: Math.round(membershipConfig.price * 100),
+            metadata: orderMetadata,
+          },
+          membershipConfig.price,
+          'membership',
+          subTax.taxAmount.toFixed(2),
+        );
       }
 
     } catch (error) {
@@ -1682,130 +1269,7 @@ export class StripeController {
     }
   }
 
-  /**
-   * Create an Order and Invoice from a successful payment
-   * This is done asynchronously to not block the webhook response
-   * Uses a transaction to ensure order + invoice are created atomically
-   */
-  private async createOrderAndInvoice(
-    paymentIntent: Stripe.PaymentIntent,
-    metadata: Stripe.Metadata,
-    amountPaid: number,
-    type: 'membership' | 'event_registration',
-    taxAmount: string = '0.00',
-  ): Promise<void> {
-    try {
-      const em = this.em.fork();
-
-      // Look up the payment record (before transaction)
-      const payment = await em.findOne(Payment, {
-        stripePaymentIntentId: paymentIntent.id
-      });
-
-      // Determine order type
-      const orderType = type === 'membership'
-        ? OrderType.MEMBERSHIP
-        : OrderType.EVENT_REGISTRATION;
-
-      // Build order items based on payment type
-      const items: Array<{
-        description: string;
-        quantity: number;
-        unitPrice: string;
-        itemType: OrderItemType;
-        referenceId?: string;
-        metadata?: Record<string, unknown>;
-      }> = [];
-
-      if (type === 'membership') {
-        items.push({
-          description: `MECA Membership: ${metadata.membershipTypeName || metadata.membershipCategory || 'Annual'}`,
-          quantity: 1,
-          unitPrice: amountPaid.toFixed(2),
-          itemType: OrderItemType.MEMBERSHIP,
-          referenceId: metadata.membershipTypeConfigId,
-          metadata: {
-            membershipCategory: metadata.membershipCategory,
-          },
-        });
-      } else if (type === 'event_registration') {
-        // Main event registration item
-        const classCount = parseInt(metadata.classCount || '1', 10);
-        const perClassFee = parseFloat(metadata.perClassFee || '0');
-
-        items.push({
-          description: `Event Registration: ${metadata.eventTitle || 'Event'} (${classCount} class${classCount > 1 ? 'es' : ''})`,
-          quantity: classCount,
-          unitPrice: perClassFee.toFixed(2),
-          itemType: OrderItemType.EVENT_CLASS,
-          referenceId: metadata.eventId,
-          metadata: {
-            registrationId: metadata.registrationId,
-            classCount,
-          },
-        });
-
-        // Add membership item if included
-        if (metadata.includeMembership === 'true' && metadata.membershipPrice) {
-          const membershipPrice = parseFloat(metadata.membershipPrice);
-          if (membershipPrice > 0) {
-            items.push({
-              description: 'MECA Membership (with registration)',
-              quantity: 1,
-              unitPrice: membershipPrice.toFixed(2),
-              itemType: OrderItemType.MEMBERSHIP,
-              referenceId: metadata.membershipTypeConfigId,
-            });
-          }
-        }
-      }
-
-      // Build billing address from metadata
-      const billingAddress = {
-        name: metadata.billingFirstName && metadata.billingLastName
-          ? `${metadata.billingFirstName} ${metadata.billingLastName}`
-          : undefined,
-        address1: metadata.billingAddress,
-        city: metadata.billingCity,
-        state: metadata.billingState,
-        postalCode: metadata.billingPostalCode,
-        country: metadata.billingCountry || 'US',
-      };
-
-      // Use transaction for order + invoice creation (atomic operation)
-      const { order, invoice } = await em.transactional(async () => {
-        // Create the order
-        const createdOrder = await this.ordersService.createFromPayment({
-          paymentId: payment?.id,
-          userId: metadata.userId,
-          orderType,
-          items,
-          billingAddress: billingAddress.name ? billingAddress : undefined,
-          tax: taxAmount,
-          notes: `Stripe Payment: ${paymentIntent.id}`,
-        });
-
-        console.log(`Order ${createdOrder.orderNumber} created for payment ${paymentIntent.id}`);
-
-        // Create invoice from order
-        const createdInvoice = await this.invoicesService.createFromOrder(createdOrder.id);
-        console.log(`Invoice ${createdInvoice.invoiceNumber} created for order ${createdOrder.orderNumber}`);
-
-        return { order: createdOrder, invoice: createdInvoice };
-      });
-
-      // Send invoice email (async, non-blocking, outside transaction)
-      if (invoice) {
-        this.invoicesService.sendInvoice(invoice.id).catch((error) => {
-          console.error('Failed to send invoice email:', error);
-        });
-      }
-
-    } catch (error) {
-      console.error('Failed to create order/invoice:', error);
-      throw error;
-    }
-  }
+  // NOTE: createOrderAndInvoice has been moved to PaymentFulfillmentService
 
   /**
    * Create an Order and Invoice directly from a registration ID

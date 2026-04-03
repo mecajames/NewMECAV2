@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Upload, Trash2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, X, FolderOpen } from 'lucide-react';
 import { getStorageUrl } from '@/lib/storage';
 import { MediaType, MediaFile } from '@/media-files';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { useMediaFiles, useCreateMediaFile, useDeleteMediaFile } from '@/media-files/useMediaFiles';
 import { uploadFile as backendUpload } from '@/api-client/uploads.api-client';
 import axios from '@/lib/axios';

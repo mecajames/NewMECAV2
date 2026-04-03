@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { achievementsApi, BackfillProgress } from '../achievements.api-client';
 import { seasonsApi } from '../../seasons/seasons.api-client';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import {
   AchievementDefinition,
   AchievementRecipient,

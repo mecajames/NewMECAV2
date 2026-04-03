@@ -132,6 +132,18 @@ export enum StripePaymentType {
   WORLD_FINALS_REGISTRATION = 'world_finals_registration',
 }
 
+/**
+ * PayPal-specific payment types used in order metadata routing.
+ * Mirrors StripePaymentType for PayPal payment flows.
+ */
+export enum PayPalPaymentType {
+  MEMBERSHIP = 'membership',
+  EVENT_REGISTRATION = 'event_registration',
+  INVOICE_PAYMENT = 'invoice_payment',
+  SHOP = 'shop',
+  WORLD_FINALS_REGISTRATION = 'world_finals_registration',
+}
+
 export enum HostType {
   BUSINESS = 'business',
   INDIVIDUAL = 'individual',
@@ -375,6 +387,7 @@ export const EventTypeSchema = z.nativeEnum(EventType);
 export const PaymentMethodSchema = z.nativeEnum(PaymentMethod);
 export const PaymentTypeSchema = z.nativeEnum(PaymentType);
 export const StripePaymentTypeSchema = z.nativeEnum(StripePaymentType);
+export const PayPalPaymentTypeSchema = z.nativeEnum(PayPalPaymentType);
 export const HostTypeSchema = z.nativeEnum(HostType);
 export const IndoorOutdoorSchema = z.nativeEnum(IndoorOutdoor);
 export const RulebookCategorySchema = z.nativeEnum(RulebookCategory);

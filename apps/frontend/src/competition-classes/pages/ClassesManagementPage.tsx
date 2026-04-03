@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CompetitionFormat } from '@/types/database';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { competitionFormatsApi, CompetitionFormat as FormatObject } from '@/competition-formats';

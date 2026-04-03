@@ -8,7 +8,7 @@ interface HeroSlide {
   buttonText: string;
   buttonUrl: string;
 }
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { mediaFilesApi, MediaFile } from '@/media-files';
 import { getStorageUrl } from '@/lib/storage';

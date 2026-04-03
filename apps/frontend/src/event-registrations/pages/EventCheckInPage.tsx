@@ -20,7 +20,7 @@ import {
   CameraOff,
 } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { eventRegistrationsApi, CheckInResponse } from '@/event-registrations';
 

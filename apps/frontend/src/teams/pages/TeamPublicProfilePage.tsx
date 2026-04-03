@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { teamsApi, Team, TeamPublicStats, PendingRequest } from '../teams.api-client';
 import { seasonsApi, Season } from '@/seasons';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 const TEAM_TYPE_LABELS: Record<string, string> = {
   competitive: 'Competitive Team',

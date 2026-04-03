@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, Search, MapPin, User, Globe, Shield, Clock, UserPlus, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { teamsApi, Team, PendingRequest } from '../teams.api-client';
 import { SEOHead, useTeamDirectorySEO } from '@/shared/seo';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { BannerDisplay, useBanners } from '@/banners';
 import { BannerPosition } from '@newmeca/shared';
 

@@ -1,7 +1,7 @@
 import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, ChevronRight, Bell, Users, ClipboardList, Shield, ShoppingBag, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '@/notifications';
 import { CartIcon } from '@/shop/components/CartIcon';

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { TicketList } from '../components/TicketList';
 import { CreateTicketForm } from '../components/CreateTicketForm';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { Ticket as TicketType } from '../tickets.api-client';
 
 export function TicketsPage() {

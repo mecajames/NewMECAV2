@@ -40,6 +40,7 @@ import {
 } from '@/tickets';
 // Shop (cart context must be static)
 import { CartProvider } from '@/shop/context/CartContext';
+import { PayPalProvider } from '@/shared/components/PayPalProvider';
 import { ShopPage } from '@/shop/pages/ShopPage';
 import { ProductDetailPage } from '@/shop/pages/ProductDetailPage';
 import { CartPage } from '@/shop/pages/CartPage';
@@ -165,6 +166,7 @@ function App() {
         <SiteSettingsProvider>
           <SeasonsProvider>
             <CartProvider>
+              <PayPalProvider>
               <ReCaptchaProvider version="v2">
                   <ScrollToTop />
                   <PageTracker />
@@ -377,6 +379,7 @@ function App() {
           <Footer />
         </div>
               </ReCaptchaProvider>
+              </PayPalProvider>
             </CartProvider>
           </SeasonsProvider>
         </SiteSettingsProvider>

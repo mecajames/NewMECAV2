@@ -210,6 +210,10 @@ export class Membership {
   @Property({ type: 'text', nullable: true, fieldName: 'stripe_subscription_id' })
   stripeSubscriptionId?: string;
 
+  // PayPal Subscription ID (for future recurring billing via PayPal)
+  @Property({ type: 'text', nullable: true, fieldName: 'paypal_subscription_id' })
+  paypalSubscriptionId?: string;
+
   // True if this member had recurring billing enabled in the old PMPro system
   // Used to identify members who need to re-setup auto-renewal
   @Property({ type: 'boolean', default: false, fieldName: 'had_legacy_subscription' })

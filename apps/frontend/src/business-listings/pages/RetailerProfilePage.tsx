@@ -17,7 +17,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { getRetailerById, updateMyRetailerListing, adminUpdateRetailer, RetailerListing } from '@/business-listings';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { SEOHead, useRetailerProfileSEO } from '@/shared/seo';
 
 const STORE_TYPE_LABELS: Record<string, { label: string; description: string }> = {

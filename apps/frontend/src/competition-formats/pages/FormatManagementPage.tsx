@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Award, Plus, Edit, Trash2, Search, X, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { competitionFormatsApi, CompetitionFormat } from '@/competition-formats';
 
 export default function FormatManagementPage() {

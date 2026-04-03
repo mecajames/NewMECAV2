@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { createJudgeApplication, getMyJudgeApplication, getMyJudgeProfile } from '../judges.api-client';
 import type { CreateJudgeApplicationDto } from '@newmeca/shared';
 import { JudgeSpecialty, WeekendAvailability, ApplicationStatus } from '@newmeca/shared';

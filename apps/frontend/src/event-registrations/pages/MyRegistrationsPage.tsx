@@ -14,7 +14,7 @@ import {
   ClipboardList,
   AlertCircle,
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
 
 export default function MyRegistrationsPage() {

@@ -5,7 +5,7 @@ import {
   AlertCircle, Clock, Circle, Users, BarChart3, ArrowRightFromLine
 } from 'lucide-react';
 import { qaApi } from '@/api-client/qa.api-client';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 export default function QAChecklistPage() {
   const navigate = useNavigate();

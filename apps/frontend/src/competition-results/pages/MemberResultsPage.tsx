@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Trophy, Award, User, MapPin, ArrowLeft, Lock, AlertCircle } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { profilesApi, Profile } from '@/profiles';
