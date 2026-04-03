@@ -767,6 +767,7 @@ export class StripeController {
     try {
       // Handle specific event types
       switch (event.type) {
+        // Payment Intent events
         case 'payment_intent.succeeded':
           await this.handlePaymentIntentSucceeded(paymentIntent);
           webhookEvent.processingResult = 'success';
@@ -775,14 +776,87 @@ export class StripeController {
           await this.handlePaymentIntentFailed(paymentIntent);
           webhookEvent.processingResult = 'success';
           break;
+        case 'payment_intent.processing':
+          await this.handlePaymentIntentProcessing(paymentIntent);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'payment_intent.requires_action':
+          await this.handlePaymentIntentRequiresAction(paymentIntent);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'payment_intent.amount_capturable_updated':
+          console.log('Payment intent amount capturable updated:', paymentIntent.id, 'Amount:', paymentIntent.amount_capturable);
+          webhookEvent.processingResult = 'success';
+          break;
+
+        // Charge events
+        case 'charge.succeeded':
+          console.log('Charge succeeded:', (event.data.object as Stripe.Charge).id);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'charge.failed':
+          await this.handleChargeFailed(event.data.object as Stripe.Charge);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'charge.captured':
+          console.log('Charge captured:', (event.data.object as Stripe.Charge).id, 'Amount:', (event.data.object as Stripe.Charge).amount_captured);
+          webhookEvent.processingResult = 'success';
+          break;
         case 'charge.refunded':
           await this.handleChargeRefunded(event.data.object as Stripe.Charge);
           webhookEvent.processingResult = 'success';
           break;
+        case 'charge.refund.updated':
+          console.log('Charge refund updated:', (event.data.object as any).id);
+          webhookEvent.processingResult = 'success';
+          break;
+
+        // Dispute events
         case 'charge.dispute.created':
           await this.handleDisputeCreated(event.data.object as Stripe.Dispute);
           webhookEvent.processingResult = 'success';
           break;
+        case 'charge.dispute.closed':
+          await this.handleDisputeClosed(event.data.object as Stripe.Dispute);
+          webhookEvent.processingResult = 'success';
+          break;
+
+        // Account events
+        case 'account.updated':
+          console.log('Stripe account updated');
+          webhookEvent.processingResult = 'success';
+          break;
+
+        // Review events (Stripe Radar)
+        case 'review.opened':
+          console.log('Stripe review opened:', (event.data.object as any).id, 'Reason:', (event.data.object as any).reason);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'review.closed':
+          console.log('Stripe review closed:', (event.data.object as any).id, 'Reason:', (event.data.object as any).reason);
+          webhookEvent.processingResult = 'success';
+          break;
+
+        // Setup Intent events
+        case 'setup_intent.succeeded':
+          console.log('Setup intent succeeded:', (event.data.object as Stripe.SetupIntent).id, 'Payment method:', (event.data.object as Stripe.SetupIntent).payment_method);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'setup_intent.setup_failed':
+          console.log('Setup intent failed:', (event.data.object as Stripe.SetupIntent).id, 'Error:', (event.data.object as Stripe.SetupIntent).last_setup_error?.message);
+          webhookEvent.processingResult = 'success';
+          break;
+
+        // Source events (legacy)
+        case 'source.canceled':
+          console.log('Source canceled:', (event.data.object as any).id);
+          webhookEvent.processingResult = 'success';
+          break;
+        case 'source.chargeable':
+          console.log('Source chargeable:', (event.data.object as any).id);
+          webhookEvent.processingResult = 'success';
+          break;
+
         // Subscription events
         case 'customer.subscription.created':
         case 'customer.subscription.updated':
@@ -915,8 +989,91 @@ export class StripeController {
 
   private async handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
     console.log('Payment failed:', paymentIntent.id);
-    // Log the failure for monitoring
-    // In production, you might want to send an email notification
+    const metadata = paymentIntent.metadata;
+    console.log('Payment failure details:', {
+      paymentType: metadata?.paymentType,
+      email: metadata?.email,
+      error: paymentIntent.last_payment_error?.message,
+      code: paymentIntent.last_payment_error?.code,
+    });
+  }
+
+  private async handlePaymentIntentProcessing(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    console.log('Payment processing:', paymentIntent.id, 'Type:', paymentIntent.metadata?.paymentType);
+    // This occurs for async payment methods like ACH/bank transfers
+    // Payment is not yet complete — do not fulfill
+  }
+
+  private async handlePaymentIntentRequiresAction(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    console.log('Payment requires action:', paymentIntent.id, 'Type:', paymentIntent.metadata?.paymentType);
+    // This occurs when 3D Secure or other authentication is needed
+    // The frontend handles this via Stripe.js — this is just for logging
+  }
+
+  private async handleChargeFailed(charge: Stripe.Charge): Promise<void> {
+    console.log('Charge failed:', charge.id, 'Failure code:', charge.failure_code, 'Message:', charge.failure_message);
+
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+
+    if (paymentIntentId) {
+      console.log('Failed charge associated with payment intent:', paymentIntentId);
+    }
+  }
+
+  private async handleDisputeClosed(dispute: Stripe.Dispute): Promise<void> {
+    console.log('Dispute closed:', dispute.id, 'Status:', dispute.status);
+
+    const chargeId = typeof dispute.charge === 'string'
+      ? dispute.charge
+      : dispute.charge?.id;
+
+    if (!chargeId) {
+      console.error('Closed dispute missing charge ID:', dispute.id);
+      return;
+    }
+
+    // Get the payment intent from the charge
+    const stripe = new (await import('stripe')).default(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2025-02-24.acacia',
+    });
+
+    const charge = await stripe.charges.retrieve(chargeId);
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+
+    if (!paymentIntentId) {
+      console.error('Closed dispute charge missing payment_intent:', chargeId);
+      return;
+    }
+
+    const em = this.em.fork();
+    const payment = await em.findOne(Payment, {
+      stripePaymentIntentId: paymentIntentId,
+    });
+
+    if (payment) {
+      // Update dispute info in payment metadata
+      payment.paymentMetadata = {
+        ...payment.paymentMetadata,
+        dispute: {
+          ...((payment.paymentMetadata as any)?.dispute || {}),
+          id: dispute.id,
+          status: dispute.status,
+          closedAt: new Date().toISOString(),
+        },
+      };
+      await em.flush();
+      console.log(`Payment ${payment.id} dispute ${dispute.id} closed with status: ${dispute.status}`);
+    }
+
+    if (dispute.status === 'lost') {
+      console.error(`[CRITICAL] Dispute LOST: ${dispute.id}, Amount: $${dispute.amount / 100}`);
+    } else if (dispute.status === 'won') {
+      console.log(`Dispute WON: ${dispute.id}, Amount: $${dispute.amount / 100}`);
+    }
   }
 
   /**
