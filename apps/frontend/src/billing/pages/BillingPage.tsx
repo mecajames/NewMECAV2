@@ -14,7 +14,7 @@ import {
   Pencil,
   Car,
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { billingApi, Order, Invoice } from '../../api-client/billing.api-client';
 import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 

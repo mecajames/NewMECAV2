@@ -6,7 +6,7 @@ import { competitionResultsApi, CompetitionResult } from '@/competition-results'
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useResultsSEO } from '@/shared/seo';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { BannerDisplay, useBanners } from '@/banners';
 import { BannerPosition } from '@newmeca/shared';
 

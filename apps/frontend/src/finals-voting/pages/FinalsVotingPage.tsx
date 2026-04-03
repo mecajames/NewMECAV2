@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Vote, CheckCircle, ArrowLeft, ArrowRight, Loader2, Search, X, Users, MessageSquare, MapPin, Gavel, Building2, Factory, UserCheck, Eye } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { VotingAnswerType } from '@newmeca/shared';
 import type { EntitySearchResult } from '@newmeca/shared';
 import { finalsVotingApi } from '../../api-client/finals-voting.api-client';

@@ -6,7 +6,7 @@ import { profilesApi, Profile } from '@/profiles';
 import { competitionResultsApi } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { seasonsApi, Season } from '@/seasons';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { SeasonSelector } from '@/seasons';
 import { AuditLogModal } from '@/admin';
 

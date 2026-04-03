@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Mail, Calendar, Shield, CreditCard, Lock, ArrowLeft, Phone, MapPin, Building, Pencil, Save, X, Users, Car, Loader2, AlertCircle } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import ChangePassword from '@/profiles/components/ChangePassword';
 import { CountrySelect, StateProvinceSelect, PhoneInput } from '@/shared/fields';
 import { MecaIdSwitcher } from '@/shared/components';

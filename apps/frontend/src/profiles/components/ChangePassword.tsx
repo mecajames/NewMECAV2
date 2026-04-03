@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Lock, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Users, Trophy, Plus, QrCode } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { eventsApi, Event } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
 

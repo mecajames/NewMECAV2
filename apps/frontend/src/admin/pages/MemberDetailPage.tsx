@@ -59,7 +59,7 @@ import {
   RetailerListing,
   ManufacturerListing,
 } from '@/business-listings';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import axios from '@/lib/axios';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';

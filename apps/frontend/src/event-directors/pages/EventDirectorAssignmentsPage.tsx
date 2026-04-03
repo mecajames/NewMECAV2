@@ -4,7 +4,7 @@ import {
   ArrowLeft, ClipboardList, FileText, ChevronRight, Calendar, MapPin,
   Clock, AlertCircle, User
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { getMyEventDirectorProfile, EventDirector } from '@/event-directors';
 import {
   eventHostingRequestsApi,

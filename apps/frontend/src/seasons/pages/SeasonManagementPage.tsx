@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Season, CompetitionFormat } from '@/types/database';
 import { seasonsApi } from '@/seasons';
 import { competitionClassesApi } from '@/competition-classes';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 // TODO: Replace with backend API calls once seasons and competition_classes modules are implemented
 // Current status: seasons and competition_classes tables don't exist in database yet

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { User, Car, Music, ArrowLeft, Award, MapPin, Calendar, X, Move, Check, Trophy } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
 import { membershipsApi, Membership } from '@/memberships';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { AchievementsGallery } from '@/achievements';
 
 export default function MemberProfilePage() {

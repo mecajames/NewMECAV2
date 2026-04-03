@@ -17,7 +17,7 @@ import {
   Edit,
   ArrowLeft,
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { CountrySelect, StateProvinceSelect } from '@/shared/fields';
 import { getPostalCodeLabel } from '@/utils/countries';
 import {

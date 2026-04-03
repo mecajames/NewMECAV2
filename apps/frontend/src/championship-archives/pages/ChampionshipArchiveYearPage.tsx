@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Trophy, Medal, Search, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { championshipArchivesApi, ChampionshipArchive, ChampionshipAward } from '@/championship-archives';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 /**
  * Fix mojibake characters from scraped HTML that was double-encoded

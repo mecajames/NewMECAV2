@@ -14,7 +14,7 @@ import {
   Clock,
   ArrowLeft,
 } from 'lucide-react';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import {
   getMyRetailerListing,
   getMyManufacturerListing,
