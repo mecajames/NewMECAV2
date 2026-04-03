@@ -30,6 +30,9 @@ import {
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
+import { PaymentMethodSelector, SelectedPaymentMethod } from '@/shared/components/PaymentMethodSelector';
+import { PayPalPaymentButton } from '@/shared/components/PayPalPaymentButton';
+import { paypalApi } from '@/paypal/paypal.api-client';
 
 // Check if Stripe is configured (without loading it)
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
@@ -133,6 +136,7 @@ export default function MembershipCheckoutPage() {
   const { user, profile, signUp } = useAuth();
 
   const { taxRate, calculateTax } = useTaxRate();
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<SelectedPaymentMethod>('stripe');
   const [membership, setMembership] = useState<MembershipTypeConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -284,8 +288,8 @@ export default function MembershipCheckoutPage() {
   const handleContinueToPayment = async () => {
     if (!validateInfoStep() || !membership) return;
 
-    // If Stripe is not configured, go directly to payment step (test mode)
-    if (!isStripeConfigured) {
+    // If Stripe is not configured or PayPal is selected, go directly to payment step
+    if (!isStripeConfigured || selectedPaymentMethod === 'paypal') {
       setStep('payment');
       return;
     }
@@ -1128,7 +1132,23 @@ export default function MembershipCheckoutPage() {
                 </form>
               )}
 
-              {step === 'payment' && clientSecret && isStripeConfigured && LazyMembershipStripePaymentForm && (
+              {step === 'payment' && (
+                <div>
+                  <PaymentMethodSelector
+                    selected={selectedPaymentMethod}
+                    onChange={(method) => {
+                      setSelectedPaymentMethod(method);
+                      // If switching to Stripe and no clientSecret, go back to info to create it
+                      if (method === 'stripe' && !clientSecret && isStripeConfigured) {
+                        setStep('info');
+                      }
+                    }}
+                    stripeAvailable={isStripeConfigured}
+                  />
+                </div>
+              )}
+
+              {step === 'payment' && selectedPaymentMethod === 'stripe' && clientSecret && isStripeConfigured && LazyMembershipStripePaymentForm && (
                 <Suspense fallback={
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
@@ -1142,6 +1162,69 @@ export default function MembershipCheckoutPage() {
                     onBack={() => setStep('info')}
                   />
                 </Suspense>
+              )}
+
+              {step === 'payment' && selectedPaymentMethod === 'paypal' && membership && (
+                <div className="space-y-6">
+                  <div className="bg-slate-700 rounded-xl p-6 mb-4">
+                    <h3 className="text-lg font-semibold text-white mb-2">Order Summary</h3>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">{membership.name}</span>
+                      <span className="text-white">${membership.price.toFixed(2)}</span>
+                    </div>
+                    {taxRate > 0 && (
+                      <div className="flex justify-between text-sm mt-1">
+                        <span className="text-gray-400">Tax ({(taxRate * 100).toFixed(0)}%)</span>
+                        <span className="text-white">${calculateTax(membership.price).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-semibold mt-2 pt-2 border-t border-slate-600">
+                      <span className="text-gray-300">Total</span>
+                      <span className="text-orange-500">${(membership.price + calculateTax(membership.price)).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  <PayPalPaymentButton
+                    paymentType="membership"
+                    createOrderFn={async () => {
+                      const email = user ? (profile?.email || formData.email) : formData.email;
+                      const result = await paypalApi.createMembershipOrder({
+                        membershipTypeConfigId: membership.id,
+                        email,
+                        userId: user?.id,
+                        billingFirstName: formData.firstName,
+                        billingLastName: formData.lastName,
+                        billingPhone: formData.phone || undefined,
+                        billingAddress: formData.address,
+                        billingCity: formData.city,
+                        billingState: formData.state,
+                        billingPostalCode: formData.postalCode,
+                        billingCountry: formData.country || 'USA',
+                        teamName: formData.teamName || undefined,
+                        teamDescription: formData.teamDescription || undefined,
+                        businessName: formData.businessName || undefined,
+                        businessWebsite: formData.businessWebsite || undefined,
+                      });
+                      return result.paypalOrderId;
+                    }}
+                    metadata={{
+                      membershipTypeConfigId: membership.id,
+                      email: (user ? (profile?.email || formData.email) : formData.email),
+                      userId: user?.id || '',
+                      billingFirstName: formData.firstName,
+                      billingLastName: formData.lastName,
+                    }}
+                    onSuccess={(captureId) => handlePaymentSuccess(captureId)}
+                    onError={(err) => setError(err)}
+                  />
+
+                  <button
+                    onClick={() => setStep('info')}
+                    className="w-full py-2 text-gray-400 hover:text-white transition-colors text-sm"
+                  >
+                    Back to information
+                  </button>
+                </div>
               )}
 
               {step === 'payment' && !isStripeConfigured && (

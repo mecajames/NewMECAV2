@@ -45,6 +45,12 @@ export class Payment {
   @Property({ type: 'text', nullable: true, fieldName: 'stripe_customer_id' })
   stripeCustomerId?: string;
 
+  @Property({ type: 'text', nullable: true, fieldName: 'paypal_order_id' })
+  paypalOrderId?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'paypal_capture_id' })
+  paypalCaptureId?: string;
+
   @Property({ type: 'text', nullable: true, fieldName: 'wordpress_order_id' })
   wordpressOrderId?: string;
 

@@ -28,6 +28,8 @@ import { MembershipTypeConfigsModule } from './membership-type-configs/membershi
 import { RecaptchaModule } from './recaptcha/recaptcha.module';
 import { PaymentsModule } from './payments/payments.module';
 import { StripeModule } from './stripe/stripe.module';
+import { PayPalModule } from './paypal/paypal.module';
+import { PaymentFulfillmentModule } from './payments/payment-fulfillment.module';
 import { QuickBooksModule } from './quickbooks/quickbooks.module';
 import { TeamsModule } from './teams/teams.module';
 import { TicketsModule } from './tickets/tickets.module';
@@ -106,6 +108,8 @@ import { QaModule } from './qa/qa.module';
     ClassNameMappingsModule,
     RecaptchaModule,
     StripeModule,
+    PayPalModule,
+    PaymentFulfillmentModule,
     QuickBooksModule,
     TeamsModule,
     TicketsModule,
