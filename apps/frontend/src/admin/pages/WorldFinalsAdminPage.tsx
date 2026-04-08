@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Trophy, Mail, Bell, Send, CheckCircle2, Clock, ArrowLeft, RefreshCw,
   Users, MailCheck, TicketCheck, Settings, Package, Plus, Trash2, Save, DollarSign, BarChart3,
-  ChevronDown, ChevronUp, Edit2, X, Eye
+  ChevronDown, ChevronUp, Edit2, X, Eye, Upload, Image
 } from 'lucide-react';
+import { uploadFile } from '@/api-client/uploads.api-client';
 import {
   worldFinalsApi,
   type WorldFinalsQualification,
@@ -75,7 +76,15 @@ export default function WorldFinalsAdminPage() {
   const [configForm, setConfigForm] = useState({
     collectTshirtSize: true, collectRingSize: true, collectHotelInfo: true, collectGuestCount: true,
     customMessage: '', isActive: false,
+    availableTshirtSizes: ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'] as string[],
+    availableRingSizes: ['5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10', '10.5', '11', '11.5', '12', '12.5', '13', '14', '15'] as string[],
+    collectExtraTshirts: false, extraTshirtPrice: '25.00', maxExtraTshirts: '5',
+    tshirtFieldLabel: '', ringFieldLabel: '', hotelFieldLabel: '', guestCountFieldLabel: '', extraTshirtFieldLabel: '',
+    hotelInfoText: '', registrationImageUrl: '',
   });
+  const [newTshirtSize, setNewTshirtSize] = useState('');
+  const [newRingSize, setNewRingSize] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
 
   // World Finals events loaded from events system (event_type='world_finals')
@@ -161,6 +170,18 @@ export default function WorldFinalsAdminPage() {
           collectGuestCount: data.collect_guest_count ?? true,
           customMessage: data.custom_message || '',
           isActive: data.is_active || false,
+          availableTshirtSizes: data.available_tshirt_sizes || ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'],
+          availableRingSizes: data.available_ring_sizes || ['5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10', '10.5', '11', '11.5', '12', '12.5', '13', '14', '15'],
+          collectExtraTshirts: data.collect_extra_tshirts || false,
+          extraTshirtPrice: String(data.extra_tshirt_price ?? '25.00'),
+          maxExtraTshirts: String(data.max_extra_tshirts ?? '5'),
+          tshirtFieldLabel: data.tshirt_field_label || '',
+          ringFieldLabel: data.ring_field_label || '',
+          hotelFieldLabel: data.hotel_field_label || '',
+          guestCountFieldLabel: data.guest_count_field_label || '',
+          extraTshirtFieldLabel: data.extra_tshirt_field_label || '',
+          hotelInfoText: data.hotel_info_text || '',
+          registrationImageUrl: data.registration_image_url || '',
         });
       }
     } catch { /* no config yet */ }
@@ -213,6 +234,18 @@ export default function WorldFinalsAdminPage() {
         collectTshirtSize: configForm.collectTshirtSize, collectRingSize: configForm.collectRingSize,
         collectHotelInfo: configForm.collectHotelInfo, collectGuestCount: configForm.collectGuestCount,
         customMessage: configForm.customMessage || null, isActive: configForm.isActive,
+        availableTshirtSizes: configForm.availableTshirtSizes,
+        availableRingSizes: configForm.availableRingSizes,
+        collectExtraTshirts: configForm.collectExtraTshirts,
+        extraTshirtPrice: Number(configForm.extraTshirtPrice),
+        maxExtraTshirts: Number(configForm.maxExtraTshirts),
+        tshirtFieldLabel: configForm.tshirtFieldLabel || null,
+        ringFieldLabel: configForm.ringFieldLabel || null,
+        hotelFieldLabel: configForm.hotelFieldLabel || null,
+        guestCountFieldLabel: configForm.guestCountFieldLabel || null,
+        extraTshirtFieldLabel: configForm.extraTshirtFieldLabel || null,
+        hotelInfoText: configForm.hotelInfoText || null,
+        registrationImageUrl: configForm.registrationImageUrl || null,
       });
       alert('Configuration saved!');
     } catch (err: any) { alert('Error: ' + (err?.response?.data?.message || err.message)); }
@@ -481,18 +514,171 @@ export default function WorldFinalsAdminPage() {
                 className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
               <span className="text-white font-medium">Pre-Registration Active</span>
             </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[['collectTshirtSize', 'T-Shirt Size'], ['collectRingSize', 'Ring Size'], ['collectHotelInfo', 'Hotel Info'], ['collectGuestCount', 'Guest Count']].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={(configForm as any)[key]} onChange={e => setConfigForm({ ...configForm, [key]: e.target.checked })}
-                    className="w-4 h-4 rounded border-slate-500 text-orange-500 bg-slate-700" />
-                  <span className="text-white text-sm">{label}</span>
-                </label>
-              ))}
-            </div>
-            <div><label className="block text-sm text-gray-400 mb-1">Custom Message</label>
+
+            <div><label className="block text-sm text-gray-400 mb-1">Custom Welcome Message</label>
               <textarea value={configForm.customMessage} onChange={e => setConfigForm({ ...configForm, customMessage: e.target.value })} rows={3}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" placeholder="Welcome message..." /></div>
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" placeholder="Welcome message shown at top of registration page..." /></div>
+
+            {/* --- Included T-Shirt --- */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={configForm.collectTshirtSize} onChange={e => setConfigForm({ ...configForm, collectTshirtSize: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
+                <span className="text-white font-medium">Collect T-Shirt Size (Included with Registration)</span>
+              </label>
+              {configForm.collectTshirtSize && (<>
+                <div><label className="block text-sm text-gray-400 mb-1">Description Text</label>
+                  <input type="text" value={configForm.tshirtFieldLabel} onChange={e => setConfigForm({ ...configForm, tshirtFieldLabel: e.target.value })}
+                    placeholder="Select your size for the complimentary event t-shirt included with your registration."
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" /></div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Available Sizes</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {configForm.availableTshirtSizes.map((size) => (
+                      <span key={size} className="inline-flex items-center gap-1 px-3 py-1 bg-slate-700 text-white text-sm rounded-full">
+                        {size}
+                        <button onClick={() => setConfigForm({ ...configForm, availableTshirtSizes: configForm.availableTshirtSizes.filter(s => s !== size) })}
+                          className="text-red-400 hover:text-red-300 ml-1">&times;</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input type="text" value={newTshirtSize} onChange={e => setNewTshirtSize(e.target.value.toUpperCase())}
+                      placeholder="Add size (e.g. 6XL)" className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm w-36"
+                      onKeyDown={e => { if (e.key === 'Enter' && newTshirtSize.trim()) { if (!configForm.availableTshirtSizes.includes(newTshirtSize.trim())) setConfigForm({ ...configForm, availableTshirtSizes: [...configForm.availableTshirtSizes, newTshirtSize.trim()] }); setNewTshirtSize(''); } }} />
+                    <button onClick={() => { if (newTshirtSize.trim() && !configForm.availableTshirtSizes.includes(newTshirtSize.trim())) { setConfigForm({ ...configForm, availableTshirtSizes: [...configForm.availableTshirtSizes, newTshirtSize.trim()] }); setNewTshirtSize(''); } }}
+                      className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded">Add</button>
+                  </div>
+                </div>
+              </>)}
+            </div>
+
+            {/* --- Extra T-Shirts --- */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={configForm.collectExtraTshirts} onChange={e => setConfigForm({ ...configForm, collectExtraTshirts: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
+                <span className="text-white font-medium">Allow Extra T-Shirt Ordering</span>
+              </label>
+              {configForm.collectExtraTshirts && (<>
+                <div><label className="block text-sm text-gray-400 mb-1">Description Text</label>
+                  <input type="text" value={configForm.extraTshirtFieldLabel} onChange={e => setConfigForm({ ...configForm, extraTshirtFieldLabel: e.target.value })}
+                    placeholder="Want extra event t-shirts? Add them here — each shirt is an additional charge."
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-sm text-gray-400 mb-1">Price per Extra T-Shirt ($)</label>
+                    <input type="number" step="0.01" min="0" value={configForm.extraTshirtPrice}
+                      onChange={e => setConfigForm({ ...configForm, extraTshirtPrice: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white" /></div>
+                  <div><label className="block text-sm text-gray-400 mb-1">Max Extra T-Shirts per Registration</label>
+                    <input type="number" min="1" max="20" value={configForm.maxExtraTshirts}
+                      onChange={e => setConfigForm({ ...configForm, maxExtraTshirts: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white" /></div>
+                </div>
+              </>)}
+            </div>
+
+            {/* --- Ring Size --- */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={configForm.collectRingSize} onChange={e => setConfigForm({ ...configForm, collectRingSize: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
+                <span className="text-white font-medium">Collect Ring Size</span>
+              </label>
+              {configForm.collectRingSize && (<>
+                <div><label className="block text-sm text-gray-400 mb-1">Description Text</label>
+                  <input type="text" value={configForm.ringFieldLabel} onChange={e => setConfigForm({ ...configForm, ringFieldLabel: e.target.value })}
+                    placeholder="In case you win the world championship, we need to know your ring size to help us expedite ordering your custom ring."
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" /></div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Available Sizes</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {configForm.availableRingSizes.map((size) => (
+                      <span key={size} className="inline-flex items-center gap-1 px-3 py-1 bg-slate-700 text-white text-sm rounded-full">
+                        {size}
+                        <button onClick={() => setConfigForm({ ...configForm, availableRingSizes: configForm.availableRingSizes.filter(s => s !== size) })}
+                          className="text-red-400 hover:text-red-300 ml-1">&times;</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input type="text" value={newRingSize} onChange={e => setNewRingSize(e.target.value)}
+                      placeholder="Add size (e.g. 16)" className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm w-36"
+                      onKeyDown={e => { if (e.key === 'Enter' && newRingSize.trim()) { if (!configForm.availableRingSizes.includes(newRingSize.trim())) setConfigForm({ ...configForm, availableRingSizes: [...configForm.availableRingSizes, newRingSize.trim()] }); setNewRingSize(''); } }} />
+                    <button onClick={() => { if (newRingSize.trim() && !configForm.availableRingSizes.includes(newRingSize.trim())) { setConfigForm({ ...configForm, availableRingSizes: [...configForm.availableRingSizes, newRingSize.trim()] }); setNewRingSize(''); } }}
+                      className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded">Add</button>
+                  </div>
+                </div>
+              </>)}
+            </div>
+
+            {/* --- Hotel Information --- */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={configForm.collectHotelInfo} onChange={e => setConfigForm({ ...configForm, collectHotelInfo: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
+                <span className="text-white font-medium">Display Hotel Information</span>
+              </label>
+              {configForm.collectHotelInfo && (<>
+                <div><label className="block text-sm text-gray-400 mb-1">Section Heading</label>
+                  <input type="text" value={configForm.hotelFieldLabel} onChange={e => setConfigForm({ ...configForm, hotelFieldLabel: e.target.value })}
+                    placeholder="Hotel & Accommodation Details"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" /></div>
+                <div><label className="block text-sm text-gray-400 mb-1">Hotel Details</label>
+                  <p className="text-xs text-gray-500 mb-1">Include hotel name, address, booking code, group rate, booking deadline, etc.</p>
+                  <textarea value={configForm.hotelInfoText} onChange={e => setConfigForm({ ...configForm, hotelInfoText: e.target.value })} rows={5}
+                    placeholder="We have a room block at the Hilton Garden Inn (123 Main St). Use code MECA2026 for the group rate of $129/night. Book by [date] to guarantee availability."
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" /></div>
+              </>)}
+            </div>
+
+            {/* --- Guest Count --- */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={configForm.collectGuestCount} onChange={e => setConfigForm({ ...configForm, collectGuestCount: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
+                <span className="text-white font-medium">Collect Guest Count</span>
+              </label>
+              {configForm.collectGuestCount && (
+                <div><label className="block text-sm text-gray-400 mb-1">Description Text</label>
+                  <input type="text" value={configForm.guestCountFieldLabel} onChange={e => setConfigForm({ ...configForm, guestCountFieldLabel: e.target.value })}
+                    placeholder="How many guests will you be bringing?"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" /></div>
+              )}
+            </div>
+
+            {/* --- Registration Page Image --- */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Image className="h-5 w-5 text-orange-400" />
+                <h4 className="text-white font-medium">Registration Page Image</h4>
+              </div>
+              <p className="text-sm text-gray-400">Upload an image displayed on the pre-registration page. If not set, the event flyer will be used.</p>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded-lg cursor-pointer">
+                  <Upload className="h-4 w-4" />{uploadingImage ? 'Uploading...' : 'Upload Image'}
+                  <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" disabled={uploadingImage}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploadingImage(true);
+                      try {
+                        const result = await uploadFile(file, 'world-finals-images');
+                        setConfigForm(prev => ({ ...prev, registrationImageUrl: result.publicUrl }));
+                      } catch (err: any) { alert('Upload failed: ' + (err?.response?.data?.message || err.message)); }
+                      finally { setUploadingImage(false); e.target.value = ''; }
+                    }} />
+                </label>
+                {configForm.registrationImageUrl && (
+                  <button onClick={() => setConfigForm({ ...configForm, registrationImageUrl: '' })}
+                    className="text-red-400 hover:text-red-300 text-sm">Remove Image</button>
+                )}
+              </div>
+              {configForm.registrationImageUrl && (
+                <div><img src={configForm.registrationImageUrl} alt="Registration page preview" className="max-h-48 rounded-lg object-cover" onError={e => (e.target as HTMLImageElement).style.display = 'none'} /></div>
+              )}
+            </div>
+
             <button onClick={handleSaveConfig} disabled={savingConfig}
               className="flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold rounded-lg">
               <Save className="h-4 w-4" />{savingConfig ? 'Saving...' : 'Save Settings'}</button>

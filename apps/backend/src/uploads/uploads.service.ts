@@ -71,6 +71,13 @@ const UPLOAD_DESTINATIONS: Record<string, UploadDestination> = {
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     maxSizeBytes: 10 * 1024 * 1024, // 10MB
   },
+  'world-finals-images': {
+    bucket: 'documents',
+    folder: 'world-finals-images',
+    adminOnly: true,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    maxSizeBytes: 10 * 1024 * 1024, // 10MB
+  },
   'rulebooks': {
     bucket: 'documents',
     folder: 'rulebooks',

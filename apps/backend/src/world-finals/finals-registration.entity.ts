@@ -83,6 +83,9 @@ export class FinalsRegistration {
   @Property({ type: 'text', default: 'pending', fieldName: 'registration_status', serializedName: 'registration_status' })
   registrationStatus: string = 'pending';
 
+  @Property({ type: 'jsonb', nullable: true, fieldName: 'extra_tshirts', serializedName: 'extra_tshirts' })
+  extraTshirts?: { size: string; quantity: number }[];
+
   @Property({ type: 'text', nullable: true })
   notes?: string;
 

@@ -305,7 +305,12 @@ export class WorldFinalsController {
     @Param('seasonId') seasonId: string,
   ) {
     await this.requireAdmin(authHeader);
-    return this.worldFinalsService.getRegistrationConfig(seasonId);
+    try {
+      return await this.worldFinalsService.getRegistrationConfig(seasonId);
+    } catch (err: any) {
+      console.error('[WF] getRegistrationConfig error:', err?.message, err?.stack);
+      throw err;
+    }
   }
 
   @Put('registration-config/:seasonId')
@@ -315,7 +320,12 @@ export class WorldFinalsController {
     @Body() data: any,
   ) {
     await this.requireAdmin(authHeader);
-    return this.worldFinalsService.upsertRegistrationConfig(seasonId, data);
+    try {
+      return await this.worldFinalsService.upsertRegistrationConfig(seasonId, data);
+    } catch (err: any) {
+      console.error('[WF] upsertRegistrationConfig error:', err?.message, err?.stack);
+      throw err;
+    }
   }
 
   // --- World Finals Events (reads from events table) ---
@@ -420,7 +430,12 @@ export class WorldFinalsController {
     @Query('eventId') eventId?: string,
   ) {
     await this.requireAdmin(authHeader);
-    return this.worldFinalsService.getPreRegistrationStats(seasonId, eventId);
+    try {
+      return await this.worldFinalsService.getPreRegistrationStats(seasonId, eventId);
+    } catch (err: any) {
+      console.error('[WF] getPreRegistrationStats error:', err?.message, err?.stack);
+      throw err;
+    }
   }
 
   // =============================================
@@ -479,12 +494,16 @@ export class WorldFinalsController {
     const premiumClasses = (data.classes || []).filter((c: any) => c.isPremium);
 
     // Calculate pricing
+    const extraTshirts = data.extraTshirts || [];
+    const extraTshirtPrice = Number(validation.config.extra_tshirt_price || 25);
     const pricing = this.worldFinalsService.calculatePreRegistrationPricing(
       selectedPkg,
       pricingTier,
       standardClasses.length,
       premiumClasses.map((c: any) => ({ className: c.className, price: c.premiumPrice || 0 })),
       data.addonItems || [],
+      extraTshirts,
+      extraTshirtPrice,
     );
 
     // Create registration
@@ -504,12 +523,13 @@ export class WorldFinalsController {
       addonItems: data.addonItems || [],
       tshirtSize: data.tshirtSize,
       ringSize: data.ringSize,
+      extraTshirts: extraTshirts.length > 0 ? extraTshirts : undefined,
       hotelNeeded: data.hotelNeeded,
       hotelNotes: data.hotelNotes,
       guestCount: data.guestCount,
       pricingTier,
       baseAmount: pricing.classTotal + pricing.premiumTotal,
-      addonsAmount: pricing.addonsTotal,
+      addonsAmount: pricing.addonsTotal + pricing.extraTshirtTotal,
       totalAmount: pricing.total,
       notes: data.notes,
       userId: data.userId,

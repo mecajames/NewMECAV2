@@ -906,17 +906,37 @@ export class WorldFinalsService {
     return em.findOne(WorldFinalsRegistrationConfig, { seasonId });
   }
 
-  async upsertRegistrationConfig(seasonId: string, data: Partial<WorldFinalsRegistrationConfig>): Promise<WorldFinalsRegistrationConfig> {
+  async upsertRegistrationConfig(seasonId: string, data: Record<string, any>): Promise<WorldFinalsRegistrationConfig> {
     const em = this.em.fork();
     let config = await em.findOne(WorldFinalsRegistrationConfig, { seasonId });
-    if (config) {
-      em.assign(config, data);
-    } else {
+    if (!config) {
       config = new WorldFinalsRegistrationConfig();
       config.seasonId = seasonId;
-      em.assign(config, data);
       em.persist(config);
     }
+    // Set properties explicitly — em.assign() can mismap when serializedName differs from property name
+    if (data.collectTshirtSize !== undefined) config.collectTshirtSize = data.collectTshirtSize;
+    if (data.collectRingSize !== undefined) config.collectRingSize = data.collectRingSize;
+    if (data.collectHotelInfo !== undefined) config.collectHotelInfo = data.collectHotelInfo;
+    if (data.collectGuestCount !== undefined) config.collectGuestCount = data.collectGuestCount;
+    if (data.customMessage !== undefined) config.customMessage = data.customMessage;
+    if (data.isActive !== undefined) config.isActive = data.isActive;
+    if (data.registrationMode !== undefined) config.registrationMode = data.registrationMode;
+    if (data.registrationOpenDate !== undefined) config.registrationOpenDate = new Date(data.registrationOpenDate);
+    if (data.earlyBirdDeadline !== undefined) config.earlyBirdDeadline = new Date(data.earlyBirdDeadline);
+    if (data.registrationCloseDate !== undefined) config.registrationCloseDate = new Date(data.registrationCloseDate);
+    if (data.availableTshirtSizes !== undefined) config.availableTshirtSizes = data.availableTshirtSizes;
+    if (data.availableRingSizes !== undefined) config.availableRingSizes = data.availableRingSizes;
+    if (data.collectExtraTshirts !== undefined) config.collectExtraTshirts = data.collectExtraTshirts;
+    if (data.extraTshirtPrice !== undefined) config.extraTshirtPrice = Number(data.extraTshirtPrice);
+    if (data.maxExtraTshirts !== undefined) config.maxExtraTshirts = Number(data.maxExtraTshirts);
+    if (data.tshirtFieldLabel !== undefined) config.tshirtFieldLabel = data.tshirtFieldLabel || undefined;
+    if (data.ringFieldLabel !== undefined) config.ringFieldLabel = data.ringFieldLabel || undefined;
+    if (data.hotelFieldLabel !== undefined) config.hotelFieldLabel = data.hotelFieldLabel || undefined;
+    if (data.guestCountFieldLabel !== undefined) config.guestCountFieldLabel = data.guestCountFieldLabel || undefined;
+    if (data.extraTshirtFieldLabel !== undefined) config.extraTshirtFieldLabel = data.extraTshirtFieldLabel || undefined;
+    if (data.hotelInfoText !== undefined) config.hotelInfoText = data.hotelInfoText || undefined;
+    if (data.registrationImageUrl !== undefined) config.registrationImageUrl = data.registrationImageUrl || undefined;
     await em.flush();
     return config;
   }
@@ -1283,6 +1303,8 @@ export class WorldFinalsService {
     standardClassCount: number,
     premiumSelections: { className: string; price: number }[],
     addonSelections: { itemId: string; price: number; quantity: number }[],
+    extraTshirts?: { size: string; quantity: number }[],
+    extraTshirtPrice?: number,
   ) {
     const basePrice = pricingTier === 'early_bird'
       ? Number(pkg.base_price_early || pkg.basePriceEarly) : Number(pkg.base_price_regular || pkg.basePriceRegular);
@@ -1295,12 +1317,13 @@ export class WorldFinalsService {
     const classTotal = standardClassCount > 0 ? basePrice + (extraClasses * additionalPrice) : 0;
     const premiumTotal = premiumSelections.reduce((sum, p) => sum + Number(p.price), 0);
     const addonsTotal = addonSelections.reduce((sum, a) => sum + (Number(a.price) * a.quantity), 0);
+    const extraTshirtTotal = (extraTshirts || []).reduce((sum, t) => sum + (t.quantity * Number(extraTshirtPrice || 0)), 0);
 
     return {
       basePrice, additionalPrice, includedClasses,
       standardClassCount, extraClasses, classTotal,
-      premiumTotal, addonsTotal,
-      total: classTotal + premiumTotal + addonsTotal,
+      premiumTotal, addonsTotal, extraTshirtTotal,
+      total: classTotal + premiumTotal + addonsTotal + extraTshirtTotal,
       pricingTier,
     };
   }
@@ -1328,6 +1351,7 @@ export class WorldFinalsService {
     baseAmount: number;
     addonsAmount: number;
     totalAmount: number;
+    extraTshirts?: { size: string; quantity: number }[];
     notes?: string;
     userId?: string;
   }): Promise<FinalsRegistration> {
@@ -1345,6 +1369,7 @@ export class WorldFinalsService {
     registration.addonItems = data.addonItems;
     registration.tshirtSize = data.tshirtSize;
     registration.ringSize = data.ringSize;
+    registration.extraTshirts = data.extraTshirts;
     registration.hotelNeeded = data.hotelNeeded;
     registration.hotelNotes = data.hotelNotes;
     registration.guestCount = data.guestCount || 0;
@@ -1429,14 +1454,14 @@ export class WorldFinalsService {
       params
     );
 
-    // Per-event breakdown
+    // Per-event breakdown (wf_event_id references the events table)
     const eventBreakdown = await conn.execute(
-      `SELECT fr.wf_event_id, e.name as event_name, COUNT(*) as count,
+      `SELECT fr.wf_event_id, e.title as event_name, COUNT(*) as count,
         COALESCE(SUM(fr.total_amount) FILTER (WHERE fr.payment_status = 'paid'), 0) as revenue
       FROM finals_registrations fr
-      LEFT JOIN world_finals_events e ON e.id = fr.wf_event_id
+      LEFT JOIN events e ON e.id = fr.wf_event_id
       WHERE fr.season_id = ? AND fr.registration_status != 'cancelled'
-      GROUP BY fr.wf_event_id, e.name ORDER BY count DESC`,
+      GROUP BY fr.wf_event_id, e.title ORDER BY count DESC`,
       [seasonId]
     );
 

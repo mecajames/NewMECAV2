@@ -12,7 +12,7 @@ export default function AuthCallbackPage() {
   const { ensureProfileExists } = useAuth();
   const ensureProfileRef = useRef(ensureProfileExists);
   ensureProfileRef.current = ensureProfileExists;
-  const handled = useRef(false);
+  const redirected = useRef(false);
 
   /** Resolve redirect: query param > sessionStorage (from idle timeout) > /dashboard */
   const resolveRedirect = (): string => {
@@ -27,51 +27,67 @@ export default function AuthCallbackPage() {
   };
 
   useEffect(() => {
-    if (handled.current) return;
-    handled.current = true;
+    if (redirected.current) return;
 
-    const completeSignIn = async (user: import('@supabase/supabase-js').User) => {
-      try {
-        await ensureProfileRef.current(user);
-        navigate(resolveRedirect(), { replace: true });
-      } catch (err) {
-        console.error('Profile creation error:', err);
-        setError('An unexpected error occurred. Please try again.');
-        setTimeout(() => navigate('/login'), 3000);
-      }
+    const doRedirect = (target: string) => {
+      if (redirected.current) return;
+      redirected.current = true;
+      navigate(target, { replace: true });
     };
 
-    // Check if session already exists (OAuth tokens may have been processed already)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        completeSignIn(session.user);
+    const completeSignIn = async (user: import('@supabase/supabase-js').User) => {
+      // Try to ensure profile exists, but don't let it block redirect
+      try {
+        await Promise.race([
+          ensureProfileRef.current(user),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ]);
+      } catch (err) {
+        // Profile setup failed or timed out — still redirect, profile will be fetched on next page
+        console.warn('Profile setup during callback failed/timed out, redirecting anyway:', err);
       }
-    });
+      doRedirect(resolveRedirect());
+    };
 
-    // Also listen for auth state changes in case tokens are still being processed
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        completeSignIn(session.user);
-      }
-    });
+    // Poll for session — handles both immediate availability and delayed token processing
+    let attempts = 0;
+    const maxAttempts = 20; // 20 * 500ms = 10 seconds
 
-    // Fallback: if nothing works within 10 seconds, show error
-    const timeout = setTimeout(async () => {
+    const checkSession = async () => {
+      if (redirected.current) return;
+      attempts++;
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         completeSignIn(session.user);
-      } else {
-        setError('Authentication failed. Please try again.');
-        setTimeout(() => navigate('/login'), 3000);
+        return;
       }
-    }, 10000);
+
+      if (attempts >= maxAttempts) {
+        setError('Authentication failed. Please try again.');
+        setTimeout(() => doRedirect('/login'), 3000);
+        return;
+      }
+
+      // Try again in 500ms
+      setTimeout(checkSession, 500);
+    };
+
+    // Also listen for auth state change
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+        completeSignIn(session.user);
+      }
+    });
+
+    // Start polling
+    checkSession();
 
     return () => {
       subscription.unsubscribe();
-      clearTimeout(timeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate, searchParams]);
+  }, []);
 
   if (error) {
     return (
