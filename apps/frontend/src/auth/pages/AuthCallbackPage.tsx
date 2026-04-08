@@ -10,6 +10,8 @@ export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const { ensureProfileExists } = useAuth();
+  const ensureProfileRef = useRef(ensureProfileExists);
+  ensureProfileRef.current = ensureProfileExists;
   const handled = useRef(false);
 
   /** Resolve redirect: query param > sessionStorage (from idle timeout) > /dashboard */
@@ -28,27 +30,36 @@ export default function AuthCallbackPage() {
     if (handled.current) return;
     handled.current = true;
 
-    // Listen for auth state changes - this is the recommended way to handle OAuth callbacks
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        try {
-          await ensureProfileExists(session.user);
-          navigate(resolveRedirect(), { replace: true });
-        } catch (err) {
-          console.error('Profile creation error:', err);
-          setError('An unexpected error occurred. Please try again.');
-          setTimeout(() => navigate('/login'), 3000);
-        }
+    const completeSignIn = async (user: import('@supabase/supabase-js').User) => {
+      try {
+        await ensureProfileRef.current(user);
+        navigate(resolveRedirect(), { replace: true });
+      } catch (err) {
+        console.error('Profile creation error:', err);
+        setError('An unexpected error occurred. Please try again.');
+        setTimeout(() => navigate('/login'), 3000);
+      }
+    };
+
+    // Check if session already exists (OAuth tokens may have been processed already)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        completeSignIn(session.user);
       }
     });
 
-    // Fallback: if no auth event fires within 10 seconds, show error
+    // Also listen for auth state changes in case tokens are still being processed
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        completeSignIn(session.user);
+      }
+    });
+
+    // Fallback: if nothing works within 10 seconds, show error
     const timeout = setTimeout(async () => {
-      // One last check for an existing session
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        await ensureProfileExists(session.user);
-        navigate(resolveRedirect(), { replace: true });
+        completeSignIn(session.user);
       } else {
         setError('Authentication failed. Please try again.');
         setTimeout(() => navigate('/login'), 3000);
@@ -59,7 +70,8 @@ export default function AuthCallbackPage() {
       subscription.unsubscribe();
       clearTimeout(timeout);
     };
-  }, [navigate, searchParams, ensureProfileExists]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, searchParams]);
 
   if (error) {
     return (
