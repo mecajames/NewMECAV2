@@ -670,6 +670,8 @@ export default function BusinessListingsAdminPage() {
 
   const pendingRetailers = retailers.filter((r) => !r.isApproved).length;
   const pendingManufacturers = manufacturers.filter((m) => !m.isApproved).length;
+  const activeRetailers = retailers.filter((r) => r.isActive).length;
+  const activeManufacturers = manufacturers.filter((m) => m.isActive).length;
 
   if (loading) {
     return (
@@ -849,12 +851,12 @@ export default function BusinessListingsAdminPage() {
 
           <div className="bg-slate-800 rounded-xl p-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-500" />
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-green-500" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Pending Retailers</p>
-                <p className="text-white font-semibold text-2xl">{pendingRetailers}</p>
+                <p className="text-gray-400 text-sm">Active Retailers</p>
+                <p className="text-white font-semibold text-2xl">{activeRetailers}</p>
               </div>
             </div>
           </div>
@@ -873,12 +875,12 @@ export default function BusinessListingsAdminPage() {
 
           <div className="bg-slate-800 rounded-xl p-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-500" />
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-green-500" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Pending Manufacturers</p>
-                <p className="text-white font-semibold text-2xl">{pendingManufacturers}</p>
+                <p className="text-gray-400 text-sm">Active Manufacturers</p>
+                <p className="text-white font-semibold text-2xl">{activeManufacturers}</p>
               </div>
             </div>
           </div>
