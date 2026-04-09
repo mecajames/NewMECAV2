@@ -160,8 +160,10 @@ export class BusinessListingsService {
     // Handle user reassignment separately (admin only)
     if (data.userId && isAdmin) {
       listing.user = em.getReference(Profile, data.userId);
-      delete data.userId;
     }
+    // Always remove userId - it's handled via the user relation above,
+    // and the entity's userId is a read-only getter that em.assign() can't set
+    delete data.userId;
 
     // Filter out undefined values to prevent MikroORM issues
     const filteredData: Record<string, any> = {};
@@ -297,8 +299,10 @@ export class BusinessListingsService {
     // Handle user reassignment separately (admin only)
     if (data.userId && isAdmin) {
       listing.user = em.getReference(Profile, data.userId);
-      delete data.userId;
     }
+    // Always remove userId - it's handled via the user relation above,
+    // and the entity's userId is a read-only getter that em.assign() can't set
+    delete data.userId;
 
     // Filter out undefined values to prevent MikroORM issues
     const filteredData: Record<string, any> = {};
