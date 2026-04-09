@@ -1112,8 +1112,8 @@ export class WorldFinalsService {
       : null;
 
     // Check registration window from config
-    if (now < config.registrationOpenDate) throw new BadRequestException('Pre-registration has not opened yet');
-    if (now > config.registrationCloseDate) throw new BadRequestException('Pre-registration has closed');
+    if (now < config.registrationOpenDate) throw new BadRequestException('Pre-registration has not opened yet. Please check back later.');
+    if (now > config.registrationCloseDate) throw new BadRequestException('The pre-registration period has ended. You can still register on-site at day-of-event pricing.');
 
     const pricingTier = now < config.earlyBirdDeadline ? 'early_bird' : 'regular';
 

@@ -16,10 +16,12 @@ import {
   Save,
   Edit,
   ArrowLeft,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { CountrySelect, StateProvinceSelect } from '@/shared/fields';
 import { getPostalCodeLabel } from '@/utils/countries';
+import { uploadFile } from '@/api-client/uploads.api-client';
 import {
   adminGetAllRetailers,
   adminGetAllManufacturers,
@@ -54,6 +56,7 @@ export default function BusinessListingsAdminPage() {
   const [manufacturers, setManufacturers] = useState<ManufacturerListing[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved'>('all');
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -111,6 +114,9 @@ export default function BusinessListingsAdminPage() {
     start_date: '',
     end_date: '',
   });
+
+  // Image upload state
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // For user reassignment in edit modal
   const [editUserSearch, setEditUserSearch] = useState('');
@@ -632,7 +638,12 @@ export default function BusinessListingsAdminPage() {
       (filterStatus === 'pending' && !r.isApproved) ||
       (filterStatus === 'approved' && r.isApproved);
 
-    return matchesSearch && matchesStatus;
+    const matchesActive =
+      filterActive === 'all' ||
+      (filterActive === 'active' && r.isActive) ||
+      (filterActive === 'inactive' && !r.isActive);
+
+    return matchesSearch && matchesStatus && matchesActive;
   });
 
   const filteredManufacturers = manufacturers.filter((m) => {
@@ -649,11 +660,18 @@ export default function BusinessListingsAdminPage() {
       (filterStatus === 'pending' && !m.isApproved) ||
       (filterStatus === 'approved' && m.isApproved);
 
-    return matchesSearch && matchesStatus;
+    const matchesActive =
+      filterActive === 'all' ||
+      (filterActive === 'active' && m.isActive) ||
+      (filterActive === 'inactive' && !m.isActive);
+
+    return matchesSearch && matchesStatus && matchesActive;
   });
 
   const pendingRetailers = retailers.filter((r) => !r.isApproved).length;
   const pendingManufacturers = manufacturers.filter((m) => !m.isApproved).length;
+  const activeRetailers = retailers.filter((r) => r.isActive).length;
+  const activeManufacturers = manufacturers.filter((m) => m.isActive).length;
 
   if (loading) {
     return (
@@ -691,7 +709,6 @@ export default function BusinessListingsAdminPage() {
         </div>
       </td>
       <td className="px-4 py-4">
-        <div className="flex items-center gap-2">
           {listing.isApproved ? (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-full">
               <CheckCircle className="h-3 w-3" />
@@ -703,13 +720,19 @@ export default function BusinessListingsAdminPage() {
               Pending
             </span>
           )}
-          {!listing.isActive && (
+      </td>
+      <td className="px-4 py-4">
+          {listing.isActive ? (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-full">
+              <CheckCircle className="h-3 w-3" />
+              Active
+            </span>
+          ) : (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/10 text-red-400 text-xs rounded-full">
               <XCircle className="h-3 w-3" />
               Inactive
             </span>
           )}
-        </div>
       </td>
       <td className="px-4 py-4">
         {listing.isSponsor ? (
@@ -828,12 +851,12 @@ export default function BusinessListingsAdminPage() {
 
           <div className="bg-slate-800 rounded-xl p-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-500" />
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-green-500" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Pending Retailers</p>
-                <p className="text-white font-semibold text-2xl">{pendingRetailers}</p>
+                <p className="text-gray-400 text-sm">Active Retailers</p>
+                <p className="text-white font-semibold text-2xl">{activeRetailers}</p>
               </div>
             </div>
           </div>
@@ -852,12 +875,12 @@ export default function BusinessListingsAdminPage() {
 
           <div className="bg-slate-800 rounded-xl p-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-500" />
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-green-500" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Pending Manufacturers</p>
-                <p className="text-white font-semibold text-2xl">{pendingManufacturers}</p>
+                <p className="text-gray-400 text-sm">Active Manufacturers</p>
+                <p className="text-white font-semibold text-2xl">{activeManufacturers}</p>
               </div>
             </div>
           </div>
@@ -926,9 +949,19 @@ export default function BusinessListingsAdminPage() {
             onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'approved')}
             className="px-4 py-3 bg-slate-800 text-white rounded-lg border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
           >
-            <option value="all">All Statuses</option>
+            <option value="all">All Approvals</option>
             <option value="pending">Pending Approval</option>
             <option value="approved">Approved</option>
+          </select>
+
+          <select
+            value={filterActive}
+            onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
+            className="px-4 py-3 bg-slate-800 text-white rounded-lg border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
+          >
+            <option value="all">All Active States</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
           </select>
         </div>
 
@@ -939,7 +972,8 @@ export default function BusinessListingsAdminPage() {
             <thead className="bg-slate-700/50">
               <tr>
                 <th className="px-4 py-3 text-left text-gray-400 font-medium">Business</th>
-                <th className="px-4 py-3 text-left text-gray-400 font-medium">Status</th>
+                <th className="px-4 py-3 text-left text-gray-400 font-medium">Approval</th>
+                <th className="px-4 py-3 text-left text-gray-400 font-medium">Active</th>
                 <th className="px-4 py-3 text-left text-gray-400 font-medium">Sponsor</th>
                 <th className="px-4 py-3 text-left text-gray-400 font-medium">Actions</th>
               </tr>
@@ -950,7 +984,7 @@ export default function BusinessListingsAdminPage() {
                   filteredRetailers.map((r) => renderListingRow(r, 'retailers'))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
                       No retailers found
                     </td>
                   </tr>
@@ -959,7 +993,7 @@ export default function BusinessListingsAdminPage() {
                 filteredManufacturers.map((m) => renderListingRow(m, 'manufacturers'))
               ) : (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
                     No manufacturers found
                   </td>
                 </tr>
@@ -1293,11 +1327,47 @@ export default function BusinessListingsAdminPage() {
                 </div>
               </div>
 
-              {/* Profile Image URL */}
+              {/* Profile/Logo Image */}
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Profile/Logo Image URL
+                  Profile/Logo Image
                 </label>
+
+                {/* Upload button */}
+                <div className="flex gap-3 mb-3">
+                  <label className={`flex items-center gap-2 px-4 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                    uploadingImage
+                      ? 'bg-slate-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-orange-600 hover:bg-orange-500 text-white'
+                  }`}>
+                    <Upload className="h-4 w-4" />
+                    {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      disabled={uploadingImage}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          setUploadingImage(true);
+                          const destination = createType === 'retailers' ? 'retailer-images' : 'manufacturer-images';
+                          const result = await uploadFile(file, destination);
+                          setCreateForm({ ...createForm, profile_image_url: result.publicUrl });
+                        } catch (err: any) {
+                          setError(err.response?.data?.message || 'Failed to upload image');
+                        } finally {
+                          setUploadingImage(false);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                  <span className="text-gray-500 text-sm self-center">or enter URL below</span>
+                </div>
+
+                {/* URL input */}
                 <input
                   type="url"
                   value={createForm.profile_image_url}
@@ -1307,6 +1377,24 @@ export default function BusinessListingsAdminPage() {
                   className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
                   placeholder="https://..."
                 />
+
+                {/* Preview */}
+                {createForm.profile_image_url && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <img
+                      src={createForm.profile_image_url}
+                      alt="Profile preview"
+                      className="w-24 h-24 object-contain rounded-lg bg-slate-700 border border-slate-600 p-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCreateForm({ ...createForm, profile_image_url: '' })}
+                      className="text-red-400 hover:text-red-300 text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Admin Options */}
@@ -1754,11 +1842,47 @@ export default function BusinessListingsAdminPage() {
                 </div>
               </div>
 
-              {/* Profile Image URL */}
+              {/* Profile/Logo Image */}
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Profile/Logo Image URL
+                  Profile/Logo Image
                 </label>
+
+                {/* Upload button */}
+                <div className="flex gap-3 mb-3">
+                  <label className={`flex items-center gap-2 px-4 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                    uploadingImage
+                      ? 'bg-slate-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-orange-600 hover:bg-orange-500 text-white'
+                  }`}>
+                    <Upload className="h-4 w-4" />
+                    {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      disabled={uploadingImage}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          setUploadingImage(true);
+                          const destination = editType === 'retailers' ? 'retailer-images' : 'manufacturer-images';
+                          const result = await uploadFile(file, destination);
+                          setEditForm({ ...editForm, profile_image_url: result.publicUrl });
+                        } catch (err: any) {
+                          setError(err.response?.data?.message || 'Failed to upload image');
+                        } finally {
+                          setUploadingImage(false);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                  <span className="text-gray-500 text-sm self-center">or enter URL below</span>
+                </div>
+
+                {/* URL input */}
                 <input
                   type="url"
                   value={editForm.profile_image_url}
@@ -1768,13 +1892,22 @@ export default function BusinessListingsAdminPage() {
                   className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
                   placeholder="https://..."
                 />
+
+                {/* Preview */}
                 {editForm.profile_image_url && (
-                  <div className="mt-3">
+                  <div className="mt-3 flex items-center gap-3">
                     <img
                       src={editForm.profile_image_url}
                       alt="Profile preview"
-                      className="w-24 h-24 object-cover rounded-lg"
+                      className="w-24 h-24 object-contain rounded-lg bg-slate-700 border border-slate-600 p-1"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, profile_image_url: '' })}
+                      className="text-red-400 hover:text-red-300 text-sm"
+                    >
+                      Remove
+                    </button>
                   </div>
                 )}
               </div>
