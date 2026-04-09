@@ -81,6 +81,7 @@ export default function WorldFinalsAdminPage() {
     collectExtraTshirts: false, extraTshirtPrice: '25.00', maxExtraTshirts: '5',
     tshirtFieldLabel: '', ringFieldLabel: '', hotelFieldLabel: '', guestCountFieldLabel: '', extraTshirtFieldLabel: '',
     hotelInfoText: '', registrationImageUrl: '',
+    registrationOpenDate: '', earlyBirdDeadline: '', registrationCloseDate: '',
   });
   const [newTshirtSize, setNewTshirtSize] = useState('');
   const [newRingSize, setNewRingSize] = useState('');
@@ -182,6 +183,9 @@ export default function WorldFinalsAdminPage() {
           extraTshirtFieldLabel: data.extra_tshirt_field_label || '',
           hotelInfoText: data.hotel_info_text || '',
           registrationImageUrl: data.registration_image_url || '',
+          registrationOpenDate: data.registration_open_date ? new Date(data.registration_open_date).toISOString().slice(0, 16) : '',
+          earlyBirdDeadline: data.early_bird_deadline ? new Date(data.early_bird_deadline).toISOString().slice(0, 16) : '',
+          registrationCloseDate: data.registration_close_date ? new Date(data.registration_close_date).toISOString().slice(0, 16) : '',
         });
       }
     } catch { /* no config yet */ }
@@ -246,6 +250,9 @@ export default function WorldFinalsAdminPage() {
         extraTshirtFieldLabel: configForm.extraTshirtFieldLabel || null,
         hotelInfoText: configForm.hotelInfoText || null,
         registrationImageUrl: configForm.registrationImageUrl || null,
+        registrationOpenDate: configForm.registrationOpenDate || undefined,
+        earlyBirdDeadline: configForm.earlyBirdDeadline || undefined,
+        registrationCloseDate: configForm.registrationCloseDate || undefined,
       });
       alert('Configuration saved!');
     } catch (err: any) { alert('Error: ' + (err?.response?.data?.message || err.message)); }
@@ -514,6 +521,34 @@ export default function WorldFinalsAdminPage() {
                 className="w-5 h-5 rounded border-slate-500 text-orange-500 bg-slate-700" />
               <span className="text-white font-medium">Pre-Registration Active</span>
             </label>
+
+            {/* Registration Dates */}
+            <div className="border border-slate-700 rounded-lg p-4 space-y-4">
+              <h4 className="text-white font-medium">Registration Dates</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Registration Opens</label>
+                  <input type="datetime-local" value={configForm.registrationOpenDate}
+                    onChange={e => setConfigForm({ ...configForm, registrationOpenDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" />
+                  <p className="text-xs text-gray-500 mt-1">When the pre-registration form becomes available</p>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Early Bird Deadline</label>
+                  <input type="datetime-local" value={configForm.earlyBirdDeadline}
+                    onChange={e => setConfigForm({ ...configForm, earlyBirdDeadline: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" />
+                  <p className="text-xs text-gray-500 mt-1">Special pricing ends after this date</p>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Registration Closes</label>
+                  <input type="datetime-local" value={configForm.registrationCloseDate}
+                    onChange={e => setConfigForm({ ...configForm, registrationCloseDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm" />
+                  <p className="text-xs text-gray-500 mt-1">Form closes and shows "registration ended" message</p>
+                </div>
+              </div>
+            </div>
 
             <div><label className="block text-sm text-gray-400 mb-1">Custom Welcome Message</label>
               <textarea value={configForm.customMessage} onChange={e => setConfigForm({ ...configForm, customMessage: e.target.value })} rows={3}

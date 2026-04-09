@@ -40,7 +40,9 @@ export type UploadDestination =
   | 'team-gallery'
   | 'team-banners'
   | 'qa-screenshots'
-  | 'world-finals-images';
+  | 'world-finals-images'
+  | 'retailer-images'
+  | 'manufacturer-images';
 
 /**
  * Uploads a file through the backend to Supabase storage.
