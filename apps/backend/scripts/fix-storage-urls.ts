@@ -22,7 +22,7 @@ import { Client } from 'pg';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const OLD_STORAGE_BASE = process.env.OLD_STORAGE_BASE || 'http://3.209.7.224:3000';
-const NEW_STORAGE_BASE = process.env.NEW_STORAGE_BASE || 'https://mecacaraudio.com/supabase';
+const NEW_STORAGE_BASE = process.env.NEW_STORAGE_BASE || 'https://dbprod.mecacaraudio.com';
 const DRY_RUN = process.argv.includes('--dry-run');
 
 // Tables and columns that store Supabase storage URLs
