@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getManufacturerById, updateMyManufacturerListing, adminUpdateManufacturer, ManufacturerListing } from '@/business-listings';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { getStorageUrl } from '@/lib/storage';
 
 export default function ManufacturerProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -207,7 +208,7 @@ export default function ManufacturerProfilePage() {
           >
             {manufacturer.profileImageUrl ? (
               <img
-                src={manufacturer.profileImageUrl}
+                src={getStorageUrl(manufacturer.profileImageUrl)}
                 alt={`${manufacturer.businessName} logo`}
                 className={`w-full h-full object-cover ${!isEditingPosition ? 'cursor-pointer' : ''} select-none`}
                 style={{ objectPosition: `${position.x}% ${position.y}%` }}

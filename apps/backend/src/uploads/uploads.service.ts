@@ -277,9 +277,15 @@ export class UploadsService {
     }
 
     // 7. Get public URL
-    const { data: { publicUrl } } = this.supabaseAdmin.getClient().storage
+    const { data: { publicUrl: rawPublicUrl } } = this.supabaseAdmin.getClient().storage
       .from(dest.bucket)
       .getPublicUrl(storagePath);
+
+    // Rewrite URL to use public-facing storage URL if configured.
+    // This is needed when the Supabase instance uses an internal HTTP URL
+    // (e.g., http://IP:8000) but images need to be served over HTTPS
+    // via a reverse proxy (e.g., https://domain.com/supabase/).
+    const publicUrl = this.rewriteStorageUrl(rawPublicUrl);
 
     this.logger.log(`Upload successful: ${publicUrl}`);
 
@@ -290,6 +296,26 @@ export class UploadsService {
       fileSize: file.size,
       mimeType: file.mimetype,
     };
+  }
+
+  /**
+   * Rewrites a Supabase storage URL to use the public-facing STORAGE_PUBLIC_URL.
+   * When STORAGE_PUBLIC_URL is set, replaces the Supabase base URL so that
+   * browsers can load images through an HTTPS reverse proxy instead of
+   * hitting an internal HTTP IP directly (which causes mixed content errors).
+   */
+  private rewriteStorageUrl(url: string): string {
+    const storagePublicUrl = process.env.STORAGE_PUBLIC_URL;
+    if (!storagePublicUrl) {
+      return url;
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    if (!supabaseUrl || !url.startsWith(supabaseUrl)) {
+      return url;
+    }
+
+    return url.replace(supabaseUrl, storagePublicUrl);
   }
 
   /**

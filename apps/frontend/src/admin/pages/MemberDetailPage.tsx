@@ -61,6 +61,7 @@ import {
 } from '@/business-listings';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import axios from '@/lib/axios';
+import { getStorageUrl } from '@/lib/storage';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
 
@@ -2406,7 +2407,7 @@ function BusinessInfoTab({
                 {listing.profileImageUrl ? (
                   <>
                     <img
-                      src={listing.profileImageUrl}
+                      src={getStorageUrl(listing.profileImageUrl)}
                       alt="Business Logo"
                       className="h-16 w-16 object-cover rounded-lg bg-slate-600"
                     />
@@ -5208,6 +5209,15 @@ function MembershipsTab({ member }: { member: Profile }) {
                         </span>
                       )}
                     </div>
+                    {/* Subscription ID */}
+                    {membership.stripeSubscriptionId && (
+                      <div>
+                        <span className="text-gray-400">Subscription ID: </span>
+                        <span className="text-blue-400 font-mono text-xs">
+                          {membership.stripeSubscriptionId}
+                        </span>
+                      </div>
+                    )}
                     {/* Stripe Subscription Details */}
                     {subscriptionDetails[membership.id] && (
                       <div className="col-span-2 mt-1 p-3 bg-slate-700/50 rounded-lg space-y-1">
@@ -6068,6 +6078,7 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                   <tr>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Order</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Subscription</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
                     <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
@@ -6075,13 +6086,22 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {orders.map((order) => (
+                  {orders.map((order: any) => (
                     <tr key={order.id} className="hover:bg-gray-700/50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {order.orderNumber}
+                        {order.orderNumber || order.order_number}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {order.orderType?.replace('_', ' ')}
+                        {(order.orderType || order.order_type)?.replace('_', ' ')}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                        {order.metadata?.subscription_id ? (
+                          <span className="font-mono text-xs text-blue-400">
+                            {String(order.metadata.subscription_id)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(order.status)}`}>
@@ -6126,6 +6146,7 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                 <thead className="bg-gray-800">
                   <tr>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Invoice</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Subscription</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
                     <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Due Date</th>
@@ -6133,10 +6154,19 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {invoices.map((invoice) => (
+                  {invoices.map((invoice: any) => (
                     <tr key={invoice.id} className="hover:bg-gray-700/50">
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {invoice.invoiceNumber}
+                        {invoice.invoiceNumber || invoice.invoice_number}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                        {invoice.metadata?.subscription_id ? (
+                          <span className="font-mono text-xs text-blue-400">
+                            {String(invoice.metadata.subscription_id)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(invoice.status)}`}>

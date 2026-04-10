@@ -382,18 +382,50 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Payment Info */}
-            {order.payment && (
+            {(order.payment || order.metadata?.subscription_id || order.metadata?.gateway) && (
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-2 mb-4">
                   <CreditCard className="h-5 w-5 text-green-400" />
                   <h2 className="text-lg font-semibold text-white">Payment</h2>
                 </div>
                 <div className="space-y-2 text-sm">
-                  {order.payment.stripePaymentIntentId && (
+                  {order.payment?.stripePaymentIntentId && (
                     <div>
                       <span className="text-gray-400">Stripe ID: </span>
                       <span className="text-gray-300 font-mono text-xs">
                         {order.payment.stripePaymentIntentId}
+                      </span>
+                    </div>
+                  )}
+                  {order.metadata?.subscription_id && (
+                    <div>
+                      <span className="text-gray-400">Subscription ID: </span>
+                      <span className="text-blue-400 font-mono text-xs">
+                        {String(order.metadata.subscription_id)}
+                      </span>
+                    </div>
+                  )}
+                  {order.metadata?.transaction_id && (
+                    <div>
+                      <span className="text-gray-400">Transaction ID: </span>
+                      <span className="text-gray-300 font-mono text-xs">
+                        {String(order.metadata.transaction_id)}
+                      </span>
+                    </div>
+                  )}
+                  {order.metadata?.gateway && (
+                    <div>
+                      <span className="text-gray-400">Gateway: </span>
+                      <span className="text-gray-300 capitalize">
+                        {String(order.metadata.gateway)}
+                      </span>
+                    </div>
+                  )}
+                  {order.metadata?.payment_type && (
+                    <div>
+                      <span className="text-gray-400">Payment Type: </span>
+                      <span className="text-gray-300">
+                        {String(order.metadata.payment_type)}
                       </span>
                     </div>
                   )}

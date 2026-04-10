@@ -1,23 +1,23 @@
 /**
  * Populate Legacy Subscription Data
  *
- * This script identifies members who had recurring billing enabled in the old
- * WordPress PMPro system and marks them with `had_legacy_subscription = true`.
+ * Identifies members who had recurring billing in the old WordPress PMPro system
+ * and marks them with `had_legacy_subscription = true`.
  *
- * These members will see "Legacy" in the Auto-Renew column and will need to
- * re-setup their subscription once Stripe Subscriptions are implemented.
+ * Uses two sources to identify legacy subscribers:
+ *   1. Hardcoded PMPro user IDs extracted from wp_pmpro_memberships_users
+ *      (billing_amount > 0 AND cycle_number > 0)
+ *   2. Order metadata: members with multiple orders under the same subscription_id
+ *      (confirmed recurring billing from Stripe sub_* or PayPal I-* subscriptions)
  *
  * Usage:
  *   npx tsx scripts/populate-legacy-subscriptions.ts [options]
  *
  * Options:
  *   --dry-run     Preview what will be updated without making changes
- *   --pmpro-file  Path to extracted PMPro memberships data (optional)
  */
 
 import { Client } from 'pg';
-import * as fs from 'fs';
-import * as path from 'path';
 
 // Database configuration
 const DB_CONFIG = {
@@ -31,7 +31,6 @@ const DB_CONFIG = {
 // PMPro WordPress User IDs that had recurring billing (billing_amount > 0 AND cycle_number > 0)
 // This list was extracted from wp_pmpro_memberships_users table
 const LEGACY_SUBSCRIPTION_WP_USER_IDS = new Set([
-  // From the analysis: 318 users had recurring billing, 115 were active
   // Active users with auto-renewal from PMPro analysis:
   34501, 34661, 34725, 34765, 34902, 34919, 34964, 35078, 35100, 35107,
   35108, 35120, 35254, 34568, 34488, 254, 35347, 35361, 233, 34701,
@@ -53,134 +52,138 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
 
-  console.log('🔄 Populate Legacy Subscription Data');
+  console.log('Populate Legacy Subscription Data');
   console.log('=====================================');
   console.log(`Mode: ${dryRun ? 'DRY RUN' : 'LIVE'}`);
-  console.log(`Legacy user IDs to match: ${LEGACY_SUBSCRIPTION_WP_USER_IDS.size}`);
   console.log('');
 
   const client = new Client(DB_CONFIG);
 
   try {
     await client.connect();
-    console.log('✅ Connected to database');
+    console.log('Connected to database');
 
-    // Step 1: Find orders with PMPro metadata and extract user mappings
-    console.log('\n📋 Finding orders with PMPro user IDs...');
+    // =========================================================================
+    // Source 1: Hardcoded PMPro user IDs -> V2 profile mapping via order metadata
+    // =========================================================================
+    console.log('\n--- Source 1: Hardcoded PMPro user IDs ---');
+    console.log(`Hardcoded PMPro IDs: ${LEGACY_SUBSCRIPTION_WP_USER_IDS.size}`);
 
     const { rows: ordersWithPmpro } = await client.query(`
-      SELECT
-        o.id,
-        o.member_id,
-        o.metadata->>'pmpro_user_id' as pmpro_user_id,
-        o.metadata->>'subscription_id' as subscription_id,
+      SELECT DISTINCT ON (metadata->>'pmpro_user_id')
+        member_id,
+        metadata->>'pmpro_user_id' as pmpro_user_id,
         p.email,
         p.full_name
       FROM orders o
       JOIN profiles p ON p.id = o.member_id
       WHERE o.metadata->>'pmpro_user_id' IS NOT NULL
-      ORDER BY o.created_at DESC
+      ORDER BY metadata->>'pmpro_user_id', o.created_at DESC
     `);
 
-    console.log(`   Found ${ordersWithPmpro.length} orders with PMPro user IDs`);
-
-    // Step 2: Build a map of profile IDs to their PMPro user IDs
-    const profileToPmpro = new Map<string, number>();
-    const pmproToProfile = new Map<number, { profileId: string; email: string; name: string }>();
-
+    const hardcodedProfileIds = new Set<string>();
     for (const order of ordersWithPmpro) {
       const pmproUserId = parseInt(order.pmpro_user_id);
-      if (!isNaN(pmproUserId) && order.member_id) {
-        profileToPmpro.set(order.member_id, pmproUserId);
-        pmproToProfile.set(pmproUserId, {
-          profileId: order.member_id,
-          email: order.email,
-          name: order.full_name,
-        });
+      if (!isNaN(pmproUserId) && LEGACY_SUBSCRIPTION_WP_USER_IDS.has(pmproUserId)) {
+        hardcodedProfileIds.add(order.member_id);
       }
     }
+    console.log(`Matched to V2 profiles: ${hardcodedProfileIds.size}`);
 
-    console.log(`   Mapped ${profileToPmpro.size} unique profiles to PMPro user IDs`);
+    // =========================================================================
+    // Source 2: Members with multiple orders under the same subscription_id
+    // =========================================================================
+    console.log('\n--- Source 2: Multi-order subscription members ---');
 
-    // Step 3: Find which profiles had legacy subscriptions
-    const profilesWithLegacySub: Array<{ profileId: string; email: string; name: string; pmproId: number }> = [];
+    const { rows: multiOrderSubs } = await client.query(`
+      SELECT member_id
+      FROM orders
+      WHERE metadata->>'subscription_id' IS NOT NULL
+        AND metadata->>'subscription_id' != ''
+      GROUP BY member_id, metadata->>'subscription_id'
+      HAVING count(*) > 1
+    `);
 
-    for (const [pmproId, profile] of pmproToProfile.entries()) {
-      if (LEGACY_SUBSCRIPTION_WP_USER_IDS.has(pmproId)) {
-        profilesWithLegacySub.push({
-          ...profile,
-          pmproId,
-        });
-      }
-    }
+    const multiOrderProfileIds = new Set<string>(multiOrderSubs.map(r => r.member_id));
+    console.log(`Members with multiple orders on same subscription: ${multiOrderProfileIds.size}`);
 
-    console.log(`\n📊 Found ${profilesWithLegacySub.length} profiles that had legacy subscriptions`);
+    // =========================================================================
+    // Union of both sources
+    // =========================================================================
+    const allLegacyProfileIds = new Set([...hardcodedProfileIds, ...multiOrderProfileIds]);
+    const inBoth = [...hardcodedProfileIds].filter(id => multiOrderProfileIds.has(id)).length;
+    const hardcodedOnly = hardcodedProfileIds.size - inBoth;
+    const multiOrderOnly = multiOrderProfileIds.size - inBoth;
 
-    if (profilesWithLegacySub.length === 0) {
-      console.log('\n⚠️  No matching profiles found. This could mean:');
-      console.log('   - The PMPro orders migration was not run');
-      console.log('   - The order metadata does not contain pmpro_user_id');
-      console.log('   - The PMPro user IDs don\'t match any current orders');
-      return;
-    }
+    console.log('\n--- Combined ---');
+    console.log(`In both sources: ${inBoth}`);
+    console.log(`Hardcoded only: ${hardcodedOnly}`);
+    console.log(`Multi-order only: ${multiOrderOnly}`);
+    console.log(`Total unique members to flag: ${allLegacyProfileIds.size}`);
 
-    // Step 4: Update memberships for these profiles
-    console.log('\n🔄 Updating memberships...');
+    // =========================================================================
+    // Update memberships
+    // =========================================================================
+    console.log('\nUpdating memberships...');
 
     let updated = 0;
+    let alreadyFlagged = 0;
     let notFound = 0;
 
-    for (const profile of profilesWithLegacySub) {
-      // Find active membership for this profile
+    for (const profileId of allLegacyProfileIds) {
       const { rows: memberships } = await client.query(`
-        SELECT id, user_id, payment_status, had_legacy_subscription
+        SELECT id, had_legacy_subscription
         FROM memberships
         WHERE user_id = $1
         ORDER BY created_at DESC
         LIMIT 1
-      `, [profile.profileId]);
+      `, [profileId]);
 
       if (memberships.length === 0) {
         notFound++;
         continue;
       }
 
-      const membership = memberships[0];
-
-      if (membership.had_legacy_subscription) {
-        // Already marked
+      if (memberships[0].had_legacy_subscription) {
+        alreadyFlagged++;
         continue;
       }
 
       if (dryRun) {
-        console.log(`   [DRY RUN] Would update membership for ${profile.name} (${profile.email}) - PMPro ID: ${profile.pmproId}`);
+        // Look up name/email for logging
+        const { rows: profiles } = await client.query(
+          'SELECT email, full_name FROM profiles WHERE id = $1', [profileId]
+        );
+        const name = profiles[0]?.full_name || 'Unknown';
+        const email = profiles[0]?.email || 'Unknown';
+        console.log(`  [DRY RUN] Would flag: ${name} (${email})`);
         updated++;
       } else {
         await client.query(`
           UPDATE memberships
           SET had_legacy_subscription = true, updated_at = NOW()
           WHERE id = $1
-        `, [membership.id]);
-
-        console.log(`   ✅ Updated: ${profile.name} (${profile.email})`);
+        `, [memberships[0].id]);
         updated++;
       }
     }
 
-    console.log(`\n📈 Summary:`);
-    console.log(`   Profiles with legacy subscriptions: ${profilesWithLegacySub.length}`);
-    console.log(`   Memberships updated: ${updated}`);
-    console.log(`   Memberships not found: ${notFound}`);
+    console.log('\n=====================================');
+    console.log('Summary:');
+    console.log(`  Total legacy members identified: ${allLegacyProfileIds.size}`);
+    console.log(`  Memberships updated: ${updated}`);
+    console.log(`  Already flagged: ${alreadyFlagged}`);
+    console.log(`  No membership found: ${notFound}`);
 
     if (dryRun) {
-      console.log('\n⚠️  This was a dry run. No changes were made.');
-      console.log('   Run without --dry-run to apply changes.');
+      console.log('\nThis was a dry run. No changes were made.');
+      console.log('Run without --dry-run to apply changes.');
     } else {
-      console.log('\n✅ Legacy subscription data populated successfully!');
+      console.log('\nLegacy subscription data populated successfully!');
     }
 
   } catch (error: any) {
-    console.error('\n❌ Error:', error.message);
+    console.error('\nError:', error.message);
     throw error;
   } finally {
     await client.end();

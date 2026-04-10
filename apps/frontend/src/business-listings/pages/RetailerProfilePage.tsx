@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { getRetailerById, updateMyRetailerListing, adminUpdateRetailer, RetailerListing } from '@/business-listings';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useRetailerProfileSEO } from '@/shared/seo';
 
 const STORE_TYPE_LABELS: Record<string, { label: string; description: string }> = {
@@ -241,7 +242,7 @@ export default function RetailerProfilePage() {
           >
             {retailer.profileImageUrl ? (
               <img
-                src={retailer.profileImageUrl}
+                src={getStorageUrl(retailer.profileImageUrl)}
                 alt={`${retailer.businessName} logo`}
                 className={`w-full h-full object-cover ${!isEditingPosition ? 'cursor-pointer' : ''} select-none`}
                 style={{ objectPosition: `${position.x}% ${position.y}%` }}
