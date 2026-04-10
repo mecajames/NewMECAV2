@@ -11,6 +11,7 @@ import {
   uploadBannerImage,
   autoDetectBannerSizes,
 } from '../../api-client/banners.api-client';
+import { getStorageUrl } from '@/lib/storage';
 
 interface FormData {
   name: string;
@@ -490,7 +491,7 @@ export default function BannersAdminPage() {
                         <div className="flex items-center gap-4">
                           <div className="w-24 h-12 bg-slate-700 rounded overflow-hidden flex-shrink-0">
                             <img
-                              src={banner.imageUrl}
+                              src={getStorageUrl(banner.imageUrl)}
                               alt={banner.name}
                               className="w-full h-full object-cover"
                               onError={(e) => {
@@ -701,7 +702,7 @@ export default function BannersAdminPage() {
                   <div className="mt-2 p-2 bg-slate-700 rounded-lg">
                     <p className="text-xs text-slate-400 mb-2">Preview:</p>
                     <img
-                      src={formData.imageUrl}
+                      src={getStorageUrl(formData.imageUrl)}
                       alt="Preview"
                       className="max-w-full h-auto rounded"
                       style={{ maxHeight: '120px' }}

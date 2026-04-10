@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Trophy, Users, Store, Gavel, Star, Award } from 'lucide-react';
 import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 import { hallOfFameApi, type HallOfFameInductee } from '@/hall-of-fame/hall-of-fame.api-client';
+import { getStorageUrl } from '@/lib/storage';
 
 const KNOWN_ICONS: Record<string, typeof Trophy> = {
   competitors: Trophy,
@@ -150,7 +151,7 @@ export default function HallOfFamePage() {
                         <div className="flex items-start gap-3">
                           {inductee.image_url && (
                             <img
-                              src={inductee.image_url}
+                              src={getStorageUrl(inductee.image_url)}
                               alt={inductee.name}
                               className="w-12 h-12 rounded-full object-cover border-2 border-slate-600 flex-shrink-0"
                             />

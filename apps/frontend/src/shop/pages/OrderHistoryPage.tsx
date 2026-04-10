@@ -13,6 +13,7 @@ import { ShopOrder } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
 import { OrderStatusBadge } from '../components/OrderStatusBadge';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { getStorageUrl } from '@/lib/storage';
 
 export function OrderHistoryPage() {
   const navigate = useNavigate();
@@ -133,7 +134,7 @@ export function OrderHistoryPage() {
                       >
                         {item.product?.imageUrl ? (
                           <img
-                            src={item.product.imageUrl}
+                            src={getStorageUrl(item.product.imageUrl)}
                             alt={item.productName}
                             className="w-full h-full object-cover"
                           />

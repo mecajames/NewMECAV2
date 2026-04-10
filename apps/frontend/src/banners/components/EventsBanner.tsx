@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { type PublicBanner } from '@newmeca/shared';
 import { recordBannerEngagement } from '../../api-client/banners.api-client';
+import { getStorageUrl } from '@/lib/storage';
 
 const STORAGE_KEY = 'meca_banner_impressions';
 const DEFAULT_WIDTH = 728;
@@ -110,7 +111,7 @@ export function BannerDisplay({ banner: propBanner }: BannerDisplayProps) {
 
   const bannerContent = (
     <img
-      src={banner.imageUrl}
+      src={getStorageUrl(banner.imageUrl)}
       alt={banner.altText || 'Advertisement'}
       className="w-full h-full object-contain"
       style={{ maxWidth: `${width}px`, maxHeight: `${height}px` }}

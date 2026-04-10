@@ -29,12 +29,17 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const URL_COLUMNS = [
   { table: 'retailer_listings', column: 'profile_image_url' },
   { table: 'manufacturer_listings', column: 'profile_image_url' },
+  { table: 'shop_products', column: 'image_url' },
+  { table: 'banners', column: 'image_url' },
+  { table: 'hall_of_fame_inductees', column: 'image_url' },
+  { table: 'voting_questions', column: 'image_url' },
 ];
 
 // Tables with JSON columns that may contain storage URLs
 const JSON_COLUMNS = [
   { table: 'retailer_listings', column: 'gallery_images' },
   { table: 'manufacturer_listings', column: 'gallery_images' },
+  { table: 'shop_products', column: 'additional_images' },
 ];
 
 async function main() {

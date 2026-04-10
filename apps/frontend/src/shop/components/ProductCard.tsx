@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ShoppingCart, Plus, Check } from 'lucide-react';
 import { ShopProduct } from '@newmeca/shared';
+import { getStorageUrl } from '@/lib/storage';
 import { useCart } from '../context/CartContext';
 import { trackAddToCart } from '@/lib/gtag';
 
@@ -38,7 +39,7 @@ export function ProductCard({ product, showAddToCart = true }: ProductCardProps)
       <div className="relative aspect-square bg-slate-700 overflow-hidden">
         {product.imageUrl ? (
           <img
-            src={product.imageUrl}
+            src={getStorageUrl(product.imageUrl)}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />

@@ -12,6 +12,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { ShopProduct } from '@newmeca/shared';
+import { getStorageUrl } from '@/lib/storage';
 import { shopApi } from '../shop.api-client';
 import { useCart } from '../context/CartContext';
 import { SEOHead, useProductDetailSEO } from '@/shared/seo';
@@ -172,7 +173,7 @@ export function ProductDetailPage() {
             <div className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
               {product.imageUrl ? (
                 <img
-                  src={product.imageUrl}
+                  src={getStorageUrl(product.imageUrl)}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
@@ -192,7 +193,7 @@ export function ProductDetailPage() {
                     className="aspect-square bg-slate-800 rounded-lg overflow-hidden border border-slate-700 hover:border-orange-500 transition-colors"
                   >
                     <img
-                      src={img}
+                      src={getStorageUrl(img)}
                       alt={`${product.name} ${index + 1}`}
                       className="w-full h-full object-cover"
                     />

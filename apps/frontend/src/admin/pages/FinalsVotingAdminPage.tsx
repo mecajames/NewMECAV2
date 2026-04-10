@@ -8,6 +8,7 @@ import {
 import { VotingSessionStatus, VotingAnswerType } from '@newmeca/shared';
 import type { VotingSessionResults } from '@newmeca/shared';
 import { finalsVotingApi, uploadVotingItemImage } from '../../api-client/finals-voting.api-client';
+import { getStorageUrl } from '@/lib/storage';
 import { useSeasons } from '@/shared/contexts';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -841,7 +842,7 @@ export default function FinalsVotingAdminPage() {
                                       <div key={question.id} className="flex items-center justify-between p-4 hover:bg-slate-700/20">
                                         <div className="flex items-center gap-4">
                                           {question.imageUrl ? (
-                                            <img src={question.imageUrl} alt={question.title} className="w-16 h-16 rounded-lg object-cover bg-slate-700" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                            <img src={getStorageUrl(question.imageUrl)} alt={question.title} className="w-16 h-16 rounded-lg object-cover bg-slate-700" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                                           ) : (
                                             <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center">
                                               <atConf.icon className="h-6 w-6 text-slate-500" />
@@ -1036,7 +1037,7 @@ export default function FinalsVotingAdminPage() {
                 </div>
                 {questionForm.image_url && (
                   <div className="mt-2 p-2 bg-slate-700 rounded-lg">
-                    <img src={questionForm.image_url} alt="Preview" className="w-24 h-24 rounded-lg object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    <img src={getStorageUrl(questionForm.image_url)} alt="Preview" className="w-24 h-24 rounded-lg object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   </div>
                 )}
               </div>

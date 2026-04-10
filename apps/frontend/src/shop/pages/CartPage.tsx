@@ -10,6 +10,7 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { getStorageUrl } from '@/lib/storage';
 import { trackViewCart, trackRemoveFromCart } from '@/lib/gtag';
 
 export function CartPage() {
@@ -90,7 +91,7 @@ export function CartPage() {
                     >
                       {item.product.imageUrl ? (
                         <img
-                          src={item.product.imageUrl}
+                          src={getStorageUrl(item.product.imageUrl)}
                           alt={item.product.name}
                           className="w-full h-full object-cover"
                         />
