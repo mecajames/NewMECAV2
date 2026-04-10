@@ -138,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: mecaIdData } = await supabase.rpc('generate_meca_id');
     const mecaId = mecaIdData || 700800;
 
+    const signUpFullName = [firstName, lastName].filter(Boolean).join(' ') || email;
+
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -145,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         first_name: firstName,
         last_name: lastName,
+        full_name: signUpFullName,
         meca_id: mecaId,
         role: 'user',
         membership_status: 'none',
