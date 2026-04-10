@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, Save, X, Search, Upload, Image as Imag
 import { useNavigate } from 'react-router-dom';
 import { hallOfFameApi, type HallOfFameInductee, type CreateHallOfFameInducteeDto } from '../hall-of-fame.api-client';
 import { uploadFile } from '@/api-client/uploads.api-client';
+import { getStorageUrl } from '@/lib/storage';
 import ActiveMemberLookup from '@/shared/components/MemberSearchInput';
 import type { Profile } from '@/profiles/profiles.api-client';
 
@@ -355,7 +356,7 @@ export default function HallOfFameAdminPage() {
                     {form.image_url ? (
                       <div className="relative group">
                         <img
-                          src={form.image_url}
+                          src={getStorageUrl(form.image_url)}
                           alt="Inductee"
                           className="w-20 h-20 rounded-lg object-cover border border-slate-600"
                         />
@@ -480,7 +481,7 @@ export default function HallOfFameAdminPage() {
                       <td className="px-4 py-2">
                         {inductee.image_url ? (
                           <img
-                            src={inductee.image_url}
+                            src={getStorageUrl(inductee.image_url)}
                             alt={inductee.name}
                             className="w-8 h-8 rounded-full object-cover"
                           />

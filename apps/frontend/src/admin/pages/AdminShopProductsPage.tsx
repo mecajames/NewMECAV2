@@ -18,6 +18,7 @@ import {
 import { ShopProduct, CreateShopProductDto, UpdateShopProductDto } from '@newmeca/shared';
 import { shopApi } from '@/shop/shop.api-client';
 import { uploadFile } from '@/api-client/uploads.api-client';
+import { getStorageUrl } from '@/lib/storage';
 
 // Local type to avoid Rollup issues with CommonJS enum re-exports
 type ShopProductCategory = 'measuring_tools' | 'cds' | 'apparel' | 'accessories' | 'other';
@@ -370,7 +371,7 @@ export function AdminShopProductsPage() {
                           <div className="w-12 h-12 bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
                             {product.imageUrl ? (
                               <img
-                                src={product.imageUrl}
+                                src={getStorageUrl(product.imageUrl)}
                                 alt={product.name}
                                 className="w-full h-full object-cover"
                               />
@@ -596,7 +597,7 @@ export function AdminShopProductsPage() {
                     {formData.image_url && (
                       <div className="mb-3 relative inline-block">
                         <img
-                          src={formData.image_url}
+                          src={getStorageUrl(formData.image_url)}
                           alt="Product preview"
                           className="w-32 h-32 object-cover rounded-lg border border-slate-600"
                           onError={(e) => {

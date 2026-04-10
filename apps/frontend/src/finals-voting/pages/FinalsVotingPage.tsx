@@ -5,6 +5,7 @@ import { useAuth } from '@/auth/contexts/AuthContext';
 import { VotingAnswerType } from '@newmeca/shared';
 import type { EntitySearchResult } from '@newmeca/shared';
 import { finalsVotingApi } from '../../api-client/finals-voting.api-client';
+import { getStorageUrl } from '@/lib/storage';
 
 // =============================================================================
 // Types
@@ -827,7 +828,7 @@ export default function FinalsVotingPage() {
             {currentFQ.question.image_url && (
               <div className="mb-4">
                 <img
-                  src={currentFQ.question.image_url}
+                  src={getStorageUrl(currentFQ.question.image_url)}
                   alt=""
                   className="w-full max-h-64 rounded-xl object-cover"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}

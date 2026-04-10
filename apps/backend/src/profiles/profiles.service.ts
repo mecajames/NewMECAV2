@@ -146,6 +146,11 @@ export class ProfilesService {
       data.meca_id = await this.generateNextMecaId();
     }
 
+    // Ensure full_name is set
+    if (!data.full_name) {
+      data.full_name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.email || '';
+    }
+
     const em = this.em.fork();
     const profile = em.create(Profile, data as any);
     await em.persistAndFlush(profile);

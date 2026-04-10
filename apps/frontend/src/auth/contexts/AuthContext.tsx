@@ -193,6 +193,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
+    const profileFullName = [firstName, lastName].filter(Boolean).join(' ') || authUser.email || '';
+
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -200,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: authUser.email,
         first_name: firstName,
         last_name: lastName,
+        full_name: profileFullName,
         meca_id: mecaId,
         role: 'user',
         membership_status: 'none',

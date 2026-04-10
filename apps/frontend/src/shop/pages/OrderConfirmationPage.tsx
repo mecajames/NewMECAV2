@@ -12,6 +12,7 @@ import {
 import { ShopOrder } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
 import { OrderStatusBadge } from '../components/OrderStatusBadge';
+import { getStorageUrl } from '@/lib/storage';
 
 export function OrderConfirmationPage() {
   const { id } = useParams<{ id: string }>();
@@ -129,7 +130,7 @@ export function OrderConfirmationPage() {
                 <div className="w-16 h-16 bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
                   {item.product?.imageUrl ? (
                     <img
-                      src={item.product.imageUrl}
+                      src={getStorageUrl(item.product.imageUrl)}
                       alt={item.productName}
                       className="w-full h-full object-cover"
                     />

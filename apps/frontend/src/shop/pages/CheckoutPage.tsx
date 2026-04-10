@@ -22,6 +22,7 @@ import { useCart } from '../context/CartContext';
 import { useTaxRate } from '@/hooks/useTaxRate';
 import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { getStorageUrl } from '@/lib/storage';
 import { trackBeginCheckout, trackAddShippingInfo, trackPurchase } from '@/lib/gtag';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
@@ -706,7 +707,7 @@ export function CheckoutPage() {
                     <div className="w-16 h-16 bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
                       {item.product.imageUrl ? (
                         <img
-                          src={item.product.imageUrl}
+                          src={getStorageUrl(item.product.imageUrl)}
                           alt={item.product.name}
                           className="w-full h-full object-cover"
                         />
