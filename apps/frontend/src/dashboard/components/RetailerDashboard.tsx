@@ -15,6 +15,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { getStorageUrl } from '@/lib/storage';
 import {
   getMyRetailerListing,
   getMyManufacturerListing,
@@ -711,7 +712,7 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                   <div className="flex items-start gap-4 mb-6">
                     {retailerListing.profileImageUrl ? (
                       <img
-                        src={retailerListing.profileImageUrl}
+                        src={getStorageUrl(retailerListing.profileImageUrl)}
                         alt={retailerListing.businessName}
                         className="w-20 h-20 object-cover rounded-lg"
                       />
@@ -795,7 +796,7 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                   <div className="flex items-start gap-4 mb-6">
                     {manufacturerListing.profileImageUrl ? (
                       <img
-                        src={manufacturerListing.profileImageUrl}
+                        src={getStorageUrl(manufacturerListing.profileImageUrl)}
                         alt={manufacturerListing.businessName}
                         className="w-20 h-20 object-cover rounded-lg"
                       />

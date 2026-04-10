@@ -199,8 +199,33 @@ export default function BillingPage() {
                       </p>
                     </div>
                   )}
+                  <div>
+                    <p className="text-gray-400 text-sm">Auto-Renewal</p>
+                    <p className={`text-lg font-semibold ${
+                      membership.stripeSubscriptionId ? 'text-green-400' :
+                      membership.hadLegacySubscription ? 'text-yellow-400' :
+                      'text-gray-400'
+                    }`}>
+                      {membership.stripeSubscriptionId ? 'Active' :
+                       membership.hadLegacySubscription ? 'Legacy' :
+                       'Off'}
+                    </p>
+                  </div>
                 </div>
               </div>
+              {/* Subscription ID */}
+              {(membership.stripeSubscriptionId || membership.hadLegacySubscription) && (
+                <div className="mt-3 pt-3 border-t border-slate-700">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-sm">Subscription ID:</span>
+                    {membership.stripeSubscriptionId ? (
+                      <span className="font-mono text-sm text-blue-400">{membership.stripeSubscriptionId}</span>
+                    ) : membership.hadLegacySubscription ? (
+                      <span className="text-sm text-yellow-400">Legacy (needs re-setup)</span>
+                    ) : null}
+                  </div>
+                </div>
+              )}
 
             </div>
           ) : (
@@ -292,6 +317,11 @@ export default function BillingPage() {
                       <div>
                         <p className="text-white font-medium">{order.orderNumber}</p>
                         <p className="text-gray-400 text-sm">{formatDate(order.createdAt)}</p>
+                        {order.metadata?.subscription_id && (
+                          <p className="text-gray-500 text-xs font-mono mt-0.5">
+                            Sub: {String(order.metadata.subscription_id)}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-white font-medium">{formatCurrency(order.total)}</p>
@@ -335,6 +365,11 @@ export default function BillingPage() {
                       <div>
                         <p className="text-white font-medium">{invoice.invoiceNumber}</p>
                         <p className="text-gray-400 text-sm">{formatDate(invoice.createdAt)}</p>
+                        {invoice.metadata?.subscription_id && (
+                          <p className="text-gray-500 text-xs font-mono mt-0.5">
+                            Sub: {String(invoice.metadata.subscription_id)}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
@@ -402,6 +437,9 @@ export default function BillingPage() {
                       Type
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                      Subscription
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
                       Status
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">
@@ -420,6 +458,15 @@ export default function BillingPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {order.orderType?.replace('_', ' ')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {order.metadata?.subscription_id ? (
+                          <span className="font-mono text-xs text-blue-400">
+                            {String(order.metadata.subscription_id)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
@@ -458,6 +505,9 @@ export default function BillingPage() {
                       Invoice
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                      Subscription
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
                       Status
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">
@@ -476,6 +526,15 @@ export default function BillingPage() {
                     <tr key={invoice.id} className="hover:bg-slate-700/30">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {invoice.invoiceNumber}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {invoice.metadata?.subscription_id ? (
+                          <span className="font-mono text-xs text-blue-400">
+                            {String(invoice.metadata.subscription_id)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span

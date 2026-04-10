@@ -93,6 +93,9 @@ export function OrderTable({
               Type
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              Subscription
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Status
             </th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
@@ -195,6 +198,15 @@ export function OrderTable({
                 <span className="text-sm text-gray-400">
                   {orderTypeLabels[order.orderType] || order.orderType}
                 </span>
+              </td>
+              <td className="whitespace-nowrap px-4 py-3">
+                {order.metadata?.subscription_id ? (
+                  <span className="font-mono text-xs text-blue-400">
+                    {String(order.metadata.subscription_id)}
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-500">-</span>
+                )}
               </td>
               <td className="whitespace-nowrap px-4 py-3">
                 <OrderStatusBadge status={order.status} size="sm" />

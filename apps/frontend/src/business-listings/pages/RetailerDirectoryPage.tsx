@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Search, MapPin, Globe, Mail, Phone, Building2, Tag } from 'lucide-react';
 import { getAllRetailers, RetailerListing } from '@/business-listings';
+import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useRetailerDirectorySEO } from '@/shared/seo';
 
 const STORE_TYPE_LABELS: Record<string, string> = {
@@ -129,7 +130,7 @@ export default function RetailerDirectoryPage() {
                 <div className="relative h-48 bg-gradient-to-br from-slate-700 to-slate-800">
                   {retailer.profileImageUrl ? (
                     <img
-                      src={retailer.profileImageUrl}
+                      src={getStorageUrl(retailer.profileImageUrl)}
                       alt={`${retailer.businessName} logo`}
                       className="w-full h-full object-cover"
                       style={{

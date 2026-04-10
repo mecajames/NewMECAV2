@@ -662,7 +662,7 @@ export default function HomePage() {
                             }`}>
                               {sponsor.profileImageUrl ? (
                                 <img
-                                  src={sponsor.profileImageUrl}
+                                  src={getStorageUrl(sponsor.profileImageUrl)}
                                   alt={sponsor.businessName}
                                   className="w-20 h-20 md:w-24 md:h-24 object-contain"
                                 />

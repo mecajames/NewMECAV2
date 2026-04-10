@@ -97,6 +97,9 @@ export function InvoiceTable({
               </th>
             )}
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              Subscription
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Status
             </th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
@@ -168,6 +171,15 @@ export function InvoiceTable({
                   )}
                 </td>
               )}
+              <td className="whitespace-nowrap px-4 py-3">
+                {invoice.metadata?.subscription_id ? (
+                  <span className="font-mono text-xs text-blue-400">
+                    {String(invoice.metadata.subscription_id)}
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-500">-</span>
+                )}
+              </td>
               <td className="whitespace-nowrap px-4 py-3">
                 <InvoiceStatusBadge status={invoice.status} size="sm" />
               </td>

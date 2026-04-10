@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Factory, Search, MapPin, Globe, Mail, Phone, Tag } from 'lucide-react';
 import { getAllManufacturers, ManufacturerListing } from '@/business-listings';
+import { getStorageUrl } from '@/lib/storage';
 
 export default function ManufacturerDirectoryPage() {
   const navigate = useNavigate();
@@ -123,7 +124,7 @@ export default function ManufacturerDirectoryPage() {
                 <div className="relative h-48 bg-gradient-to-br from-slate-700 to-slate-800">
                   {manufacturer.profileImageUrl ? (
                     <img
-                      src={manufacturer.profileImageUrl}
+                      src={getStorageUrl(manufacturer.profileImageUrl)}
                       alt={`${manufacturer.businessName} logo`}
                       className="w-full h-full object-cover"
                       style={{

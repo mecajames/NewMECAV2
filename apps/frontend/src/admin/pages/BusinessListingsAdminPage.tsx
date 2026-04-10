@@ -22,6 +22,7 @@ import { useAuth } from '@/auth/contexts/AuthContext';
 import { CountrySelect, StateProvinceSelect } from '@/shared/fields';
 import { getPostalCodeLabel } from '@/utils/countries';
 import { uploadFile } from '@/api-client/uploads.api-client';
+import { getStorageUrl } from '@/lib/storage';
 import {
   adminGetAllRetailers,
   adminGetAllManufacturers,
@@ -687,7 +688,7 @@ export default function BusinessListingsAdminPage() {
         <div className="flex items-center gap-3">
           {listing.profileImageUrl ? (
             <img
-              src={listing.profileImageUrl}
+              src={getStorageUrl(listing.profileImageUrl)}
               alt={listing.businessName}
               className="w-10 h-10 rounded-lg object-cover"
             />
@@ -1382,7 +1383,7 @@ export default function BusinessListingsAdminPage() {
                 {createForm.profile_image_url && (
                   <div className="mt-3 flex items-center gap-3">
                     <img
-                      src={createForm.profile_image_url}
+                      src={getStorageUrl(createForm.profile_image_url)}
                       alt="Profile preview"
                       className="w-24 h-24 object-contain rounded-lg bg-slate-700 border border-slate-600 p-1"
                     />
@@ -1897,7 +1898,7 @@ export default function BusinessListingsAdminPage() {
                 {editForm.profile_image_url && (
                   <div className="mt-3 flex items-center gap-3">
                     <img
-                      src={editForm.profile_image_url}
+                      src={getStorageUrl(editForm.profile_image_url)}
                       alt="Profile preview"
                       className="w-24 h-24 object-contain rounded-lg bg-slate-700 border border-slate-600 p-1"
                     />

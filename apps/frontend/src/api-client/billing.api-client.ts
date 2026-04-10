@@ -46,6 +46,7 @@ export interface Order {
     stripePaymentIntentId?: string;
   };
   invoiceId?: string;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -93,6 +94,7 @@ export interface Invoice {
     website?: string;
   };
   items: InvoiceItem[];
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
