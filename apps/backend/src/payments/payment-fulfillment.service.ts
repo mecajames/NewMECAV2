@@ -62,9 +62,9 @@ export class PaymentFulfillmentService {
     const userId = metadata.userId;
 
     if (!email || !membershipTypeConfigId || !userId) {
-      this.logger.error(`Missing required metadata for membership payment: ${transactionId}`);
+      this.logger.error(`Missing required metadata for membership payment: ${transactionId} — email: ${email}, configId: ${membershipTypeConfigId}, userId: ${userId}`);
       if (!userId) {
-        this.logger.error('Guest memberships are no longer supported - userId is required');
+        this.logger.error('userId is required for membership fulfillment. Ensure account is created before payment.');
       }
       return;
     }

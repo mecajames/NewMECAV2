@@ -15,7 +15,6 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
-  UserPlus,
   Newspaper,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -149,15 +148,12 @@ export default function MembershipCheckoutPage() {
   // Order data saved after successful payment
   const [orderData, setOrderData] = useState<OrderData | null>(null);
 
-  // Account creation state (for guest checkout)
-  const [showAccountCreation, setShowAccountCreation] = useState(false);
+  // Account creation state (for guest checkout — account created before payment)
   const [accountCreated, setAccountCreated] = useState(false);
   const [accountPassword, setAccountPassword] = useState('');
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
-  const [accountError, setAccountError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [creatingAccount, setCreatingAccount] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -253,6 +249,23 @@ export default function MembershipCheckoutPage() {
       }
     }
 
+    // Password required for guests
+    if (!user) {
+      if (!accountPassword) {
+        setError('Password is required to create your account');
+        return false;
+      }
+      const strength = calculatePasswordStrength(accountPassword);
+      if (strength.score < MIN_PASSWORD_STRENGTH) {
+        setError(`Password is not strong enough. Current strength: ${strength.score}. Minimum required: ${MIN_PASSWORD_STRENGTH}`);
+        return false;
+      }
+      if (accountPassword !== accountConfirmPassword) {
+        setError('Passwords do not match');
+        return false;
+      }
+    }
+
     if (!formData.firstName || !formData.lastName) {
       setError('First and last name are required');
       return false;
@@ -322,6 +335,7 @@ export default function MembershipCheckoutPage() {
       }
 
       // Create Payment Intent via backend (one-time payment)
+      // For guests, userId is omitted — account is created after payment succeeds
       const response = await axios.post('/api/stripe/create-payment-intent', {
           membershipTypeConfigId: membership.id,
           email,
@@ -351,10 +365,69 @@ export default function MembershipCheckoutPage() {
     }
   };
 
-  const handlePaymentSuccess = async (_paymentIntentId: string) => {
+  const handlePaymentSuccess = async (paymentIntentId: string) => {
     if (!membership) return;
 
     const email = user ? (profile?.email || formData.email) : formData.email;
+    let currentUserId = user?.id;
+
+    // For guests: create account after payment succeeds, then create membership directly
+    if (!user && !accountCreated) {
+      try {
+        const { error: signUpError, data: signUpData } = await signUp(
+          formData.email,
+          accountPassword,
+          formData.firstName,
+          formData.lastName,
+        );
+
+        if (signUpError) {
+          console.error('Account creation failed after payment:', signUpError);
+          // Payment succeeded but account creation failed — still show confirmation
+          // User can create account later with same email
+        } else {
+          currentUserId = signUpData?.user?.id;
+          setAccountCreated(true);
+        }
+      } catch (err) {
+        console.error('Account creation error after payment:', err);
+      }
+    }
+
+    // For new guest accounts: create membership directly (webhook won't have userId)
+    // For existing users: webhook handles membership creation via payment intent metadata
+    if (currentUserId && accountCreated) {
+      try {
+        await axios.post('/api/memberships', {
+          userId: currentUserId,
+          membershipTypeConfigId: membership.id,
+          amountPaid: membership.price,
+          stripePaymentIntentId: paymentIntentId,
+          transactionId: paymentIntentId,
+          competitorName: formData.competitorName || undefined,
+          vehicleLicensePlate: formData.vehicleLicensePlate || undefined,
+          vehicleColor: formData.vehicleColor || undefined,
+          vehicleMake: formData.vehicleMake || undefined,
+          vehicleModel: formData.vehicleModel || undefined,
+          hasTeamAddon: formData.hasTeamAddon || false,
+          teamName: formData.teamName || undefined,
+          teamDescription: formData.teamDescription || undefined,
+          businessName: formData.businessName || undefined,
+          businessWebsite: formData.businessWebsite || undefined,
+          billingFirstName: formData.firstName,
+          billingLastName: formData.lastName,
+          billingPhone: formData.phone || undefined,
+          billingAddress: formData.address,
+          billingCity: formData.city,
+          billingState: formData.state,
+          billingPostalCode: formData.postalCode,
+          billingCountry: formData.country || 'USA',
+        });
+      } catch (err) {
+        // Webhook may have already created the membership — log but don't block
+        console.error('Direct membership creation failed (webhook may handle it):', err);
+      }
+    }
 
     // Save order data for confirmation page
     setOrderData({
@@ -383,69 +456,8 @@ export default function MembershipCheckoutPage() {
 
     // Proceed to confirmation
     setStep('confirmation');
-
-    // Show account creation prompt for guests
-    if (!user) {
-      setShowAccountCreation(true);
-    }
   };
 
-  const handleCreateAccount = async () => {
-    if (!orderData) return;
-
-    // Validate password strength
-    const strength = calculatePasswordStrength(accountPassword);
-    if (strength.score < MIN_PASSWORD_STRENGTH) {
-      setAccountError(`Password is not strong enough. Current strength: ${strength.score}. Minimum required: ${MIN_PASSWORD_STRENGTH}`);
-      return;
-    }
-    if (accountPassword !== accountConfirmPassword) {
-      setAccountError('Passwords do not match');
-      return;
-    }
-
-    setCreatingAccount(true);
-    setAccountError(null);
-
-    try {
-      // Create the account
-      const { error } = await signUp(
-        orderData.email,
-        accountPassword,
-        orderData.firstName,
-        orderData.lastName
-      );
-
-      if (error) {
-        setAccountError(error.message || 'Failed to create account');
-        return;
-      }
-
-      // TODO: Link the membership to the new user once backend endpoint exists
-      // if (signUpData?.user?.id) {
-      //   try {
-      //     await membershipsApi.linkMembershipsToUser({
-      //       email: orderData.email,
-      //       userId: signUpData.user.id,
-      //     });
-      //   } catch (linkError) {
-      //     console.error('Failed to link membership:', linkError);
-      //   }
-      // }
-
-      setAccountCreated(true);
-      setShowAccountCreation(false);
-    } catch (err) {
-      console.error('Account creation error:', err);
-      setAccountError('Failed to create account. Please try again.');
-    } finally {
-      setCreatingAccount(false);
-    }
-  };
-
-  const handleSkipAccountCreation = () => {
-    setShowAccountCreation(false);
-  };
 
   const getCategoryLabel = (category: MembershipCategory): string => {
     switch (category) {
@@ -539,146 +551,24 @@ export default function MembershipCheckoutPage() {
               </div>
             </div>
 
-            {/* Account Creation Section (for guests) */}
-            {showAccountCreation && !accountCreated && (
-              <div className="bg-gradient-to-r from-orange-600/20 to-red-600/20 border border-orange-500/30 rounded-xl p-6 mb-8">
-                <div className="flex items-start mb-4">
-                  <UserPlus className="h-6 w-6 text-orange-500 mr-3 flex-shrink-0 mt-1" />
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">Create Your Account</h3>
-                    <p className="text-gray-400 text-sm mt-1">
-                      Create an account to access your membership, track events, and manage your profile.
-                    </p>
-                  </div>
-                </div>
-
-                {accountError && (
-                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500 rounded-lg">
-                    <p className="text-red-500 text-sm">{accountError}</p>
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={orderData?.email || ''}
-                      disabled
-                      className="w-full px-4 py-3 bg-slate-600 border border-slate-500 rounded-lg text-gray-300 cursor-not-allowed"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Create Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={accountPassword}
-                        onChange={(e) => setAccountPassword(e.target.value)}
-                        className="w-full px-4 py-3 pr-12 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        placeholder="Enter a strong password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                      >
-                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </button>
-                    </div>
-                    {accountPassword && (
-                      <div className="mt-2">
-                        <PasswordStrengthIndicator
-                          password={accountPassword}
-                          showFeedback={true}
-                          showScore={true}
-                        />
-                        <p className="text-xs text-gray-400 mt-1">
-                          Minimum strength required: {MIN_PASSWORD_STRENGTH}
-                        </p>
-                      </div>
-                    )}
-                    {!accountPassword && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        Use a mix of letters, numbers, and symbols for a strong password
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={accountConfirmPassword}
-                        onChange={(e) => setAccountConfirmPassword(e.target.value)}
-                        className="w-full px-4 py-3 pr-12 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        placeholder="Confirm your password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </button>
-                    </div>
-                    {accountConfirmPassword && accountPassword !== accountConfirmPassword && (
-                      <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
-                    )}
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleCreateAccount}
-                      disabled={creatingAccount}
-                      className="flex-1 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {creatingAccount ? (
-                        <span className="flex items-center justify-center">
-                          <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                          Creating Account...
-                        </span>
-                      ) : (
-                        'Create Account'
-                      )}
-                    </button>
-                    <button
-                      onClick={handleSkipAccountCreation}
-                      className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-                    >
-                      Skip
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Account Created Success */}
-            {accountCreated && (
+            {/* Account Info */}
+            {(user || accountCreated) ? (
               <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-6 mb-8">
                 <div className="flex items-center">
                   <CheckCircle className="h-6 w-6 text-green-500 mr-3" />
                   <div>
-                    <h3 className="text-lg font-semibold text-white">Account Created!</h3>
+                    <h3 className="text-lg font-semibold text-white">Account Ready</h3>
                     <p className="text-gray-400 text-sm">
-                      Your account has been created and your membership is linked.
+                      Your account has been created and your membership is linked. Check your email to verify your account.
                     </p>
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* Skipped Account Creation Notice */}
-            {!showAccountCreation && !accountCreated && !user && (
+            ) : (
               <div className="bg-slate-700/50 rounded-xl p-6 mb-8">
                 <p className="text-gray-400 text-sm">
                   A confirmation email has been sent to <span className="text-white">{orderData?.email}</span>.
-                  You can create an account later using this email to access your membership.
+                  You can create an account with this email to access your membership.
                 </p>
               </div>
             )}
@@ -786,32 +676,100 @@ export default function MembershipCheckoutPage() {
                     </div>
                   )}
 
-                  {/* Email (for guests) */}
+                  {/* Email & Account Creation (for guests) */}
                   {!user && (
                     <div className="mb-8">
                       <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                         <Mail className="h-5 w-5 mr-2 text-orange-500" />
-                        Contact Information
+                        Account & Contact Information
                       </h3>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Email Address *
-                        </label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                          <input
-                            type="email"
-                            name="email"
-                            value={formData.email}
-                            onChange={handleInputChange}
-                            className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            placeholder="you@example.com"
-                            required
-                          />
+                      <p className="text-gray-400 text-sm mb-4">
+                        An account is required to manage your membership, track events, and access your profile.
+                      </p>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Email Address *
+                          </label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                              type="email"
+                              name="email"
+                              value={formData.email}
+                              onChange={handleInputChange}
+                              className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              placeholder="you@example.com"
+                              required
+                            />
+                          </div>
                         </div>
-                        <p className="mt-1 text-xs text-gray-400">
-                          We'll send your membership confirmation to this email
-                        </p>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Create Password *
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                              type={showPassword ? 'text' : 'password'}
+                              value={accountPassword}
+                              onChange={(e) => setAccountPassword(e.target.value)}
+                              className="w-full pl-10 pr-12 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              placeholder="Enter a strong password"
+                              required
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                            >
+                              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
+                          </div>
+                          {accountPassword && (
+                            <div className="mt-2">
+                              <PasswordStrengthIndicator
+                                password={accountPassword}
+                                showFeedback={true}
+                                showScore={true}
+                              />
+                              <p className="text-xs text-gray-400 mt-1">
+                                Minimum strength required: {MIN_PASSWORD_STRENGTH}
+                              </p>
+                            </div>
+                          )}
+                          {!accountPassword && (
+                            <p className="mt-1 text-xs text-gray-400">
+                              Use a mix of letters, numbers, and symbols for a strong password
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Confirm Password *
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                              type={showConfirmPassword ? 'text' : 'password'}
+                              value={accountConfirmPassword}
+                              onChange={(e) => setAccountConfirmPassword(e.target.value)}
+                              className="w-full pl-10 pr-12 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              placeholder="Confirm your password"
+                              required
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                            >
+                              {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
+                          </div>
+                          {accountConfirmPassword && accountPassword !== accountConfirmPassword && (
+                            <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
