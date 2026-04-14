@@ -35,6 +35,7 @@ import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderSta
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
+import { CouponsService } from '../coupons/coupons.service';
 import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
 import { WorldFinalsService } from '../world-finals/world-finals.service';
 import { PaymentFulfillmentService } from '../payments/payment-fulfillment.service';
@@ -61,6 +62,8 @@ interface CreateMembershipPaymentIntentDto {
   businessWebsite?: string;
   // User info (if logged in)
   userId?: string;
+  // Coupon
+  couponCode?: string;
 }
 
 interface CreateEventRegistrationPaymentIntentDto {
@@ -112,6 +115,7 @@ interface CreateShopPaymentIntentDto {
   shippingAddress?: ShopAddress;
   billingAddress?: ShopAddress;
   userId?: string;
+  couponCode?: string;
 }
 
 @Controller('api/stripe')
@@ -131,6 +135,7 @@ export class StripeController {
     private readonly membershipSyncService: MembershipSyncService,
     private readonly worldFinalsService: WorldFinalsService,
     private readonly paymentFulfillmentService: PaymentFulfillmentService,
+    private readonly couponsService: CouponsService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -205,20 +210,46 @@ export class StripeController {
       }
     }
 
-    // Calculate tax
+    // Calculate price with optional coupon discount
     const membershipPrice = Number(membershipConfig.price);
-    const tax = await this.taxService.calculateTax(membershipPrice);
+    let discountAmount = 0;
+    let couponId: string | undefined;
+
+    if (data.couponCode) {
+      const validation = await this.couponsService.validateCoupon(data.couponCode, {
+        scope: 'membership',
+        subtotal: membershipPrice,
+        membershipTypeConfigId: data.membershipTypeConfigId,
+        userId: data.userId,
+        email: data.email,
+      });
+      if (!validation.valid) {
+        throw new BadRequestException(validation.message);
+      }
+      discountAmount = validation.discountAmount!;
+      couponId = validation.couponId;
+    }
+
+    const discountedPrice = Math.max(0, membershipPrice - discountAmount);
+    const tax = await this.taxService.calculateTax(discountedPrice);
 
     // Convert price + tax to cents for Stripe
-    const amountInCents = Math.round((membershipPrice + tax.taxAmount) * 100);
+    const amountInCents = Math.round((discountedPrice + tax.taxAmount) * 100);
 
     // Create metadata to store with the payment intent
     const metadata: Record<string, string> = {
       email: data.email.toLowerCase(),
       membershipCategory: membershipConfig.category,
+      membershipPrice: membershipPrice.toFixed(2),
       taxAmount: tax.taxAmount.toFixed(2),
       taxRate: tax.taxRate.toString(),
     };
+
+    if (data.couponCode && couponId) {
+      metadata.couponCode = data.couponCode.toUpperCase();
+      metadata.couponId = couponId;
+      metadata.discountAmount = discountAmount.toFixed(2);
+    }
 
     // Add optional fields to metadata if provided
     if (data.userId) metadata.userId = data.userId;
@@ -576,6 +607,33 @@ export class StripeController {
       throw new BadRequestException(`Some items are out of stock: ${unavailableNames}`);
     }
 
+    // Validate coupon if provided
+    let shopDiscountAmount = 0;
+    let shopCouponId: string | undefined;
+
+    if (data.couponCode) {
+      // Calculate subtotal for validation
+      const productsForValidation = await this.shopService.getProductsByIds(data.items.map(i => i.productId));
+      let subtotal = 0;
+      for (const item of data.items) {
+        const product = productsForValidation.find(p => p.id === item.productId);
+        if (product) subtotal += Number(product.price) * item.quantity;
+      }
+
+      const validation = await this.couponsService.validateCoupon(data.couponCode, {
+        scope: 'shop',
+        subtotal,
+        productIds: data.items.map(i => i.productId),
+        userId: data.userId,
+        email: data.email,
+      });
+      if (!validation.valid) {
+        throw new BadRequestException(validation.message);
+      }
+      shopDiscountAmount = validation.discountAmount!;
+      shopCouponId = validation.couponId;
+    }
+
     // Create order in pending state with shipping
     const order = await this.shopService.createOrder({
       userId: data.userId,
@@ -586,6 +644,8 @@ export class StripeController {
       billingAddress: data.billingAddress,
       shippingMethod: (data as any).shippingMethod || 'standard',
       shippingAmount: (data as any).shippingAmount || 0,
+      discountAmount: shopDiscountAmount,
+      couponCode: data.couponCode?.toUpperCase(),
     });
 
     // Convert price to cents for Stripe
@@ -601,6 +661,11 @@ export class StripeController {
     };
 
     if (data.userId) metadata.userId = data.userId;
+    if (data.couponCode && shopCouponId) {
+      metadata.couponCode = data.couponCode.toUpperCase();
+      metadata.couponId = shopCouponId;
+      metadata.discountAmount = shopDiscountAmount.toFixed(2);
+    }
 
     // Update order with payment intent ID (will be updated after creation)
     const paymentIntent = await this.stripeService.createPaymentIntent({

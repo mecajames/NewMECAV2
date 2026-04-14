@@ -403,7 +403,7 @@ export class InvoicePdfService {
         ` : ''}
         ${parseFloat(invoice.discount) > 0 ? `
         <tr>
-          <td>Discount:</td>
+          <td>Discount${invoice.couponCode ? ` (${invoice.couponCode})` : ''}:</td>
           <td>-${this.formatCurrency(invoice.discount, invoice.currency)}</td>
         </tr>
         ` : ''}

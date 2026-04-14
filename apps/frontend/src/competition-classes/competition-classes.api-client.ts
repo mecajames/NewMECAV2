@@ -7,6 +7,7 @@ export interface CompetitionClass {
   format: string;
   season_id: string;
   is_active: boolean;
+  unlimited_wattage: boolean;
   display_order: number;
   created_at: string;
   updated_at: string;
@@ -62,6 +63,7 @@ export const competitionClassesApi = {
     format: string;
     season_id: string;
     is_active?: boolean;
+    unlimited_wattage?: boolean;
     display_order?: number;
   }): Promise<CompetitionClass> => {
     const response = await axios.post('/api/competition-classes', data);
@@ -79,6 +81,7 @@ export const competitionClassesApi = {
       format?: string;
       season_id?: string;
       is_active?: boolean;
+      unlimited_wattage?: boolean;
       display_order?: number;
     }
   ): Promise<CompetitionClass> => {

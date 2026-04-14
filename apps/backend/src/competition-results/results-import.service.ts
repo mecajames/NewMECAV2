@@ -2,6 +2,27 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { ParsedResult } from '@newmeca/shared';
 
+// Fallback list for parser-level unlimited wattage detection.
+// The authoritative source is competition_classes.unlimited_wattage in the DB,
+// checked by CompetitionResultsService.create/update. This list handles initial
+// parsing before the class is resolved against the database.
+const UNLIMITED_WATTAGE_CLASSES = [
+  // Full names
+  'trunk 2', 'street 5', 'modified street 4', 'modified 5',
+  'x street 2', 'extreme',
+  // Abbreviations
+  't2', 's5', 'ms4', 'm5',
+  'xst2', 'xms2', 'xcc', 'x',
+  'pnp5', 'pnpx',
+  'bbms2', 'bbm5', 'bbx',
+  'ccs2', 'ccms2', 'ccm5', 'ccx',
+];
+
+function isUnlimitedWattageClass(className: string): boolean {
+  const nameLower = (className || '').toLowerCase().trim();
+  return UNLIMITED_WATTAGE_CLASSES.includes(nameLower);
+}
+
 @Injectable()
 export class ResultsImportService {
   /**
@@ -73,15 +94,20 @@ export class ResultsImportService {
         // Look up full class name from Internal Values if available
         const classInfo = classMap.get(classAbbr);
 
+        // Auto-set wattage to -1 ("Unlimited") for unlimited power classes
+        const resolvedClassName = classInfo?.className || classAbbr;
+        const unlimitedClass = isUnlimitedWattageClass(resolvedClassName) || isUnlimitedWattageClass(classAbbr);
+        const finalWattage = unlimitedClass ? -1 : (isNaN(wattage as number) ? undefined : wattage);
+
         return {
           memberID: memberID || '999999',
           name,
-          class: classInfo?.className || classAbbr,
+          class: resolvedClassName,
           classAbbreviation: classAbbr,
           score,
           points,
           format: classInfo?.division,
-          wattage: isNaN(wattage as number) ? undefined : wattage,
+          wattage: finalWattage,
           frequency: isNaN(frequency as number) ? undefined : frequency,
         };
       });
@@ -166,8 +192,11 @@ export class ResultsImportService {
               const mecaId = (mecaIdRaw && mecaIdRaw !== '' && mecaIdRaw !== '0') ? mecaIdRaw : '999999';
 
               // Parse wattage and frequency
-              const wattage = wattageRaw && wattageRaw !== '0' && wattageRaw !== '' ? parseInt(wattageRaw) : undefined;
+              const parsedWattage = wattageRaw && wattageRaw !== '0' && wattageRaw !== '' ? parseInt(wattageRaw) : undefined;
               const frequency = frequencyRaw && frequencyRaw !== '0' && frequencyRaw !== '' ? parseInt(frequencyRaw) : undefined;
+
+              // Auto-set wattage to -1 ("Unlimited") for unlimited power classes
+              const wattage = isUnlimitedWattageClass(className) ? -1 : parsedWattage;
 
               console.log(`[TLAB IMPORT] Name="${competitorName}", Final MECA ID="${mecaId}", Wattage=${wattage}, Frequency=${frequency}`);
 

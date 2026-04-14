@@ -11,7 +11,7 @@ export default function JudgesAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({
-    isActive: undefined as boolean | undefined,
+    isActive: true as boolean | undefined,
     level: '' as string,
     specialty: '' as string,
     search: '',

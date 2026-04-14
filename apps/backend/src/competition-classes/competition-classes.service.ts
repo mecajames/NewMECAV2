@@ -65,6 +65,7 @@ export class CompetitionClassesService {
       season,
       isActive: input.is_active ?? input.isActive ?? true,
       displayOrder: input.display_order ?? input.displayOrder ?? 0,
+      unlimitedWattage: input.unlimited_wattage ?? input.unlimitedWattage ?? false,
     } as any);
     await em.persistAndFlush(competitionClass);
     return competitionClass;
@@ -88,6 +89,8 @@ export class CompetitionClassesService {
     if (input.isActive !== undefined) updateData.isActive = input.isActive;
     if (input.display_order !== undefined) updateData.displayOrder = input.display_order;
     if (input.displayOrder !== undefined) updateData.displayOrder = input.displayOrder;
+    if (input.unlimited_wattage !== undefined) updateData.unlimitedWattage = input.unlimited_wattage;
+    if (input.unlimitedWattage !== undefined) updateData.unlimitedWattage = input.unlimitedWattage;
 
     // Handle season change
     const seasonId = input.season_id || input.seasonId;
@@ -170,6 +173,7 @@ export class CompetitionClassesService {
         season: Reference.createFromPK(Season, toSeasonId),
         isActive: sourceClass.isActive,
         displayOrder: sourceClass.displayOrder,
+        unlimitedWattage: sourceClass.unlimitedWattage,
       } as any);
       newClasses.push(newClass);
     }

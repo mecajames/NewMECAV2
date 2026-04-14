@@ -308,6 +308,12 @@ export default function OrderDetailPage() {
                         <span className="text-green-400">-{formatCurrency(order.discount, order.currency)}</span>
                       </div>
                     )}
+                    {(order as any).coupon_code && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Coupon Code</span>
+                        <span className="text-orange-400 font-mono font-semibold">{(order as any).coupon_code}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-lg font-semibold border-t border-slate-700 pt-2">
                       <span className="text-white">Total</span>
                       <span className="text-white">{formatCurrency(order.total, order.currency)}</span>

@@ -539,6 +539,8 @@ export class PaymentFulfillmentService {
           items,
           billingAddress: billingAddress.name ? billingAddress : undefined,
           tax: taxAmount,
+          discount: metadata.discountAmount || '0.00',
+          couponCode: metadata.couponCode || undefined,
           notes: `${params.paymentMethod} Payment: ${transactionId}`,
         });
 

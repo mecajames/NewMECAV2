@@ -10,7 +10,7 @@ export default function EventDirectorsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({
-    isActive: undefined as boolean | undefined,
+    isActive: true as boolean | undefined,
     search: '',
   });
 

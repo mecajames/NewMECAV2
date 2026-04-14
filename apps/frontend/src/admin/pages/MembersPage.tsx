@@ -10,6 +10,7 @@ import { membershipsApi } from '@/memberships/memberships.api-client';
 import axios from '@/lib/axios';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
 import { notificationsApi } from '@/notifications/notifications.api-client';
+import { getAllEventDirectors } from '@/event-directors/event-directors.api-client';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -70,6 +71,9 @@ export default function MembersPage() {
   // MECA ID range filter
   const [mecaIdMin, setMecaIdMin] = useState<string>('');
   const [mecaIdMax, setMecaIdMax] = useState<string>('');
+
+  // Event director user IDs (for role filter)
+  const [eventDirectorUserIds, setEventDirectorUserIds] = useState<Set<string>>(new Set());
 
   // Delete confirmation state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -156,15 +160,19 @@ export default function MembersPage() {
 
   useEffect(() => {
     filterAndSortMembers();
-  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax, showOnlineOnly, onlineUserIds]);
+  }, [members, searchTerm, roleFilter, membershipTypeFilter, statusFilter, autoRenewFilter, renewalDateFilter, sortBy, mecaIdMin, mecaIdMax, showOnlineOnly, onlineUserIds, eventDirectorUserIds]);
 
   const fetchMembers = async () => {
     try {
-      // Fetch profiles and memberships in PARALLEL for faster load
-      const [{ data: backendProfiles }, backendMemberships] = await Promise.all([
+      // Fetch profiles, memberships, and event directors in PARALLEL for faster load
+      const [{ data: backendProfiles }, backendMemberships, eventDirectors] = await Promise.all([
         axios.get('/api/profiles/admin/members'),
         membershipsApi.getMembersList(),
+        getAllEventDirectors().catch(() => []),
       ]);
+
+      // Build set of event director user IDs for the role filter
+      setEventDirectorUserIds(new Set(eventDirectors.map((ed: any) => ed.user_id)));
 
       // Map backend response - most fields are already snake_case from the API
       const profilesData = backendProfiles.map((p: any) => ({
@@ -477,6 +485,9 @@ export default function MembersPage() {
       if (roleFilter === 'admin') {
         // "Admin" filter should show both role=admin AND is_staff users
         filtered = filtered.filter((member) => member.role === 'admin' || member.is_staff);
+      } else if (roleFilter === 'event_director') {
+        // Event directors may have role='event_director' on profile OR exist in the event_directors table
+        filtered = filtered.filter((member) => member.role === 'event_director' || eventDirectorUserIds.has(member.id));
       } else {
         filtered = filtered.filter((member) => member.role === roleFilter);
       }

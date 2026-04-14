@@ -357,6 +357,15 @@ export class CompetitionResultsService {
       delete transformedData.createdBy;
     }
 
+    // Auto-set wattage to -1 ("Unlimited") for unlimited power classes
+    const classRef = transformedData.competitionClassEntity;
+    if (classRef) {
+      const classEntity = await em.findOne(CompetitionClass, { id: classRef.id ?? classRef });
+      if (classEntity?.unlimitedWattage) {
+        transformedData.wattage = -1;
+      }
+    }
+
     const result = em.create(CompetitionResult, transformedData);
     await em.persistAndFlush(result);
 
@@ -533,6 +542,15 @@ export class CompetitionResultsService {
     transformedData.revisionCount = (result.revisionCount || 0) + 1;
 
     // updatedAt will be automatically set by MikroORM's onUpdate decorator
+
+    // Auto-set wattage to -1 ("Unlimited") for unlimited power classes
+    const updateClassRef = transformedData.competitionClassEntity || result.competitionClassEntity;
+    if (updateClassRef) {
+      const classEntity = await em.findOne(CompetitionClass, { id: updateClassRef.id ?? updateClassRef });
+      if (classEntity?.unlimitedWattage) {
+        transformedData.wattage = -1;
+      }
+    }
 
     em.assign(result, transformedData);
     await em.flush();
@@ -1643,8 +1661,10 @@ export class CompetitionResultsService {
    * Check if wattage/frequency is required for a given format and class
    * Required for all SPL classes except Dueling Demos
    */
-  private isWattageFrequencyRequired(format: string, className: string): boolean {
+  private isWattageFrequencyRequired(format: string, className: string, unlimitedWattage?: boolean): boolean {
     if (!format || format.toUpperCase() !== 'SPL') return false;
+    // Unlimited wattage classes don't require wattage/frequency entry
+    if (unlimitedWattage) return false;
     const exemptClasses = ['dueling demos'];
     const classLower = (className || '').toLowerCase();
     return !exemptClasses.some(exempt => classLower.includes(exempt));
@@ -1677,6 +1697,9 @@ export class CompetitionResultsService {
   }> {
     const em = this.em.fork();
     const today = new Date();
+
+    // Fetch competition classes to check unlimited_wattage flag
+    const competitionClasses = await em.find(CompetitionClass, {});
 
     // Fetch active memberships for name matching
     const pointsEligibleCategories = [
@@ -1740,9 +1763,14 @@ export class CompetitionResultsService {
         validationErrors.push('Score is required');
       }
 
-      // Check for wattage/frequency requirement (SPL classes except Dueling Demos)
+      // Check for wattage/frequency requirement (SPL classes except Dueling Demos and unlimited wattage classes)
       const format = result.format || 'SPL';
-      if (this.isWattageFrequencyRequired(format, result.class)) {
+      const matchedClass = competitionClasses.find(
+        c => c.name.toLowerCase() === (result.class || '').toLowerCase() ||
+             c.abbreviation.toLowerCase() === (result.class || '').toLowerCase()
+      );
+      const isUnlimited = matchedClass?.unlimitedWattage || result.wattage === -1;
+      if (this.isWattageFrequencyRequired(format, result.class, isUnlimited)) {
         if (!result.wattage) {
           missingFields.push('wattage');
         }

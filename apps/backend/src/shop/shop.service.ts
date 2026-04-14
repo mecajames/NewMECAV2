@@ -212,12 +212,14 @@ export class ShopService {
     stripePaymentIntentId?: string;
     shippingMethod?: 'standard' | 'priority';
     shippingAmount?: number;
+    discountAmount?: number;
+    couponCode?: string;
   }): Promise<ShopOrder> {
     const em = this.em.fork();
 
     // Validate items and calculate totals
     const products = await this.validateAndGetProducts(em, data.items);
-    const totals = await this.calculateOrderTotals(products, data.items, data.shippingAmount);
+    const totals = await this.calculateOrderTotals(products, data.items, data.shippingAmount, data.discountAmount || 0);
 
     // Generate order number
     const orderNumber = await this.generateOrderNumber(em);
@@ -229,6 +231,8 @@ export class ShopService {
       guestName: data.guestName,
       status: ShopOrderStatus.PENDING,
       subtotal: totals.subtotal,
+      discountAmount: totals.discountAmount,
+      couponCode: data.couponCode || null,
       shippingAmount: totals.shippingAmount,
       shippingMethod: data.shippingMethod || 'standard',
       taxAmount: totals.taxAmount,
@@ -598,6 +602,11 @@ export class ShopService {
   // PRIVATE HELPERS
   // =============================================================================
 
+  async getProductsByIds(productIds: string[]): Promise<ShopProduct[]> {
+    const em = this.em.fork();
+    return em.find(ShopProduct, { id: { $in: productIds } });
+  }
+
   private async validateAndGetProducts(em: EntityManager, items: CartItem[]): Promise<ShopProduct[]> {
     const productIds = items.map(item => item.productId);
     const products = await em.find(ShopProduct, { id: { $in: productIds }, isActive: true });
@@ -615,7 +624,8 @@ export class ShopService {
     products: ShopProduct[],
     items: CartItem[],
     providedShippingAmount?: number,
-  ): Promise<OrderTotals> {
+    discountAmount: number = 0,
+  ): Promise<OrderTotals & { discountAmount: number }> {
     let subtotal = 0;
 
     for (const item of items) {
@@ -623,12 +633,15 @@ export class ShopService {
       subtotal += Number(product.price) * item.quantity;
     }
 
+    // Apply discount before tax calculation
+    const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+
     // Use provided shipping amount or default to 0
     const shippingAmount = providedShippingAmount ?? 0;
-    const { taxAmount, taxRate } = await this.taxService.calculateTax(subtotal);
-    const totalAmount = subtotal + shippingAmount + taxAmount;
+    const { taxAmount, taxRate } = await this.taxService.calculateTax(discountedSubtotal);
+    const totalAmount = discountedSubtotal + shippingAmount + taxAmount;
 
-    return { subtotal, shippingAmount, taxAmount, taxRate, totalAmount };
+    return { subtotal, discountAmount, shippingAmount, taxAmount, taxRate, totalAmount };
   }
 
   private async generateOrderNumber(em: EntityManager): Promise<string> {
