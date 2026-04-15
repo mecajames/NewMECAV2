@@ -25,6 +25,7 @@ import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { EmailService } from '../email/email.service';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 /**
  * Validates that a team name does not contain variations of the word "team".
@@ -155,6 +156,7 @@ export class MembershipsService {
     @Inject(forwardRef(() => StripeService))
     private readonly stripeService: StripeService,
     private readonly adminAuditService: AdminAuditService,
+    private readonly adminNotificationsService: AdminNotificationsService,
   ) {}
 
   async findById(id: string): Promise<Membership> {
@@ -1620,6 +1622,11 @@ export class MembershipsService {
       description: `Cancelled membership immediately for ${membership.user?.email || 'unknown'}. Reason: ${reason}`,
       oldValues: { paymentStatus: PaymentStatus.PAID },
       newValues: { paymentStatus: PaymentStatus.CANCELLED, cancellationReason: reason },
+    });
+
+    // Notify admins (async, non-blocking)
+    this.adminNotificationsService.notifyMembershipCancelled(membership, reason).catch((err) => {
+      this.logger.error(`Admin notification failed (non-critical): ${err}`);
     });
 
     return {

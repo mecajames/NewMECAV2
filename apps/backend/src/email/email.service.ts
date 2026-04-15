@@ -1476,6 +1476,112 @@ export class EmailService {
           });
           break;
 
+        case 'admin_new_membership':
+          result = await this.sendAdminAlertEmail({
+            to: toEmail,
+            title: 'New Membership: John Smith',
+            subtitle: 'competitor - $75.00',
+            fields: [
+              { label: 'Member', value: 'John Smith' },
+              { label: 'Email', value: 'john.smith@example.com' },
+              { label: 'MECA ID', value: '100456' },
+              { label: 'Type', value: 'Competitor Annual' },
+              { label: 'Category', value: 'competitor' },
+              { label: 'Amount Paid', value: '$75.00' },
+              { label: 'Date', value: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+            ],
+            dashboardUrl: `${frontendUrl}/admin/members`,
+            dashboardLabel: 'View Members',
+          });
+          break;
+
+        case 'admin_new_shop_order':
+          result = await this.sendAdminAlertEmail({
+            to: toEmail,
+            title: 'New Shop Order #SHOP-2026-00042',
+            subtitle: '$129.95',
+            fields: [
+              { label: 'Order #', value: 'SHOP-2026-00042' },
+              { label: 'Customer', value: 'Jane Doe' },
+              { label: 'Email', value: 'jane.doe@example.com' },
+              { label: 'Items', value: '3' },
+              { label: 'Total', value: '$129.95' },
+              { label: 'Date', value: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+            ],
+            dashboardUrl: `${frontendUrl}/admin/shop/orders`,
+            dashboardLabel: 'View Orders',
+          });
+          break;
+
+        case 'admin_subscription_renewed':
+          result = await this.sendAdminAlertEmail({
+            to: toEmail,
+            title: 'Subscription Renewed: Mike Johnson',
+            subtitle: 'Extended to Apr 14, 2027',
+            fields: [
+              { label: 'Member', value: 'Mike Johnson' },
+              { label: 'MECA ID', value: '100789' },
+              { label: 'New End Date', value: 'Apr 14, 2027' },
+              { label: 'Subscription ID', value: 'sub_1PxYz2AbCdEfGh' },
+            ],
+            dashboardUrl: `${frontendUrl}/admin/members`,
+            dashboardLabel: 'View Members',
+          });
+          break;
+
+        case 'admin_subscription_cancelled':
+          result = await this.sendAdminAlertEmail({
+            to: toEmail,
+            title: 'Subscription Cancelled: Sarah Williams',
+            subtitle: 'MECA ID: 100234',
+            fields: [
+              { label: 'Member', value: 'Sarah Williams' },
+              { label: 'MECA ID', value: '100234' },
+              { label: 'Date', value: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+            ],
+            dashboardUrl: `${frontendUrl}/admin/members`,
+            dashboardLabel: 'View Members',
+          });
+          break;
+
+        case 'admin_membership_cancelled':
+          result = await this.sendAdminAlertEmail({
+            to: toEmail,
+            title: 'Membership Cancelled: Bob Anderson',
+            subtitle: 'MECA ID: 100567',
+            fields: [
+              { label: 'Member', value: 'Bob Anderson' },
+              { label: 'MECA ID', value: '100567' },
+              { label: 'Reason', value: 'Requested refund - moving out of state' },
+              { label: 'Date', value: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+            ],
+            dashboardUrl: `${frontendUrl}/admin/members`,
+            dashboardLabel: 'View Members',
+          });
+          break;
+
+        case 'admin_weekly_digest':
+          result = await this.sendAdminWeeklyDigestEmail({
+            to: toEmail,
+            dateRange: `${new Date(Date.now() - 7 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+            summaryCards: [
+              { label: 'New Members', value: '3', color: '#f97316' },
+              { label: 'Shop Orders', value: '2', color: '#3b82f6' },
+              { label: 'Revenue', value: '$515', color: '#22c55e' },
+              { label: 'Cancellations', value: '1', color: '#ef4444' },
+              { label: 'Upcoming Renewals', value: '2', color: '#eab308' },
+              { label: 'Expiring Soon', value: '1', color: '#ef4444' },
+            ],
+            sections: [
+              { title: 'New Memberships', count: 3, color: '#f97316', headers: ['Member', 'Type', 'Amount'], rows: [['John Smith', 'Competitor Annual', '$75.00'], ['Jane Doe', 'Retailer', '$200.00'], ['Mike Johnson', 'Competitor + Team', '$100.00']] },
+              { title: 'Shop Orders', count: 2, color: '#3b82f6', headers: ['Order #', 'Customer', 'Total'], rows: [['SHOP-2026-00040', 'Tom Brown', '$49.99'], ['SHOP-2026-00041', 'Lisa Chen', '$89.50']] },
+              { title: 'Cancellations', count: 1, color: '#ef4444', headers: ['Member', 'Reason', 'Date'], rows: [['Bob Anderson', 'Moving out of state', 'Apr 14, 2026']] },
+              { title: 'Upcoming Renewals (Next 30 Days)', count: 2, color: '#eab308', headers: ['Member', 'MECA ID', 'Renewal Date'], rows: [['Chris Evans', '100111', 'Apr 28, 2026'], ['Diana Prince', '100222', 'May 5, 2026']] },
+              { title: 'Expiring Soon - No Auto-Renewal (Next 30 Days)', count: 1, color: '#ef4444', headers: ['Member', 'MECA ID', 'Expiry Date'], rows: [['Bruce Wayne', '100333', 'Apr 21, 2026']] },
+            ],
+          });
+          break;
+
         default:
           return { success: false, message: `Unknown template key: ${templateKey}` };
       }
@@ -3748,6 +3854,140 @@ Fun, Fair, Loud and Clear!
       html,
       text,
       from: this.fromAddresses.events,
+    });
+  }
+
+  // ==========================================================================
+  // Admin Notification Email Templates
+  // ==========================================================================
+
+  async sendAdminAlertEmail(dto: {
+    to: string;
+    title: string;
+    subtitle?: string;
+    fields: Array<{ label: string; value: string }>;
+    dashboardUrl?: string;
+    dashboardLabel?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const subject = dto.title;
+
+    const fieldsHtml = dto.fields.map(f => `
+      <tr>
+        <td style="padding: 8px 0; color: #64748b; font-size: 14px; font-family: Arial, sans-serif; vertical-align: top; width: 140px;">${f.label}:</td>
+        <td style="padding: 8px 0; color: #1e293b; font-size: 14px; font-family: Arial, sans-serif; font-weight: bold; vertical-align: top;">${f.value}</td>
+      </tr>
+    `).join('');
+
+    const buttonHtml = dto.dashboardUrl
+      ? this.getEmailButton(dto.dashboardLabel || 'View in Dashboard', dto.dashboardUrl)
+      : '';
+
+    const html = `
+${this.getEmailHeaderHtml(dto.title, dto.subtitle || 'Admin Notification')}
+    <p style="font-size: 16px; font-family: Arial, sans-serif;">Hello Admin,</p>
+
+    <p style="font-family: Arial, sans-serif;">This is an automated notification from the MECA system.</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;">
+      <tr>
+        <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            ${fieldsHtml}
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    ${buttonHtml}
+${this.getEmailFooterHtml()}
+    `.trim();
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      from: this.fromAddresses.billing,
+    });
+  }
+
+  async sendAdminWeeklyDigestEmail(dto: {
+    to: string;
+    dateRange: string;
+    sections: Array<{
+      title: string;
+      count: number;
+      color: string;
+      rows?: Array<string[]>;
+      headers?: string[];
+      emptyMessage?: string;
+    }>;
+    summaryCards: Array<{ label: string; value: string; color: string }>;
+  }): Promise<{ success: boolean; error?: string }> {
+    const subject = `MECA Weekly Business Summary - ${dto.dateRange}`;
+
+    const cardsHtml = dto.summaryCards.map(card => `
+      <td style="padding: 5px; width: ${Math.floor(100 / dto.summaryCards.length)}%;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 10px;">
+              <p style="color: #64748b; font-size: 11px; margin: 0; text-transform: uppercase; font-family: Arial, sans-serif;">${card.label}</p>
+              <p style="color: ${card.color}; font-size: 26px; font-weight: bold; margin: 6px 0 0; font-family: Arial, sans-serif;">${card.value}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    `).join('');
+
+    const sectionsHtml = dto.sections.map(section => {
+      if (section.count === 0 && section.emptyMessage) {
+        return `
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+          <tr><td style="padding: 10px 0 5px;"><h3 style="margin: 0; color: #1e293b; font-size: 15px; font-family: Arial, sans-serif;">${section.title} (${section.count})</h3></td></tr>
+          <tr><td style="color: #94a3b8; font-size: 13px; font-family: Arial, sans-serif; padding: 8px 0;">${section.emptyMessage}</td></tr>
+        </table>`;
+      }
+      if (section.count === 0) return '';
+
+      const headerRow = section.headers ? `<tr style="border-bottom: 2px solid #e2e8f0;">
+        ${section.headers.map(h => `<th style="text-align: left; padding: 8px 10px; color: #64748b; font-size: 11px; font-weight: 600; font-family: Arial, sans-serif; text-transform: uppercase;">${h}</th>`).join('')}
+      </tr>` : '';
+
+      const dataRows = (section.rows || []).map(row => `<tr style="border-bottom: 1px solid #f1f5f9;">
+        ${row.map(cell => `<td style="padding: 7px 10px; color: #334155; font-size: 13px; font-family: Arial, sans-serif;">${cell}</td>`).join('')}
+      </tr>`).join('');
+
+      return `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr><td style="padding: 10px 0 5px;"><h3 style="margin: 0; color: #1e293b; font-size: 15px; font-family: Arial, sans-serif;">${section.title} (${section.count})</h3></td></tr>
+      </table>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px; border: 1px solid #e2e8f0;">
+        ${headerRow}
+        ${dataRows}
+      </table>`;
+    }).join('');
+
+    const html = `
+${this.getEmailHeaderHtml('Weekly Business Summary', dto.dateRange)}
+    <p style="font-size: 16px; font-family: Arial, sans-serif;">Hello Admin,</p>
+    <p style="font-family: Arial, sans-serif;">Here is your weekly business summary for MECA.</p>
+
+    <!-- Summary Cards -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;">
+      <tr>${cardsHtml}</tr>
+    </table>
+
+    <!-- Sections -->
+    ${sectionsHtml}
+
+    ${this.getEmailButton('View Billing Dashboard', 'https://mecacaraudio.com/admin/billing')}
+${this.getEmailFooterHtml()}
+    `.trim();
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      from: this.fromAddresses.billing,
     });
   }
 }

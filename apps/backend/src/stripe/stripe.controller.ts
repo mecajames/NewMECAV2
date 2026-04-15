@@ -36,6 +36,7 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
 import { WorldFinalsService } from '../world-finals/world-finals.service';
 import { PaymentFulfillmentService } from '../payments/payment-fulfillment.service';
@@ -136,6 +137,7 @@ export class StripeController {
     private readonly worldFinalsService: WorldFinalsService,
     private readonly paymentFulfillmentService: PaymentFulfillmentService,
     private readonly couponsService: CouponsService,
+    private readonly adminNotificationsService: AdminNotificationsService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -1304,6 +1306,12 @@ export class StripeController {
       membership.stripeSubscriptionId = undefined;
       await em.flush();
       console.log(`Cleared subscription from membership ${membership.id}`);
+
+      // Notify admins of subscription cancellation
+      await em.populate(membership, ['user', 'membershipTypeConfig']);
+      this.adminNotificationsService.notifySubscriptionCancelled(membership).catch((err) => {
+        console.error('Admin notification failed (non-critical):', err);
+      });
     }
   }
 
@@ -1360,6 +1368,12 @@ export class StripeController {
     await em.flush();
 
     console.log('Extended membership ' + membership.id + ' end_date: ' + oldEndStr + ' -> ' + newEndStr + ' (subscription: ' + subscriptionId + ')');
+
+    // Notify admins of subscription renewal
+    await em.populate(membership, ['user', 'membershipTypeConfig']);
+    this.adminNotificationsService.notifySubscriptionRenewal(membership, newEndDate).catch((err) => {
+      console.error('Admin notification failed (non-critical):', err);
+    });
   }
 
   /**

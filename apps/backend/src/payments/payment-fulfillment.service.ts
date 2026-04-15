@@ -20,6 +20,7 @@ import {
 } from '@newmeca/shared';
 import { Membership } from '../memberships/memberships.entity';
 import { Payment } from './payments.entity';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 /**
  * Payment-method-agnostic params for fulfillment.
@@ -47,6 +48,7 @@ export class PaymentFulfillmentService {
     private readonly quickBooksService: QuickBooksService,
     private readonly shopService: ShopService,
     private readonly worldFinalsService: WorldFinalsService,
+    private readonly adminNotificationsService: AdminNotificationsService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -99,6 +101,11 @@ export class PaymentFulfillmentService {
       });
 
       this.logger.log(`Membership created successfully for: ${email}`);
+
+      // Notify admins of new membership (async, non-blocking)
+      this.adminNotificationsService.notifyNewMembership(membership, amountPaid).catch((err) => {
+        this.logger.error(`Admin notification failed (non-critical): ${err}`);
+      });
 
       // Clear MECA ID invalidation flag on profile if it was set
       if (membership.mecaId) {
@@ -263,6 +270,11 @@ export class PaymentFulfillmentService {
       );
 
       this.logger.log(`Shop order ${order.orderNumber} marked as paid via ${params.paymentMethod} payment ${transactionId}`);
+
+      // Notify admins of new shop order (async, non-blocking)
+      this.adminNotificationsService.notifyNewShopOrder(order).catch((err) => {
+        this.logger.error(`Admin notification failed (non-critical): ${err}`);
+      });
 
       // Create billing Order and Invoice for the shop purchase
       try {
