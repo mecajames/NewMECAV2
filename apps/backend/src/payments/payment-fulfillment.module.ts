@@ -7,6 +7,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { ShopModule } from '../shop/shop.module';
 import { WorldFinalsModule } from '../world-finals/world-finals.module';
+import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { WorldFinalsModule } from '../world-finals/world-finals.module';
     InvoicesModule,
     forwardRef(() => ShopModule),
     forwardRef(() => WorldFinalsModule),
+    AdminNotificationsModule,
   ],
   providers: [PaymentFulfillmentService],
   exports: [PaymentFulfillmentService],
