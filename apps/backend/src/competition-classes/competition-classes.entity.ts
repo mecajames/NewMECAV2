@@ -25,6 +25,9 @@ export class CompetitionClass {
   @Property({ type: 'boolean', fieldName: 'is_active', serializedName: 'is_active' })
   isActive: boolean = true;
 
+  @Property({ type: 'boolean', fieldName: 'unlimited_wattage', serializedName: 'unlimited_wattage' })
+  unlimitedWattage: boolean = false;
+
   @Property({ type: 'integer', fieldName: 'display_order', serializedName: 'display_order' })
   displayOrder: number = 0;
 

@@ -46,6 +46,7 @@ import { ContactModule } from './contact/contact.module';
 import { WorldFinalsModule } from './world-finals/world-finals.module';
 import { AchievementsModule } from './achievements/achievements.module';
 import { ShopModule } from './shop/shop.module';
+import { CouponsModule } from './coupons/coupons.module';
 import { TrainingRecordsModule } from './training-records/training-records.module';
 import { ScheduledTasksModule } from './scheduled-tasks/scheduled-tasks.module';
 import { BannersModule } from './banners/banners.module';
@@ -125,6 +126,7 @@ import { QaModule } from './qa/qa.module';
     WorldFinalsModule,
     AchievementsModule,
     ShopModule,
+    CouponsModule,
     TrainingRecordsModule,
     ScheduledTasksModule,
     BannersModule,

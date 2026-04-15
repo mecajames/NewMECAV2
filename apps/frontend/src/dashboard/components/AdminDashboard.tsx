@@ -229,6 +229,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/billing',
         },
         {
+          icon: Tags,
+          title: 'Coupon Codes',
+          description: 'Create and manage discount coupon codes',
+          action: 'coupons',
+          color: 'emerald',
+          navigateTo: '/admin/coupons',
+        },
+        {
           icon: Star,
           title: 'Hall of Fame',
           description: 'Manage Hall of Fame inductees by category and year',

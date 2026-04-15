@@ -38,6 +38,7 @@ export interface CreatePaymentIntentDto {
   userId?: string;
   shippingMethod?: 'standard' | 'priority';
   shippingAmount?: number;
+  couponCode?: string;
 }
 
 export interface ShippingRate {

@@ -20,6 +20,7 @@ import {
 import { ShopAddress } from '@newmeca/shared';
 import { useCart } from '../context/CartContext';
 import { useTaxRate } from '@/hooks/useTaxRate';
+import { CouponInput } from '@/shared/components/CouponInput';
 import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { getStorageUrl } from '@/lib/storage';
@@ -307,11 +308,16 @@ export function CheckoutPage() {
   // Tax
   const { taxRate, calculateTax } = useTaxRate();
 
+  // Coupon
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
+
   // Get the selected shipping rate
   const selectedRate = shippingRates.find((r) => r.method === selectedShippingMethod);
   const shippingCost = selectedRate?.price || 0;
-  const taxAmount = calculateTax(subtotal);
-  const orderTotal = subtotal + shippingCost + taxAmount;
+  const discountedSubtotal = Math.max(0, subtotal - couponDiscount);
+  const taxAmount = calculateTax(discountedSubtotal);
+  const orderTotal = discountedSubtotal + shippingCost + taxAmount;
 
   // Pre-fill address from user profile
   useEffect(() => {
@@ -452,6 +458,7 @@ export function CheckoutPage() {
         userId: user?.id,
         shippingMethod: selectedShippingMethod,
         shippingAmount: shippingCost,
+        couponCode: couponCode || undefined,
       });
 
       setClientSecret(result.clientSecret);
@@ -728,11 +735,36 @@ export function CheckoutPage() {
                 ))}
               </div>
 
+              {/* Coupon Code */}
+              <div className="mb-4">
+                <CouponInput
+                  scope="shop"
+                  subtotal={subtotal}
+                  productIds={items.map(i => i.productId)}
+                  userId={user?.id}
+                  email={formData.email || undefined}
+                  onApply={(amount, code) => {
+                    setCouponDiscount(amount);
+                    setCouponCode(code);
+                  }}
+                  onRemove={() => {
+                    setCouponDiscount(0);
+                    setCouponCode('');
+                  }}
+                />
+              </div>
+
               <div className="border-t border-slate-700 pt-4 space-y-2">
                 <div className="flex justify-between text-gray-400">
                   <span>Subtotal</span>
                   <span>${subtotal.toFixed(2)}</span>
                 </div>
+                {couponDiscount > 0 && (
+                  <div className="flex justify-between text-green-400">
+                    <span>Discount</span>
+                    <span>-${couponDiscount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-400">
                   <span>Shipping</span>
                   {loadingRates ? (

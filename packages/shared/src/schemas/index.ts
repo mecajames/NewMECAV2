@@ -66,3 +66,6 @@ export * from "./spl-world-records.schema.js";
 
 // Hall of Fame
 export * from "./hall-of-fame.schema.js";
+
+// Coupons
+export * from "./coupons.schema.js";

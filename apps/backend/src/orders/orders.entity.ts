@@ -43,6 +43,9 @@ export class Order {
   @Property({ type: 'decimal', precision: 10, scale: 2, default: '0.00' })
   discount: string = '0.00';
 
+  @Property({ type: 'varchar', length: 50, nullable: true, fieldName: 'coupon_code', serializedName: 'coupon_code' })
+  couponCode?: string;
+
   @Property({ type: 'decimal', precision: 10, scale: 2 })
   total!: string;
 

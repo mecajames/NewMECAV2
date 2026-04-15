@@ -318,6 +318,7 @@ export class InvoicesService {
       subtotal: order.subtotal,
       tax: order.tax,
       discount: order.discount,
+      couponCode: order.couponCode || undefined,
       total: order.total,
       currency: order.currency,
       dueDate,

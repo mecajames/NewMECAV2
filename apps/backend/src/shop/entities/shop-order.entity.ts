@@ -40,6 +40,12 @@ export class ShopOrder {
   @Property({ type: 'decimal', precision: 5, scale: 4, fieldName: 'tax_rate', default: 0 })
   taxRate: number = 0;
 
+  @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'discount_amount', serializedName: 'discount_amount', default: 0 })
+  discountAmount: number = 0;
+
+  @Property({ type: 'varchar', length: 50, nullable: true, fieldName: 'coupon_code', serializedName: 'coupon_code' })
+  couponCode?: string;
+
   @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'total_amount' })
   totalAmount!: number;
 
