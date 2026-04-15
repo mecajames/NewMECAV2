@@ -46,6 +46,7 @@ import AdminMembershipWizard from '../components/AdminMembershipWizard';
 import { UserPlus } from 'lucide-react';
 import { teamsApi, Team } from '@/teams';
 import { moderationApi } from '@/api-client/moderation.api-client';
+import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
 import { notificationsApi } from '@/notifications/notifications.api-client';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
@@ -97,7 +98,7 @@ export default function MemberDetailPage() {
     first_name: '',
     last_name: '',
     phone: '',
-    role: 'user',
+    role: 'competitor',
   });
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -111,6 +112,9 @@ export default function MemberDetailPage() {
   const [sendPasswordEmail, setSendPasswordEmail] = useState(false);
   const [emailServiceConfigured, setEmailServiceConfigured] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
+
+  // Available roles from permissions system
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
 
   // Staff access modal
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -154,6 +158,9 @@ export default function MemberDetailPage() {
   } | null>(null);
 
   useEffect(() => {
+    // Fetch available roles from permissions system
+    permissionsApi.getRoles().then(setAvailableRoles).catch(() => {});
+
     if (memberId && !permLoading && !isCreateMode) {
       fetchMember();
       // Fetch memberships to compute derived status
@@ -676,10 +683,21 @@ export default function MemberDetailPage() {
                   onChange={(e) => setCreateFormData({ ...createFormData, role: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
-                  <option value="user">User</option>
-                  <option value="event_director">Event Director</option>
-                  <option value="retailer">Retailer</option>
-                  <option value="admin">Admin</option>
+                  {availableRoles.length > 0 ? (
+                    availableRoles.map((r) => (
+                      <option key={r.id} value={r.name}>{r.displayName}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="user">User</option>
+                      <option value="competitor">Competitor</option>
+                      <option value="event_director">Event Director</option>
+                      <option value="judge">Judge</option>
+                      <option value="retailer">Retailer</option>
+                      <option value="manufacturer">Manufacturer</option>
+                      <option value="admin">Admin</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -2740,10 +2758,21 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
                 onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
               >
-                <option value="user">User</option>
-                <option value="event_director">Event Director</option>
-                <option value="retailer">Retailer</option>
-                <option value="admin">Admin</option>
+                {availableRoles.length > 0 ? (
+                  availableRoles.map((r) => (
+                    <option key={r.id} value={r.name}>{r.displayName}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="user">User</option>
+                    <option value="competitor">Competitor</option>
+                    <option value="event_director">Event Director</option>
+                    <option value="judge">Judge</option>
+                    <option value="retailer">Retailer</option>
+                    <option value="manufacturer">Manufacturer</option>
+                    <option value="admin">Admin</option>
+                  </>
+                )}
               </select>
             ) : (
               <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{member.role}</div>

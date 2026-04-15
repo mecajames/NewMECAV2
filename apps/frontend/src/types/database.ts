@@ -1,5 +1,5 @@
 // Database Types
-export type UserRole = 'user' | 'event_director' | 'retailer' | 'admin';
+export { UserRole } from '@newmeca/shared';
 export type MembershipStatus = 'none' | 'active' | 'expired' | 'pending' | 'inactive';
 export type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled' | 'not_public';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'unpaid' | 'partially_paid';
