@@ -56,6 +56,7 @@ import { MemberGalleryModule } from './member-gallery/member-gallery.module';
 import { StandingsModule } from './standings/standings.module';
 import { ConstantContactModule } from './constant-contact/constant-contact.module';
 import { ModerationModule } from './moderation/moderation.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { FinalsVotingModule } from './finals-voting/finals-voting.module';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -134,6 +135,7 @@ import { QaModule } from './qa/qa.module';
     StandingsModule,
     ConstantContactModule,
     ModerationModule,
+    PermissionsModule,
     UploadsModule,
     FinalsVotingModule,
     AnalyticsModule,

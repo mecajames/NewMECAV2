@@ -5,6 +5,7 @@ import {
   ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Eye, X, Edit2, Trash2, Plus, Users,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { seasonsApi, Season } from '@/seasons';
 import axios from '@/lib/axios';
 import Pagination from '@/shared/components/Pagination';
@@ -93,7 +94,7 @@ export default function AuditLogAdminPage() {
   const [detailData, setDetailData] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = isAdminUser(profile);
 
   useEffect(() => {
     if (isAdmin) fetchSeasons();

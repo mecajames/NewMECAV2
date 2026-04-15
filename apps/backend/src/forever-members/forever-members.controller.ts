@@ -1,24 +1,29 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Headers, HttpCode, HttpStatus, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Public } from '../auth/public.decorator';
 import { ForeverMembersService } from './forever-members.service';
 import { ForeverMember } from './forever-members.entity';
+import { Profile } from '../profiles/profiles.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
-import { UserRole } from '@newmeca/shared';
+import { isAdminUser } from '../auth/is-admin.helper';
 
 @Controller('api/forever-members')
 export class ForeverMembersController {
   constructor(
     private readonly foreverMembersService: ForeverMembersService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly em: EntityManager,
   ) {}
 
   private async requireAdmin(authHeader?: string) {
-    if (!authHeader) throw new Error('Unauthorized');
+    if (!authHeader) throw new UnauthorizedException('No authorization provided');
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user } } = await this.supabaseAdmin.getClient().auth.getUser(token);
-    if (!user) throw new Error('Unauthorized');
-    const profile = await this.foreverMembersService['em'].fork().findOne('Profile', { id: user.id });
-    if (!profile || (profile as any).role !== UserRole.ADMIN) throw new Error('Forbidden');
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) throw new UnauthorizedException('Invalid token');
+    const profile = await this.em.fork().findOne(Profile, { id: user.id }, {
+      fields: ['id', 'role', 'is_staff', 'meca_id'] as any,
+    });
+    if (!profile || !isAdminUser(profile)) throw new ForbiddenException('Admin access required');
     return user;
   }
 

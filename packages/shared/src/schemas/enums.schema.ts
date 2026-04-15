@@ -5,10 +5,12 @@ import { z } from 'zod';
 // =============================================================================
 
 export enum UserRole {
-  USER = 'user',
+  USER = 'user',               // Legacy — maps to COMPETITOR
+  COMPETITOR = 'competitor',   // Replaces USER for membership clarity
   EVENT_DIRECTOR = 'event_director',
   JUDGE = 'judge',
   RETAILER = 'retailer',
+  MANUFACTURER = 'manufacturer',
   ADMIN = 'admin',
 }
 
