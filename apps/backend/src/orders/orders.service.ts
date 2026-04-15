@@ -257,6 +257,8 @@ export class OrdersService {
     guestName?: string;
     tax?: string;
     shipping?: string;
+    discount?: string;
+    couponCode?: string;
     shopOrderReference?: { shopOrderId: string; shopOrderNumber: string };
   }): Promise<Order> {
     const em = this.em.fork();
@@ -298,9 +300,10 @@ export class OrdersService {
     const { subtotal } = this.calculateTotals(data.items);
     const tax = data.tax || '0.00';
     const shipping = data.shipping || '0.00';
+    const discount = data.discount || '0.00';
     // Include shipping in total if provided (Order entity doesn't have a shipping column,
     // so shipping is embedded in total and noted in the notes field)
-    const total = (parseFloat(subtotal) + parseFloat(tax) + parseFloat(shipping)).toFixed(2);
+    const total = (parseFloat(subtotal) - parseFloat(discount) + parseFloat(tax) + parseFloat(shipping)).toFixed(2);
 
     // Create order - for guest orders, member can be null but we set guestEmail
     const orderData: Partial<Order> = {
@@ -309,7 +312,8 @@ export class OrdersService {
       orderType: data.orderType,
       subtotal,
       tax,
-      discount: '0.00',
+      discount,
+      couponCode: data.couponCode || undefined,
       total,
       currency: 'USD',
       notes: data.notes,

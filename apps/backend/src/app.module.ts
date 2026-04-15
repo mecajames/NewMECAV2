@@ -46,6 +46,7 @@ import { ContactModule } from './contact/contact.module';
 import { WorldFinalsModule } from './world-finals/world-finals.module';
 import { AchievementsModule } from './achievements/achievements.module';
 import { ShopModule } from './shop/shop.module';
+import { CouponsModule } from './coupons/coupons.module';
 import { TrainingRecordsModule } from './training-records/training-records.module';
 import { ScheduledTasksModule } from './scheduled-tasks/scheduled-tasks.module';
 import { BannersModule } from './banners/banners.module';
@@ -56,6 +57,7 @@ import { MemberGalleryModule } from './member-gallery/member-gallery.module';
 import { StandingsModule } from './standings/standings.module';
 import { ConstantContactModule } from './constant-contact/constant-contact.module';
 import { ModerationModule } from './moderation/moderation.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { FinalsVotingModule } from './finals-voting/finals-voting.module';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -124,6 +126,7 @@ import { QaModule } from './qa/qa.module';
     WorldFinalsModule,
     AchievementsModule,
     ShopModule,
+    CouponsModule,
     TrainingRecordsModule,
     ScheduledTasksModule,
     BannersModule,
@@ -134,6 +137,7 @@ import { QaModule } from './qa/qa.module';
     StandingsModule,
     ConstantContactModule,
     ModerationModule,
+    PermissionsModule,
     UploadsModule,
     FinalsVotingModule,
     AnalyticsModule,

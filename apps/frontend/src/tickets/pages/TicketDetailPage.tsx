@@ -3,6 +3,7 @@ import { useParams, useLocation } from 'react-router-dom';
 import { CheckCircle, Mail, X } from 'lucide-react';
 import { TicketDetail } from '../components/TicketDetail';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 
 export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -12,7 +13,7 @@ export function TicketDetailPage() {
   const [ticketNumber, setTicketNumber] = useState<string | null>(null);
 
   // Check if user is staff (admin or event_director)
-  const isStaff = profile?.role === 'admin' || profile?.role === 'event_director';
+  const isStaff = isAdminUser(profile) || profile?.role === 'event_director';
 
   // Show success banner when navigated from ticket creation
   useEffect(() => {

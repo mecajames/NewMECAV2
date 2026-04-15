@@ -17,6 +17,7 @@ import {
   TicketSystemSettings,
 } from '@/tickets';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 
 type TabId = 'tickets' | 'staff' | 'departments' | 'routing' | 'settings';
 
@@ -78,7 +79,7 @@ export function AdminTicketsPage() {
     );
   }
 
-  const isAdmin = profile.role === 'admin';
+  const isAdmin = isAdminUser(profile);
   const visibleTabs = tabs.filter((tab) => !tab.adminOnly || isAdmin);
 
   const renderTabContent = () => {

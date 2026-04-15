@@ -4,6 +4,7 @@ import { Trophy, Medal, Search, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'l
 import DOMPurify from 'dompurify';
 import { championshipArchivesApi, ChampionshipArchive, ChampionshipAward } from '@/championship-archives';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 
 /**
  * Fix mojibake characters from scraped HTML that was double-encoded
@@ -102,7 +103,7 @@ const archiveContentStyles = `
 export default function ChampionshipArchiveYearPage() {
   const { year } = useParams<{ year: string }>();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isAdminUser(user);
 
   const [archive, setArchive] = useState<ChampionshipArchive | null>(null);
   const [results, setResults] = useState<any>({});

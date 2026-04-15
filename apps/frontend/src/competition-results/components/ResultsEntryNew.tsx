@@ -78,6 +78,7 @@ interface UserDecision {
 
 type EntryMethod = 'manual' | 'excel' | 'termlab';
 
+
 export default function ResultsEntryNew({ initialEventId }: { initialEventId?: string } = {}) {
   const { profile } = useAuth();
 
@@ -746,6 +747,13 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       if (selectedClass) {
         updated.competition_class = selectedClass.name;
         updated.format = selectedClass.format;
+        // Auto-populate wattage for unlimited power classes
+        if (selectedClass.unlimited_wattage) {
+          updated.wattage = -1;
+        } else if (updated.wattage === -1 || updated.wattage === '-1') {
+          // Clear the unlimited sentinel if switching to a non-unlimited class
+          updated.wattage = '';
+        }
       }
     }
 
@@ -760,6 +768,12 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   // Check if wattage/frequency is required for this class
   const isWattageFrequencyRequired = (format: string, className: string): boolean => {
     if (format !== 'SPL') return false;
+    // Check unlimited_wattage flag from competition class data
+    const matchedClass = competitionClasses.find(
+      c => c.name.toLowerCase() === className.toLowerCase() ||
+           c.abbreviation.toLowerCase() === className.toLowerCase()
+    );
+    if (matchedClass?.unlimited_wattage) return false;
     // Only Dueling Demos classes are exempt from wattage/frequency requirement
     const exemptClasses = ['dueling demos'];
     const classLower = className.toLowerCase();
@@ -1313,13 +1327,22 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                       <label className="block text-xs text-gray-400 mb-1">
                         Wattage (W){isWattageFrequencyRequired(currentEntry.format, currentEntry.competition_class) && <span className="text-orange-400"> *</span>}
                       </label>
-                      <input
-                        type="number"
-                        value={currentEntry.wattage}
-                        onChange={(e) => updateField('wattage', e.target.value)}
-                        placeholder="6000"
-                        className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                      />
+                      {currentEntry.wattage === -1 || currentEntry.wattage === '-1' ? (
+                        <input
+                          type="text"
+                          value="Unlimited"
+                          disabled
+                          className="w-full px-2 py-1.5 bg-slate-600 border border-slate-500 rounded text-orange-400 text-sm font-semibold cursor-not-allowed"
+                        />
+                      ) : (
+                        <input
+                          type="number"
+                          value={currentEntry.wattage}
+                          onChange={(e) => updateField('wattage', e.target.value)}
+                          placeholder="6000"
+                          className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm"
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs text-gray-400 mb-1">
@@ -1698,7 +1721,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                     <td className="px-3 py-2 text-white">{result.format || '-'}</td>
                     <td className="px-3 py-2 text-white">{result.competition_class || '-'}</td>
                     <td className="px-3 py-2 text-white">{result.score || '-'}</td>
-                    <td className="px-3 py-2 text-white">{result.wattage || '-'}</td>
+                    <td className="px-3 py-2 text-white">{result.wattage === -1 ? <span className="text-orange-400 font-semibold">Unlimited</span> : (result.wattage || '-')}</td>
                     <td className="px-3 py-2 text-white">{result.frequency || '-'}</td>
                     <td className="px-3 py-2 text-white font-semibold">{result.placement || '-'}</td>
                     <td className="px-3 py-2 text-orange-400 font-semibold">{result.points_earned || '0'}</td>
@@ -1954,13 +1977,22 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Wattage (W)</label>
-                  <input
-                    type="number"
-                    value={editingResult.wattage}
-                    onChange={(e) => setEditingResult({...editingResult, wattage: e.target.value})}
-                    placeholder="e.g., 6000"
-                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
-                  />
+                  {editingResult.wattage === -1 || editingResult.wattage === '-1' ? (
+                    <input
+                      type="text"
+                      value="Unlimited"
+                      disabled
+                      className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-orange-400 font-semibold cursor-not-allowed"
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      value={editingResult.wattage}
+                      onChange={(e) => setEditingResult({...editingResult, wattage: e.target.value})}
+                      placeholder="e.g., 6000"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Frequency (Hz)</label>
@@ -2145,7 +2177,9 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                           <td className="px-3 py-2 text-white">{item.data.class}</td>
                           <td className="px-3 py-2 text-white">{item.data.score}</td>
                           <td className="px-3 py-2">
-                            {item.missingFields.includes('wattage') ? (
+                            {item.data.wattage === -1 ? (
+                              <span className="text-orange-400 font-semibold">Unlimited</span>
+                            ) : item.missingFields.includes('wattage') ? (
                               <input
                                 type="number"
                                 value={decision?.wattage || ''}

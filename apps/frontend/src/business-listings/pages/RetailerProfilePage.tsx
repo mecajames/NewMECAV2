@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { getRetailerById, updateMyRetailerListing, adminUpdateRetailer, RetailerListing } from '@/business-listings';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { getStorageUrl } from '@/lib/storage';
 import { SEOHead, useRetailerProfileSEO } from '@/shared/seo';
 
@@ -51,7 +52,7 @@ export default function RetailerProfilePage() {
 
   // Check if logged-in user is the retailer owner or an admin
   const isOwner = user?.id && retailer?.user?.id && user.id === retailer.user.id;
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = isAdminUser(profile);
   const canEdit = isOwner || isAdmin;
 
   useEffect(() => {

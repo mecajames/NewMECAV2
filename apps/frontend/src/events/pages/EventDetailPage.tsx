@@ -4,6 +4,7 @@ import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, Trendin
 import { eventsApi, Event, EventAssignmentManager } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { usePermissions } from '@/auth';
 import { EventRatingsPanel } from '@/ratings';
 import { ratingsApi } from '@/api-client/ratings.api-client';
@@ -44,7 +45,7 @@ export default function EventDetailPage() {
   const [showFlyerLightbox, setShowFlyerLightbox] = useState(false);
 
   // Check if user is admin
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = isAdminUser(profile);
 
   // Track if user participated in this event (for ratings)
   const [userParticipated, setUserParticipated] = useState(false);
@@ -745,7 +746,7 @@ export default function EventDetailPage() {
             )}
 
             {/* Check-In Button for Event Directors/Admins Only */}
-            {(profile?.role === 'admin' || profile?.role === 'event_director') && (event.status === 'upcoming' || event.status === 'ongoing') && (
+            {(isAdminUser(profile) || profile?.role === 'event_director') && (event.status === 'upcoming' || event.status === 'ongoing') && (
               <button
                 onClick={() => navigate(`/events/${eventId}/check-in`)}
                 className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-lg transition-colors flex items-center justify-center gap-2"

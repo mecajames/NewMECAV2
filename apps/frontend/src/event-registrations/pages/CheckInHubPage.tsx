@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { QrCode, Calendar, MapPin, ArrowLeft, Loader2, Search, Filter } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { seasonsApi, Season } from '@/seasons';
 
@@ -17,7 +18,7 @@ export default function CheckInHubPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Check if user has permission (admin or event_director only)
-  const hasPermission = profile?.role === 'admin' || profile?.role === 'event_director';
+  const hasPermission = isAdminUser(profile) || profile?.role === 'event_director';
 
   useEffect(() => {
     if (!authLoading && hasPermission) {

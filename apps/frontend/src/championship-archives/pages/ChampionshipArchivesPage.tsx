@@ -3,13 +3,14 @@ import { Link } from 'react-router-dom';
 import { Trophy, Calendar } from 'lucide-react';
 import { championshipArchivesApi, ChampionshipArchive } from '@/championship-archives';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 
 export default function ChampionshipArchivesPage() {
   const { user } = useAuth();
   const [archives, setArchives] = useState<ChampionshipArchive[]>([]);
   const [loading, setLoading] = useState(true);
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isAdminUser(user);
   const seoProps = useStaticPageSEO('championshipArchives');
 
   useEffect(() => {

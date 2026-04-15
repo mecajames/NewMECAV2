@@ -12,6 +12,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ShopModule } from '../shop/shop.module';
 import { SiteSettingsModule } from '../site-settings/site-settings.module';
 import { WorldFinalsModule } from '../world-finals/world-finals.module';
+import { CouponsModule } from '../coupons/coupons.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { WorldFinalsModule } from '../world-finals/world-finals.module';
     forwardRef(() => ShopModule),
     SiteSettingsModule,
     forwardRef(() => WorldFinalsModule),
+    CouponsModule,
   ],
   providers: [StripeService],
   controllers: [StripeController],

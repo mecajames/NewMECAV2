@@ -36,6 +36,7 @@ export default function ClassesManagementPage() {
     format: 'SPL' as CompetitionFormat,
     season_id: '',
     is_active: true,
+    unlimited_wattage: false,
     display_order: 0,
   });
 
@@ -47,7 +48,7 @@ export default function ClassesManagementPage() {
   // Auto-select current season when seasons are loaded
   useEffect(() => {
     if (seasons.length > 0 && !selectedSeasonId) {
-      const currentSeason = seasons.find(s => s.isCurrent);
+      const currentSeason = seasons.find(s => s.isCurrent || s.is_current);
       if (currentSeason) {
         setSelectedSeasonId(currentSeason.id);
       } else {
@@ -163,6 +164,7 @@ export default function ClassesManagementPage() {
           abbreviation: formData.abbreviation,
           format: formData.format,
           is_active: formData.is_active,
+          unlimited_wattage: formData.unlimited_wattage,
           display_order: formData.display_order,
         });
         alert('Class updated successfully!');
@@ -173,6 +175,7 @@ export default function ClassesManagementPage() {
           format: formData.format,
           season_id: formData.season_id,
           is_active: formData.is_active,
+          unlimited_wattage: formData.unlimited_wattage,
           display_order: formData.display_order,
         });
         alert('Class created successfully!');
@@ -193,6 +196,7 @@ export default function ClassesManagementPage() {
       format: classItem.format as CompetitionFormat,
       season_id: classItem.season_id,
       is_active: classItem.is_active,
+      unlimited_wattage: classItem.unlimited_wattage ?? false,
       display_order: classItem.display_order,
     });
     setShowForm(true);
@@ -280,6 +284,7 @@ export default function ClassesManagementPage() {
       format: selectedFormat as CompetitionFormat || 'SPL',
       season_id: selectedSeasonId || currentSeason?.id || '',
       is_active: true,
+      unlimited_wattage: false,
       display_order: classes.length,
     });
     setEditingClass(null);
@@ -502,7 +507,7 @@ export default function ClassesManagementPage() {
                     </div>
                   </div>
 
-                  <div>
+                  <div className="flex gap-6">
                     <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
                       <input
                         type="checkbox"
@@ -511,6 +516,16 @@ export default function ClassesManagementPage() {
                         className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-orange-600 focus:ring-orange-500"
                       />
                       <span>Active</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.unlimited_wattage}
+                        onChange={(e) => setFormData({ ...formData, unlimited_wattage: e.target.checked })}
+                        className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-orange-600 focus:ring-orange-500"
+                      />
+                      <span>Unlimited Wattage</span>
+                      <span className="text-xs text-gray-500">(auto-fills &quot;Unlimited&quot; for wattage in results)</span>
                     </label>
                   </div>
 
@@ -575,15 +590,22 @@ export default function ClassesManagementPage() {
                         </td>
                         <td className="px-6 py-4 text-gray-300 text-sm">{classItem.format}</td>
                         <td className="px-6 py-4">
-                          {classItem.is_active ? (
-                            <span className="px-3 py-1 bg-green-500/10 text-green-400 text-xs font-semibold rounded-full">
-                              Active
-                            </span>
-                          ) : (
-                            <span className="px-3 py-1 bg-gray-500/10 text-gray-400 text-xs font-semibold rounded-full">
-                              Inactive
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {classItem.is_active ? (
+                              <span className="px-3 py-1 bg-green-500/10 text-green-400 text-xs font-semibold rounded-full">
+                                Active
+                              </span>
+                            ) : (
+                              <span className="px-3 py-1 bg-gray-500/10 text-gray-400 text-xs font-semibold rounded-full">
+                                Inactive
+                              </span>
+                            )}
+                            {classItem.unlimited_wattage && (
+                              <span className="px-3 py-1 bg-orange-500/10 text-orange-400 text-xs font-semibold rounded-full">
+                                Unlimited W
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">

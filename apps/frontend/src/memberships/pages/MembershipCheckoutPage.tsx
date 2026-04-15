@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { useTaxRate } from '@/hooks/useTaxRate';
+import { CouponInput } from '@/shared/components/CouponInput';
 import { newsletterApi } from '@/newsletter';
 import {
   membershipTypeConfigsApi,
@@ -135,6 +136,8 @@ export default function MembershipCheckoutPage() {
   const { user, profile, signUp } = useAuth();
 
   const { taxRate, calculateTax } = useTaxRate();
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<SelectedPaymentMethod>('stripe');
   const [membership, setMembership] = useState<MembershipTypeConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -352,6 +355,7 @@ export default function MembershipCheckoutPage() {
           teamDescription: formData.teamDescription || undefined,
           businessName: formData.businessName || undefined,
           businessWebsite: formData.businessWebsite || undefined,
+          couponCode: couponCode || undefined,
       });
 
       const { clientSecret: secret } = response.data;
@@ -1284,11 +1288,35 @@ export default function MembershipCheckoutPage() {
                 </div>
               )}
 
+              <div className="mb-4">
+                <CouponInput
+                  scope="membership"
+                  subtotal={membership.price}
+                  membershipTypeConfigId={membership.id}
+                  userId={user?.id}
+                  email={formData.email || undefined}
+                  onApply={(amount, code) => {
+                    setCouponDiscount(amount);
+                    setCouponCode(code);
+                  }}
+                  onRemove={() => {
+                    setCouponDiscount(0);
+                    setCouponCode('');
+                  }}
+                />
+              </div>
+
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Membership</span>
                   <span className="text-white">${membership.price.toFixed(2)}</span>
                 </div>
+                {couponDiscount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-400">Discount</span>
+                    <span className="text-green-400">-${couponDiscount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Duration</span>
                   <span className="text-white">12 months</span>
@@ -1296,7 +1324,7 @@ export default function MembershipCheckoutPage() {
                 {taxRate > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Tax ({(taxRate * 100).toFixed(0)}%)</span>
-                    <span className="text-white">${calculateTax(membership.price).toFixed(2)}</span>
+                    <span className="text-white">${calculateTax(Math.max(0, membership.price - couponDiscount)).toFixed(2)}</span>
                   </div>
                 )}
               </div>
@@ -1305,7 +1333,7 @@ export default function MembershipCheckoutPage() {
                 <div className="flex justify-between">
                   <span className="text-lg font-semibold text-white">Total</span>
                   <span className="text-lg font-bold text-orange-500">
-                    ${(membership.price + calculateTax(membership.price)).toFixed(2)}
+                    ${(Math.max(0, membership.price - couponDiscount) + calculateTax(Math.max(0, membership.price - couponDiscount))).toFixed(2)}
                   </span>
                 </div>
               </div>
