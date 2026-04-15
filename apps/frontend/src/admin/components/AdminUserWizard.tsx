@@ -35,9 +35,10 @@ import { membershipTypeConfigsApi, MembershipTypeConfig, MembershipCategory, Man
 import { membershipsApi, AdminPaymentMethod, AdminCreateMembershipDto, AdminCreateMembershipResult, Membership, MembershipAccountType } from '@/memberships';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
 
+import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
+
 // User types
 type UserType = 'staff' | 'membership';
-type StaffRole = 'admin' | 'event_director' | 'judge';
 
 interface AdminUserWizardProps {
   isOpen: boolean;
@@ -79,7 +80,7 @@ interface FormData {
   forcePasswordChange: boolean;
   sendEmail: boolean;
   // Staff role
-  staffRole: StaffRole | null;
+  staffRole: string | null;
   // Whether to also add membership (for staff users)
   addMembership: boolean;
   // Membership fields (for membership users)
@@ -178,6 +179,7 @@ export default function AdminUserWizard({
   const [showPassword, setShowPassword] = useState(false);
   const [emailServiceConfigured, setEmailServiceConfigured] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [membershipTypes, setMembershipTypes] = useState<MembershipTypeConfig[]>([]);
   const [selectedMembershipType, setSelectedMembershipType] = useState<MembershipTypeConfig | null>(null);
   const [loadingMembershipTypes, setLoadingMembershipTypes] = useState(false);
@@ -192,6 +194,11 @@ export default function AdminUserWizard({
   const [masterSearchResults, setMasterSearchResults] = useState<MasterMembershipSearch[]>([]);
   const [selectedMaster, setSelectedMaster] = useState<MasterMembershipSearch | null>(null);
   const [searchingMaster, setSearchingMaster] = useState(false);
+
+  // Load roles from DB
+  useEffect(() => {
+    permissionsApi.getRoles().then(setAvailableRoles).catch(console.error);
+  }, []);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -747,31 +754,18 @@ export default function AdminUserWizard({
     }
   };
 
-  const getRoleDisplayName = (role: StaffRole): string => {
-    switch (role) {
-      case 'admin':
-        return 'Administrator';
-      case 'event_director':
-        return 'Event Director';
-      case 'judge':
-        return 'Judge';
-      default:
-        return role;
-    }
+  const getRoleDisplayName = (roleName: string): string => {
+    const role = availableRoles.find((r) => r.name === roleName);
+    return role?.displayName || roleName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
-  const getRoleDescription = (role: StaffRole): string => {
-    switch (role) {
-      case 'admin':
-        return 'Full access to all system features and settings';
-      case 'event_director':
-        return 'Can create and manage events, view registrations';
-      case 'judge':
-        return 'Can score competitors at events';
-      default:
-        return '';
-    }
+  const getRoleDescription = (roleName: string): string => {
+    const role = availableRoles.find((r) => r.name === roleName);
+    return role?.description || '';
   };
+
+  // Staff-assignable roles from the database (exclude system roles users shouldn't self-assign)
+  const staffRoles = availableRoles.filter((r) => !['user', 'competitor'].includes(r.name));
 
   if (!isOpen) return null;
 
@@ -1192,22 +1186,22 @@ export default function AdminUserWizard({
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white mb-4">Select Role</h3>
 
-              {(['admin', 'event_director', 'judge'] as StaffRole[]).map((role) => (
+              {staffRoles.map((role) => (
                 <button
-                  key={role}
-                  onClick={() => handleInputChange('staffRole', role)}
+                  key={role.name}
+                  onClick={() => handleInputChange('staffRole', role.name)}
                   className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
-                    formData.staffRole === role
+                    formData.staffRole === role.name
                       ? 'border-orange-500 bg-orange-500/10'
                       : 'border-slate-600 hover:border-slate-500'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-semibold text-white">{getRoleDisplayName(role)}</h4>
-                      <p className="text-sm text-gray-400 mt-1">{getRoleDescription(role)}</p>
+                      <h4 className="font-semibold text-white">{role.displayName}</h4>
+                      {role.description && <p className="text-sm text-gray-400 mt-1">{role.description}</p>}
                     </div>
-                    {formData.staffRole === role && (
+                    {formData.staffRole === role.name && (
                       <Check className="h-5 w-5 text-orange-500" />
                     )}
                   </div>

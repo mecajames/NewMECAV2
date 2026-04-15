@@ -3,7 +3,7 @@ import { Migration } from '@mikro-orm/migrations';
 export class Migration20260324200000_world_finals_multi_packages extends Migration {
   override async up(): Promise<void> {
     // Drop old single-package table and recreate for multi-package support
-    this.addSql(`DROP TABLE IF EXISTS "public"."world_finals_packages";`);
+    this.addSql(`DROP TABLE IF EXISTS "public"."world_finals_packages" CASCADE;`);
 
     // New packages table — multiple per season
     this.addSql(`

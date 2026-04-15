@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from './contexts/AuthContext';
+import { permissionsApi, type Permission } from '@/api-client/permissions.api-client';
 
 /**
- * Hook to check if the current user has a specific permission
+ * Hook to check if the current user has a specific permission.
+ *
+ * Loads effective permissions from the backend (role_permissions + user_permission_overrides).
+ * Admins/staff get wildcard '*' (all permissions).
  *
  * Usage:
- * const { hasPermission, loading } = usePermissions();
- * if (hasPermission('edit_user')) {
- *   // Show edit button
- * }
+ *   const { hasPermission, isAdmin, loading } = usePermissions();
+ *   if (hasPermission('edit_user')) { ... }
  */
 export function usePermissions() {
   const { user, profile } = useAuth();
@@ -23,44 +24,56 @@ export function usePermissions() {
       return;
     }
 
+    let cancelled = false;
+
+    const fetchPermissions = async () => {
+      try {
+        const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
+
+        if (isAdmin) {
+          // Admins/staff get wildcard
+          if (!cancelled) {
+            setPermissions(new Set(['*']));
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Fetch effective permissions from backend
+        const result = await permissionsApi.getMyPermissions();
+        if (!cancelled) {
+          setPermissions(new Set(result.permissions));
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error fetching permissions:', error);
+        if (!cancelled) {
+          setPermissions(new Set());
+          setLoading(false);
+        }
+      }
+    };
+
     fetchPermissions();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, profile]);
 
-  const fetchPermissions = async () => {
-    if (!user) return;
-
-    try {
-      // If user is admin (by role or is_staff flag), they have all permissions
-      if (profile?.role === 'admin' || profile?.is_staff === true) {
-        // Admins/staff have all permissions - just set a wildcard
-        setPermissions(new Set(['*'])); // Wildcard means all permissions
-        setLoading(false);
-        return;
-      }
-
-      // For non-admin users, just set empty permissions for now
-      // The role_permissions and user_permission_overrides tables don't exist yet
-      // When the permission system is fully implemented, uncomment the code below
-      setPermissions(new Set<string>());
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching permissions:', error);
-      setLoading(false);
-    }
-  };
-
   const hasPermission = (permissionName: string): boolean => {
-    // Admins have all permissions
     if (permissions.has('*')) return true;
     return permissions.has(permissionName);
   };
 
   const hasAnyPermission = (permissionNames: string[]): boolean => {
-    return permissionNames.some(name => permissions.has(name));
+    if (permissions.has('*')) return true;
+    return permissionNames.some((name) => permissions.has(name));
   };
 
   const hasAllPermissions = (permissionNames: string[]): boolean => {
-    return permissionNames.every(name => permissions.has(name));
+    if (permissions.has('*')) return true;
+    return permissionNames.every((name) => permissions.has(name));
   };
 
   return {
@@ -74,10 +87,11 @@ export function usePermissions() {
 }
 
 /**
- * Hook to get all available permissions (for admin permission management UI)
+ * Hook to get all available permissions (for admin permission management UI).
+ * Fetches from the backend API.
  */
 export function useAllPermissions() {
-  const [permissions, setPermissions] = useState<any[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -86,43 +100,15 @@ export function useAllPermissions() {
 
   const fetchAllPermissions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('permissions')
-        .select('*')
-        .order('category, name');
-
-      if (error) throw error;
-
-      setPermissions(data || []);
-      setLoading(false);
+      setLoading(true);
+      const data = await permissionsApi.getAll();
+      setPermissions(data);
     } catch (error) {
       console.error('Error fetching all permissions:', error);
+    } finally {
       setLoading(false);
     }
   };
 
   return { permissions, loading, refresh: fetchAllPermissions };
-}
-
-/**
- * Hook to check permission via database function (server-side check)
- * Use this for critical operations where you need server validation
- */
-export async function checkPermissionServerSide(permissionName: string): Promise<boolean> {
-  try {
-    const { data, error } = await supabase.rpc('check_user_permission', {
-      p_user_id: (await supabase.auth.getUser()).data.user?.id,
-      p_permission_name: permissionName,
-    });
-
-    if (error) {
-      console.error('Error checking permission:', error);
-      return false;
-    }
-
-    return data === true;
-  } catch (error) {
-    console.error('Error checking permission:', error);
-    return false;
-  }
 }

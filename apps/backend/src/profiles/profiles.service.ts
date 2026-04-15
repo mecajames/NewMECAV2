@@ -2,7 +2,9 @@ import { Injectable, Inject, NotFoundException, BadRequestException, Logger } fr
 import { EntityManager, raw } from '@mikro-orm/core';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
+import { Role } from '../permissions/permission.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { isAdminUser } from '../auth/is-admin.helper';
 import { EmailService } from '../email/email.service';
 import { generateSecurePassword, validatePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { AccountType } from '@newmeca/shared';
@@ -245,6 +247,14 @@ export class ProfilesService {
       }
       if ('role' in data && data.role !== 'admin') {
         delete (data as any).role;
+      }
+    }
+
+    // Validate role exists in the roles table
+    if ('role' in data && data.role) {
+      const roleRecord = await em.findOne(Role, { name: data.role });
+      if (!roleRecord) {
+        throw new BadRequestException(`Invalid role "${data.role}". Role does not exist.`);
       }
     }
 
@@ -523,6 +533,14 @@ export class ProfilesService {
         mecaId = await this.generateNextMecaId();
       }
 
+      // Validate role exists in the roles table
+      if (dto.role) {
+        const roleRecord = await em.findOne(Role, { name: dto.role });
+        if (!roleRecord) {
+          throw new BadRequestException(`Invalid role "${dto.role}". Role does not exist.`);
+        }
+      }
+
       const now = new Date();
       const fullName = [dto.firstName, dto.lastName].filter(Boolean).join(' ').trim() || dto.email;
       const profile = em.create(Profile, {
@@ -532,10 +550,10 @@ export class ProfilesService {
         last_name: dto.lastName,
         full_name: fullName,
         phone: dto.phone,
-        role: dto.role || 'user',
+        role: dto.role || 'competitor',
         membership_status: 'none',
         meca_id: mecaId,
-        is_staff: dto.role === 'admin',
+        is_staff: isAdminUser({ role: dto.role }),
         force_password_change: dto.forcePasswordChange ?? false,
         account_type: AccountType.MEMBER,
         can_apply_judge: false,

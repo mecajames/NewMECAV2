@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Trophy, Award, User, MapPin, ArrowLeft, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { profilesApi, Profile } from '@/profiles';
@@ -31,7 +32,7 @@ export default function MemberResultsPage() {
     if (!currentUserProfile) return false;
     if (currentUserProfile.membership_status === 'active') return true;
     // Also allow admins
-    if (currentUserProfile.role === 'admin') return true;
+    if (isAdminUser(currentUserProfile)) return true;
     return false;
   }, [currentUserProfile]);
 

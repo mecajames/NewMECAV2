@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getManufacturerById, updateMyManufacturerListing, adminUpdateManufacturer, ManufacturerListing } from '@/business-listings';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { getStorageUrl } from '@/lib/storage';
 
 export default function ManufacturerProfilePage() {
@@ -36,7 +37,7 @@ export default function ManufacturerProfilePage() {
 
   // Check if logged-in user is the manufacturer owner or an admin
   const isOwner = user?.id && manufacturer?.user?.id && user.id === manufacturer.user.id;
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = isAdminUser(profile);
   const canEdit = isOwner || isAdmin;
 
   useEffect(() => {

@@ -101,8 +101,9 @@ export class UploadsController {
       );
     }
 
+    const admin = isAdminUser(profile);
     this.logger.log(
-      `Upload request from ${profile.email} (${profile.role}) to "${destination}" — ${file.originalname} (${file.size} bytes) subfolder="${subfolder || ''}" preserveFilename="${preserveFilename}"`,
+      `Upload request from ${profile.email} (role=${profile.role}, is_staff=${profile.is_staff}, isAdmin=${admin}) to "${destination}" — ${file.originalname} (${file.size} bytes) subfolder="${subfolder || ''}" preserveFilename="${preserveFilename}"`,
     );
 
     // Delegate to service (handles auth checks, validation, and upload)
@@ -110,7 +111,7 @@ export class UploadsController {
       file,
       destination,
       profile.id,
-      profile.role || 'user',
+      admin,
       entityId,
       subfolder,
       preserveFilename === 'true',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import axios from '@/lib/axios';
 
 export default function CardRedirectPage() {
@@ -29,7 +30,7 @@ export default function CardRedirectPage() {
           return;
         }
 
-        if (profile?.role === 'admin') {
+        if (isAdminUser(profile)) {
           // Admin: go to admin member detail page
           // We need the profile ID of the membership owner
           const membershipResponse = await axios.get(`/api/memberships/${membershipId}`);

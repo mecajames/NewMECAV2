@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { isAdminUser } from '@/auth/isAdminUser';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { eventRegistrationsApi, CheckInResponse } from '@/event-registrations';
 
@@ -56,7 +57,7 @@ export default function EventCheckInPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Check if user has permission (admin or event_director only)
-  const hasCheckInPermission = profile?.role === 'admin' || profile?.role === 'event_director';
+  const hasCheckInPermission = isAdminUser(profile) || profile?.role === 'event_director';
 
   useEffect(() => {
     if (eventId) {

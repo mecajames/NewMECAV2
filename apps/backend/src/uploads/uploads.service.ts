@@ -1,6 +1,5 @@
 import { Injectable, Logger, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
-import { UserRole } from '@newmeca/shared';
 
 /**
  * Defines upload destinations with their bucket, folder, and access rules.
@@ -179,7 +178,7 @@ export class UploadsService {
    * @param file - The uploaded file from multer
    * @param destination - A key from UPLOAD_DESTINATIONS (e.g., 'product-images')
    * @param userId - The authenticated user's ID
-   * @param userRole - The authenticated user's role
+   * @param isAdmin - Whether the user has admin/staff access
    * @param entityId - Optional entity ID for scoping (e.g., team ID for team uploads)
    * @param subfolder - Optional subfolder within the destination folder (e.g., 'faq-docs')
    * @param preserveFilename - If true (admin only), use the original filename instead of generating a unique one
@@ -188,7 +187,7 @@ export class UploadsService {
     file: Express.Multer.File,
     destination: string,
     userId: string,
-    userRole: string,
+    isAdmin: boolean,
     entityId?: string,
     subfolder?: string,
     preserveFilename?: boolean,
@@ -202,7 +201,7 @@ export class UploadsService {
     }
 
     // 2. Check authorization
-    if (dest.adminOnly && userRole !== UserRole.ADMIN) {
+    if (dest.adminOnly && !isAdmin) {
       throw new ForbiddenException(`Admin access required to upload to "${destination}"`);
     }
 
