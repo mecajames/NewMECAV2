@@ -1,6 +1,5 @@
 import axios from '@/lib/axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface Role {
   id: string;
@@ -43,48 +42,48 @@ export interface EffectivePermissions {
 export const permissionsApi = {
   // Permissions CRUD
   // Roles CRUD
-  getRoles: () => axios.get<Role[]>(`${API_URL}/api/permissions/roles`).then((r) => r.data),
+  getRoles: () => axios.get<Role[]>(`/api/permissions/roles`).then((r) => r.data),
   createRole: (data: { name: string; displayName: string; description?: string }) =>
-    axios.post<Role>(`${API_URL}/api/permissions/roles`, data).then((r) => r.data),
+    axios.post<Role>(`/api/permissions/roles`, data).then((r) => r.data),
   updateRole: (id: string, data: { displayName?: string; description?: string }) =>
-    axios.put<Role>(`${API_URL}/api/permissions/roles/${id}`, data).then((r) => r.data),
-  deleteRole: (id: string) => axios.delete(`${API_URL}/api/permissions/roles/${id}`),
+    axios.put<Role>(`/api/permissions/roles/${id}`, data).then((r) => r.data),
+  deleteRole: (id: string) => axios.delete(`/api/permissions/roles/${id}`),
 
   // Permissions CRUD
-  getAll: () => axios.get<Permission[]>(`${API_URL}/api/permissions`).then((r) => r.data),
+  getAll: () => axios.get<Permission[]>(`/api/permissions`).then((r) => r.data),
   getByCategory: (category: string) =>
-    axios.get<Permission[]>(`${API_URL}/api/permissions/category/${category}`).then((r) => r.data),
+    axios.get<Permission[]>(`/api/permissions/category/${category}`).then((r) => r.data),
   getById: (id: string) =>
-    axios.get<Permission>(`${API_URL}/api/permissions/${id}`).then((r) => r.data),
+    axios.get<Permission>(`/api/permissions/${id}`).then((r) => r.data),
   create: (data: Partial<Permission>) =>
-    axios.post<Permission>(`${API_URL}/api/permissions`, data).then((r) => r.data),
+    axios.post<Permission>(`/api/permissions`, data).then((r) => r.data),
   update: (id: string, data: Partial<Permission>) =>
-    axios.put<Permission>(`${API_URL}/api/permissions/${id}`, data).then((r) => r.data),
-  delete: (id: string) => axios.delete(`${API_URL}/api/permissions/${id}`),
+    axios.put<Permission>(`/api/permissions/${id}`, data).then((r) => r.data),
+  delete: (id: string) => axios.delete(`/api/permissions/${id}`),
 
   // Role permissions
   getAllRolePermissions: () =>
-    axios.get<RolePermission[]>(`${API_URL}/api/permissions/roles/all`).then((r) => r.data),
+    axios.get<RolePermission[]>(`/api/permissions/roles/all`).then((r) => r.data),
   getRolePermissions: (role: string) =>
-    axios.get<RolePermission[]>(`${API_URL}/api/permissions/role/${role}`).then((r) => r.data),
+    axios.get<RolePermission[]>(`/api/permissions/role/${role}`).then((r) => r.data),
   assignToRole: (role: string, permissionId: string) =>
-    axios.post<RolePermission>(`${API_URL}/api/permissions/role/${role}/assign`, { permissionId }).then((r) => r.data),
+    axios.post<RolePermission>(`/api/permissions/role/${role}/assign`, { permissionId }).then((r) => r.data),
   removeFromRole: (role: string, permissionId: string) =>
-    axios.delete(`${API_URL}/api/permissions/role/${role}/remove/${permissionId}`),
+    axios.delete(`/api/permissions/role/${role}/remove/${permissionId}`),
 
   // User overrides
   getUserOverrides: (userId: string) =>
-    axios.get<UserPermissionOverride[]>(`${API_URL}/api/permissions/user/${userId}`).then((r) => r.data),
+    axios.get<UserPermissionOverride[]>(`/api/permissions/user/${userId}`).then((r) => r.data),
   getEffective: (userId: string) =>
-    axios.get<EffectivePermissions>(`${API_URL}/api/permissions/user/${userId}/effective`).then((r) => r.data),
+    axios.get<EffectivePermissions>(`/api/permissions/user/${userId}/effective`).then((r) => r.data),
   grantToUser: (userId: string, permissionId: string) =>
-    axios.post<UserPermissionOverride>(`${API_URL}/api/permissions/user/${userId}/grant`, { permissionId }).then((r) => r.data),
+    axios.post<UserPermissionOverride>(`/api/permissions/user/${userId}/grant`, { permissionId }).then((r) => r.data),
   revokeFromUser: (userId: string, permissionId: string) =>
-    axios.post<UserPermissionOverride>(`${API_URL}/api/permissions/user/${userId}/revoke`, { permissionId }).then((r) => r.data),
+    axios.post<UserPermissionOverride>(`/api/permissions/user/${userId}/revoke`, { permissionId }).then((r) => r.data),
   removeOverride: (userId: string, permissionId: string) =>
-    axios.delete(`${API_URL}/api/permissions/user/${userId}/override/${permissionId}`),
+    axios.delete(`/api/permissions/user/${userId}/override/${permissionId}`),
 
   // Current user
   getMyPermissions: () =>
-    axios.get<EffectivePermissions>(`${API_URL}/api/permissions/me/effective`).then((r) => r.data),
+    axios.get<EffectivePermissions>(`/api/permissions/me/effective`).then((r) => r.data),
 };
