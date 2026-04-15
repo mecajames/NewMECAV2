@@ -1846,6 +1846,14 @@ export default function SiteSettings() {
                   <option value="shop_shipping_notification">Shipping Notification</option>
                   <option value="shop_delivery_confirmation">Delivery Confirmation</option>
                 </optgroup>
+                <optgroup label="Admin Notifications">
+                  <option value="admin_new_membership">Admin: New Membership Alert</option>
+                  <option value="admin_new_shop_order">Admin: New Shop Order Alert</option>
+                  <option value="admin_subscription_renewed">Admin: Subscription Renewed</option>
+                  <option value="admin_subscription_cancelled">Admin: Subscription Cancelled</option>
+                  <option value="admin_membership_cancelled">Admin: Membership Cancelled</option>
+                  <option value="admin_weekly_digest">Admin: Weekly Digest</option>
+                </optgroup>
               </select>
               <div className="flex gap-2">
                 <input
