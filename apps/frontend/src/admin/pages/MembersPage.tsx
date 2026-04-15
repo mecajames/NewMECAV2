@@ -11,6 +11,7 @@ import axios from '@/lib/axios';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
 import { notificationsApi } from '@/notifications/notifications.api-client';
 import { getAllEventDirectors } from '@/event-directors/event-directors.api-client';
+import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -61,6 +62,7 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [membershipTypeFilter, setMembershipTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('active');
   const [autoRenewFilter, setAutoRenewFilter] = useState<string>('all');
@@ -155,6 +157,8 @@ export default function MembersPage() {
       userActivityApi.getOnlineUsers()
         .then(ids => setOnlineUserIds(new Set(ids)))
         .catch(() => {});
+      // Fetch available roles from permissions system
+      permissionsApi.getRoles().then(setAvailableRoles).catch(() => {});
     }
   }, [permLoading]);
 
@@ -784,9 +788,21 @@ export default function MembersPage() {
                   className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none"
                 >
                   <option value="all">All Roles</option>
-                  <option value="user">User</option>
-                  <option value="event_director">Event Director</option>
-                  <option value="admin">Admin</option>
+                  {availableRoles.length > 0 ? (
+                    availableRoles.map((r) => (
+                      <option key={r.id} value={r.name}>{r.displayName}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="user">User</option>
+                      <option value="competitor">Competitor</option>
+                      <option value="event_director">Event Director</option>
+                      <option value="judge">Judge</option>
+                      <option value="retailer">Retailer</option>
+                      <option value="manufacturer">Manufacturer</option>
+                      <option value="admin">Admin</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>

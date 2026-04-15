@@ -3,7 +3,9 @@ import { UserRole } from '@newmeca/shared';
 /** Per-role idle timeout in milliseconds */
 export const IDLE_TIMEOUT_MS: Record<UserRole, number> = {
   [UserRole.USER]: 60 * 60 * 1000,           // 1 hour
+  [UserRole.COMPETITOR]: 60 * 60 * 1000,     // 1 hour
   [UserRole.RETAILER]: 60 * 60 * 1000,       // 1 hour
+  [UserRole.MANUFACTURER]: 60 * 60 * 1000,   // 1 hour
   [UserRole.JUDGE]: 60 * 60 * 1000,          // 1 hour
   [UserRole.ADMIN]: 4 * 60 * 60 * 1000,      // 4 hours
   [UserRole.EVENT_DIRECTOR]: 4 * 60 * 60 * 1000, // 4 hours
