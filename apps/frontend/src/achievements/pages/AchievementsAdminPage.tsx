@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Award, Plus, Edit3, Trash2, ChevronLeft, ChevronRight,
   Loader2, RefreshCw, Users, X, Check, PlusCircle, Calendar,
-  Search, ArrowLeft, Gift
+  Search, ArrowLeft, Gift, Wrench
 } from 'lucide-react';
 import { achievementsApi, BackfillProgress } from '../achievements.api-client';
 import { seasonsApi } from '../../seasons/seasons.api-client';
@@ -133,6 +133,10 @@ export default function AchievementsAdminPage() {
     search: '',
     group_name: '',
   });
+
+  // Repair values state
+  const [repairing, setRepairing] = useState(false);
+  const [repairResult, setRepairResult] = useState<{ repaired: number; total: number } | null>(null);
 
   // Delete recipient state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -528,6 +532,23 @@ export default function AchievementsAdminPage() {
   };
 
   // Manual Award handlers
+  const handleRepairValues = async () => {
+    if (!confirm('This will repair all achievement values by re-reading scores from competition results. Continue?')) return;
+    setRepairing(true);
+    setRepairResult(null);
+    try {
+      const result = await achievementsApi.repairValues();
+      setRepairResult(result);
+      if (result.repaired > 0) {
+        fetchRecipients(recipientsPagination.page);
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to repair values');
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   const handleOpenManualAward = () => {
     setManualAwardData({ achievement_id: '', profile_id: '', achieved_value: '', notes: '' });
     setEligibleProfiles([]);
@@ -615,6 +636,19 @@ export default function AchievementsAdminPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
+              onClick={handleRepairValues}
+              disabled={repairing}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
+              title="Fix achievement values by re-reading scores from competition results"
+            >
+              {repairing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wrench className="h-4 w-4" />
+              )}
+              Repair Values
+            </button>
+            <button
               onClick={() => setShowRecheckModal(true)}
               disabled={backfilling}
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
@@ -678,6 +712,20 @@ export default function AchievementsAdminPage() {
         )}
 
         {/* Re-check Result */}
+        {repairResult && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
+            <p className="text-green-400">
+              Repair complete: Fixed {repairResult.repaired} of {repairResult.total} achievement values.
+            </p>
+            <button
+              onClick={() => setRepairResult(null)}
+              className="p-1 hover:bg-green-500/20 rounded text-green-400"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {backfillResult && !backfilling && (
           <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
             <p className="text-green-400">

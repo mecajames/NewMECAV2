@@ -1736,11 +1736,26 @@ export class EmailService {
   }
 
   /**
-   * Returns the standard MECA email header with logo, title, and optional subtitle
+   * Returns the standard MECA email header with logo, title, and optional subtitle.
+   * The optional preheader is rendered as hidden text at the top of the <body> so
+   * email clients (Outlook, Gmail, Apple Mail) show it as the inbox preview line
+   * instead of the logo URL / alt text.
    */
-  private getEmailHeaderHtml(title: string, subtitle?: string): string {
+  private getEmailHeaderHtml(title: string, subtitle?: string, preheader?: string): string {
     const subtitleHtml = subtitle
       ? `<p style="color: #ffffff; margin: 10px 0 0 0; font-size: 14px;">${subtitle}</p>`
+      : '';
+    const escapedPreheader = preheader
+      ? preheader
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+      : '';
+    const preheaderHtml = escapedPreheader
+      ? `  <!-- Preheader: hidden preview text shown in the inbox preview line -->
+  <div style="display:none; font-size:1px; color:#f1f5f9; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">${escapedPreheader}</div>
+  <div style="display:none; font-size:1px; color:#f1f5f9; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+`
       : '';
     return `<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -1756,7 +1771,7 @@ export class EmailService {
   <![endif]-->
 </head>
 <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
-  <!-- Outer wrapper table for centering -->
+${preheaderHtml}  <!-- Outer wrapper table for centering -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9;">
     <tr>
       <td align="center" style="padding: 20px 10px;">
@@ -1822,7 +1837,7 @@ export class EmailService {
 
   private getNewUserEmailTemplate(greeting: string, email: string, password: string, forceChange: boolean): string {
     return `
-${this.getEmailHeaderHtml('Welcome to MECA!')}
+${this.getEmailHeaderHtml('Welcome to MECA!', undefined, 'Your MECA account is ready — your account details are inside')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your MECA account has been created. Here are your login details:</p>
@@ -1849,7 +1864,7 @@ ${this.getEmailFooterHtml()}
 
   private getPasswordResetEmailTemplate(greeting: string, password: string, forceChange: boolean): string {
     return `
-${this.getEmailHeaderHtml('Password Reset')}
+${this.getEmailHeaderHtml('Password Reset', undefined, 'Your MECA password has been reset — sign in with your new credentials')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your MECA account password has been reset by an administrator. Here is your new password:</p>
@@ -1933,7 +1948,7 @@ Fun, Fair, Loud and Clear!
     `).join('');
 
     return `
-${this.getEmailHeaderHtml('Invoice ' + invoiceNumber)}
+${this.getEmailHeaderHtml('Invoice ' + invoiceNumber, undefined, `Invoice ${invoiceNumber} — payment due`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>A new invoice has been generated for your MECA membership. Please review the details below and make payment by the due date.</p>
@@ -2004,7 +2019,7 @@ Fun, Fair, Loud and Clear!
 
   private getReferenceVerificationEmailTemplate(dto: SendReferenceVerificationEmailDto): string {
     return `
-${this.getEmailHeaderHtml(dto.applicationType + ' Application', 'Reference Verification Request')}
+${this.getEmailHeaderHtml(dto.applicationType + ' Application', 'Reference Verification Request', `A MECA ${dto.applicationType} applicant has listed you as a reference`)}
     <p style="font-size: 16px;">Hello ${dto.referenceName},</p>
 
     <p><strong>${dto.applicantName}</strong> has applied to become a MECA ${dto.applicationType} and has listed you as a professional reference.</p>
@@ -2045,7 +2060,7 @@ Fun, Fair, Loud and Clear!
 
   private getEventRatingEmailTemplate(greeting: string, eventName: string, eventDate: string, ratingUrl: string): string {
     return `
-${this.getEmailHeaderHtml('How Was Your Experience?', "We'd love to hear your feedback")}
+${this.getEmailHeaderHtml('How Was Your Experience?', "We'd love to hear your feedback", `Tell us how ${eventName} went — it only takes a minute`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Thank you for participating in <strong>${eventName}</strong> on ${eventDate}!</p>
@@ -2126,7 +2141,7 @@ Fun, Fair, Loud and Clear!
       : dto.ticketDescription;
 
     return `
-${this.getEmailHeaderHtml('Support Request Received', 'Ticket ' + dto.ticketNumber)}
+${this.getEmailHeaderHtml('Support Request Received', 'Ticket ' + dto.ticketNumber, `We've received your support request — ticket ${dto.ticketNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Thank you for contacting MECA Support. We have received your request and our team will review it shortly.</p>
@@ -2178,7 +2193,7 @@ Fun, Fair, Loud and Clear!
       : dto.ticketDescription;
 
     return `
-${this.getEmailHeaderHtml('New Support Ticket', dto.departmentName + ' Department')}
+${this.getEmailHeaderHtml('New Support Ticket', dto.departmentName + ' Department', `New ${dto.priority} priority ticket in ${dto.departmentName} — action needed`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>A new support ticket has been submitted that requires your attention.</p>
@@ -2230,7 +2245,7 @@ Fun, Fair, Loud and Clear!
     const replyLabel = dto.isStaffReply ? 'MECA Support' : 'Customer';
 
     return `
-${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumber)}
+${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumber, `New reply on your MECA support ticket ${dto.ticketNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>There is a new reply on your support ticket <strong>"${dto.ticketTitle}"</strong>.</p>
@@ -2284,7 +2299,7 @@ Fun, Fair, Loud and Clear!
     const statusColor = dto.newStatus === 'resolved' || dto.newStatus === 'closed' ? '#22c55e' : '#3b82f6';
 
     return `
-${this.getEmailHeaderHtml('Ticket Status Update', `Ticket ${dto.ticketNumber}`)}
+${this.getEmailHeaderHtml('Ticket Status Update', `Ticket ${dto.ticketNumber}`, `Status update on your MECA support ticket ${dto.ticketNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>The status of your support ticket has been updated.</p>
@@ -2351,7 +2366,7 @@ Fun, Fair, Loud and Clear!
       : `Click the button below to access your support ticket ${dto.ticketNumber}.`;
 
     return `
-${this.getEmailHeaderHtml(title, 'MECA Support System')}
+${this.getEmailHeaderHtml(title, 'MECA Support System', dto.isNewTicket ? 'Verify your email to submit your MECA support request' : `Access your MECA support ticket ${dto.ticketNumber}`)}
     <p style="font-size: 16px;">Hello,</p>
 
     <p>${description}</p>
@@ -2411,7 +2426,7 @@ Fun, Fair, Loud and Clear!
     `).join('');
 
     return `
-${this.getEmailHeaderHtml('Registration Confirmed!', `You're all set for ${dto.eventName}`)}
+${this.getEmailHeaderHtml('Registration Confirmed!', `You're all set for ${dto.eventName}`, `You're registered for ${dto.eventName} — see you there!`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your registration for <strong>${dto.eventName}</strong> has been confirmed. We look forward to seeing you there!</p>
@@ -2506,7 +2521,7 @@ Fun, Fair, Loud and Clear!
     eventDateStr: string,
   ): string {
     return `
-${this.getEmailHeaderHtml('Registration Cancelled', dto.eventName)}
+${this.getEmailHeaderHtml('Registration Cancelled', dto.eventName, `Your registration for ${dto.eventName} has been cancelled`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your registration for <strong>${dto.eventName}</strong> scheduled for ${eventDateStr} has been cancelled.</p>
@@ -2571,7 +2586,7 @@ Fun, Fair, Loud and Clear!
     `).join('');
 
     return `
-${this.getEmailHeaderHtml('See You Tomorrow!', `${dto.eventName} is coming up`)}
+${this.getEmailHeaderHtml('See You Tomorrow!', `${dto.eventName} is coming up`, `Reminder — ${dto.eventName} is tomorrow!`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>This is a friendly reminder that <strong>${dto.eventName}</strong> is tomorrow! Here's everything you need to know:</p>
@@ -2671,7 +2686,7 @@ Fun, Fair, Loud and Clear!
     const registerUrl = `${frontendUrl}/events/${dto.eventId}/register`;
 
     return `
-${this.getEmailHeaderHtml('Still Interested?', `${dto.eventName} is tomorrow!`)}
+${this.getEmailHeaderHtml('Still Interested?', `${dto.eventName} is tomorrow!`, `Don't miss out — register for ${dto.eventName} before tomorrow`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>You expressed interest in <strong>${dto.eventName}</strong>, and it's happening <strong>tomorrow</strong>! There's still time to register and secure your spot.</p>
@@ -2738,7 +2753,7 @@ Fun, Fair, Loud and Clear!
 
   private getGuestInterestVerificationEmailTemplate(greeting: string, eventName: string, verificationUrl: string): string {
     return `
-${this.getEmailHeaderHtml('Confirm Your Interest', eventName)}
+${this.getEmailHeaderHtml('Confirm Your Interest', eventName, `Confirm your interest in ${eventName}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Thanks for your interest in <strong>${eventName}</strong>! To keep our event lists accurate, please click the button below to confirm.</p>
@@ -2814,7 +2829,7 @@ Fun, Fair, Loud and Clear!
         : '';
 
     return `
-${this.getEmailHeaderHtml('Welcome to MECA!', `Your ${dto.membershipType} Membership is Active`)}
+${this.getEmailHeaderHtml('Welcome to MECA!', `Your ${dto.membershipType} Membership is Active`, 'Welcome to MECA — Thank you for joining MECA!')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Congratulations! Your MECA ${dto.membershipType} membership has been successfully activated. Welcome to the Mobile Electronics Competition Association family!</p>
@@ -2879,7 +2894,7 @@ Fun, Fair, Loud and Clear!
 
   private getMembershipRenewalEmailTemplate(greeting: string, dto: SendMembershipRenewalEmailDto, expiryDateStr: string): string {
     return `
-${this.getEmailHeaderHtml('Membership Renewed!', 'Thank you for your continued support')}
+${this.getEmailHeaderHtml('Membership Renewed!', 'Thank you for your continued support', 'Thanks for renewing — your MECA membership is active')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Great news! Your MECA membership has been successfully renewed. We're thrilled to have you continue as part of the MECA community!</p>
@@ -2943,7 +2958,7 @@ Fun, Fair, Loud and Clear!
     const warningTextColor = isUrgent ? '#991b1b' : '#92400e';
 
     return `
-${this.getEmailHeaderHtml(headerText, "Don't lose your membership benefits")}
+${this.getEmailHeaderHtml(headerText, "Don't lose your membership benefits", `Your MECA membership will be expiring soon — renew today`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <div style="background: ${warningBgColor}; border: 2px solid ${warningBorderColor}; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -3004,7 +3019,7 @@ Fun, Fair, Loud and Clear!
 
   private getMembershipExpiredEmailTemplate(greeting: string, dto: SendMembershipExpiredEmailDto, expiredDateStr: string): string {
     return `
-${this.getEmailHeaderHtml('Your Membership Has Expired', 'We miss you at MECA!')}
+${this.getEmailHeaderHtml('Your Membership Has Expired', 'We miss you at MECA!', 'Your MECA membership has expired — renew today to restore your benefits')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef2f2; border: 2px solid #ef4444; padding: 20px;">
@@ -3067,7 +3082,7 @@ Fun, Fair, Loud and Clear!
 
   private getSecondaryMemberWelcomeEmailTemplate(dto: SendSecondaryMemberWelcomeEmailDto, expiryDateStr: string): string {
     return `
-${this.getEmailHeaderHtml('Welcome to MECA!', "You've been added as a secondary member")}
+${this.getEmailHeaderHtml('Welcome to MECA!', "You've been added as a secondary member", "You've been added as a secondary MECA member — welcome to MECA!")}
     <p style="font-size: 16px;">Hello ${dto.secondaryMemberName},</p>
 
     <p><strong>${dto.masterMemberName}</strong> has added you as a secondary member to their MECA account. You now have your own MECA membership and can compete at MECA events!</p>
@@ -3145,7 +3160,7 @@ Fun, Fair, Loud and Clear!
       : '';
 
     return `
-${this.getEmailHeaderHtml('Membership Cancelled', 'Your MECA membership has been cancelled')}
+${this.getEmailHeaderHtml('Membership Cancelled', 'Your MECA membership has been cancelled', 'Your MECA membership has been cancelled')}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>We're writing to confirm that your MECA membership has been cancelled as requested.</p>
@@ -3239,7 +3254,7 @@ Fun, Fair, Loud and Clear!
       : '';
 
     return `
-${this.getEmailHeaderHtml('Invoice Cancelled', 'Your invoice has been automatically cancelled due to non-payment')}
+${this.getEmailHeaderHtml('Invoice Cancelled', 'Your invoice has been automatically cancelled due to non-payment', `Invoice ${dto.invoiceNumber} has been automatically cancelled due to non-payment`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>We're writing to inform you that your invoice has been automatically cancelled because payment was not received within the required timeframe.</p>
@@ -3345,7 +3360,7 @@ Fun, Fair, Loud and Clear!
     });
 
     return `
-${this.getEmailHeaderHtml('Order Confirmed!', `Order #${dto.orderNumber}`)}
+${this.getEmailHeaderHtml('Order Confirmed!', `Order #${dto.orderNumber}`, `Thanks for your order — here's your MECA Shop confirmation for order #${dto.orderNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Thank you for your order from the MECA Shop! We've received your order and are getting it ready.</p>
@@ -3459,7 +3474,7 @@ Fun, Fair, Loud and Clear!
     });
 
     return `
-${this.getEmailHeaderHtml('Payment Received!', `Order #${dto.orderNumber}`)}
+${this.getEmailHeaderHtml('Payment Received!', `Order #${dto.orderNumber}`, `Payment received for MECA Shop order #${dto.orderNumber} — your receipt is inside`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>We've received your payment. Thank you for shopping with MECA!</p>
@@ -3558,7 +3573,7 @@ Fun, Fair, Loud and Clear!
     });
 
     return `
-${this.getEmailHeaderHtml('Your Order Has Shipped!', `Order #${dto.orderNumber}`)}
+${this.getEmailHeaderHtml('Your Order Has Shipped!', `Order #${dto.orderNumber}`, `Good news — your MECA Shop order #${dto.orderNumber} is on its way!`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Great news! Your order is on its way. Here are the shipping details:</p>
@@ -3659,7 +3674,7 @@ Fun, Fair, Loud and Clear!
     });
 
     return `
-${this.getEmailHeaderHtml('Order Delivered!', `Order #${dto.orderNumber}`)}
+${this.getEmailHeaderHtml('Order Delivered!', `Order #${dto.orderNumber}`, `Your MECA Shop order #${dto.orderNumber} has been delivered — enjoy!`)}
     <p style="font-size: 16px;">${greeting},</p>
 
     <p>Your order has been delivered! We hope you enjoy your MECA merchandise.</p>
@@ -3730,7 +3745,7 @@ Fun, Fair, Loud and Clear!
     const subject = `Your Exclusive MECA World Finals Pre-Registration Invitation - ${dto.competitionClass}`;
 
     const html = `
-${this.getEmailHeaderHtml('World Finals Invitation', `Pre-Register for ${dto.competitionClass}`)}
+${this.getEmailHeaderHtml('World Finals Invitation', `Pre-Register for ${dto.competitionClass}`, `You're invited to pre-register for the MECA World Finals in ${dto.competitionClass}`)}
     <p style="font-size: 16px;">Dear ${dto.firstName},</p>
 
     <p>As a qualified competitor with <strong>${dto.totalPoints} points</strong> in <strong>${dto.competitionClass}</strong> during the ${dto.seasonName}, you are invited to pre-register for the MECA World Finals!</p>
@@ -3794,7 +3809,7 @@ Fun, Fair, Loud and Clear!
     const subject = `Congratulations! You've Qualified for MECA World Finals in ${dto.competitionClass}!`;
 
     const html = `
-${this.getEmailHeaderHtml('World Finals Qualification!', `You've Qualified in ${dto.competitionClass}`)}
+${this.getEmailHeaderHtml('World Finals Qualification!', `You've Qualified in ${dto.competitionClass}`, `Congratulations — you've qualified for the MECA World Finals in ${dto.competitionClass}!`)}
     <p style="font-size: 16px;">Congratulations, ${dto.firstName}!</p>
 
     <p>You have officially qualified for the <strong>MECA World Finals</strong> in <strong>${dto.competitionClass}</strong>!</p>
@@ -3883,7 +3898,7 @@ Fun, Fair, Loud and Clear!
       : '';
 
     const html = `
-${this.getEmailHeaderHtml(dto.title, dto.subtitle || 'Admin Notification')}
+${this.getEmailHeaderHtml(dto.title, dto.subtitle || 'Admin Notification', dto.subtitle || dto.title)}
     <p style="font-size: 16px; font-family: Arial, sans-serif;">Hello Admin,</p>
 
     <p style="font-family: Arial, sans-serif;">This is an automated notification from the MECA system.</p>
@@ -3967,7 +3982,7 @@ ${this.getEmailFooterHtml()}
     }).join('');
 
     const html = `
-${this.getEmailHeaderHtml('Weekly Business Summary', dto.dateRange)}
+${this.getEmailHeaderHtml('Weekly Business Summary', dto.dateRange, `Weekly MECA business summary for ${dto.dateRange}`)}
     <p style="font-size: 16px; font-family: Arial, sans-serif;">Hello Admin,</p>
     <p style="font-family: Arial, sans-serif;">Here is your weekly business summary for MECA.</p>
 

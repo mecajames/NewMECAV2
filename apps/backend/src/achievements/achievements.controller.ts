@@ -389,6 +389,16 @@ export class AchievementsController {
     return this.imageService.checkAssets();
   }
 
+  /**
+   * Repair achievement values by re-reading scores from linked competition results (admin)
+   * Fixes corrupted achieved_value data without deleting/re-creating achievements
+   */
+  @Post('admin/repair-values')
+  async repairValues(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.achievementsService.repairAchievementValues();
+  }
+
   // =============================================================================
   // Admin Endpoints - Manual Award
   // =============================================================================
