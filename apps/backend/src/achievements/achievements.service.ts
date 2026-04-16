@@ -409,6 +409,7 @@ export class AchievementsService {
   async checkAndAwardAchievements(resultId: string): Promise<AchievementRecipient[]> {
     const result = await this.em.findOne(CompetitionResult, { id: resultId }, {
       populate: ['event', 'season'],
+      refresh: true, // Force re-query even if entity is in the identity map (critical for backfill)
     });
 
     if (!result) {
@@ -487,10 +488,18 @@ export class AchievementsService {
         // Only upgrade if new threshold is higher
         const existingThreshold = Number(existingRecipient.achievement.thresholdValue);
         if (qualifyingThreshold <= existingThreshold) {
-          this.logger.debug(
-            `Skipping "${targetDef.name}" for ${competitor.email} - ` +
-            `already has ${existingThreshold}+ in ${groupName}`
-          );
+          // Even when not upgrading, fix the achieved_value if it's wrong
+          const existingValue = Number(existingRecipient.achievedValue);
+          if (existingValue !== score && score > 0 && !isNaN(score)) {
+            this.logger.log(
+              `Correcting achieved_value for "${existingRecipient.achievement.name}" ` +
+              `(${competitor.email}): ${existingValue} -> ${score}`
+            );
+            existingRecipient.achievedValue = score as any;
+            existingRecipient.competitionResult = result;
+            existingRecipient.event = result.event;
+            await this.em.flush();
+          }
           continue;
         }
 
@@ -677,6 +686,40 @@ export class AchievementsService {
       total,
       percentage: 100,
     };
+  }
+
+  // =============================================================================
+  // Data Repair
+  // =============================================================================
+
+  /**
+   * Repair achieved_value for all recipients by re-reading the score from
+   * the linked competition_result. This fixes corrupted data (e.g., all values
+   * showing as 1) without deleting/re-creating achievements.
+   */
+  async repairAchievementValues(): Promise<{ repaired: number; total: number }> {
+    const em = this.em.fork();
+    const connection = em.getConnection();
+
+    // Direct SQL update: set achieved_value from the linked competition_result's score
+    const result = await connection.execute(`
+      UPDATE achievement_recipients ar
+      SET achieved_value = cr.score
+      FROM competition_results cr
+      WHERE ar.competition_result_id = cr.id
+        AND ar.achieved_value != cr.score
+    `);
+
+    const repaired = result?.rowCount || result?.affectedRows || 0;
+
+    // Count total recipients for context
+    const countResult = await connection.execute(
+      `SELECT COUNT(*) as total FROM achievement_recipients`
+    );
+    const total = Number(countResult?.[0]?.total || 0);
+
+    this.logger.log(`Repaired ${repaired} of ${total} achievement values`);
+    return { repaired, total };
   }
 
   // =============================================================================

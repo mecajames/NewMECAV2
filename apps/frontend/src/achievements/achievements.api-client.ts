@@ -284,6 +284,14 @@ export const achievementsApi = {
     const response = await axios.delete(`/api/achievements/admin/recipients/${recipientId}`);
     return response.data;
   },
+
+  /**
+   * Repair achievement values by re-reading scores from linked competition results (admin)
+   */
+  repairValues: async (): Promise<{ repaired: number; total: number }> => {
+    const response = await axios.post('/api/achievements/admin/repair-values');
+    return response.data;
+  },
 };
 
 export default achievementsApi;
