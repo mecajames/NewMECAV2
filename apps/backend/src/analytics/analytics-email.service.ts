@@ -126,6 +126,9 @@ export class AnalyticsEmailService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="margin:0; padding:0; background-color:#0f172a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <!-- Preheader: hidden preview text shown in the inbox preview line -->
+  <div style="display:none; font-size:1px; color:#0f172a; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">Weekly MECA analytics report for ${dateRange}</div>
+  <div style="display:none; font-size:1px; color:#0f172a; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
   <div style="max-width:640px; margin:0 auto; padding:20px;">
     <!-- Header -->
     <div style="text-align:center; padding:24px 0; border-bottom:2px solid #f97316;">
