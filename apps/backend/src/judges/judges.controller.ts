@@ -192,6 +192,7 @@ export class JudgesController {
   // Public Endpoints
   // =============================================================================
 
+  @Public()
   @Get('directory')
   async getPublicDirectory(
     @Query('state') state?: string,
