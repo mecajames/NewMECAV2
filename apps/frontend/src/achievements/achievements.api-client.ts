@@ -286,10 +286,14 @@ export const achievementsApi = {
   },
 
   /**
-   * Repair achievement values by re-reading scores from linked competition results (admin)
+   * Repair achievement values by re-matching each recipient to the best-scoring
+   * competition_result for their profile + achievement (admin).
+   * Optional date range scopes the repair by achievement_recipients.achieved_at.
    */
-  repairValues: async (): Promise<{ repaired: number; total: number }> => {
-    const response = await axios.post('/api/achievements/admin/repair-values');
+  repairValues: async (
+    params?: { start_date?: string; end_date?: string }
+  ): Promise<{ repaired: number; total: number; unmatched: number }> => {
+    const response = await axios.post('/api/achievements/admin/repair-values', params || {});
     return response.data;
   },
 };

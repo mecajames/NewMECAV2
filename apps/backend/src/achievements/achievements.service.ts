@@ -693,33 +693,169 @@ export class AchievementsService {
   // =============================================================================
 
   /**
-   * Repair achieved_value for all recipients by re-reading the score from
-   * the linked competition_result. This fixes corrupted data (e.g., all values
-   * showing as 1) without deleting/re-creating achievements.
+   * Repair achieved_value / competition_result_id / event_id / season_id for
+   * recipients whose linkage is missing or whose achieved_value is wrong.
+   *
+   * For each recipient we re-scan that profile's competition_results, find the
+   * ones matching the achievement's type/class filter whose score passes the
+   * threshold, and snap the recipient onto the highest-scoring match.
+   *
+   * Unlike checkAndAwardAchievements this does NOT gate on current membership —
+   * the recipient already exists; we're repairing data, not awarding.
+   *
+   * Scope by achieved_at with startDate/endDate so large repairs can be run in
+   * chunks instead of all 3000+ rows at once.
    */
-  async repairAchievementValues(): Promise<{ repaired: number; total: number }> {
+  async repairAchievementValues(options?: {
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<{ repaired: number; total: number; unmatched: number }> {
+    let final = { repaired: 0, total: 0, unmatched: 0 };
+    for await (const update of this.repairAchievementValuesWithProgress(options)) {
+      if (update.type === 'complete') {
+        final = { repaired: update.repaired, total: update.total, unmatched: update.unmatched };
+      }
+    }
+    return final;
+  }
+
+  /**
+   * Streaming variant of repairAchievementValues — yields progress updates so
+   * the admin UI can show a progress bar during long runs.
+   */
+  async *repairAchievementValuesWithProgress(options?: {
+    startDate?: Date;
+    endDate?: Date;
+  }): AsyncGenerator<{
+    type: 'progress' | 'complete';
+    processed: number;
+    repaired: number;
+    unmatched: number;
+    total: number;
+    percentage: number;
+  }> {
+    const { startDate, endDate } = options || {};
     const em = this.em.fork();
-    const connection = em.getConnection();
 
-    // Direct SQL update: set achieved_value from the linked competition_result's score
-    const result = await connection.execute(`
-      UPDATE achievement_recipients ar
-      SET achieved_value = cr.score
-      FROM competition_results cr
-      WHERE ar.competition_result_id = cr.id
-        AND ar.achieved_value != cr.score
-    `);
+    const where: FilterQuery<AchievementRecipient> = {};
+    if (startDate || endDate) {
+      (where as any).achievedAt = {};
+      if (startDate) (where as any).achievedAt.$gte = startDate;
+      if (endDate) (where as any).achievedAt.$lte = endDate;
+    }
 
-    const repaired = result?.rowCount || result?.affectedRows || 0;
+    const recipients = await em.find(AchievementRecipient, where, {
+      populate: ['achievement'],
+    });
 
-    // Count total recipients for context
-    const countResult = await connection.execute(
-      `SELECT COUNT(*) as total FROM achievement_recipients`
-    );
-    const total = Number(countResult?.[0]?.total || 0);
+    const total = recipients.length;
 
-    this.logger.log(`Repaired ${repaired} of ${total} achievement values`);
-    return { repaired, total };
+    // Initial progress tick so the client can render "0 of N"
+    yield { type: 'progress', processed: 0, repaired: 0, unmatched: 0, total, percentage: 0 };
+
+    if (total === 0) {
+      this.logger.log('Repair: no recipients in selected range');
+      yield { type: 'complete', processed: 0, repaired: 0, unmatched: 0, total: 0, percentage: 100 };
+      return;
+    }
+
+    this.logger.log(`Repair: scanning ${total} recipients${startDate ? ` from ${startDate.toISOString()}` : ''}${endDate ? ` to ${endDate.toISOString()}` : ''}`);
+
+    const profileIds = [...new Set(
+      recipients.map(r => r.profile?.id).filter((id): id is string => !!id)
+    )];
+
+    const resultsByProfile = new Map<string, CompetitionResult[]>();
+    const PROFILE_BATCH = 300;
+    for (let i = 0; i < profileIds.length; i += PROFILE_BATCH) {
+      const batch = profileIds.slice(i, i + PROFILE_BATCH);
+      const results = await em.find(CompetitionResult, {
+        competitor: { id: { $in: batch } },
+      }, {
+        populate: ['event', 'season'],
+      });
+      for (const r of results) {
+        const pid = r.competitor?.id;
+        if (!pid) continue;
+        const list = resultsByProfile.get(pid);
+        if (list) {
+          list.push(r);
+        } else {
+          resultsByProfile.set(pid, [r]);
+        }
+      }
+    }
+
+    let processed = 0;
+    let repaired = 0;
+    let unmatched = 0;
+    const FLUSH_EVERY = 100;
+    const PROGRESS_EVERY = 10;
+
+    for (const recipient of recipients) {
+      processed++;
+      const pid = recipient.profile?.id;
+
+      if (pid) {
+        const profileResults = resultsByProfile.get(pid) || [];
+        const threshold = Number(recipient.achievement.thresholdValue);
+        const operator = recipient.achievement.thresholdOperator;
+
+        let best: CompetitionResult | null = null;
+        let bestScore = -Infinity;
+        for (const r of profileResults) {
+          const score = Number(r.score);
+          if (isNaN(score)) continue;
+          if (!this.evaluateThreshold(score, operator, threshold)) continue;
+          if (!this.matchesCompetitionType(r, recipient.achievement)) continue;
+          if (score > bestScore) {
+            bestScore = score;
+            best = r;
+          }
+        }
+
+        if (best) {
+          // Only count/update if something actually differs. Without this,
+          // re-running the repair re-reports every recipient as "fixed" even
+          // when nothing changes.
+          const currentScore = Number(recipient.achievedValue);
+          const currentResultId = recipient.competitionResult?.id;
+          const currentEventId = recipient.event?.id;
+          const currentSeasonId = recipient.season?.id;
+          const needsUpdate =
+            currentScore !== bestScore ||
+            currentResultId !== best.id ||
+            currentEventId !== best.event?.id ||
+            currentSeasonId !== best.season?.id;
+
+          if (needsUpdate) {
+            recipient.achievedValue = bestScore as any;
+            recipient.competitionResult = best;
+            recipient.event = best.event;
+            recipient.season = best.season;
+            repaired++;
+
+            if (repaired % FLUSH_EVERY === 0) {
+              await em.flush();
+            }
+          }
+        } else {
+          unmatched++;
+        }
+      } else {
+        unmatched++;
+      }
+
+      if (processed % PROGRESS_EVERY === 0 || processed === total) {
+        const percentage = total > 0 ? Math.round((processed / total) * 100) : 100;
+        yield { type: 'progress', processed, repaired, unmatched, total, percentage };
+      }
+    }
+
+    await em.flush();
+
+    this.logger.log(`Repair complete: ${repaired} repaired, ${unmatched} unmatched, ${total} total`);
+    yield { type: 'complete', processed, repaired, unmatched, total, percentage: 100 };
   }
 
   // =============================================================================

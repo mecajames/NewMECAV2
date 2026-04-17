@@ -390,13 +390,79 @@ export class AchievementsController {
   }
 
   /**
-   * Repair achievement values by re-reading scores from linked competition results (admin)
-   * Fixes corrupted achieved_value data without deleting/re-creating achievements
+   * Repair achievement values by re-matching each recipient to the best-scoring
+   * competition_result for their profile + achievement (admin).
+   *
+   * Optional start_date/end_date (ISO strings) scope the repair by the
+   * recipient's achieved_at — lets the admin chunk large repairs so they
+   * don't bog down the server.
    */
   @Post('admin/repair-values')
-  async repairValues(@Headers('authorization') authHeader: string) {
+  async repairValues(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { start_date?: string; end_date?: string } = {},
+  ) {
     await this.requireAdmin(authHeader);
-    return this.achievementsService.repairAchievementValues();
+    const startDate = body.start_date ? new Date(body.start_date) : undefined;
+    const endDate = body.end_date ? new Date(body.end_date) : undefined;
+    return this.achievementsService.repairAchievementValues({ startDate, endDate });
+  }
+
+  /**
+   * Stream repair progress via Server-Sent Events (admin).
+   * Accepts authorization via query param because EventSource can't set headers.
+   */
+  @Public()
+  @Sse('admin/repair-stream')
+  repairStream(
+    @Headers('authorization') authHeader?: string,
+    @Query('authorization') authQuery?: string,
+    @Query('startDate') startDateStr?: string,
+    @Query('endDate') endDateStr?: string,
+  ): Observable<MessageEvent> {
+    const subject = new Subject<MessageEvent>();
+    const effectiveAuth = authHeader || authQuery;
+
+    (async () => {
+      try {
+        if (!effectiveAuth || !effectiveAuth.startsWith('Bearer ')) {
+          throw new UnauthorizedException('No authorization token provided');
+        }
+
+        const token = effectiveAuth.substring(7);
+        const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+
+        if (error || !user) {
+          throw new UnauthorizedException('Invalid authorization token');
+        }
+
+        const em = this.em.fork();
+        const profile = await em.findOne(Profile, { id: user.id });
+        if (!isAdminUser(profile)) {
+          throw new ForbiddenException('Admin access required');
+        }
+
+        const options: { startDate?: Date; endDate?: Date } = {};
+        if (startDateStr) options.startDate = new Date(startDateStr);
+        if (endDateStr) options.endDate = new Date(endDateStr);
+
+        const generator = this.achievementsService.repairAchievementValuesWithProgress(options);
+        for await (const progress of generator) {
+          subject.next({ data: progress } as MessageEvent);
+        }
+
+        subject.complete();
+      } catch (error: any) {
+        this.logger.error(`Repair stream error: ${error.message}`, error.stack);
+        const safeMessage = error instanceof UnauthorizedException || error instanceof ForbiddenException
+          ? error.message
+          : 'Repair failed due to a server error. Check backend logs for details.';
+        subject.next({ data: { type: 'error', message: safeMessage } } as MessageEvent);
+        subject.complete();
+      }
+    })();
+
+    return subject.asObservable();
   }
 
   // =============================================================================
