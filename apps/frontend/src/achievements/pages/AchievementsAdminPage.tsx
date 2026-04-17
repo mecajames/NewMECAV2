@@ -136,7 +136,19 @@ export default function AchievementsAdminPage() {
 
   // Repair values state
   const [repairing, setRepairing] = useState(false);
-  const [repairResult, setRepairResult] = useState<{ repaired: number; total: number } | null>(null);
+  const [repairResult, setRepairResult] = useState<{ repaired: number; total: number; unmatched?: number } | null>(null);
+  const [repairProgress, setRepairProgress] = useState<{
+    type: 'progress' | 'complete' | 'error';
+    processed: number;
+    repaired: number;
+    unmatched: number;
+    total: number;
+    percentage: number;
+  } | null>(null);
+  const [showRepairModal, setShowRepairModal] = useState(false);
+  const [repairTimeframe, setRepairTimeframe] = useState<'30days' | '90days' | 'thisYear' | 'custom' | 'all'>('30days');
+  const [repairCustomStart, setRepairCustomStart] = useState('');
+  const [repairCustomEnd, setRepairCustomEnd] = useState('');
 
   // Delete recipient state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -531,23 +543,87 @@ export default function AchievementsAdminPage() {
     }
   };
 
-  // Manual Award handlers
+  const getRepairDateRange = useCallback(() => {
+    const now = new Date();
+    let startDate: string | undefined;
+    let endDate: string | undefined;
+
+    switch (repairTimeframe) {
+      case '30days':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      case '90days':
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      case 'thisYear':
+        startDate = new Date(now.getFullYear(), 0, 1).toISOString();
+        break;
+      case 'custom':
+        if (repairCustomStart) startDate = new Date(repairCustomStart).toISOString();
+        if (repairCustomEnd) endDate = new Date(repairCustomEnd + 'T23:59:59').toISOString();
+        break;
+      case 'all':
+        break;
+    }
+
+    return { startDate, endDate };
+  }, [repairTimeframe, repairCustomStart, repairCustomEnd]);
+
   const handleRepairValues = async () => {
-    if (!confirm('This will repair all achievement values by re-reading scores from competition results. Continue?')) return;
+    setShowRepairModal(false);
     setRepairing(true);
     setRepairResult(null);
+    setRepairProgress(null);
+    const { startDate, endDate } = getRepairDateRange();
+
     try {
-      const result = await achievementsApi.repairValues();
-      setRepairResult(result);
-      if (result.repaired > 0) {
-        fetchRecipients(recipientsPagination.page);
-      }
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (session?.access_token) params.append('authorization', `Bearer ${session.access_token}`);
+
+      const url = `/api/achievements/admin/repair-stream${params.toString() ? `?${params.toString()}` : ''}`;
+      const eventSource = new EventSource(url);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setRepairProgress(data);
+
+          if (data.type === 'complete') {
+            setRepairResult({
+              repaired: data.repaired,
+              total: data.total,
+              unmatched: data.unmatched,
+            });
+            setRepairing(false);
+            eventSource.close();
+            if (data.repaired > 0) {
+              fetchRecipients(recipientsPagination.page);
+            }
+          } else if (data.type === 'error') {
+            setError(data.message || 'Repair failed');
+            setRepairing(false);
+            eventSource.close();
+          }
+        } catch (parseError) {
+          console.error('Failed to parse SSE data:', parseError);
+        }
+      };
+
+      eventSource.onerror = (err) => {
+        console.error('Repair SSE error:', err);
+        setError('Connection error during repair. Please try again.');
+        setRepairing(false);
+        eventSource.close();
+      };
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Failed to repair values');
-    } finally {
       setRepairing(false);
     }
   };
+
+  // Manual Award handlers
 
   const handleOpenManualAward = () => {
     setManualAwardData({ achievement_id: '', profile_id: '', achieved_value: '', notes: '' });
@@ -636,10 +712,10 @@ export default function AchievementsAdminPage() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={handleRepairValues}
+              onClick={() => setShowRepairModal(true)}
               disabled={repairing}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
-              title="Fix achievement values by re-reading scores from competition results"
+              title="Fix achievement values by re-matching each recipient to the best competition result"
             >
               {repairing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -711,11 +787,43 @@ export default function AchievementsAdminPage() {
           </div>
         )}
 
+        {/* Repair Progress */}
+        {repairing && repairProgress && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-amber-400 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Repairing achievement values...
+              </p>
+              <span className="text-amber-300 font-mono">{repairProgress.percentage}%</span>
+            </div>
+            <div className="w-full bg-slate-700 rounded-full h-3 mb-2">
+              <div
+                className="bg-amber-500 h-3 rounded-full transition-all duration-300"
+                style={{ width: `${repairProgress.percentage}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-400">
+              {repairProgress.processed} of {repairProgress.total} recipients scanned
+              {repairProgress.repaired > 0 && (
+                <span className="text-green-400 ml-2">• {repairProgress.repaired} repaired</span>
+              )}
+              {repairProgress.unmatched > 0 && (
+                <span className="text-yellow-400 ml-2">• {repairProgress.unmatched} unmatched</span>
+              )}
+            </p>
+          </div>
+        )}
+
         {/* Re-check Result */}
         {repairResult && (
           <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-6 flex items-center justify-between">
             <p className="text-green-400">
-              Repair complete: Fixed {repairResult.repaired} of {repairResult.total} achievement values.
+              Repair complete: Fixed {repairResult.repaired} of {repairResult.total} achievement values
+              {typeof repairResult.unmatched === 'number' && repairResult.unmatched > 0 && (
+                <span className="text-yellow-400"> ({repairResult.unmatched} had no matching competition result)</span>
+              )}
+              .
             </p>
             <button
               onClick={() => setRepairResult(null)}
@@ -1522,6 +1630,133 @@ export default function AchievementsAdminPage() {
                 >
                   <RefreshCw className="h-4 w-4" />
                   Start Re-check
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Repair Values Modal */}
+        {showRepairModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl max-w-md w-full">
+              <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Wrench className="h-5 w-5 text-amber-500" />
+                  Repair Achievement Values
+                </h2>
+                <button
+                  onClick={() => setShowRepairModal(false)}
+                  className="p-2 hover:bg-slate-700 rounded-lg text-gray-400 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-gray-400 text-sm">
+                  Scope the repair by the recipient's achieved date. Smaller ranges are easier on the server; run multiple passes if you need to cover everything.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="repair-timeframe"
+                      value="30days"
+                      checked={repairTimeframe === '30days'}
+                      onChange={(e) => setRepairTimeframe(e.target.value as typeof repairTimeframe)}
+                      className="text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-white">Last 30 days</span>
+                    <span className="text-gray-500 text-sm ml-auto">(Recommended)</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="repair-timeframe"
+                      value="90days"
+                      checked={repairTimeframe === '90days'}
+                      onChange={(e) => setRepairTimeframe(e.target.value as typeof repairTimeframe)}
+                      className="text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-white">Last 90 days</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="repair-timeframe"
+                      value="thisYear"
+                      checked={repairTimeframe === 'thisYear'}
+                      onChange={(e) => setRepairTimeframe(e.target.value as typeof repairTimeframe)}
+                      className="text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-white">This year ({new Date().getFullYear()})</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="repair-timeframe"
+                      value="custom"
+                      checked={repairTimeframe === 'custom'}
+                      onChange={(e) => setRepairTimeframe(e.target.value as typeof repairTimeframe)}
+                      className="text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-white">Custom date range</span>
+                  </label>
+
+                  {repairTimeframe === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3 pl-8 mt-2">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          value={repairCustomStart}
+                          onChange={(e) => setRepairCustomStart(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">End Date</label>
+                        <input
+                          type="date"
+                          value={repairCustomEnd}
+                          onChange={(e) => setRepairCustomEnd(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-700 transition-colors">
+                    <input
+                      type="radio"
+                      name="repair-timeframe"
+                      value="all"
+                      checked={repairTimeframe === 'all'}
+                      onChange={(e) => setRepairTimeframe(e.target.value as typeof repairTimeframe)}
+                      className="text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-white">All time</span>
+                    <span className="text-yellow-500 text-sm ml-auto">(May bog down the server)</span>
+                  </label>
+                </div>
+              </div>
+              <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowRepairModal(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRepairValues}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg flex items-center gap-2"
+                >
+                  <Wrench className="h-4 w-4" />
+                  Start Repair
                 </button>
               </div>
             </div>
