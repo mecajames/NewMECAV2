@@ -1102,9 +1102,10 @@ export class AchievementsService {
         return false;
       }
 
-      // Also check points_multiplier if specified (for Dueling Demos Certified 360 Sound)
+      // Also check points_multiplier if specified (for Dueling Demos Certified 360 Sound).
+      // The multiplier lives on the event, not the result — callers must populate 'event'.
       if (definition.pointsMultiplier) {
-        const resultMultiplier = (result as any).pointsMultiplier || 1;
+        const resultMultiplier = result.event?.pointsMultiplier ?? 1;
         if (resultMultiplier < definition.pointsMultiplier) {
           return false;
         }
