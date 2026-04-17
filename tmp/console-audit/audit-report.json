@@ -1,0 +1,3459 @@
+{
+  "byRoute": {
+    "/standings": {
+      "errors": [],
+      "warnings": [],
+      "network": [
+        {
+          "type": "requestfailed",
+          "method": "GET",
+          "url": "https://mecacaraudio.com/api/standings/classes",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "mixed": []
+    },
+    "/team-standings": {
+      "errors": [],
+      "warnings": [],
+      "network": [
+        {
+          "type": "requestfailed",
+          "method": "GET",
+          "url": "https://mecacaraudio.com/api/standings/leaderboard?limit=100",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "mixed": []
+    },
+    "/rulebooks": {
+      "errors": [],
+      "warnings": [],
+      "network": [
+        {
+          "type": "requestfailed",
+          "method": "GET",
+          "url": "https://mecacaraudio.com/api/standings/teams?limit=10",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "type": "requestfailed",
+          "method": "GET",
+          "url": "https://mecacaraudio.com/api/notifications?userId=983f6056-b83f-4a79-b093-692f4dfe3635&limit=10",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "mixed": []
+    },
+    "/host-event": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "reCAPTCHA v2 error"
+        }
+      ],
+      "warnings": [],
+      "network": [],
+      "mixed": []
+    },
+    "/judges": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 401 ()"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 401,
+          "url": "https://mecacaraudio.com/api/judges/directory",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/forever-members": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/shop": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/shop/cart": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/world-records": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/world-finals/register": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/dashboard": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/dashboard/mymeca": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/dashboard/business-listing": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/dashboard/membership": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/dashboard/admin": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/profile": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/public-profile": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/billing": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/membership": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/my-registrations": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/tickets": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/shop/orders": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/finals-voting": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/members": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/seasons": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/classes": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/formats": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/membership-types": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/business-listings": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 ()"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 ()"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 ()"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 ()"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 ()"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 404,
+          "url": "https://mecacaraudio.com/wp-content/uploads/2022/09/BoB-Retail-Logo-150x150-1.jpg",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 404,
+          "url": "https://mecacaraudio.com/wp-content/uploads/2022/05/Only-Tint-150x150-1.jpg",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 404,
+          "url": "https://mecacaraudio.com/wp-content/uploads/2022/10/royality-vinyls-directory.jpg",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 404,
+          "url": "https://mecacaraudio.com/wp-content/uploads/2022/05/Team-Nuts-Logo-150x150-1.jpg",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 404,
+          "url": "https://mecacaraudio.com/wp-content/uploads/2022/07/why-so-serious-directory-150x150-1.jpg",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/shop/orders": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/coupons": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/permissions": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/advertisers": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "requestfailed",
+          "method": "POST",
+          "url": "https://mecacaraudio.com/cdn-cgi/rum?",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/banners": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/banners/analytics": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/points-configuration": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/analytics": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/search-console": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/seo-settings": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/membership-cards": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/finals-voting": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/world-records": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/hall-of-fame": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/forever-members": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/login-audit": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/admin-audit": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/qa-checklist": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/admin/score-sheet-editor": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/events/b2a1e095-edf8-4435-85b8-7a594ab1ffe7": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "requestfailed",
+          "method": "POST",
+          "url": "https://mecacaraudio.com/cdn-cgi/rum?",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/rulebooks/4c342419-06b6-4122-afc7-c68b4fb8719b": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error checking maintenance mode: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching site settings: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/site-settings",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    },
+    "/retailers/38434ec8-3b7f-42ae-acd4-d756f7722920": {
+      "errors": [
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        },
+        {
+          "type": "error",
+          "text": "Failed to load resource: the server responded with a status of 429 ()"
+        },
+        {
+          "type": "error",
+          "text": "Error fetching profile: JSHandle@object"
+        }
+      ],
+      "warnings": [],
+      "network": [
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        },
+        {
+          "type": "http",
+          "status": 429,
+          "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+          "method": "GET"
+        }
+      ],
+      "mixed": []
+    }
+  },
+  "byError": [
+    {
+      "key": "error:Failed to load resource: the server responded with a status of 429 ()",
+      "kind": "errors",
+      "count": 177,
+      "routes": [
+        "/forever-members",
+        "/shop",
+        "/shop/cart",
+        "/world-records",
+        "/world-finals/register",
+        "/dashboard",
+        "/dashboard/mymeca",
+        "/dashboard/business-listing",
+        "/dashboard/membership",
+        "/dashboard/admin",
+        "/profile",
+        "/public-profile",
+        "/billing",
+        "/membership",
+        "/my-registrations",
+        "/tickets",
+        "/shop/orders",
+        "/finals-voting",
+        "/admin/members",
+        "/admin/seasons",
+        "/admin/classes",
+        "/admin/formats",
+        "/admin/membership-types",
+        "/admin/shop/orders",
+        "/admin/coupons",
+        "/admin/permissions",
+        "/admin/advertisers",
+        "/admin/banners",
+        "/admin/banners/analytics",
+        "/admin/points-configuration",
+        "/admin/analytics",
+        "/admin/search-console",
+        "/admin/seo-settings",
+        "/admin/membership-cards",
+        "/admin/finals-voting",
+        "/admin/world-records",
+        "/admin/hall-of-fame",
+        "/admin/forever-members",
+        "/admin/login-audit",
+        "/admin/admin-audit",
+        "/admin/qa-checklist",
+        "/admin/score-sheet-editor",
+        "/events/b2a1e095-edf8-4435-85b8-7a594ab1ffe7",
+        "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7",
+        "/rulebooks/4c342419-06b6-4122-afc7-c68b4fb8719b",
+        "/retailers/38434ec8-3b7f-42ae-acd4-d756f7722920"
+      ],
+      "sample": {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 429 ()"
+      }
+    },
+    {
+      "key": "http429:https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+      "kind": "network",
+      "count": 133,
+      "routes": [
+        "/forever-members",
+        "/shop",
+        "/shop/cart",
+        "/world-records",
+        "/world-finals/register",
+        "/dashboard",
+        "/dashboard/mymeca",
+        "/dashboard/business-listing",
+        "/dashboard/membership",
+        "/dashboard/admin",
+        "/profile",
+        "/public-profile",
+        "/billing",
+        "/membership",
+        "/my-registrations",
+        "/tickets",
+        "/shop/orders",
+        "/finals-voting",
+        "/admin/members",
+        "/admin/seasons",
+        "/admin/classes",
+        "/admin/formats",
+        "/admin/membership-types",
+        "/admin/coupons",
+        "/admin/permissions",
+        "/admin/advertisers",
+        "/admin/banners",
+        "/admin/banners/analytics",
+        "/admin/points-configuration",
+        "/admin/analytics",
+        "/admin/search-console",
+        "/admin/seo-settings",
+        "/admin/membership-cards",
+        "/admin/finals-voting",
+        "/admin/world-records",
+        "/admin/hall-of-fame",
+        "/admin/forever-members",
+        "/admin/login-audit",
+        "/admin/admin-audit",
+        "/admin/qa-checklist",
+        "/admin/score-sheet-editor",
+        "/events/b2a1e095-edf8-4435-85b8-7a594ab1ffe7",
+        "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7",
+        "/rulebooks/4c342419-06b6-4122-afc7-c68b4fb8719b",
+        "/retailers/38434ec8-3b7f-42ae-acd4-d756f7722920"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 429,
+        "url": "https://mecacaraudio.com/api/profiles/983f6056-b83f-4a79-b093-692f4dfe3635",
+        "method": "GET"
+      }
+    },
+    {
+      "key": "error:Error fetching profile: JSHandle@object",
+      "kind": "errors",
+      "count": 133,
+      "routes": [
+        "/forever-members",
+        "/shop",
+        "/shop/cart",
+        "/world-records",
+        "/world-finals/register",
+        "/dashboard",
+        "/dashboard/mymeca",
+        "/dashboard/business-listing",
+        "/dashboard/membership",
+        "/dashboard/admin",
+        "/profile",
+        "/public-profile",
+        "/billing",
+        "/membership",
+        "/my-registrations",
+        "/tickets",
+        "/shop/orders",
+        "/finals-voting",
+        "/admin/members",
+        "/admin/seasons",
+        "/admin/classes",
+        "/admin/formats",
+        "/admin/membership-types",
+        "/admin/coupons",
+        "/admin/permissions",
+        "/admin/advertisers",
+        "/admin/banners",
+        "/admin/banners/analytics",
+        "/admin/points-configuration",
+        "/admin/analytics",
+        "/admin/search-console",
+        "/admin/seo-settings",
+        "/admin/membership-cards",
+        "/admin/finals-voting",
+        "/admin/world-records",
+        "/admin/hall-of-fame",
+        "/admin/forever-members",
+        "/admin/login-audit",
+        "/admin/admin-audit",
+        "/admin/qa-checklist",
+        "/admin/score-sheet-editor",
+        "/events/b2a1e095-edf8-4435-85b8-7a594ab1ffe7",
+        "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7",
+        "/rulebooks/4c342419-06b6-4122-afc7-c68b4fb8719b",
+        "/retailers/38434ec8-3b7f-42ae-acd4-d756f7722920"
+      ],
+      "sample": {
+        "type": "error",
+        "text": "Error fetching profile: JSHandle@object"
+      }
+    },
+    {
+      "key": "http429:https://mecacaraudio.com/api/site-settings",
+      "kind": "network",
+      "count": 44,
+      "routes": [
+        "/admin/shop/orders",
+        "/admin/coupons",
+        "/admin/permissions",
+        "/admin/advertisers",
+        "/admin/banners",
+        "/admin/banners/analytics",
+        "/admin/points-configuration",
+        "/admin/analytics",
+        "/admin/search-console",
+        "/admin/seo-settings",
+        "/admin/membership-cards",
+        "/admin/finals-voting",
+        "/admin/world-records",
+        "/admin/hall-of-fame",
+        "/admin/forever-members",
+        "/admin/login-audit",
+        "/admin/admin-audit",
+        "/admin/qa-checklist",
+        "/admin/score-sheet-editor",
+        "/events/b2a1e095-edf8-4435-85b8-7a594ab1ffe7",
+        "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7",
+        "/rulebooks/4c342419-06b6-4122-afc7-c68b4fb8719b"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 429,
+        "url": "https://mecacaraudio.com/api/site-settings",
+        "method": "GET"
+      }
+    },
+    {
+      "key": "error:Error checking maintenance mode: JSHandle@object",
+      "kind": "errors",
+      "count": 22,
+      "routes": [
+        "/admin/shop/orders",
+        "/admin/coupons",
+        "/admin/permissions",
+        "/admin/advertisers",
+        "/admin/banners",
+        "/admin/banners/analytics",
+        "/admin/points-configuration",
+        "/admin/analytics",
+        "/admin/search-console",
+        "/admin/seo-settings",
+        "/admin/membership-cards",
+        "/admin/finals-voting",
+        "/admin/world-records",
+        "/admin/hall-of-fame",
+        "/admin/forever-members",
+        "/admin/login-audit",
+        "/admin/admin-audit",
+        "/admin/qa-checklist",
+        "/admin/score-sheet-editor",
+        "/events/b2a1e095-edf8-4435-85b8-7a594ab1ffe7",
+        "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7",
+        "/rulebooks/4c342419-06b6-4122-afc7-c68b4fb8719b"
+      ],
+      "sample": {
+        "type": "error",
+        "text": "Error checking maintenance mode: JSHandle@object"
+      }
+    },
+    {
+      "key": "error:Error fetching site settings: JSHandle@object",
+      "kind": "errors",
+      "count": 22,
+      "routes": [
+        "/admin/shop/orders",
+        "/admin/coupons",
+        "/admin/permissions",
+        "/admin/advertisers",
+        "/admin/banners",
+        "/admin/banners/analytics",
+        "/admin/points-configuration",
+        "/admin/analytics",
+        "/admin/search-console",
+        "/admin/seo-settings",
+        "/admin/membership-cards",
+        "/admin/finals-voting",
+        "/admin/world-records",
+        "/admin/hall-of-fame",
+        "/admin/forever-members",
+        "/admin/login-audit",
+        "/admin/admin-audit",
+        "/admin/qa-checklist",
+        "/admin/score-sheet-editor",
+        "/events/b2a1e095-edf8-4435-85b8-7a594ab1ffe7",
+        "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7",
+        "/rulebooks/4c342419-06b6-4122-afc7-c68b4fb8719b"
+      ],
+      "sample": {
+        "type": "error",
+        "text": "Error fetching site settings: JSHandle@object"
+      }
+    },
+    {
+      "key": "error:Failed to load resource: the server responded with a status of 404 ()",
+      "kind": "errors",
+      "count": 5,
+      "routes": [
+        "/admin/business-listings"
+      ],
+      "sample": {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 404 ()"
+      }
+    },
+    {
+      "key": "reqfail:POST:https://mecacaraudio.com/cdn-cgi/rum:net::ERR_ABORTED",
+      "kind": "network",
+      "count": 2,
+      "routes": [
+        "/admin/advertisers",
+        "/shop/products/33cc7766-cba2-400d-a5a1-361e0ef973e7"
+      ],
+      "sample": {
+        "type": "requestfailed",
+        "method": "POST",
+        "url": "https://mecacaraudio.com/cdn-cgi/rum?",
+        "error": "net::ERR_ABORTED"
+      }
+    },
+    {
+      "key": "reqfail:GET:https://mecacaraudio.com/api/standings/classes:net::ERR_ABORTED",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/standings"
+      ],
+      "sample": {
+        "type": "requestfailed",
+        "method": "GET",
+        "url": "https://mecacaraudio.com/api/standings/classes",
+        "error": "net::ERR_ABORTED"
+      }
+    },
+    {
+      "key": "reqfail:GET:https://mecacaraudio.com/api/standings/leaderboard:net::ERR_ABORTED",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/team-standings"
+      ],
+      "sample": {
+        "type": "requestfailed",
+        "method": "GET",
+        "url": "https://mecacaraudio.com/api/standings/leaderboard?limit=100",
+        "error": "net::ERR_ABORTED"
+      }
+    },
+    {
+      "key": "reqfail:GET:https://mecacaraudio.com/api/standings/teams:net::ERR_ABORTED",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/rulebooks"
+      ],
+      "sample": {
+        "type": "requestfailed",
+        "method": "GET",
+        "url": "https://mecacaraudio.com/api/standings/teams?limit=10",
+        "error": "net::ERR_ABORTED"
+      }
+    },
+    {
+      "key": "reqfail:GET:https://mecacaraudio.com/api/notifications:net::ERR_ABORTED",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/rulebooks"
+      ],
+      "sample": {
+        "type": "requestfailed",
+        "method": "GET",
+        "url": "https://mecacaraudio.com/api/notifications?userId=983f6056-b83f-4a79-b093-692f4dfe3635&limit=10",
+        "error": "net::ERR_ABORTED"
+      }
+    },
+    {
+      "key": "error:reCAPTCHA v2 error",
+      "kind": "errors",
+      "count": 1,
+      "routes": [
+        "/host-event"
+      ],
+      "sample": {
+        "type": "error",
+        "text": "reCAPTCHA v2 error"
+      }
+    },
+    {
+      "key": "http401:https://mecacaraudio.com/api/judges/directory",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/judges"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 401,
+        "url": "https://mecacaraudio.com/api/judges/directory",
+        "method": "GET"
+      }
+    },
+    {
+      "key": "error:Failed to load resource: the server responded with a status of 401 ()",
+      "kind": "errors",
+      "count": 1,
+      "routes": [
+        "/judges"
+      ],
+      "sample": {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 401 ()"
+      }
+    },
+    {
+      "key": "http404:https://mecacaraudio.com/wp-content/uploads/2022/09/BoB-Retail-Logo-150x150-1.jpg",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/admin/business-listings"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 404,
+        "url": "https://mecacaraudio.com/wp-content/uploads/2022/09/BoB-Retail-Logo-150x150-1.jpg",
+        "method": "GET"
+      }
+    },
+    {
+      "key": "http404:https://mecacaraudio.com/wp-content/uploads/2022/05/Only-Tint-150x150-1.jpg",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/admin/business-listings"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 404,
+        "url": "https://mecacaraudio.com/wp-content/uploads/2022/05/Only-Tint-150x150-1.jpg",
+        "method": "GET"
+      }
+    },
+    {
+      "key": "http404:https://mecacaraudio.com/wp-content/uploads/2022/10/royality-vinyls-directory.jpg",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/admin/business-listings"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 404,
+        "url": "https://mecacaraudio.com/wp-content/uploads/2022/10/royality-vinyls-directory.jpg",
+        "method": "GET"
+      }
+    },
+    {
+      "key": "http404:https://mecacaraudio.com/wp-content/uploads/2022/05/Team-Nuts-Logo-150x150-1.jpg",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/admin/business-listings"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 404,
+        "url": "https://mecacaraudio.com/wp-content/uploads/2022/05/Team-Nuts-Logo-150x150-1.jpg",
+        "method": "GET"
+      }
+    },
+    {
+      "key": "http404:https://mecacaraudio.com/wp-content/uploads/2022/07/why-so-serious-directory-150x150-1.jpg",
+      "kind": "network",
+      "count": 1,
+      "routes": [
+        "/admin/business-listings"
+      ],
+      "sample": {
+        "type": "http",
+        "status": 404,
+        "url": "https://mecacaraudio.com/wp-content/uploads/2022/07/why-so-serious-directory-150x150-1.jpg",
+        "method": "GET"
+      }
+    }
+  ]
+}
