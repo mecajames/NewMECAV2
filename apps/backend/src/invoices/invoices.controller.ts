@@ -276,6 +276,22 @@ export class InvoicesController {
   }
 
   /**
+   * Refund a paid invoice: issues Stripe refund, marks the invoice/order/payment
+   * as REFUNDED, and deletes the memberships created from the purchase so the
+   * user can re-order with the same email. (admin)
+   */
+  @Post(':id/refund-cleanup')
+  @HttpCode(HttpStatus.OK)
+  async refundAndCleanup(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.invoicesService.refundAndCleanup(id, body.reason || 'Refunded by admin');
+  }
+
+  /**
    * Mark overdue invoices (admin/cron job endpoint)
    */
   @Post('batch/mark-overdue')

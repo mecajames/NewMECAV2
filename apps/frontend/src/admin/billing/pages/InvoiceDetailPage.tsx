@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, User, MapPin, Building, Download, Send, CheckCircle, XCircle, RefreshCw, Package, Info } from 'lucide-react';
+import { ArrowLeft, FileText, User, MapPin, Building, Download, Send, CheckCircle, XCircle, RefreshCw, Package, Info, Undo2 } from 'lucide-react';
 import { billingApi, Invoice, invoicesApi } from '../../../api-client/billing.api-client';
 import { InvoiceStatusBadge } from '../components/BillingStatusBadge';
 import { InvoiceStatus } from '../billing.types';
@@ -91,6 +91,31 @@ export default function InvoiceDetailPage() {
     }
   };
 
+  const handleRefundInvoice = async () => {
+    if (!invoice) return;
+    const confirmed = window.confirm(
+      'This will issue a Stripe refund, mark the invoice/order as refunded, and DELETE the memberships created from this purchase so the customer can re-order with the same email.\n\nContinue?',
+    );
+    if (!confirmed) return;
+
+    const reason = prompt('Enter refund reason:');
+    if (reason === null) return;
+
+    try {
+      const result = await invoicesApi.refundAndCleanup(
+        invoice.id,
+        reason || 'Refunded by admin',
+      );
+      alert(
+        `Refund issued${result.stripeRefundId ? ` (Stripe refund ${result.stripeRefundId})` : ''}. Deleted ${result.deletedMembershipIds.length} membership(s).`,
+      );
+      fetchInvoice();
+    } catch (err: any) {
+      console.error('Error refunding invoice:', err);
+      alert(err?.response?.data?.message || 'Failed to refund invoice');
+    }
+  };
+
   const handleViewPdf = () => {
     if (invoice) {
       billingApi.viewInvoicePdf(invoice.id).catch(() => {
@@ -152,6 +177,7 @@ export default function InvoiceDetailPage() {
   const canResend = invoice.status === InvoiceStatus.SENT || invoice.status === InvoiceStatus.OVERDUE;
   const canMarkPaid = invoice.status === InvoiceStatus.SENT || invoice.status === InvoiceStatus.OVERDUE;
   const canCancel = invoice.status !== InvoiceStatus.PAID && invoice.status !== InvoiceStatus.CANCELLED;
+  const canRefund = invoice.status === InvoiceStatus.PAID;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
@@ -221,6 +247,15 @@ export default function InvoiceDetailPage() {
                 >
                   <XCircle className="h-4 w-4" />
                   Cancel
+                </button>
+              )}
+              {canRefund && (
+                <button
+                  onClick={handleRefundInvoice}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg border border-red-500/20 transition-colors"
+                >
+                  <Undo2 className="h-4 w-4" />
+                  Refund
                 </button>
               )}
               {invoice.order && (

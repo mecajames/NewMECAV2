@@ -10,6 +10,7 @@ import {
   InvoiceStatus,
   InvoiceItemType,
   OrderStatus,
+  PaymentStatus,
   CreateInvoiceDto,
   UpdateInvoiceStatusDto,
   InvoiceListQuery,
@@ -20,7 +21,10 @@ import { Invoice } from './invoices.entity';
 import { InvoiceItem } from './invoice-items.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Order } from '../orders/orders.entity';
+import { Payment } from '../payments/payments.entity';
+import { Membership } from '../memberships/memberships.entity';
 import { EmailService } from '../email/email.service';
+import { StripeService } from '../stripe/stripe.service';
 
 // Default MECA company info
 const DEFAULT_COMPANY_INFO = {
@@ -45,6 +49,7 @@ export class InvoicesService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
+    private readonly stripeService: StripeService,
   ) {}
 
   /**
@@ -456,6 +461,143 @@ export class InvoicesService {
     await em.flush();
 
     return invoice;
+  }
+
+  /**
+   * Refund a paid invoice AND clean up the records it created.
+   *
+   * Steps (single transaction):
+   *  1. Issue Stripe refund against the linked Payment's paymentIntent
+   *  2. Mark Payment as REFUNDED
+   *  3. Mark linked Order as REFUNDED
+   *  4. Delete Membership(s) created from this payment and clear the owner
+   *     profile's cached meca_id so the email can purchase again
+   *  5. Mark Invoice as REFUNDED
+   */
+  async refundAndCleanup(
+    id: string,
+    reason: string,
+  ): Promise<{
+    invoice: Invoice;
+    stripeRefundId?: string;
+    deletedMembershipIds: string[];
+  }> {
+    const em = this.em.fork();
+
+    return em.transactional(async (tx) => {
+      const invoice = await tx.findOne(
+        Invoice,
+        { id },
+        { populate: ['items', 'order', 'order.payment', 'user'] },
+      );
+
+      if (!invoice) {
+        throw new NotFoundException(`Invoice with ID ${id} not found`);
+      }
+
+      if (invoice.status !== InvoiceStatus.PAID) {
+        throw new BadRequestException(
+          `Only paid invoices can be refunded. Current status: ${invoice.status}`,
+        );
+      }
+
+      // Locate the payment (via order.payment); fall back to matching by
+      // membership.transactionId when the order link is missing.
+      let payment: Payment | null = invoice.order?.payment
+        ? await tx.findOne(
+            Payment,
+            { id: invoice.order.payment.id },
+            { populate: ['membership'] },
+          )
+        : null;
+
+      // Issue Stripe refund if we have a payment intent
+      let stripeRefundId: string | undefined;
+      if (payment?.stripePaymentIntentId) {
+        const refund = await this.stripeService.createRefund(
+          payment.stripePaymentIntentId,
+          reason,
+        );
+        stripeRefundId = refund.id;
+        this.logger.log(
+          `Stripe refund ${refund.id} issued for payment ${payment.id} (invoice ${invoice.invoiceNumber})`,
+        );
+      } else {
+        this.logger.warn(
+          `No Stripe payment intent found for invoice ${invoice.invoiceNumber}; skipping Stripe refund`,
+        );
+      }
+
+      // Find memberships tied to this payment. Prefer payment.membership;
+      // also sweep any memberships whose transactionId matches (covers
+      // multi-membership checkouts where only one is linked on Payment).
+      const membershipsToDelete: Membership[] = [];
+      if (payment) {
+        if (payment.membership) {
+          const m = await tx.findOne(Membership, { id: payment.membership.id });
+          if (m) membershipsToDelete.push(m);
+        }
+
+        const siblingTxId = payment.stripePaymentIntentId || payment.transactionId;
+        if (siblingTxId) {
+          const siblings = await tx.find(Membership, {
+            transactionId: siblingTxId,
+          });
+          for (const s of siblings) {
+            if (!membershipsToDelete.find((m) => m.id === s.id)) {
+              membershipsToDelete.push(s);
+            }
+          }
+        }
+      }
+
+      // Clear profile.meca_id cache for any owners whose cached value matches
+      // a membership we're about to delete, so the next purchase doesn't see
+      // stale data.
+      for (const membership of membershipsToDelete) {
+        if (membership.mecaId && membership.user) {
+          await tx.getConnection().execute(
+            `UPDATE profiles SET meca_id = NULL, meca_id_invalidated_at = NULL, updated_at = NOW() WHERE id = ? AND meca_id = ?`,
+            [
+              (membership.user as any).id ?? membership.user,
+              String(membership.mecaId),
+            ],
+          );
+        }
+      }
+
+      const deletedMembershipIds = membershipsToDelete.map((m) => m.id);
+      for (const m of membershipsToDelete) {
+        tx.remove(m);
+      }
+
+      // Update payment
+      if (payment) {
+        payment.paymentStatus = PaymentStatus.REFUNDED;
+        payment.refundedAt = new Date();
+        payment.refundReason = reason;
+      }
+
+      // Update order
+      if (invoice.order) {
+        invoice.order.status = OrderStatus.REFUNDED;
+        invoice.order.notes = reason;
+      }
+
+      // Update invoice
+      wrap(invoice).assign({
+        status: InvoiceStatus.REFUNDED,
+        notes: reason,
+      });
+
+      await tx.flush();
+
+      this.logger.log(
+        `Refunded invoice ${invoice.invoiceNumber}: deleted ${deletedMembershipIds.length} membership(s), Stripe refund ${stripeRefundId ?? 'n/a'}`,
+      );
+
+      return { invoice, stripeRefundId, deletedMembershipIds };
+    });
   }
 
   /**
