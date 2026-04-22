@@ -699,6 +699,22 @@ export const invoicesApi = {
   },
 
   /**
+   * Refund a paid invoice and delete the memberships it created so the
+   * customer can re-order with the same email. Issues a Stripe refund.
+   */
+  refundAndCleanup: async (
+    id: string,
+    reason?: string,
+  ): Promise<{
+    invoice: Invoice;
+    stripeRefundId?: string;
+    deletedMembershipIds: string[];
+  }> => {
+    const response = await axios.post(`/api/invoices/${id}/refund-cleanup`, { reason });
+    return response.data;
+  },
+
+  /**
    * Create invoice from order
    */
   createFromOrder: async (orderId: string): Promise<Invoice> => {

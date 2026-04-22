@@ -1,11 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
 import { InvoicesController } from './invoices.controller';
 import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { EmailModule } from '../email/email.module';
+import { StripeModule } from '../stripe/stripe.module';
 
 @Module({
-  imports: [EmailModule],
+  imports: [EmailModule, forwardRef(() => StripeModule)],
   controllers: [InvoicesController],
   providers: [InvoicesService, InvoicePdfService],
   exports: [InvoicesService, InvoicePdfService],

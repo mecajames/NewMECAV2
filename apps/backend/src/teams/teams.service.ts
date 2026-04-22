@@ -422,16 +422,20 @@ export class TeamsService {
 
     // Find active team membership for the user
     const membership = await em.findOne(TeamMember, { userId, status: 'active' });
-    if (!membership) {
-      // Check if user is an owner (captainId on team)
-      const teamAsOwner = await em.findOne(Team, { captainId: userId, isActive: true });
-      if (teamAsOwner) {
-        return this.findById(teamAsOwner.id, userId);
+    if (membership) {
+      // Guard against orphaned team_members rows pointing at a deleted team
+      const team = await em.findOne(Team, { id: membership.teamId });
+      if (team) {
+        return this.findById(membership.teamId, userId);
       }
-      return null;
     }
 
-    return this.findById(membership.teamId, userId);
+    // Check if user is an owner (captainId on team)
+    const teamAsOwner = await em.findOne(Team, { captainId: userId, isActive: true });
+    if (teamAsOwner) {
+      return this.findById(teamAsOwner.id, userId);
+    }
+    return null;
   }
 
   // Check if a user has an active team membership (required to create a team)

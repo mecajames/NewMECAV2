@@ -74,6 +74,37 @@ export class PaymentFulfillmentService {
     try {
       const amountPaid = amountCents / 100;
 
+      // Idempotency guard: if a membership already exists for this transaction,
+      // do NOT recreate it. This covers three cases:
+      //   1. Late/retry Stripe webhook arriving after the first fulfillment
+      //   2. A different Stripe event (charge.succeeded vs payment_intent.succeeded)
+      //      for the same payment intent
+      //   3. A REFUNDED membership we already deleted via admin refund — the
+      //      matching payment row is marked REFUNDED, so re-creation would
+      //      silently undo the refund. Abort in that case.
+      const idempotencyEm = this.em.fork();
+      const existingMembership = await idempotencyEm.findOne(Membership, {
+        transactionId,
+      });
+      if (existingMembership) {
+        this.logger.log(
+          `Membership ${existingMembership.id} already exists for transaction ${transactionId}; skipping duplicate fulfillment`,
+        );
+        return;
+      }
+      const existingPayment = await idempotencyEm.findOne(Payment, {
+        $or: [
+          { stripePaymentIntentId: transactionId },
+          { transactionId },
+        ],
+      });
+      if (existingPayment?.paymentStatus === PaymentStatus.REFUNDED) {
+        this.logger.warn(
+          `Payment ${existingPayment.id} for transaction ${transactionId} is REFUNDED; refusing to re-create the membership this payment originally produced`,
+        );
+        return;
+      }
+
       const membership = await this.membershipsService.createMembership({
         userId,
         membershipTypeConfigId,
