@@ -23,6 +23,8 @@ import { Profile } from '../profiles/profiles.entity';
 import { Order } from '../orders/orders.entity';
 import { Payment } from '../payments/payments.entity';
 import { Membership } from '../memberships/memberships.entity';
+import { Team } from '../teams/team.entity';
+import { TeamMember } from '../teams/team-member.entity';
 import { EmailService } from '../email/email.service';
 import { StripeService } from '../stripe/stripe.service';
 
@@ -481,6 +483,7 @@ export class InvoicesService {
     invoice: Invoice;
     stripeRefundId?: string;
     deletedMembershipIds: string[];
+    deletedTeamIds: string[];
   }> {
     const em = this.em.fork();
 
@@ -566,6 +569,19 @@ export class InvoicesService {
         }
       }
 
+      // Delete any teams created for these memberships (hasTeamAddon / includesTeam).
+      // teams.membership_id is ON DELETE SET NULL, so without this step teams would
+      // be orphaned in team lists. team_members has no FK to teams, so wipe members first.
+      const deletedTeamIds: string[] = [];
+      for (const membership of membershipsToDelete) {
+        const teams = await tx.find(Team, { membership: membership.id });
+        for (const team of teams) {
+          await tx.nativeDelete(TeamMember, { teamId: team.id });
+          tx.remove(team);
+          deletedTeamIds.push(team.id);
+        }
+      }
+
       const deletedMembershipIds = membershipsToDelete.map((m) => m.id);
       for (const m of membershipsToDelete) {
         tx.remove(m);
@@ -593,10 +609,10 @@ export class InvoicesService {
       await tx.flush();
 
       this.logger.log(
-        `Refunded invoice ${invoice.invoiceNumber}: deleted ${deletedMembershipIds.length} membership(s), Stripe refund ${stripeRefundId ?? 'n/a'}`,
+        `Refunded invoice ${invoice.invoiceNumber}: deleted ${deletedMembershipIds.length} membership(s), ${deletedTeamIds.length} team(s), Stripe refund ${stripeRefundId ?? 'n/a'}`,
       );
 
-      return { invoice, stripeRefundId, deletedMembershipIds };
+      return { invoice, stripeRefundId, deletedMembershipIds, deletedTeamIds };
     });
   }
 
