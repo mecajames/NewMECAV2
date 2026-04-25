@@ -353,6 +353,16 @@ export class MembershipsService {
   async createMembership(data: CreateMembershipDto): Promise<Membership> {
     const em = this.em.fork();
 
+    // Idempotency: if a membership already exists for this Stripe PaymentIntent,
+    // return it. Lets the client and the Stripe webhook both call this endpoint
+    // safely — whichever lands first wins, the second is a no-op.
+    if (data.stripePaymentIntentId) {
+      const existing = await em.findOne(Membership, {
+        stripePaymentIntentId: data.stripePaymentIntentId,
+      });
+      if (existing) return existing;
+    }
+
     // Check if purchase is allowed (before transaction)
     const canPurchase = await this.canPurchaseMembership(data.userId, data.membershipTypeConfigId);
     if (!canPurchase.allowed) {
