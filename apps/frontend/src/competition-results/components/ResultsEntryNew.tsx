@@ -326,9 +326,9 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     if (resultsSearchTerm) {
       const search = resultsSearchTerm.toLowerCase();
       filtered = filtered.filter(r =>
-        r.meca_id?.toLowerCase().includes(search) ||
-        r.competitor_name?.toLowerCase().includes(search) ||
-        competitors.find(c => c.id === r.competitor_id)?.email?.toLowerCase().includes(search)
+        String(r.meca_id ?? '').toLowerCase().includes(search) ||
+        String(r.competitor_name ?? '').toLowerCase().includes(search) ||
+        String(competitors.find(c => c.id === r.competitor_id)?.email ?? '').toLowerCase().includes(search)
       );
     }
 

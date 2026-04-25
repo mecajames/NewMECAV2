@@ -1580,6 +1580,9 @@ export class TeamsService {
       JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
       LEFT JOIN profiles p ON p.id = m.user_id
       WHERE m.status = 'active'
+      AND m.payment_status = 'paid'
+      AND (m.end_date >= CURRENT_DATE OR m.end_date IS NULL)
+      AND p.membership_status = 'active'
       AND (
         mtc.category = 'retail'
         OR mtc.category = 'manufacturer'
@@ -1692,7 +1695,13 @@ export class TeamsService {
     }
 
     // Build legacy teams with details (no more N+1)
-    const legacyTeamsWithDetails = legacyTeams.map(team => {
+    // Filter out teams whose owner does not have an active membership
+    const legacyTeamsWithDetails = legacyTeams
+      .filter(team => {
+        const owner = legacyProfileMap.get(team.captainId);
+        return owner?.membership_status === 'active';
+      })
+      .map(team => {
       const owner = legacyProfileMap.get(team.captainId);
       const members = legacyMembersByTeam.get(team.id) || [];
       const membersWithUsers = members.map(m => this.buildMemberWithUserFromMap(m, legacyProfileMap));
