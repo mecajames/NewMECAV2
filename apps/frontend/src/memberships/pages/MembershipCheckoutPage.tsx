@@ -358,7 +358,11 @@ export default function MembershipCheckoutPage() {
           couponCode: couponCode || undefined,
       });
 
-      const { clientSecret: secret } = response.data;
+      const { clientSecret: secret, stagingMode, message } = response.data;
+      if (stagingMode) {
+        setError(message || 'Payments are blocked in staging mode.');
+        return;
+      }
       setClientSecret(secret);
       setStep('payment');
     } catch (err) {
@@ -398,9 +402,10 @@ export default function MembershipCheckoutPage() {
       }
     }
 
-    // For new guest accounts: create membership directly (webhook won't have userId)
-    // For existing users: webhook handles membership creation via payment intent metadata
-    if (currentUserId && accountCreated) {
+    // Always create the membership client-side once we know who the buyer is.
+    // The Stripe webhook is the backup path (idempotent on stripePaymentIntentId).
+    // Without this, a missed webhook = silent data loss for logged-in buyers.
+    if (currentUserId) {
       try {
         await axios.post('/api/memberships', {
           userId: currentUserId,

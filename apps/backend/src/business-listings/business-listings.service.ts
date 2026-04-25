@@ -76,6 +76,7 @@ export class BusinessListingsService {
     if (!includeInactive) {
       query.isActive = true;
       query.isApproved = true;
+      query.user = { membership_status: 'active' };
     }
     return em.find(RetailerListing, query, {
       populate: ['user'],
@@ -216,6 +217,7 @@ export class BusinessListingsService {
     if (!includeInactive) {
       query.isActive = true;
       query.isApproved = true;
+      query.user = { membership_status: 'active' };
     }
     return em.find(ManufacturerListing, query, {
       populate: ['user'],

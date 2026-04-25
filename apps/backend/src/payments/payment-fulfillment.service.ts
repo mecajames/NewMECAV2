@@ -13,6 +13,7 @@ import { WorldFinalsService } from '../world-finals/world-finals.service';
 import {
   PaymentStatus,
   PaymentMethod,
+  PaymentType,
   MembershipAccountType,
   OrderType,
   OrderItemType,
@@ -20,6 +21,8 @@ import {
 } from '@newmeca/shared';
 import { Membership } from '../memberships/memberships.entity';
 import { Payment } from './payments.entity';
+import { Order } from '../orders/orders.entity';
+import { Profile } from '../profiles/profiles.entity';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 /**
@@ -165,10 +168,9 @@ export class PaymentFulfillmentService {
         }
       }
 
-      // Create Order and Invoice (async, non-blocking)
-      const membershipTaxAmount = metadata.taxAmount || '0.00';
-      this.createOrderAndInvoice(params, amountPaid, 'membership', membershipTaxAmount).catch((error) => {
-        this.logger.error(`Order/Invoice creation failed (non-critical): ${error}`);
+      // Create Payment + Order + Invoice (idempotent; safe if client also calls it)
+      this.fulfillBillingForMembership(membership, params, amountPaid).catch((error) => {
+        this.logger.error(`Billing fulfillment failed (non-critical): ${error}`);
       });
 
       // Create QuickBooks sales receipt (async, non-blocking)
@@ -491,6 +493,58 @@ export class PaymentFulfillmentService {
    * Create an Order and Invoice from a successful payment.
    * Payment-method-agnostic.
    */
+  /**
+   * Create the financial trail (Payment row, Order, Invoice) for a successfully
+   * paid membership. Safe for both the Stripe webhook AND the client-side
+   * POST /api/memberships path to call — the Payment row is keyed off
+   * stripePaymentIntentId / transactionId so concurrent calls converge on one
+   * row, and Order creation is skipped if one already exists for this Payment.
+   *
+   * Without this, a missed webhook (network blip, signing-key rotation, no
+   * `stripe listen` locally) leaves the buyer with a Membership but no
+   * Payment / Order / Invoice rows — silent data loss.
+   */
+  async fulfillBillingForMembership(
+    membership: Membership,
+    params: PaymentFulfillmentParams,
+    amountPaid: number,
+  ): Promise<void> {
+    const em = this.em.fork();
+    const txnId = params.transactionId;
+
+    let payment = await em.findOne(Payment, {
+      $or: [
+        { stripePaymentIntentId: txnId },
+        { transactionId: txnId },
+      ],
+    });
+    if (!payment) {
+      payment = em.create(Payment, {
+        user: em.getReference(Profile, membership.user.id),
+        membership: em.getReference(Membership, membership.id),
+        paymentType: PaymentType.MEMBERSHIP,
+        paymentMethod: params.paymentMethod,
+        amount: amountPaid.toFixed(2),
+        currency: 'USD',
+        transactionId: txnId,
+        stripePaymentIntentId: params.paymentMethod === PaymentMethod.STRIPE ? txnId : undefined,
+        paymentStatus: PaymentStatus.PAID,
+        paidAt: new Date(),
+      } as any);
+      await em.persistAndFlush(payment);
+    }
+
+    const existingOrder = await em.findOne(Order, { payment: payment.id });
+    if (!existingOrder) {
+      await this.createOrderAndInvoice(
+        params,
+        amountPaid,
+        'membership',
+        params.metadata.taxAmount || '0.00',
+      );
+    }
+  }
+
   async createOrderAndInvoice(
     params: PaymentFulfillmentParams,
     amountPaid: number,

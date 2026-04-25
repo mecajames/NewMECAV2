@@ -16,9 +16,12 @@ import {
   Headers,
   UnauthorizedException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole, MembershipAccountType, PaymentStatus } from '@newmeca/shared';
+import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole, MembershipAccountType, PaymentStatus, PaymentMethod } from '@newmeca/shared';
+import { PaymentFulfillmentService } from '../payments/payment-fulfillment.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
@@ -41,6 +44,8 @@ export class MembershipsController {
     private readonly membershipSyncService: MembershipSyncService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
+    @Inject(forwardRef(() => PaymentFulfillmentService))
+    private readonly paymentFulfillmentService: PaymentFulfillmentService,
   ) {}
 
   // Helper to get authenticated user from token
@@ -95,7 +100,40 @@ export class MembershipsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createMembership(@Body() data: CreateMembershipDto): Promise<Membership> {
-    return this.membershipsService.createMembership(data);
+    const membership = await this.membershipsService.createMembership(data);
+
+    // Mirror the webhook fulfillment so the buyer always ends up with a full
+    // billing record (Payment + Order + Invoice), even if the Stripe webhook
+    // never fires (local dev, network blip, signing-key rotation). Idempotent
+    // on stripePaymentIntentId — if the webhook also runs, it's a no-op.
+    if (data.stripePaymentIntentId || data.transactionId) {
+      const txnId = (data.stripePaymentIntentId || data.transactionId) as string;
+      this.paymentFulfillmentService.fulfillBillingForMembership(
+        membership,
+        {
+          transactionId: txnId,
+          paymentMethod: data.stripePaymentIntentId ? PaymentMethod.STRIPE : PaymentMethod.MANUAL,
+          amountCents: Math.round(data.amountPaid * 100),
+          metadata: {
+            userId: data.userId,
+            membershipTypeConfigId: data.membershipTypeConfigId,
+            billingFirstName: data.billingFirstName || '',
+            billingLastName: data.billingLastName || '',
+            billingPhone: data.billingPhone || '',
+            billingAddress: data.billingAddress || '',
+            billingCity: data.billingCity || '',
+            billingState: data.billingState || '',
+            billingPostalCode: data.billingPostalCode || '',
+            billingCountry: data.billingCountry || '',
+          },
+        },
+        data.amountPaid,
+      ).catch((err) => {
+        this.logger.error(`Billing fulfillment after createMembership failed (non-critical): ${err}`);
+      });
+    }
+
+    return membership;
   }
 
   /**

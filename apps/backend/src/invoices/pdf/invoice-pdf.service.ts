@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Invoice } from '../invoices.entity';
 import { InvoiceStatus, CompanyInfo, BillingAddress } from '@newmeca/shared';
-import * as fs from 'fs';
-import * as path from 'path';
 
 /**
  * Service for generating invoice PDFs
@@ -11,38 +9,8 @@ import * as path from 'path';
  */
 @Injectable()
 export class InvoicePdfService {
-  private logoBase64: string | null = null;
-
-  constructor() {
-    this.loadLogo();
-  }
-
-  /**
-   * Load MECA logo as base64 for embedding in PDFs
-   */
-  private loadLogo(): void {
-    try {
-      // Try multiple possible paths for the logo
-      const possiblePaths = [
-        path.join(__dirname, '../../../../frontend/public/meca-logo-transparent.png'),
-        path.join(__dirname, '../../../../../apps/frontend/public/meca-logo-transparent.png'),
-        path.join(process.cwd(), '../frontend/public/meca-logo-transparent.png'),
-        path.join(process.cwd(), 'apps/frontend/public/meca-logo-transparent.png'),
-      ];
-
-      for (const logoPath of possiblePaths) {
-        if (fs.existsSync(logoPath)) {
-          const logoBuffer = fs.readFileSync(logoPath);
-          this.logoBase64 = logoBuffer.toString('base64');
-          console.log('MECA logo loaded successfully from:', logoPath);
-          return;
-        }
-      }
-
-      console.warn('MECA logo not found in any expected location');
-    } catch (error) {
-      console.error('Failed to load MECA logo:', error);
-    }
+  private get logoUrl(): string {
+    return `${process.env.FRONTEND_URL || 'https://www.mecacaraudio.com'}/meca-logo-transparent.png`;
   }
   /**
    * Generate PDF content for an invoice
@@ -309,7 +277,7 @@ export class InvoicePdfService {
     <!-- Header -->
     <div class="header">
       <div class="company-info">
-        ${this.logoBase64 ? `<img src="data:image/png;base64,${this.logoBase64}" alt="MECA Logo" class="company-logo" />` : ''}
+        <img src="${this.logoUrl}" alt="MECA Logo" class="company-logo" />
         <div class="company-details">
           <h1>${this.escapeHtml(companyInfo?.name || 'MECA')}</h1>
           ${companyInfo?.address ? `
@@ -319,7 +287,7 @@ export class InvoicePdfService {
             ${this.escapeHtml(companyInfo.address.country || 'US')}
           </p>
           ` : ''}
-          ${companyInfo?.email ? `<p>${this.escapeHtml(companyInfo.email)}</p>` : ''}
+          ${companyInfo?.email ? `<p><!--email_off-->${this.escapeHtml(companyInfo.email)}<!--/email_off--></p>` : ''}
           ${companyInfo?.phone ? `<p>${this.escapeHtml(companyInfo.phone)}</p>` : ''}
         </div>
       </div>
