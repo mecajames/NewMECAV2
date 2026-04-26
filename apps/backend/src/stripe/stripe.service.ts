@@ -207,13 +207,18 @@ export class StripeService {
   /**
    * Create a refund for a Payment Intent
    */
-  async createRefund(paymentIntentId: string, reason?: string): Promise<Stripe.Refund> {
+  /**
+   * Issue a Stripe refund. Pass `amountCents` for a partial refund — omit
+   * for a full refund of the original PaymentIntent.
+   */
+  async createRefund(paymentIntentId: string, reason?: string, amountCents?: number): Promise<Stripe.Refund> {
     const stripe = this.getStripeClient();
 
     try {
       return await stripe.refunds.create({
         payment_intent: paymentIntentId,
         reason: 'requested_by_customer',
+        amount: amountCents,
         metadata: reason ? { reason } : undefined,
       });
     } catch (error) {
@@ -312,6 +317,87 @@ export class StripeService {
   /**
    * Reactivate a subscription that was set to cancel at period end
    */
+  /**
+   * Look up the customer's default card on file for display ("Visa ending in 4242, exp 8/26").
+   * Returns null if the customer has no card payment method attached. Tries
+   * the customer's invoice_settings.default_payment_method first, then falls
+   * back to the first attached card.
+   */
+  async getDefaultPaymentMethod(customerId: string): Promise<{
+    brand: string;
+    last4: string;
+    expMonth: number;
+    expYear: number;
+  } | null> {
+    const stripe = this.getStripeClient();
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer.deleted) return null;
+
+      const defaultPmId = (customer as Stripe.Customer).invoice_settings?.default_payment_method;
+      let pmId: string | undefined;
+      if (typeof defaultPmId === 'string') pmId = defaultPmId;
+      else if (defaultPmId?.id) pmId = defaultPmId.id;
+
+      if (!pmId) {
+        const list = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+        pmId = list.data[0]?.id;
+      }
+      if (!pmId) return null;
+
+      const pm = await stripe.paymentMethods.retrieve(pmId);
+      if (pm.type !== 'card' || !pm.card) return null;
+      return {
+        brand: pm.card.brand,
+        last4: pm.card.last4,
+        expMonth: pm.card.exp_month,
+        expYear: pm.card.exp_year,
+      };
+    } catch (error) {
+      this.logger.error('Stripe getDefaultPaymentMethod error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Pause an active subscription via Stripe's pause_collection. Stripe stops
+   * collecting payments at the next cycle until resumeSubscription is called.
+   * `behavior` defaults to 'mark_uncollectible' so any in-flight invoice is
+   * voided rather than retried — the safer choice for admin-initiated pauses.
+   */
+  async pauseSubscription(
+    subscriptionId: string,
+    behavior: 'mark_uncollectible' | 'keep_as_draft' | 'void' = 'mark_uncollectible',
+  ): Promise<Stripe.Subscription> {
+    const stripe = this.getStripeClient();
+    try {
+      return await stripe.subscriptions.update(subscriptionId, {
+        pause_collection: { behavior },
+      });
+    } catch (error) {
+      this.logger.error('Stripe pauseSubscription error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to pause subscription');
+    }
+  }
+
+  async resumeSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    const stripe = this.getStripeClient();
+    try {
+      return await stripe.subscriptions.update(subscriptionId, {
+        pause_collection: null as any,
+      });
+    } catch (error) {
+      this.logger.error('Stripe resumeSubscription error:', error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to resume subscription');
+    }
+  }
+
   async reactivateSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
     const stripe = this.getStripeClient();
 

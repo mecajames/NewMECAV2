@@ -12,6 +12,14 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
+
+interface SubscriptionStats {
+  active: number;
+  churnLast30Days: number;
+  upcomingRenewalsNext14Days: number;
+  failedPaymentsLast30Days: number;
+  mrrFormatted: string;
+}
 import { OrderTable } from '../components/OrderTable';
 import { InvoiceTable } from '../components/InvoiceTable';
 import { OrderStatus, OrderType, InvoiceStatus } from '../billing.types';
@@ -19,6 +27,7 @@ import { OrderStatus, OrderType, InvoiceStatus } from '../billing.types';
 export default function BillingDashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<BillingDashboardStats | null>(null);
+  const [subStats, setSubStats] = useState<SubscriptionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [_refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,8 +102,12 @@ export default function BillingDashboardPage() {
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
 
-      const data = await billingApi.getDashboardStats();
+      const [data, subData] = await Promise.all([
+        billingApi.getDashboardStats(),
+        billingApi.getSubscriptionStats().catch(() => null),
+      ]);
       setStats(data);
+      setSubStats(subData);
       setError(null);
     } catch (err) {
       console.error('Error fetching billing stats:', err);
@@ -254,6 +267,39 @@ export default function BillingDashboardPage() {
                 ))}
               </ul>
             )}
+          </div>
+        )}
+
+        {/* Subscription KPIs */}
+        {subStats && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-white mb-3">Subscriptions</h2>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Active</p>
+                <p className="text-white font-semibold text-2xl mt-1">{subStats.active}</p>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">MRR</p>
+                <p className="text-white font-semibold text-2xl mt-1">{subStats.mrrFormatted}</p>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Renewing &lt;14d</p>
+                <p className="text-white font-semibold text-2xl mt-1">{subStats.upcomingRenewalsNext14Days}</p>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Churn 30d</p>
+                <p className={`font-semibold text-2xl mt-1 ${subStats.churnLast30Days > 0 ? 'text-amber-400' : 'text-white'}`}>
+                  {subStats.churnLast30Days}
+                </p>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Failed 30d</p>
+                <p className={`font-semibold text-2xl mt-1 ${subStats.failedPaymentsLast30Days > 0 ? 'text-red-400' : 'text-white'}`}>
+                  {subStats.failedPaymentsLast30Days}
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

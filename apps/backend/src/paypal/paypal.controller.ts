@@ -28,11 +28,13 @@ import { MembershipTypeConfig } from '../membership-type-configs/membership-type
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { ProcessedPaypalWebhook } from './processed-paypal-webhook.entity';
+import { Membership } from '../memberships/memberships.entity';
 import {
   PaymentMethod,
   PayPalPaymentType,
   StripePaymentType,
   ShopAddress,
+  PaymentStatus,
 } from '@newmeca/shared';
 
 // DTO interfaces matching Stripe controller pattern
@@ -471,6 +473,61 @@ export class PayPalController {
           this.logger.log(`PayPal capture refunded webhook: ${eventId}`);
           webhookRecord.processingResult = 'success';
           break;
+        case 'BILLING.SUBSCRIPTION.CANCELLED':
+        case 'BILLING.SUBSCRIPTION.EXPIRED':
+        case 'BILLING.SUBSCRIPTION.SUSPENDED': {
+          const paypalSubId = event.resource?.id;
+          if (paypalSubId) {
+            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId });
+            if (m && !m.cancelledAt) {
+              m.paymentStatus = PaymentStatus.CANCELLED;
+              m.cancelledAt = new Date();
+              m.cancellationReason = `PayPal ${eventType.split('.').pop()?.toLowerCase() || 'cancelled'} via webhook`;
+              m.cancelledBy = 'paypal_webhook';
+              await em.flush();
+              this.logger.warn(`Marked membership ${m.id} cancelled (PayPal ${eventType})`);
+            }
+          }
+          webhookRecord.processingResult = 'success';
+          break;
+        }
+        case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED': {
+          const paypalSubId = event.resource?.id;
+          if (paypalSubId) {
+            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId });
+            if (m && m.paymentStatus !== PaymentStatus.FAILED) {
+              m.paymentStatus = PaymentStatus.FAILED;
+              await em.flush();
+              this.logger.warn(`Marked membership ${m.id} FAILED (PayPal subscription payment failed)`);
+            }
+          }
+          webhookRecord.processingResult = 'success';
+          break;
+        }
+        case 'BILLING.SUBSCRIPTION.RENEWED':
+        case 'BILLING.SUBSCRIPTION.ACTIVATED': {
+          const paypalSubId = event.resource?.id;
+          if (paypalSubId) {
+            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId });
+            if (m) {
+              // Extend by one year from current end_date (matches Stripe renewal logic)
+              if (m.endDate && m.endDate > new Date()) {
+                const next = new Date(m.endDate);
+                next.setFullYear(next.getFullYear() + 1);
+                m.endDate = next;
+              } else {
+                const next = new Date();
+                next.setFullYear(next.getFullYear() + 1);
+                m.endDate = next;
+              }
+              m.paymentStatus = PaymentStatus.PAID;
+              await em.flush();
+              this.logger.log(`Extended membership ${m.id} via PayPal ${eventType}`);
+            }
+          }
+          webhookRecord.processingResult = 'success';
+          break;
+        }
         default:
           this.logger.log(`Unhandled PayPal event type: ${eventType}`);
           webhookRecord.processingResult = 'unhandled';

@@ -353,6 +353,16 @@ export class MembershipsService {
   async createMembership(data: CreateMembershipDto): Promise<Membership> {
     const em = this.em.fork();
 
+    // Idempotency: if a membership already exists for this Stripe PaymentIntent,
+    // return it. Lets the client and the Stripe webhook both call this endpoint
+    // safely — whichever lands first wins, the second is a no-op.
+    if (data.stripePaymentIntentId) {
+      const existing = await em.findOne(Membership, {
+        stripePaymentIntentId: data.stripePaymentIntentId,
+      });
+      if (existing) return existing;
+    }
+
     // Check if purchase is allowed (before transaction)
     const canPurchase = await this.canPurchaseMembership(data.userId, data.membershipTypeConfigId);
     if (!canPurchase.allowed) {
@@ -1704,6 +1714,122 @@ export class MembershipsService {
   }
 
   /**
+   * Pause an active subscription via Stripe. Membership stays in DB (so the
+   * member can be reactivated trivially), but no charges happen at the next
+   * cycle. Audit-logged.
+   */
+  async pauseMembership(
+    membershipId: string,
+    actorUserId: string,
+    reason?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, { populate: ['user'] });
+    if (!membership) throw new NotFoundException(`Membership ${membershipId} not found`);
+    if (!membership.stripeSubscriptionId) {
+      throw new BadRequestException('No Stripe subscription on this membership');
+    }
+    if (membership.cancelledAt) {
+      throw new BadRequestException('Cannot pause a cancelled membership');
+    }
+
+    await this.stripeService.pauseSubscription(membership.stripeSubscriptionId);
+
+    this.adminAuditService.logAction({
+      adminUserId: actorUserId,
+      action: 'membership_pause',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      description: `Paused subscription for ${membership.user?.email || 'unknown'}${reason ? `: ${reason}` : ''}`,
+      newValues: { paused: true, reason: reason || null },
+    });
+
+    return { success: true, message: 'Subscription paused. No charges until resumed.' };
+  }
+
+  /**
+   * Resume a previously-paused subscription. Charges resume at the next cycle.
+   */
+  async resumeMembership(
+    membershipId: string,
+    actorUserId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, { populate: ['user'] });
+    if (!membership) throw new NotFoundException(`Membership ${membershipId} not found`);
+    if (!membership.stripeSubscriptionId) {
+      throw new BadRequestException('No Stripe subscription on this membership');
+    }
+
+    await this.stripeService.resumeSubscription(membership.stripeSubscriptionId);
+
+    this.adminAuditService.logAction({
+      adminUserId: actorUserId,
+      action: 'membership_resume',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      description: `Resumed subscription for ${membership.user?.email || 'unknown'}`,
+      newValues: { paused: false },
+    });
+
+    return { success: true, message: 'Subscription resumed.' };
+  }
+
+  /**
+   * Undo a "cancel at period end" while still inside the active period.
+   * Flips Stripe's cancel_at_period_end back to false and clears the local
+   * cancellation flags. Member or admin can call.
+   */
+  async reactivateMembership(
+    membershipId: string,
+    actorUserId: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    if (!membership.cancelAtPeriodEnd) {
+      throw new BadRequestException('Membership is not scheduled for cancellation');
+    }
+    if (membership.endDate && membership.endDate < new Date()) {
+      throw new BadRequestException('Cancellation window has already passed; create a new membership');
+    }
+
+    if (membership.stripeSubscriptionId) {
+      try {
+        await this.stripeService.reactivateSubscription(membership.stripeSubscriptionId);
+      } catch (err) {
+        this.logger.error(`Stripe reactivateSubscription failed for ${membership.stripeSubscriptionId}: ${err}`);
+        throw new BadRequestException('Failed to reactivate Stripe subscription. The subscription may have already ended.');
+      }
+    }
+
+    membership.cancelAtPeriodEnd = false;
+    membership.cancelledAt = undefined;
+    membership.cancellationReason = undefined;
+    membership.cancelledBy = undefined;
+    await em.flush();
+
+    this.logger.log(`Membership ${membershipId} reactivated by ${actorUserId}`);
+
+    this.adminAuditService.logAction({
+      adminUserId: actorUserId,
+      action: 'membership_reactivate',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      description: `Reactivated cancellation for ${membership.user?.email || 'unknown'}`,
+      newValues: { cancelAtPeriodEnd: false },
+    });
+
+    return { success: true, membership, message: 'Membership reactivated. Auto-renewal restored.' };
+  }
+
+  /**
    * Refund a membership: cancels immediately, processes Stripe refund, and sends notification email.
    *
    * @param membershipId The membership to refund
@@ -1714,6 +1840,7 @@ export class MembershipsService {
     membershipId: string,
     reason: string,
     adminId: string,
+    amountCents?: number,
   ): Promise<{
     success: boolean;
     membership: Membership;
@@ -1730,12 +1857,18 @@ export class MembershipsService {
       throw new NotFoundException(`Membership ${membershipId} not found`);
     }
 
-    if (membership.cancelledAt) {
+    if (membership.cancelledAt && !amountCents) {
       throw new BadRequestException('This membership has already been cancelled');
     }
 
-    if (membership.paymentStatus !== PaymentStatus.PAID) {
-      throw new BadRequestException('Can only refund paid memberships');
+    if (membership.paymentStatus !== PaymentStatus.PAID && !amountCents) {
+      throw new BadRequestException('Can only fully refund paid memberships');
+    }
+
+    const totalPaidCents = Math.round(Number(membership.amountPaid) * 100);
+    const isPartial = amountCents !== undefined && amountCents < totalPaidCents;
+    if (amountCents !== undefined && amountCents > totalPaidCents) {
+      throw new BadRequestException(`Refund amount ${amountCents} cents exceeds paid ${totalPaidCents} cents`);
     }
 
     let stripeRefund: { id: string; amount: number; status: string } | null = null;
@@ -1746,13 +1879,14 @@ export class MembershipsService {
         const refund = await this.stripeService.createRefund(
           membership.stripePaymentIntentId,
           reason,
+          amountCents,
         );
         stripeRefund = {
           id: refund.id,
           amount: refund.amount,
           status: refund.status || 'pending',
         };
-        this.logger.log(`Stripe refund ${refund.id} created for membership ${membershipId}`);
+        this.logger.log(`Stripe refund ${refund.id} created for membership ${membershipId} (amount=${refund.amount}, partial=${isPartial})`);
       } catch (stripeError) {
         this.logger.error(`Failed to create Stripe refund for membership ${membershipId}:`, stripeError);
         throw new BadRequestException(
@@ -1761,17 +1895,25 @@ export class MembershipsService {
       }
     }
 
-    // Cancel the membership immediately
-    membership.cancelledAt = new Date();
-    membership.cancellationReason = `REFUND: ${reason}`;
-    membership.cancelledBy = adminId;
-    membership.cancelAtPeriodEnd = false;
-    membership.paymentStatus = PaymentStatus.REFUNDED;
+    // Partial refund: keep membership active, only annotate. Full refund: cancel.
+    if (isPartial) {
+      const note = `Partial refund $${(amountCents! / 100).toFixed(2)}: ${reason}`;
+      membership.cancellationReason = membership.cancellationReason
+        ? `${membership.cancellationReason}\n${note}`
+        : note;
+      // Keep paymentStatus = PAID and cancelledAt = null — membership stays active
+    } else {
+      membership.cancelledAt = new Date();
+      membership.cancellationReason = `REFUND: ${reason}`;
+      membership.cancelledBy = adminId;
+      membership.cancelAtPeriodEnd = false;
+      membership.paymentStatus = PaymentStatus.REFUNDED;
+    }
 
     await em.flush();
 
-    // Sync profile membership status
-    if (membership.user) {
+    // Sync profile membership status (full refund only — partial keeps it active)
+    if (!isPartial && membership.user) {
       await this.membershipSyncService.syncProfileMembershipStatus(membership.user.id);
     }
 
@@ -1794,19 +1936,20 @@ export class MembershipsService {
       }
     }
 
-    this.logger.log(`Membership ${membershipId} refunded by admin ${adminId}. Reason: ${reason}`);
+    this.logger.log(`Membership ${membershipId} ${isPartial ? 'partially ' : ''}refunded by admin ${adminId}. Reason: ${reason}`);
 
     // Audit log
     this.adminAuditService.logAction({
       adminUserId: adminId,
-      action: 'membership_refund',
+      action: isPartial ? 'membership_refund_partial' : 'membership_refund',
       resourceType: 'membership',
       resourceId: membershipId,
-      description: `Refunded membership for ${membership.user?.email || 'unknown'}. Reason: ${reason}`,
-      oldValues: { paymentStatus: PaymentStatus.PAID },
+      description: `${isPartial ? 'Partially refunded' : 'Refunded'} membership for ${membership.user?.email || 'unknown'}. Reason: ${reason}`,
+      oldValues: { paymentStatus: membership.paymentStatus },
       newValues: {
-        paymentStatus: PaymentStatus.REFUNDED,
+        paymentStatus: isPartial ? PaymentStatus.PAID : PaymentStatus.REFUNDED,
         refundAmount: stripeRefund ? stripeRefund.amount / 100 : Number(membership.amountPaid),
+        isPartial,
         cancellationReason: reason,
       },
     });
@@ -2115,6 +2258,25 @@ export class MembershipsService {
     const session = await this.stripeService.createBillingPortalSession(customer.id, returnUrl);
 
     return { url: session.url };
+  }
+
+  /**
+   * Return the buyer's default card on file. Resolves the Stripe customer
+   * via findOrCreateCustomer (idempotent on email) so it works even for
+   * legacy users whose customer ID was never persisted locally.
+   */
+  async getDefaultPaymentMethod(
+    userId: string,
+  ): Promise<{ brand: string; last4: string; expMonth: number; expYear: number } | null> {
+    const em = this.em.fork();
+    const user = await em.findOne(Profile, { id: userId });
+    if (!user || !user.email) return null;
+
+    const customer = await this.stripeService.findOrCreateCustomer(
+      user.email,
+      `${user.first_name || ''} ${user.last_name || ''}`.trim() || undefined,
+    );
+    return this.stripeService.getDefaultPaymentMethod(customer.id);
   }
 
   /**

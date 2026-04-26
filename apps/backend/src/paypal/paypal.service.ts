@@ -271,6 +271,144 @@ export class PayPalService {
     }
   }
 
+  // =============================================================================
+  // SUBSCRIPTIONS — recurring billing parity with Stripe.
+  // PayPal subscriptions require a Product → Plan → Subscription chain. We
+  // create one Plan per membership type at first use (idempotent via cached
+  // plan IDs in site_settings) and then subscribe individual users to it.
+  // =============================================================================
+
+  /**
+   * Create (or upsert) a billing Plan for a given membership config. Returns
+   * the PayPal plan ID. Idempotent — caches the ID under
+   * `paypal_plan_id_<membershipTypeConfigId>` in site_settings so subsequent
+   * subscriptions reuse the same plan.
+   */
+  async findOrCreatePlanForMembership(params: {
+    membershipTypeConfigId: string;
+    name: string;           // e.g. "MECA Retailer Membership"
+    description: string;
+    priceUsd: number;       // billed annually
+  }): Promise<string> {
+    const cacheKey = `paypal_plan_id_${params.membershipTypeConfigId}`;
+    const cached = await this.getSetting(cacheKey);
+    if (cached) return cached;
+
+    const baseUrl = await this.getBaseUrl();
+    const headers = await this.getAuthHeaders();
+
+    // 1. Product (or reuse a single shared one — we use one product per plan for simplicity)
+    const product = await axios.post(
+      `${baseUrl}/v1/catalogs/products`,
+      {
+        name: params.name,
+        description: params.description,
+        type: 'SERVICE',
+        category: 'MEMBERSHIP_CLUBS_AND_ORGANIZATIONS_MEMBERSHIP_ORGANIZATIONS',
+      },
+      { headers },
+    );
+
+    // 2. Plan — annual billing, infinite cycles
+    const plan = await axios.post(
+      `${baseUrl}/v1/billing/plans`,
+      {
+        product_id: product.data.id,
+        name: params.name,
+        description: params.description,
+        billing_cycles: [
+          {
+            frequency: { interval_unit: 'YEAR', interval_count: 1 },
+            tenure_type: 'REGULAR',
+            sequence: 1,
+            total_cycles: 0, // infinite
+            pricing_scheme: { fixed_price: { value: params.priceUsd.toFixed(2), currency_code: 'USD' } },
+          },
+        ],
+        payment_preferences: {
+          auto_bill_outstanding: true,
+          setup_fee_failure_action: 'CONTINUE',
+          payment_failure_threshold: 3,
+        },
+      },
+      { headers },
+    );
+
+    // 3. Persist the plan ID so we never re-create it
+    if (this.siteSettingsService) {
+      try {
+        await this.siteSettingsService.upsert(cacheKey, plan.data.id, 'string', `PayPal plan id for membership ${params.membershipTypeConfigId}`, 'system');
+        this.settingsCache.delete(cacheKey);
+      } catch (err) {
+        this.logger.warn(`Failed to cache PayPal plan id ${plan.data.id}: ${err}`);
+      }
+    }
+
+    this.logger.log(`Created PayPal plan ${plan.data.id} for membership ${params.membershipTypeConfigId}`);
+    return plan.data.id;
+  }
+
+  /**
+   * Create a Subscription against an existing Plan. Returns the PayPal
+   * subscription, including the approval URL the buyer must visit to
+   * authorize recurring billing.
+   */
+  async createSubscription(params: {
+    planId: string;
+    payerEmail?: string;
+    returnUrl: string;
+    cancelUrl: string;
+    customId?: string; // membership_type_config_id, useful for webhook routing
+  }): Promise<{ id: string; status: string; approvalUrl: string }> {
+    const baseUrl = await this.getBaseUrl();
+    const headers = await this.getAuthHeaders();
+    const body: any = {
+      plan_id: params.planId,
+      application_context: {
+        brand_name: 'MECA',
+        return_url: params.returnUrl,
+        cancel_url: params.cancelUrl,
+        user_action: 'SUBSCRIBE_NOW',
+      },
+    };
+    if (params.payerEmail) body.subscriber = { email_address: params.payerEmail };
+    if (params.customId) body.custom_id = params.customId;
+
+    try {
+      const response = await axios.post(`${baseUrl}/v1/billing/subscriptions`, body, { headers });
+      const approvalLink = response.data.links?.find((l: any) => l.rel === 'approve')?.href;
+      if (!approvalLink) throw new BadRequestException('PayPal did not return an approval link');
+      return { id: response.data.id, status: response.data.status, approvalUrl: approvalLink };
+    } catch (error: any) {
+      this.logger.error(`PayPal createSubscription failed: ${JSON.stringify(error.response?.data || error.message)}`);
+      throw new BadRequestException('Failed to create PayPal subscription');
+    }
+  }
+
+  async getSubscription(subscriptionId: string): Promise<any> {
+    const baseUrl = await this.getBaseUrl();
+    const headers = await this.getAuthHeaders();
+    try {
+      const response = await axios.get(`${baseUrl}/v1/billing/subscriptions/${subscriptionId}`, { headers });
+      return response.data;
+    } catch (error: any) {
+      this.logger.error(`PayPal getSubscription failed: ${JSON.stringify(error.response?.data || error.message)}`);
+      throw new BadRequestException('Failed to retrieve PayPal subscription');
+    }
+  }
+
+  async cancelSubscription(subscriptionId: string, reason: string = 'User requested cancellation'): Promise<void> {
+    const baseUrl = await this.getBaseUrl();
+    const headers = await this.getAuthHeaders();
+    try {
+      await axios.post(`${baseUrl}/v1/billing/subscriptions/${subscriptionId}/cancel`, { reason }, { headers });
+      this.logger.log(`PayPal subscription ${subscriptionId} cancelled. Reason: ${reason}`);
+    } catch (error: any) {
+      this.logger.error(`PayPal cancelSubscription failed: ${JSON.stringify(error.response?.data || error.message)}`);
+      throw new BadRequestException('Failed to cancel PayPal subscription');
+    }
+  }
+
   /**
    * Verify a PayPal webhook signature.
    */

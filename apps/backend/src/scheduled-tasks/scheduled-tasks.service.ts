@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EntityManager, wrap } from '@mikro-orm/core';
 import { EmailService } from '../email/email.service';
@@ -6,6 +6,8 @@ import { InvoicesService } from '../invoices/invoices.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { SiteSettingsService } from '../site-settings/site-settings.service';
 import { UserActivityService } from '../user-activity/user-activity.service';
+import { StripeService } from '../stripe/stripe.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { Membership } from '../memberships/memberships.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
@@ -25,7 +27,150 @@ export class ScheduledTasksService {
     private readonly membershipsService: MembershipsService,
     private readonly siteSettingsService: SiteSettingsService,
     private readonly userActivityService: UserActivityService,
+    @Inject(forwardRef(() => StripeService))
+    private readonly stripeService: StripeService,
+    private readonly adminNotificationsService: AdminNotificationsService,
   ) {}
+
+  // =============================================================================
+  // DUNNING — escalating emails on failed renewal payments, auto-suspend at day 14.
+  // Steps: day 1 → step 1, day 3 → step 2, day 7 → step 3, day 14 → step 4 (suspend).
+  // =============================================================================
+  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  async processFailedPaymentDunning() {
+    this.logger.log('Running dunning job...');
+    const em = this.em.fork();
+
+    const failed = await em.find(
+      Membership,
+      { paymentStatus: PaymentStatus.FAILED, cancelledAt: null },
+      { populate: ['user', 'membershipTypeConfig'] },
+    );
+    if (failed.length === 0) {
+      this.logger.log('No failed-payment memberships to process.');
+      return;
+    }
+
+    const portalBase = (process.env.FRONTEND_URL || 'http://localhost:5173') + '/dashboard';
+    let sent = 0;
+    let suspended = 0;
+
+    for (const m of failed) {
+      // Anchor on updated_at (when paymentStatus flipped to FAILED) — close enough
+      // for dunning cadence and avoids needing a separate failed_at column.
+      const failedAt = m.updatedAt ?? m.createdAt;
+      if (!failedAt) continue;
+      const daysSinceFailed = Math.floor((Date.now() - failedAt.getTime()) / 86400000);
+
+      const desiredStep =
+        daysSinceFailed >= 14 ? 4 :
+        daysSinceFailed >= 7 ? 3 :
+        daysSinceFailed >= 3 ? 2 :
+        daysSinceFailed >= 1 ? 1 : 0;
+
+      if (desiredStep === 0) continue;
+      if ((m.lastDunningStep ?? 0) >= desiredStep) continue;
+      if (!m.user?.email) continue;
+
+      try {
+        await this.emailService.sendPaymentFailedDunningEmail({
+          to: m.user.email,
+          firstName: m.user.first_name || undefined,
+          membershipType: m.membershipTypeConfig?.name || 'Membership',
+          amountDue: Number(m.amountPaid).toFixed(2),
+          step: desiredStep as 1 | 2 | 3 | 4,
+          portalUrl: portalBase,
+        });
+        m.lastDunningStep = desiredStep;
+        m.lastDunningAt = new Date();
+        sent++;
+
+        if (desiredStep === 4) {
+          m.paymentStatus = PaymentStatus.CANCELLED;
+          m.cancelledAt = new Date();
+          m.cancellationReason = 'Auto-suspended after 14 days of failed payments (dunning)';
+          m.cancelledBy = 'system';
+          suspended++;
+        }
+        await em.flush();
+      } catch (err) {
+        this.logger.error(`Dunning email failed for membership ${m.id}: ${err}`);
+      }
+    }
+
+    this.logger.log(`Dunning complete. Sent ${sent} emails, suspended ${suspended} memberships.`);
+  }
+
+  // =============================================================================
+  // STRIPE SUBSCRIPTION CATCH-UP SYNC
+  // Runs hourly. Catches cancellations done outside the app (member cancels in
+  // Stripe Dashboard, or webhook missed during a deploy/network blip). Without
+  // this, externally-cancelled subscriptions stay marked active in our DB
+  // forever.
+  // =============================================================================
+  @Cron(CronExpression.EVERY_HOUR)
+  async syncStripeSubscriptionStatus() {
+    this.logger.log('Running Stripe subscription catch-up sync...');
+    const em = this.em.fork();
+
+    const memberships = await em.find(Membership, {
+      stripeSubscriptionId: { $ne: null },
+      paymentStatus: PaymentStatus.PAID,
+      cancelledAt: null,
+    });
+
+    if (memberships.length === 0) {
+      this.logger.log('No active subscriptions to sync.');
+      return;
+    }
+
+    this.logger.log(`Checking ${memberships.length} active subscriptions...`);
+    let synced = 0;
+
+    for (const m of memberships) {
+      try {
+        const sub = await this.stripeService.getSubscription(m.stripeSubscriptionId!);
+
+        // Stripe says ended → reflect in DB
+        if (['canceled', 'incomplete_expired', 'unpaid'].includes(sub.status)) {
+          m.paymentStatus = PaymentStatus.CANCELLED;
+          m.cancelledAt = new Date();
+          m.cancellationReason = `External Stripe state: ${sub.status} — synced by hourly job`;
+          synced++;
+          await em.flush();
+
+          await em.populate(m, ['user', 'membershipTypeConfig']);
+          this.adminNotificationsService.notifySubscriptionCancelled(m).catch((err) => {
+            this.logger.error(`Admin notification failed (non-critical): ${err}`);
+          });
+          this.logger.warn(`Synced membership ${m.id} → cancelled (Stripe: ${sub.status})`);
+        }
+
+        // Cancel-at-period-end drift
+        if (Boolean(m.cancelAtPeriodEnd) !== Boolean(sub.cancel_at_period_end)) {
+          m.cancelAtPeriodEnd = sub.cancel_at_period_end;
+          await em.flush();
+          this.logger.log(`Synced membership ${m.id} cancel_at_period_end → ${sub.cancel_at_period_end}`);
+        }
+      } catch (err: any) {
+        // StripeService wraps errors in BadRequestException; "No such subscription"
+        // is Stripe's literal error string for a deleted/non-existent sub.
+        const msg = String(err?.message ?? err ?? '');
+        if (/No such subscription/i.test(msg)) {
+          m.paymentStatus = PaymentStatus.CANCELLED;
+          m.cancelledAt = new Date();
+          m.cancellationReason = 'Stripe subscription not found (deleted) — synced by hourly job';
+          synced++;
+          await em.flush();
+          this.logger.warn(`Synced membership ${m.id} → cancelled (Stripe sub missing)`);
+        } else {
+          this.logger.error(`Failed to sync membership ${m.id}: ${err}`);
+        }
+      }
+    }
+
+    this.logger.log(`Stripe sync complete. Updated ${synced} memberships.`);
+  }
 
   // =============================================================================
   // MEMBERSHIP EXPIRATION EMAILS
