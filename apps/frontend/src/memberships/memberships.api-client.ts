@@ -768,6 +768,7 @@ export const membershipsApi = {
   adminRefund: async (
     membershipId: string,
     reason: string,
+    amountCents?: number,
   ): Promise<{
     success: boolean;
     membership: Membership;
@@ -776,7 +777,30 @@ export const membershipsApi = {
   }> => {
     const response = await axios.post(`/api/memberships/${membershipId}/admin/refund`, {
       reason,
+      amountCents,
     });
+    return response.data;
+  },
+
+  /**
+   * Reactivate a membership that's set to cancel at period end.
+   * Owner or admin can call.
+   */
+  reactivate: async (
+    membershipId: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/reactivate`);
+    return response.data;
+  },
+
+  /**
+   * Default card on file (brand + last4 + exp). Pass userId only as admin.
+   */
+  getPaymentMethod: async (
+    userId?: string,
+  ): Promise<{ brand: string; last4: string; expMonth: number; expYear: number } | null> => {
+    const params = userId ? { userId } : undefined;
+    const response = await axios.get('/api/memberships/me/payment-method', { params });
     return response.data;
   },
 

@@ -876,7 +876,7 @@ export class MembershipsController {
   async refundMembership(
     @Param('id') membershipId: string,
     @Headers('authorization') authHeader: string,
-    @Body() data: { reason: string },
+    @Body() data: { reason: string; amountCents?: number },
   ): Promise<{
     success: boolean;
     membership: Membership;
@@ -888,13 +888,18 @@ export class MembershipsController {
     if (!data.reason || data.reason.trim().length < 5) {
       throw new BadRequestException('A reason (at least 5 characters) is required for refund');
     }
+    if (data.amountCents !== undefined && (!Number.isInteger(data.amountCents) || data.amountCents <= 0)) {
+      throw new BadRequestException('amountCents must be a positive integer (cents)');
+    }
 
-    this.logger.log(`Admin ${profile?.email} refunding membership ${membershipId}. Reason: ${data.reason}`);
+    const partialNote = data.amountCents !== undefined ? ` (partial: ${data.amountCents} cents)` : '';
+    this.logger.log(`Admin ${profile?.email} refunding membership ${membershipId}${partialNote}. Reason: ${data.reason}`);
 
     return this.membershipsService.refundMembership(
       membershipId,
       data.reason,
       profile?.id || 'unknown',
+      data.amountCents,
     );
   }
 
@@ -966,6 +971,138 @@ export class MembershipsController {
       message: `Your membership has been scheduled for cancellation. You will continue to have access until ${result.membership.endDate?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. If you need immediate cancellation, please contact our support team.`,
       effectiveEndDate: result.membership.endDate!,
     };
+  }
+
+  /**
+   * Return the buyer's default card on file (brand + last4 + exp). Used by
+   * the dashboard and admin member-billing page. Returns null if there's no
+   * Stripe customer or no card attached yet.
+   */
+  @Get('me/payment-method')
+  async getMyPaymentMethod(
+    @Headers('authorization') authHeader: string,
+    @Query('userId') queryUserId?: string,
+  ): Promise<{ brand: string; last4: string; expMonth: number; expYear: number } | null> {
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+
+    // Admins can look up any user's card; everyone else gets their own.
+    let targetUserId = user.id;
+    if (queryUserId && queryUserId !== user.id) {
+      if (!isAdminUser(profile)) {
+        throw new ForbiddenException('Only admins can look up another user\'s payment method');
+      }
+      targetUserId = queryUserId;
+    }
+
+    return this.membershipsService.getDefaultPaymentMethod(targetUserId);
+  }
+
+  /**
+   * Admin: bulk refund or cancel multiple memberships in one request. Returns
+   * per-membership success/error so a partial failure doesn't block the rest.
+   */
+  @Post('admin/bulk-action')
+  @HttpCode(HttpStatus.OK)
+  async bulkMembershipAction(
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      action: 'refund' | 'cancel_immediately' | 'cancel_at_renewal';
+      membershipIds: string[];
+      reason: string;
+    },
+  ): Promise<{
+    total: number;
+    succeeded: number;
+    failed: number;
+    results: Array<{ membershipId: string; ok: boolean; error?: string }>;
+  }> {
+    const { profile } = await this.requireAdmin(authHeader);
+
+    if (!Array.isArray(data.membershipIds) || data.membershipIds.length === 0) {
+      throw new BadRequestException('membershipIds must be a non-empty array');
+    }
+    if (data.membershipIds.length > 100) {
+      throw new BadRequestException('Bulk actions are limited to 100 memberships per request');
+    }
+    if (!data.reason || data.reason.trim().length < 5) {
+      throw new BadRequestException('A reason (at least 5 characters) is required');
+    }
+    if (!['refund', 'cancel_immediately', 'cancel_at_renewal'].includes(data.action)) {
+      throw new BadRequestException('action must be one of: refund, cancel_immediately, cancel_at_renewal');
+    }
+
+    const adminId = profile?.id || 'unknown';
+    this.logger.log(`Admin ${profile?.email} bulk ${data.action} on ${data.membershipIds.length} memberships. Reason: ${data.reason}`);
+
+    const results: Array<{ membershipId: string; ok: boolean; error?: string }> = [];
+    for (const id of data.membershipIds) {
+      try {
+        if (data.action === 'refund') {
+          await this.membershipsService.refundMembership(id, data.reason, adminId);
+        } else if (data.action === 'cancel_immediately') {
+          await this.membershipsService.cancelMembershipImmediately(id, data.reason, adminId);
+        } else {
+          await this.membershipsService.cancelMembershipAtRenewal(id, data.reason, adminId);
+        }
+        results.push({ membershipId: id, ok: true });
+      } catch (err: any) {
+        results.push({ membershipId: id, ok: false, error: err?.message || 'Unknown error' });
+      }
+    }
+
+    const succeeded = results.filter(r => r.ok).length;
+    return { total: data.membershipIds.length, succeeded, failed: data.membershipIds.length - succeeded, results };
+  }
+
+  /**
+   * Admin: pause an active subscription. No charges occur until resumed.
+   */
+  @Post(':id/admin/pause')
+  @HttpCode(HttpStatus.OK)
+  async pauseMembership(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { reason?: string },
+  ): Promise<{ success: boolean; message: string }> {
+    const { profile } = await this.requireAdmin(authHeader);
+    const result = await this.membershipsService.pauseMembership(
+      membershipId,
+      profile?.id || 'unknown',
+      data.reason,
+    );
+    return result;
+  }
+
+  @Post(':id/admin/resume')
+  @HttpCode(HttpStatus.OK)
+  async resumeMembership(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const { profile } = await this.requireAdmin(authHeader);
+    return this.membershipsService.resumeMembership(membershipId, profile?.id || 'unknown');
+  }
+
+  /**
+   * Reactivate a membership that's set to cancel at period end. Allowed for
+   * the owner (during the still-active window) or an admin.
+   */
+  @Post(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  async reactivateMembership(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+    const membership = await this.membershipsService.findById(membershipId);
+
+    const isOwner = membership.user.id === user.id;
+    const isAdmin = isAdminUser(profile);
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('You can only reactivate your own membership');
+    }
+
+    return this.membershipsService.reactivateMembership(membershipId, user.id);
   }
 
   // =============================================================================

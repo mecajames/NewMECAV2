@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ScheduledTasksService } from './scheduled-tasks.service';
 import { ScheduledTasksController } from './scheduled-tasks.controller';
 import { EmailModule } from '../email/email.module';
@@ -7,9 +7,20 @@ import { InvoicesModule } from '../invoices/invoices.module';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { SiteSettingsModule } from '../site-settings/site-settings.module';
 import { UserActivityModule } from '../user-activity/user-activity.module';
+import { StripeModule } from '../stripe/stripe.module';
+import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
 
 @Module({
-  imports: [EmailModule, AuthModule, InvoicesModule, MembershipsModule, SiteSettingsModule, UserActivityModule],
+  imports: [
+    EmailModule,
+    AuthModule,
+    InvoicesModule,
+    MembershipsModule,
+    SiteSettingsModule,
+    UserActivityModule,
+    forwardRef(() => StripeModule),
+    AdminNotificationsModule,
+  ],
   providers: [ScheduledTasksService],
   controllers: [ScheduledTasksController],
   exports: [ScheduledTasksService],

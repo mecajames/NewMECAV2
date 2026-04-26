@@ -154,6 +154,42 @@ export class AdminNotificationsService {
     }
   }
 
+  async notifyInvoicePaymentFailed(
+    membership: any,
+    info: { attemptCount: number; amountDueCents: number; hostedInvoiceUrl: string | null },
+  ): Promise<void> {
+    try {
+      const memberName = membership.competitorName ||
+        `${membership.user?.first_name || ''} ${membership.user?.last_name || ''}`.trim() ||
+        'Unknown';
+      const mecaId = membership.mecaId || 'N/A';
+      const amount = (info.amountDueCents / 100).toFixed(2);
+
+      await this.notifyAllAdmins(
+        'Renewal Payment Failed',
+        `${memberName} (MECA ID: ${mecaId}) renewal payment failed (attempt ${info.attemptCount}, $${amount})`,
+        '/admin/members',
+      );
+
+      await this.sendAlertToAllAdmins({
+        title: `Renewal Payment Failed: ${memberName}`,
+        subtitle: `Attempt ${info.attemptCount} — $${amount} due`,
+        fields: [
+          { label: 'Member', value: memberName },
+          { label: 'MECA ID', value: String(mecaId) },
+          { label: 'Amount Due', value: `$${amount}` },
+          { label: 'Attempt #', value: String(info.attemptCount) },
+          { label: 'Subscription ID', value: membership.stripeSubscriptionId || 'N/A' },
+          ...(info.hostedInvoiceUrl ? [{ label: 'Stripe Invoice', value: info.hostedInvoiceUrl }] : []),
+        ],
+        dashboardPath: '/admin/members',
+        dashboardLabel: 'View Members',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send invoice payment failed admin notification: ${error}`);
+    }
+  }
+
   async notifySubscriptionRenewal(membership: any, newEndDate: Date): Promise<void> {
     try {
       const memberName = membership.competitorName ||

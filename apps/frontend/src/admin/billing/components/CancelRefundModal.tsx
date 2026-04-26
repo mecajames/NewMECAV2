@@ -29,6 +29,8 @@ export default function CancelRefundModal({
 }: CancelRefundModalProps) {
   const [cancelType, setCancelType] = useState<'immediate' | 'at_renewal'>('immediate');
   const [reason, setReason] = useState('');
+  const [refundType, setRefundType] = useState<'full' | 'partial'>('full');
+  const [partialAmount, setPartialAmount] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -64,8 +66,23 @@ export default function CancelRefundModal({
 
     try {
       if (mode === 'refund') {
-        // Refund: Cancel immediately + Stripe refund + email
-        const result = await membershipsApi.adminRefund(membershipId, reason.trim());
+        let amountCents: number | undefined;
+        if (refundType === 'partial') {
+          const parsed = parseFloat(partialAmount);
+          if (!Number.isFinite(parsed) || parsed <= 0) {
+            setError('Enter a valid partial refund amount in dollars');
+            setLoading(false);
+            return;
+          }
+          const totalCents = Math.round(parseFloat(totalAmount) * 100);
+          amountCents = Math.round(parsed * 100);
+          if (amountCents >= totalCents) {
+            setError(`Partial amount $${parsed.toFixed(2)} is not less than total ${formatCurrency(totalAmount)}. Use a full refund instead.`);
+            setLoading(false);
+            return;
+          }
+        }
+        const result = await membershipsApi.adminRefund(membershipId, reason.trim(), amountCents);
         setSuccess(result.message);
       } else {
         // Cancel mode
@@ -213,6 +230,55 @@ export default function CancelRefundModal({
             </div>
           )}
 
+          {/* Refund mode: full vs partial */}
+          {mode === 'refund' && hasStripePayment && (
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-gray-300">Refund Type</label>
+              <label className="flex items-start gap-3 p-4 bg-slate-700/50 rounded-lg cursor-pointer border-2 border-transparent hover:border-orange-500/50 transition-colors has-[:checked]:border-orange-500">
+                <input
+                  type="radio"
+                  name="refundType"
+                  value="full"
+                  checked={refundType === 'full'}
+                  onChange={() => setRefundType('full')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="text-white font-medium">Full refund &mdash; {formatCurrency(totalAmount)}</div>
+                  <p className="text-sm text-gray-400 mt-1">Cancels the membership and refunds the entire amount.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 p-4 bg-slate-700/50 rounded-lg cursor-pointer border-2 border-transparent hover:border-orange-500/50 transition-colors has-[:checked]:border-orange-500">
+                <input
+                  type="radio"
+                  name="refundType"
+                  value="partial"
+                  checked={refundType === 'partial'}
+                  onChange={() => setRefundType('partial')}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="text-white font-medium">Partial refund</div>
+                  <p className="text-sm text-gray-400 mt-1">Membership stays active. Only the entered amount is refunded.</p>
+                  {refundType === 'partial' && (
+                    <div className="relative mt-2">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={partialAmount}
+                        onChange={(e) => setPartialAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
+          )}
+
           {/* Refund Mode Warning */}
           {mode === 'refund' && (
             <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-3">
@@ -220,9 +286,16 @@ export default function CancelRefundModal({
               <div>
                 <p className="text-amber-400 font-medium">This action will:</p>
                 <ul className="text-amber-400/80 text-sm mt-2 space-y-1 list-disc list-inside">
-                  <li>Cancel the membership immediately</li>
+                  {refundType === 'partial' ? (
+                    <>
+                      <li>Keep the membership active</li>
+                      <li>Refund the partial amount entered above via Stripe</li>
+                    </>
+                  ) : (
+                    <li>Cancel the membership immediately</li>
+                  )}
                   {hasStripePayment ? (
-                    <li>Process a full refund of {formatCurrency(totalAmount)} via Stripe</li>
+                    refundType === 'full' && <li>Process a full refund of {formatCurrency(totalAmount)} via Stripe</li>
                   ) : (
                     <li className="text-gray-400">No Stripe payment found - no automatic refund will be processed</li>
                   )}
