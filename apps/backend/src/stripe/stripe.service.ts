@@ -67,6 +67,17 @@ export class StripeService {
     return blockPayments !== false; // Default true when staging enabled
   }
 
+  /**
+   * Throws if Stripe is disabled via the stripe_enabled site setting.
+   * Default is enabled — only blocks when explicitly set to false.
+   */
+  private async assertStripeEnabled(): Promise<void> {
+    const value = await this.getStagingModeSetting('stripe_enabled');
+    if (value === false) {
+      throw new BadRequestException('Stripe payments are currently disabled');
+    }
+  }
+
   private getStripeClient(): Stripe {
     if (!this.stripe) {
       const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -84,6 +95,7 @@ export class StripeService {
    * Create a Payment Intent for a membership purchase
    */
   async createPaymentIntent(data: CreatePaymentIntentDto): Promise<PaymentIntentResult> {
+    await this.assertStripeEnabled();
     // Check staging mode
     if (await this.checkBlockPayments()) {
       this.logger.warn('[STAGING MODE] Payment blocked - returning mock payment intent');
@@ -230,6 +242,7 @@ export class StripeService {
     priceId: string;
     metadata?: Record<string, string>;
   }): Promise<Stripe.Subscription> {
+    await this.assertStripeEnabled();
     const stripe = this.getStripeClient();
 
     try {
@@ -435,6 +448,7 @@ export class StripeService {
     cancelUrl: string;
     metadata?: Record<string, string>;
   }): Promise<Stripe.Checkout.Session> {
+    await this.assertStripeEnabled();
     const stripe = this.getStripeClient();
 
     try {
