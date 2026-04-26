@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { useSiteSettings } from '@/shared/contexts/SiteSettingsContext';
 import { CreditCard } from 'lucide-react';
+import { paypalApi } from '@/paypal/paypal.api-client';
 
 export type SelectedPaymentMethod = 'stripe' | 'paypal';
 
@@ -12,7 +14,7 @@ interface PaymentMethodSelectorProps {
 
 /**
  * Radio button selector to choose between Stripe and PayPal.
- * Only shows options that are enabled in site settings.
+ * Only shows options that are enabled.
  */
 export function PaymentMethodSelector({
   selected,
@@ -20,12 +22,24 @@ export function PaymentMethodSelector({
   stripeAvailable = true,
 }: PaymentMethodSelectorProps) {
   const { getSetting, loading } = useSiteSettings();
+  const [isPayPalAvailable, setIsPayPalAvailable] = useState(false);
+
+  useEffect(() => {
+    if (loading) return;
+    if (getSetting('paypal_enabled') !== 'true') {
+      setIsPayPalAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    paypalApi.getClientConfig().then((config) => {
+      if (!cancelled) setIsPayPalAvailable(!!config?.clientId);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [getSetting, loading]);
 
   if (loading) return null;
-
-  const paypalEnabled = getSetting('paypal_enabled') === 'true';
-  const paypalClientId = getSetting('paypal_client_id');
-  const isPayPalAvailable = paypalEnabled && !!paypalClientId;
 
   // If only one method is available, don't show selector
   if (!isPayPalAvailable && stripeAvailable) return null;

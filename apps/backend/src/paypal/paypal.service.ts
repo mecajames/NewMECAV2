@@ -91,14 +91,14 @@ export class PayPalService {
   }
 
   private async getClientId(): Promise<string> {
-    const clientId = await this.getSetting('paypal_client_id');
-    if (!clientId) throw new BadRequestException('PayPal client ID is not configured');
+    const clientId = process.env.PAYPAL_CLIENT_ID;
+    if (!clientId) throw new BadRequestException('PayPal client ID is not configured (PAYPAL_CLIENT_ID env var)');
     return clientId;
   }
 
   private async getClientSecret(): Promise<string> {
-    const secret = await this.getSetting('paypal_client_secret');
-    if (!secret) throw new BadRequestException('PayPal client secret is not configured');
+    const secret = process.env.PAYPAL_CLIENT_SECRET;
+    if (!secret) throw new BadRequestException('PayPal client secret is not configured (PAYPAL_CLIENT_SECRET env var)');
     return secret;
   }
 

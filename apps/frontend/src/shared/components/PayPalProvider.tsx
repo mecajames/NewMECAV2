@@ -1,14 +1,15 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { PayPalScriptProvider } from '@paypal/react-paypal-js';
 import { useSiteSettings } from '@/shared/contexts/SiteSettingsContext';
+import { paypalApi } from '@/paypal/paypal.api-client';
 
 interface PayPalProviderProps {
   children: ReactNode;
 }
 
 /**
- * Wraps children with PayPal SDK provider when PayPal is enabled in site settings.
- * Only loads the PayPal SDK script when paypal_enabled is true and a client ID is configured.
+ * Wraps children with PayPal SDK provider when PayPal is enabled.
+ * Client ID comes from the backend (env var), gated by the paypal_enabled site setting.
  */
 export function PayPalProvider({ children }: PayPalProviderProps) {
   const { getSetting, loading } = useSiteSettings();
@@ -20,18 +21,18 @@ export function PayPalProvider({ children }: PayPalProviderProps) {
   useEffect(() => {
     if (loading) return;
 
-    const enabled = getSetting('paypal_enabled');
-    const clientId = getSetting('paypal_client_id');
-    const sandbox = getSetting('paypal_sandbox_mode');
-
-    if (enabled === 'true' && clientId) {
-      setPaypalConfig({
-        clientId,
-        sandbox: sandbox === 'true',
-      });
-    } else {
+    if (getSetting('paypal_enabled') !== 'true') {
       setPaypalConfig(null);
+      return;
     }
+
+    let cancelled = false;
+    paypalApi.getClientConfig().then((config) => {
+      if (!cancelled) setPaypalConfig(config);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [getSetting, loading]);
 
   // If PayPal is not enabled or still loading, render children without provider

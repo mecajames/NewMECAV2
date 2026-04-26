@@ -100,15 +100,10 @@ export default function SiteSettings() {
     shop_shipping_enabled: true,
     shop_shipping_origin_zip: '75006',
     shop_free_shipping_threshold: '0',
-    // Stripe Configuration
+    // Stripe Configuration (credentials managed via env vars)
     stripe_enabled: false,
-    stripe_secret_key: '',
-    stripe_publishable_key: '',
-    stripe_webhook_secret: '',
-    // PayPal Configuration
+    // PayPal Configuration (credentials managed via env vars)
     paypal_enabled: false,
-    paypal_client_id: '',
-    paypal_client_secret: '',
     paypal_sandbox_mode: true,
   });
 
@@ -213,15 +208,10 @@ export default function SiteSettings() {
         shop_shipping_enabled: settingsMap['shop_shipping_enabled'] !== 'false',
         shop_shipping_origin_zip: settingsMap['shop_shipping_origin_zip'] || '75006',
         shop_free_shipping_threshold: settingsMap['shop_free_shipping_threshold'] || '0',
-        // Stripe Configuration
+        // Stripe Configuration (credentials managed via env vars)
         stripe_enabled: settingsMap['stripe_enabled'] === 'true',
-        stripe_secret_key: settingsMap['stripe_secret_key'] || '',
-        stripe_publishable_key: settingsMap['stripe_publishable_key'] || '',
-        stripe_webhook_secret: settingsMap['stripe_webhook_secret'] || '',
-        // PayPal Configuration
+        // PayPal Configuration (credentials managed via env vars)
         paypal_enabled: settingsMap['paypal_enabled'] === 'true',
-        paypal_client_id: settingsMap['paypal_client_id'] || '',
-        paypal_client_secret: settingsMap['paypal_client_secret'] || '',
         paypal_sandbox_mode: settingsMap['paypal_sandbox_mode'] !== 'false',
       });
     } catch (error) {
@@ -316,15 +306,10 @@ export default function SiteSettings() {
         { key: 'shop_shipping_enabled', value: formData.shop_shipping_enabled.toString(), type: 'boolean', description: 'Enable shipping calculation' },
         { key: 'shop_shipping_origin_zip', value: formData.shop_shipping_origin_zip, type: 'text', description: 'Origin ZIP code for shipping rate calculation' },
         { key: 'shop_free_shipping_threshold', value: formData.shop_free_shipping_threshold, type: 'number', description: 'Order subtotal threshold for free shipping (0 = disabled)' },
-        // Stripe Configuration
+        // Stripe Configuration (credentials managed via env vars)
         { key: 'stripe_enabled', value: formData.stripe_enabled.toString(), type: 'boolean', description: 'Enable Stripe payment gateway' },
-        { key: 'stripe_secret_key', value: formData.stripe_secret_key, type: 'text', description: 'Stripe Secret Key (sk_live_... or sk_test_...)' },
-        { key: 'stripe_publishable_key', value: formData.stripe_publishable_key, type: 'text', description: 'Stripe Publishable Key (pk_live_... or pk_test_...)' },
-        { key: 'stripe_webhook_secret', value: formData.stripe_webhook_secret, type: 'text', description: 'Stripe Webhook Secret (whsec_...)' },
-        // PayPal Configuration
+        // PayPal Configuration (credentials managed via env vars)
         { key: 'paypal_enabled', value: formData.paypal_enabled.toString(), type: 'boolean', description: 'Enable PayPal payment gateway' },
-        { key: 'paypal_client_id', value: formData.paypal_client_id, type: 'text', description: 'PayPal Client ID' },
-        { key: 'paypal_client_secret', value: formData.paypal_client_secret, type: 'text', description: 'PayPal Client Secret' },
         { key: 'paypal_sandbox_mode', value: formData.paypal_sandbox_mode.toString(), type: 'boolean', description: 'Use PayPal Sandbox (test) environment' },
       ].map(s => ({ ...s, updatedBy: user.id }));
 
@@ -2134,85 +2119,10 @@ export default function SiteSettings() {
           </div>
 
           {formData.stripe_enabled && (
-            <div className="space-y-4 pl-4 border-l-2 border-[#635BFF]/30">
+            <div className="pl-4 border-l-2 border-[#635BFF]/30">
               <div className="bg-slate-700/50 rounded-lg p-3">
                 <p className="text-xs text-gray-400">
-                  {formData.stripe_secret_key.startsWith('sk_live_') ? (
-                    <span className="text-green-400 font-medium">Live mode</span>
-                  ) : formData.stripe_secret_key.startsWith('sk_test_') ? (
-                    <span className="text-yellow-400 font-medium">Test mode</span>
-                  ) : (
-                    <span className="text-gray-500">Enter your Stripe API keys from the Stripe Dashboard</span>
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Secret Key
-                </label>
-                <div className="relative">
-                  <input
-                    type={showSecrets['stripe_secret'] ? 'text' : 'password'}
-                    value={formData.stripe_secret_key}
-                    onChange={(e) => setFormData({ ...formData, stripe_secret_key: e.target.value })}
-                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
-                    placeholder="sk_test_... or sk_live_..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecrets(prev => ({ ...prev, stripe_secret: !prev.stripe_secret }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                  >
-                    {showSecrets['stripe_secret'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Publishable Key
-                </label>
-                <div className="relative">
-                  <input
-                    type={showSecrets['stripe_pub'] ? 'text' : 'password'}
-                    value={formData.stripe_publishable_key}
-                    onChange={(e) => setFormData({ ...formData, stripe_publishable_key: e.target.value })}
-                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
-                    placeholder="pk_test_... or pk_live_..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecrets(prev => ({ ...prev, stripe_pub: !prev.stripe_pub }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                  >
-                    {showSecrets['stripe_pub'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Webhook Secret
-                </label>
-                <div className="relative">
-                  <input
-                    type={showSecrets['stripe_webhook'] ? 'text' : 'password'}
-                    value={formData.stripe_webhook_secret}
-                    onChange={(e) => setFormData({ ...formData, stripe_webhook_secret: e.target.value })}
-                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
-                    placeholder="whsec_..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecrets(prev => ({ ...prev, stripe_webhook: !prev.stripe_webhook }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                  >
-                    {showSecrets['stripe_webhook'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Required for receiving Stripe webhook events (payment confirmations, refunds, etc.)
+                  Stripe API keys (Secret Key, Publishable Key, Webhook Secret) are managed via server environment variables for security. Contact your system administrator to update them.
                 </p>
               </div>
             </div>
@@ -2284,48 +2194,10 @@ export default function SiteSettings() {
                 </button>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Client ID
-                </label>
-                <div className="relative">
-                  <input
-                    type={showSecrets['paypal_id'] ? 'text' : 'password'}
-                    value={formData.paypal_client_id}
-                    onChange={(e) => setFormData({ ...formData, paypal_client_id: e.target.value })}
-                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
-                    placeholder="PayPal Client ID"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecrets(prev => ({ ...prev, paypal_id: !prev.paypal_id }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                  >
-                    {showSecrets['paypal_id'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Client Secret
-                </label>
-                <div className="relative">
-                  <input
-                    type={showSecrets['paypal_secret'] ? 'text' : 'password'}
-                    value={formData.paypal_client_secret}
-                    onChange={(e) => setFormData({ ...formData, paypal_client_secret: e.target.value })}
-                    className="w-full px-4 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
-                    placeholder="PayPal Client Secret"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecrets(prev => ({ ...prev, paypal_secret: !prev.paypal_secret }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                  >
-                    {showSecrets['paypal_secret'] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+              <div className="bg-slate-700/50 rounded-lg p-3">
+                <p className="text-xs text-gray-400">
+                  PayPal Client ID and Client Secret are managed via server environment variables for security. Contact your system administrator to update them.
+                </p>
               </div>
             </div>
           )}
