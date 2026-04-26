@@ -599,6 +599,52 @@ export class EmailService {
   }
 
   /**
+   * Dunning email — sent on day 1, 3, 7 of a failed renewal payment, plus a
+   * final notice when the membership is auto-suspended at day 14.
+   */
+  async sendPaymentFailedDunningEmail(dto: {
+    to: string;
+    firstName?: string;
+    membershipType: string;
+    amountDue: string;
+    step: 1 | 2 | 3 | 4;
+    portalUrl: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+    const isFinal = dto.step === 4;
+    const subject = isFinal
+      ? `MECA: Your ${dto.membershipType} has been suspended`
+      : `MECA: Action required — your ${dto.membershipType} renewal payment failed`;
+
+    const intro = isFinal
+      ? `<p>${greeting},</p><p>We were unable to collect payment for your ${dto.membershipType} renewal after multiple attempts. Your membership has been <strong>suspended</strong>.</p>`
+      : `<p>${greeting},</p><p>We tried to collect $${dto.amountDue} for your ${dto.membershipType} renewal but the charge was declined. Please update your payment method to keep your benefits active.</p>`;
+
+    const html = `
+      <html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1f2937">
+        ${intro}
+        <p style="margin:24px 0">
+          <a href="${dto.portalUrl}" style="background:#f97316;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">
+            ${isFinal ? 'Reactivate Membership' : 'Update Payment Method'}
+          </a>
+        </p>
+        <p style="color:#6b7280;font-size:13px">If you've already updated your card, please ignore this message — our system will retry automatically.</p>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+        <p style="color:#6b7280;font-size:12px">MECA — Mobile Electronics Competition Association</p>
+      </body></html>
+    `;
+    const text = `${greeting},\n\nWe were unable to collect $${dto.amountDue} for your ${dto.membershipType} renewal. ${isFinal ? 'Your membership has been suspended.' : 'Please update your payment method.'}\n\n${dto.portalUrl}\n\n— MECA`;
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.billing,
+    });
+  }
+
+  /**
    * Send invoice email to user with payment link
    */
   async sendInvoiceEmail(dto: SendInvoiceEmailDto): Promise<{ success: boolean; error?: string }> {

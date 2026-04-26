@@ -942,6 +942,10 @@ export class StripeController {
           await this.handleInvoicePaid(event.data.object as Stripe.Invoice);
           webhookEvent.processingResult = 'success';
           break;
+        case 'invoice.payment_failed':
+          await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+          webhookEvent.processingResult = 'success';
+          break;
         default:
           console.log(`Unhandled Stripe event type: ${event.type}`);
           webhookEvent.processingResult = 'unhandled';
@@ -1372,6 +1376,46 @@ export class StripeController {
     // Notify admins of subscription renewal
     await em.populate(membership, ['user', 'membershipTypeConfig']);
     this.adminNotificationsService.notifySubscriptionRenewal(membership, newEndDate).catch((err) => {
+      console.error('Admin notification failed (non-critical):', err);
+    });
+  }
+
+  /**
+   * Handle invoice.payment_failed: Stripe couldn't collect the renewal charge.
+   * Marks the membership FAILED, fires an admin alert, and lets dunning (TODO)
+   * own escalation. Without this handler, failed renewals were silent —
+   * memberships would remain "paid" until the next failed retry, with no
+   * visibility for admins or members.
+   */
+  private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+    const subscriptionId = typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : invoice.subscription?.id;
+
+    if (!subscriptionId) {
+      console.log('Invoice.payment_failed has no subscription, skipping (one-time payment)');
+      return;
+    }
+
+    console.log('Invoice payment failed for subscription:', subscriptionId, 'attempt:', invoice.attempt_count, 'amount_due:', invoice.amount_due);
+
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { stripeSubscriptionId: subscriptionId });
+
+    if (!membership) {
+      console.warn('No membership found for subscription ' + subscriptionId + ', skipping invoice.payment_failed');
+      return;
+    }
+
+    membership.paymentStatus = PaymentStatus.FAILED;
+    await em.flush();
+
+    await em.populate(membership, ['user', 'membershipTypeConfig']);
+    this.adminNotificationsService.notifyInvoicePaymentFailed(membership, {
+      attemptCount: invoice.attempt_count ?? 1,
+      amountDueCents: invoice.amount_due ?? 0,
+      hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+    }).catch((err) => {
       console.error('Admin notification failed (non-critical):', err);
     });
   }

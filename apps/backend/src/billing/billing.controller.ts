@@ -314,6 +314,41 @@ export class BillingController {
   }
 
   /**
+   * Subscription-focused KPIs: active count, churn (30d), MRR, upcoming renewals
+   * (next 14 days), failed payments (30d). Pure SQL — no Stripe API calls.
+   */
+  @Get('stats/subscriptions')
+  async getSubscriptionStats(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    const conn = this.em.getConnection();
+
+    // All five metrics + MRR in one round trip via a CTE-shaped union of counts.
+    // Sum is annual amount_paid for active stripe-subscription rows; MRR ≈ /12.
+    const rows = await conn.execute<Array<{
+      active: string; churn: string; renew: string; failed: string; annual_sum: string;
+    }>>(`
+      SELECT
+        COUNT(*) FILTER (WHERE payment_status = 'paid' AND cancelled_at IS NULL AND (end_date IS NULL OR end_date >= NOW()))                                              AS active,
+        COUNT(*) FILTER (WHERE cancelled_at >= NOW() - INTERVAL '30 days')                                                                                                AS churn,
+        COUNT(*) FILTER (WHERE stripe_subscription_id IS NOT NULL AND payment_status = 'paid' AND cancelled_at IS NULL AND end_date BETWEEN NOW() AND NOW() + INTERVAL '14 days') AS renew,
+        COUNT(*) FILTER (WHERE payment_status = 'failed' AND updated_at >= NOW() - INTERVAL '30 days')                                                                    AS failed,
+        COALESCE(SUM(amount_paid) FILTER (WHERE stripe_subscription_id IS NOT NULL AND payment_status = 'paid' AND cancelled_at IS NULL AND (end_date IS NULL OR end_date >= NOW())), 0) AS annual_sum
+      FROM memberships
+    `);
+    const row = rows[0] || { active: '0', churn: '0', renew: '0', failed: '0', annual_sum: '0' };
+    const mrrCents = Math.round((parseFloat(row.annual_sum) / 12) * 100);
+
+    return {
+      active: Number(row.active),
+      churnLast30Days: Number(row.churn),
+      upcomingRenewalsNext14Days: Number(row.renew),
+      failedPaymentsLast30Days: Number(row.failed),
+      mrrCents,
+      mrrFormatted: `$${(mrrCents / 100).toFixed(2)}`,
+    };
+  }
+
+  /**
    * Get order statistics
    */
   @Get('stats/orders')

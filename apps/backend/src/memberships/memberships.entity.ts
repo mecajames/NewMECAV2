@@ -239,6 +239,13 @@ export class Membership {
   @Property({ type: 'varchar', length: 50, nullable: true, fieldName: 'cancelled_by' })
   cancelledBy?: string;
 
+  // Dunning state: which escalation step (1=day1, 2=day3, 3=day7, 4=auto-suspend) was last sent
+  @Property({ type: 'integer', nullable: true, fieldName: 'last_dunning_step' })
+  lastDunningStep?: number;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'last_dunning_at' })
+  lastDunningAt?: Date;
+
   /**
    * Check if this membership's MECA ID can be reactivated (within grace period)
    */

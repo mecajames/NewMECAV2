@@ -366,6 +366,18 @@ export const billingApi = {
     return response.data;
   },
 
+  getSubscriptionStats: async (): Promise<{
+    active: number;
+    churnLast30Days: number;
+    upcomingRenewalsNext14Days: number;
+    failedPaymentsLast30Days: number;
+    mrrCents: number;
+    mrrFormatted: string;
+  }> => {
+    const response = await axios.get('/api/billing/stats/subscriptions');
+    return response.data;
+  },
+
   /**
    * Get order statistics
    */
