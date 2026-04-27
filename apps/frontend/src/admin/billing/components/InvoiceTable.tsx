@@ -78,39 +78,48 @@ export function InvoiceTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-700">
-     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-slate-700">
+    <div className="overflow-visible rounded-lg border border-slate-700">
+      <table className="w-full table-fixed divide-y divide-slate-700">
+        <colgroup>
+          <col className="w-[14%]" />
+          {!compact && <col className="w-[20%]" />}
+          {!compact && <col className="w-[22%]" />}
+          <col className="w-[12%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          {!compact && <col className="w-[10%]" />}
+          <col className="w-[6%]" />
+        </colgroup>
         <thead className="bg-slate-700/50">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Invoice
             </th>
             {!compact && (
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
                 Customer
               </th>
             )}
             {!compact && (
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
                 Items
               </th>
             )}
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Subscription
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Status
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
               Total
             </th>
             {!compact && (
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
                 Due Date
               </th>
             )}
-            <th className="relative px-4 py-3">
+            <th className="relative px-3 py-3">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -122,26 +131,34 @@ export function InvoiceTable({
               className="hover:bg-slate-700/30 cursor-pointer transition-colors"
               onClick={() => handleViewInvoice(invoice)}
             >
-              <td className="whitespace-nowrap px-4 py-3">
-                <div className="text-sm font-medium text-white">
+              <td className="px-3 py-3">
+                <div className="truncate text-sm font-medium text-white" title={invoice.invoiceNumber}>
                   {invoice.invoiceNumber}
                 </div>
                 {!compact && invoice.order && (
-                  <div className="text-xs text-gray-500">
+                  <div className="truncate text-xs text-gray-500">
                     Order: {invoice.order.orderNumber}
                   </div>
                 )}
               </td>
               {!compact && (
-                <td className="whitespace-nowrap px-4 py-3">
-                  <div className="text-sm text-gray-300">
+                <td className="px-3 py-3">
+                  <div
+                    className="truncate text-sm text-gray-300"
+                    title={
+                      invoice.user
+                        ? `${invoice.user.first_name || ''} ${invoice.user.last_name || ''}`.trim() ||
+                          invoice.user.email
+                        : 'Guest'
+                    }
+                  >
                     {invoice.user
                       ? `${invoice.user.first_name || ''} ${invoice.user.last_name || ''}`.trim() ||
                         invoice.user.email
                       : 'Guest'}
                   </div>
                   {invoice.user && (
-                    <div className="text-xs text-gray-500">
+                    <div className="truncate text-xs text-gray-500" title={invoice.user.email}>
                       {invoice.user.email}
                       {invoice.user.meca_id && (
                         <span className="ml-2 text-orange-400">#{invoice.user.meca_id}</span>
@@ -151,11 +168,11 @@ export function InvoiceTable({
                 </td>
               )}
               {!compact && (
-                <td className="px-4 py-3">
+                <td className="px-3 py-3">
                   {invoice.items.length > 0 ? (
-                    <div className="max-w-xs">
+                    <div>
                       <div
-                        className="text-sm text-gray-300 truncate"
+                        className="truncate text-sm text-gray-300"
                         title={invoice.items[0].description}
                       >
                         {invoice.items[0].description}
@@ -171,25 +188,28 @@ export function InvoiceTable({
                   )}
                 </td>
               )}
-              <td className="whitespace-nowrap px-4 py-3">
+              <td className="px-3 py-3">
                 {invoice.metadata?.subscription_id ? (
-                  <span className="font-mono text-xs text-blue-400">
+                  <div
+                    className="truncate font-mono text-xs text-blue-400"
+                    title={String(invoice.metadata.subscription_id)}
+                  >
                     {String(invoice.metadata.subscription_id)}
-                  </span>
+                  </div>
                 ) : (
                   <span className="text-sm text-gray-500">-</span>
                 )}
               </td>
-              <td className="whitespace-nowrap px-4 py-3">
+              <td className="whitespace-nowrap px-3 py-3">
                 <InvoiceStatusBadge status={invoice.status} size="sm" />
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right">
+              <td className="whitespace-nowrap px-3 py-3 text-right">
                 <span className="text-sm font-medium text-white">
                   {formatCurrency(invoice.total, invoice.currency)}
                 </span>
               </td>
               {!compact && (
-                <td className="whitespace-nowrap px-4 py-3">
+                <td className="whitespace-nowrap px-3 py-3">
                   <span
                     className={`text-sm ${
                       invoice.status === InvoiceStatus.OVERDUE
@@ -201,7 +221,7 @@ export function InvoiceTable({
                   </span>
                 </td>
               )}
-              <td className="relative whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
+              <td className="relative whitespace-nowrap px-3 py-3 text-right text-sm font-medium">
                 <div className="relative">
                   <button
                     onClick={(e) => {
@@ -298,7 +318,6 @@ export function InvoiceTable({
           ))}
         </tbody>
       </table>
-     </div>
     </div>
   );
 }
