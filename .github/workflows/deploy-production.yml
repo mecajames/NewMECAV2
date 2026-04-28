@@ -119,6 +119,8 @@ jobs:
             --arg cc_list_id "${{ secrets.PROD_CONSTANT_CONTACT_LIST_ID }}" \
             --arg contact_form_email "${{ secrets.PROD_CONTACT_FORM_EMAIL }}" \
             --arg storage_public_url "${{ secrets.PROD_STORAGE_PUBLIC_URL }}" \
+            --arg paypal_client_id "${{ secrets.PROD_PAYPAL_CLIENT_ID }}" \
+            --arg paypal_client_secret "${{ secrets.PROD_PAYPAL_CLIENT_SECRET }}" \
             '
             .serviceName = $svc |
             .containers.backend.image = $backend |
@@ -149,7 +151,9 @@ jobs:
             .containers.backend.environment.CONSTANT_CONTACT_REFRESH_TOKEN = $cc_refresh_token |
             .containers.backend.environment.CONSTANT_CONTACT_LIST_ID = $cc_list_id |
             .containers.backend.environment.CONTACT_FORM_EMAIL = $contact_form_email |
-            .containers.backend.environment.STORAGE_PUBLIC_URL = $storage_public_url
+            .containers.backend.environment.STORAGE_PUBLIC_URL = $storage_public_url |
+            .containers.backend.environment.PAYPAL_CLIENT_ID = $paypal_client_id |
+            .containers.backend.environment.PAYPAL_CLIENT_SECRET = $paypal_client_secret
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"

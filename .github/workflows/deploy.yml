@@ -116,6 +116,8 @@ jobs:
             --arg cc_list_id "${{ secrets.CONSTANT_CONTACT_LIST_ID }}" \
             --arg contact_form_email "${{ secrets.CONTACT_FORM_EMAIL }}" \
             --arg enable_test_mode "${{ secrets.ENABLE_TEST_MODE }}" \
+            --arg paypal_client_id "${{ secrets.PAYPAL_CLIENT_ID }}" \
+            --arg paypal_client_secret "${{ secrets.PAYPAL_CLIENT_SECRET }}" \
             '
             .containers.backend.image = $backend |
             .containers.nginx.image = $nginx |
@@ -142,7 +144,9 @@ jobs:
             .containers.backend.environment.CONSTANT_CONTACT_REFRESH_TOKEN = $cc_refresh_token |
             .containers.backend.environment.CONSTANT_CONTACT_LIST_ID = $cc_list_id |
             .containers.backend.environment.CONTACT_FORM_EMAIL = $contact_form_email |
-            .containers.backend.environment.ENABLE_TEST_MODE = $enable_test_mode
+            .containers.backend.environment.ENABLE_TEST_MODE = $enable_test_mode |
+            .containers.backend.environment.PAYPAL_CLIENT_ID = $paypal_client_id |
+            .containers.backend.environment.PAYPAL_CLIENT_SECRET = $paypal_client_secret
             ' deploy/deployment.template.json > /tmp/deployment.json
 
           echo "Deployment config (secrets masked):"
