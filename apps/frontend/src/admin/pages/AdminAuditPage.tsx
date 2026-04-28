@@ -56,6 +56,12 @@ export default function AdminAuditPage() {
       role_change: 'bg-purple-900/50 text-purple-400',
       membership_update: 'bg-blue-900/50 text-blue-400',
       membership_cancel: 'bg-red-900/50 text-red-400',
+      membership_cancel_at_renewal: 'bg-orange-900/50 text-orange-400',
+      membership_reactivate: 'bg-green-900/50 text-green-400',
+      membership_refund: 'bg-rose-900/50 text-rose-400',
+      membership_refund_partial: 'bg-pink-900/50 text-pink-300',
+      membership_pause: 'bg-amber-900/50 text-amber-300',
+      membership_resume: 'bg-teal-900/50 text-teal-300',
       membership_approve: 'bg-green-900/50 text-green-400',
       user_update: 'bg-amber-900/50 text-amber-400',
       event_create: 'bg-emerald-900/50 text-emerald-400',
@@ -145,6 +151,12 @@ export default function AdminAuditPage() {
               <option value="role_change">Role Change</option>
               <option value="membership_update">Membership Update</option>
               <option value="membership_cancel">Membership Cancel</option>
+              <option value="membership_cancel_at_renewal">Membership Cancel at Renewal</option>
+              <option value="membership_reactivate">Membership Reactivate</option>
+              <option value="membership_refund">Membership Refund</option>
+              <option value="membership_refund_partial">Membership Partial Refund</option>
+              <option value="membership_pause">Membership Pause</option>
+              <option value="membership_resume">Membership Resume</option>
               <option value="membership_approve">Membership Approve</option>
               <option value="user_update">User Update</option>
               <option value="event_create">Event Create</option>

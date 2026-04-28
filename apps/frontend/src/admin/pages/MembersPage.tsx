@@ -101,6 +101,12 @@ export default function MembersPage() {
 
   // Online status tracking
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+
+  // Bulk select for refund/cancel — keyed by membership.id (not member.id),
+  // since the bulk endpoint operates on memberships.
+  const [selectedMembershipIds, setSelectedMembershipIds] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ succeeded: number; failed: number; errors?: string[] } | null>(null);
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
 
   // Send message modal
@@ -582,6 +588,58 @@ export default function MembersPage() {
     return filteredMembers.slice(startIndex, startIndex + membersPerPage);
   }, [filteredMembers, currentPage, membersPerPage]);
 
+  // ---- Bulk action helpers --------------------------------------------------
+  const toggleMembershipSelected = (membershipId: string) => {
+    setSelectedMembershipIds(prev => {
+      const next = new Set(prev);
+      if (next.has(membershipId)) next.delete(membershipId);
+      else next.add(membershipId);
+      return next;
+    });
+  };
+
+  // Toggle every selectable row currently visible on this page.
+  const togglePageAllSelected = () => {
+    const pageIds = paginatedMembers
+      .map(m => m.membershipInfo?.id)
+      .filter((id): id is string => !!id);
+    const allOnPageSelected = pageIds.length > 0 && pageIds.every(id => selectedMembershipIds.has(id));
+    setSelectedMembershipIds(prev => {
+      const next = new Set(prev);
+      if (allOnPageSelected) pageIds.forEach(id => next.delete(id));
+      else pageIds.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
+  const runBulkAction = async (action: 'refund' | 'cancel_immediately' | 'cancel_at_renewal') => {
+    const ids = Array.from(selectedMembershipIds);
+    if (ids.length === 0) return;
+    const verb = action === 'refund' ? 'refund' : 'cancel';
+    const reason = window.prompt(`Reason for ${verb}ing ${ids.length} membership${ids.length > 1 ? 's' : ''}? (min 5 chars)`) ?? '';
+    if (reason.trim().length < 5) return;
+    if (!window.confirm(`Confirm: ${verb} ${ids.length} membership${ids.length > 1 ? 's' : ''}? This cannot be undone in bulk.`)) return;
+
+    setBulkActionLoading(true);
+    setBulkResult(null);
+    try {
+      const { data } = await axios.post('/api/memberships/admin/bulk-action', {
+        action, membershipIds: ids, reason: reason.trim(),
+      });
+      const errors = data.results
+        .filter((r: any) => !r.ok)
+        .map((r: any) => `${r.membershipId.slice(0, 8)}…: ${r.error}`);
+      setBulkResult({ succeeded: data.succeeded, failed: data.failed, errors: errors.length ? errors : undefined });
+      setSelectedMembershipIds(new Set());
+      // Refresh data so cancelled/refunded rows reflect new state
+      fetchMembers();
+    } catch (err: any) {
+      setBulkResult({ succeeded: 0, failed: ids.length, errors: [err.response?.data?.message || err.message || 'Unknown error'] });
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
   const getInitials = (firstName?: string, lastName?: string) => {
     const first = firstName?.[0] || '';
     const last = lastName?.[0] || '';
@@ -609,6 +667,9 @@ export default function MembersPage() {
         return 'bg-red-100 text-red-800';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
+      case 'dunning':
+        // Failed renewal — escalating dunning emails firing.
+        return 'bg-red-200 text-red-900 ring-1 ring-red-500/40';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -656,6 +717,13 @@ export default function MembersPage() {
   // Derive actual membership status from membership info
   const getDerivedMembershipStatus = (membershipInfo?: MembershipInfo): string => {
     if (!membershipInfo) return 'none';
+
+    // Failed renewal payment — these members are in dunning. Surface them
+    // as their own status so they're filterable + visually distinct from
+    // the generic "none" bucket.
+    if (membershipInfo.paymentStatus === 'failed') {
+      return 'dunning';
+    }
 
     // Check payment status first
     if (membershipInfo.paymentStatus === 'pending') {
@@ -820,6 +888,7 @@ export default function MembersPage() {
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
                 <option value="pending">Pending</option>
+                <option value="dunning">Dunning (payment failed)</option>
                 <option value="expired">Expired</option>
                 <option value="none">None</option>
               </select>
@@ -1000,12 +1069,78 @@ export default function MembersPage() {
           })()}
         </div>
 
+        {/* Bulk action toolbar — only visible when rows are selected */}
+        {selectedMembershipIds.size > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">
+            <span className="text-amber-200 font-medium">
+              {selectedMembershipIds.size} membership{selectedMembershipIds.size > 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={() => runBulkAction('refund')}
+              disabled={bulkActionLoading}
+              className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded disabled:opacity-50"
+              title="Full refund + immediate cancellation for each selected membership"
+            >
+              {bulkActionLoading ? 'Working…' : 'Refund all'}
+            </button>
+            <button
+              onClick={() => runBulkAction('cancel_immediately')}
+              disabled={bulkActionLoading}
+              className="px-3 py-1.5 text-sm bg-orange-600 hover:bg-orange-500 text-white rounded disabled:opacity-50"
+            >
+              {bulkActionLoading ? 'Working…' : 'Cancel now'}
+            </button>
+            <button
+              onClick={() => runBulkAction('cancel_at_renewal')}
+              disabled={bulkActionLoading}
+              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50"
+            >
+              {bulkActionLoading ? 'Working…' : 'Cancel at renewal'}
+            </button>
+            <button
+              onClick={() => setSelectedMembershipIds(new Set())}
+              className="ml-auto px-3 py-1.5 text-sm text-gray-300 hover:text-white"
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+        {bulkResult && (
+          <div className={`mb-4 px-4 py-3 rounded-lg border ${bulkResult.failed === 0 ? 'bg-green-500/10 border-green-500/30 text-green-200' : 'bg-amber-500/10 border-amber-500/30 text-amber-200'}`}>
+            <div className="font-medium">
+              Bulk action complete — {bulkResult.succeeded} succeeded, {bulkResult.failed} failed
+            </div>
+            {bulkResult.errors && (
+              <ul className="text-sm mt-1 list-disc list-inside opacity-90">
+                {bulkResult.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+                {bulkResult.errors.length > 5 && <li>…and {bulkResult.errors.length - 5} more</li>}
+              </ul>
+            )}
+            <button onClick={() => setBulkResult(null)} className="text-xs underline mt-1">Dismiss</button>
+          </div>
+        )}
+
         {/* Members Table */}
         <div className="bg-slate-800 rounded-lg shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full divide-y divide-slate-700 table-fixed min-w-[1100px]">
               <thead className="bg-slate-700">
                 <tr>
+                  <th className="w-8 px-1 py-3 text-center">
+                    {(() => {
+                      const pageIds = paginatedMembers.map(m => m.membershipInfo?.id).filter((id): id is string => !!id);
+                      const allSelected = pageIds.length > 0 && pageIds.every(id => selectedMembershipIds.has(id));
+                      return (
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={togglePageAllSelected}
+                          className="cursor-pointer"
+                          title={allSelected ? 'Deselect all on this page' : 'Select all on this page'}
+                        />
+                      );
+                    })()}
+                  </th>
                   <th className="w-8 px-1 py-3"></th>{/* Expand/collapse column */}
                   <th className="w-[13%] px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Member
@@ -1042,7 +1177,7 @@ export default function MembersPage() {
               <tbody className="bg-slate-800 divide-y divide-slate-700">
                 {paginatedMembers.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan={12} className="px-6 py-12 text-center text-gray-400">
                       No members found matching your criteria.
                     </td>
                   </tr>
@@ -1058,6 +1193,19 @@ export default function MembersPage() {
                           className="hover:bg-slate-700 transition-colors cursor-pointer"
                           onClick={() => navigate(`/admin/members/${member.id}`)}
                         >
+                          {/* Bulk-select checkbox — only renderable when there's a membership to act on */}
+                          <td className="px-1 py-4 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                            {member.membershipInfo?.id ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedMembershipIds.has(member.membershipInfo.id)}
+                                onChange={() => toggleMembershipSelected(member.membershipInfo!.id)}
+                                className="cursor-pointer"
+                              />
+                            ) : (
+                              <span className="w-4 inline-block"></span>
+                            )}
+                          </td>
                           {/* Expand/Collapse Button */}
                           <td className="px-1 py-4 whitespace-nowrap">
                             {hasSecondaries ? (
