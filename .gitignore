@@ -224,3 +224,4 @@ apps/backend/.env.example
 apps/backend/.env.example
 deploy/.env.staging.example
 /apps/backend/scripts
+/.playwright-mcp
