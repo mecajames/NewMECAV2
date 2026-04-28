@@ -4610,6 +4610,15 @@ function MembershipsTab({ member }: { member: Profile }) {
     cancelAtPeriodEnd: boolean;
   }>>({});
 
+  // Buyer's default card on file (Stripe). One per member, not per membership.
+  const [paymentMethod, setPaymentMethod] = useState<{
+    brand: string; last4: string; expMonth: number; expYear: number;
+  } | null>(null);
+
+  // Tracks which membership row has a sub-action in flight so we can disable
+  // its buttons (Reactivate/Pause/Resume) instead of allowing double-clicks.
+  const [subActionLoading, setSubActionLoading] = useState<string | null>(null);
+
   const [autoRenewalMembership, setAutoRenewalMembership] = useState<Membership | null>(null);
   const [autoRenewalAction, setAutoRenewalAction] = useState<'cancel' | 'enable'>('cancel');
   const [autoRenewalReason, setAutoRenewalReason] = useState('');
@@ -4706,6 +4715,17 @@ function MembershipsTab({ member }: { member: Profile }) {
         }
       }
       setSubscriptionDetails(subDetails);
+
+      // Fetch the buyer's default card on file (one per member). Failure is
+      // non-blocking — older members may not have a Stripe customer yet.
+      if (memberId) {
+        try {
+          const pm = await membershipsApi.getPaymentMethod(memberId);
+          setPaymentMethod(pm);
+        } catch {
+          setPaymentMethod(null);
+        }
+      }
     } catch (error) {
       console.error('Error fetching memberships:', error);
     } finally {
@@ -4916,6 +4936,49 @@ function MembershipsTab({ member }: { member: Profile }) {
       setAutoRenewalError(error.response?.data?.message || `Failed to ${autoRenewalAction} auto-renewal`);
     } finally {
       setAutoRenewalLoading(false);
+    }
+  };
+
+  // ---- Reactivate / Pause / Resume — small confirm-then-call handlers -----
+  // These bypass the AutoRenewal modal because they don't need a reason
+  // (reactivate) or only want a one-line prompt (pause).
+  const handleReactivate = async (membership: Membership) => {
+    if (!window.confirm('Reactivate this membership? Auto-renewal will resume and the cancel-at-period-end flag will be cleared.')) return;
+    setSubActionLoading(membership.id);
+    try {
+      await membershipsApi.reactivate(membership.id);
+      await fetchMemberships();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to reactivate subscription');
+    } finally {
+      setSubActionLoading(null);
+    }
+  };
+
+  const handlePauseSubscription = async (membership: Membership) => {
+    const reason = window.prompt('Reason for pausing this subscription? (optional)') ?? null;
+    if (reason === null) return; // cancelled prompt
+    setSubActionLoading(membership.id);
+    try {
+      await axios.post(`/api/memberships/${membership.id}/admin/pause`, { reason: reason || undefined });
+      await fetchMemberships();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to pause subscription');
+    } finally {
+      setSubActionLoading(null);
+    }
+  };
+
+  const handleResumeSubscription = async (membership: Membership) => {
+    if (!window.confirm('Resume this paused subscription? Stripe will start collecting again at the next cycle.')) return;
+    setSubActionLoading(membership.id);
+    try {
+      await axios.post(`/api/memberships/${membership.id}/admin/resume`);
+      await fetchMemberships();
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to resume subscription');
+    } finally {
+      setSubActionLoading(null);
     }
   };
 
@@ -5224,13 +5287,51 @@ function MembershipsTab({ member }: { member: Profile }) {
                       </span>
                       {/* Admin can only CANCEL auto-renewal, not enable it */}
                       {canEdit && membership.stripeSubscriptionId && membership.paymentStatus === 'paid' && !isExpired(membership.endDate || '') && (
-                        <button
-                          onClick={() => handleOpenAutoRenewalModal(membership, 'cancel')}
-                          className="ml-2 text-xs px-2 py-0.5 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded"
-                          title="Cancel auto-renewal"
-                        >
-                          Cancel
-                        </button>
+                        <>
+                          {/* Reactivate is the inverse of "Cancel at renewal" — only show
+                              when the sub is in the cancel-pending window. */}
+                          {subscriptionDetails[membership.id]?.cancelAtPeriodEnd ? (
+                            <button
+                              onClick={() => handleReactivate(membership)}
+                              disabled={subActionLoading === membership.id}
+                              className="ml-2 text-xs px-2 py-0.5 bg-green-500/20 text-green-300 hover:bg-green-500/30 rounded disabled:opacity-50"
+                              title="Reactivate subscription (undo cancel-at-period-end)"
+                            >
+                              {subActionLoading === membership.id ? '…' : 'Reactivate'}
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleOpenAutoRenewalModal(membership, 'cancel')}
+                                className="ml-2 text-xs px-2 py-0.5 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded"
+                                title="Cancel auto-renewal"
+                              >
+                                Cancel
+                              </button>
+                              {/* Pause / Resume — paused subs show "paused" status from Stripe.
+                                  Stripe's pause_collection is reversible at any time. */}
+                              {subscriptionDetails[membership.id]?.status === 'paused' ? (
+                                <button
+                                  onClick={() => handleResumeSubscription(membership)}
+                                  disabled={subActionLoading === membership.id}
+                                  className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded disabled:opacity-50"
+                                  title="Resume paused subscription"
+                                >
+                                  {subActionLoading === membership.id ? '…' : 'Resume'}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handlePauseSubscription(membership)}
+                                  disabled={subActionLoading === membership.id}
+                                  className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 rounded disabled:opacity-50"
+                                  title="Pause subscription (no charges until resumed)"
+                                >
+                                  {subActionLoading === membership.id ? '…' : 'Pause'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </>
                       )}
                       {membership.hadLegacySubscription && !membership.stripeSubscriptionId && (
                         <span className="ml-1 text-xs text-yellow-400" title="This member had recurring billing in the old PMPro system">
@@ -5270,6 +5371,17 @@ function MembershipsTab({ member }: { member: Profile }) {
                         {subscriptionDetails[membership.id].cancelAtPeriodEnd && (
                           <div className="text-sm text-amber-400 flex items-center gap-1">
                             ⚠ Scheduled to cancel at end of period
+                          </div>
+                        )}
+                        {paymentMethod && (
+                          <div className="text-sm flex items-center gap-2">
+                            <span className="text-gray-400">Card on file:</span>
+                            <span className="text-gray-200">
+                              {paymentMethod.brand.charAt(0).toUpperCase() + paymentMethod.brand.slice(1)} ····{paymentMethod.last4}
+                              <span className="text-gray-500 ml-2">
+                                exp {String(paymentMethod.expMonth).padStart(2, '0')}/{String(paymentMethod.expYear).slice(-2)}
+                              </span>
+                            </span>
                           </div>
                         )}
                       </div>
