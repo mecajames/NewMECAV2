@@ -23,6 +23,7 @@ import { EventRegistrationsService } from '../event-registrations/event-registra
 import { InvoicesService } from '../invoices/invoices.service';
 import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
+import { CouponsService } from '../coupons/coupons.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 import { Event } from '../events/events.entity';
@@ -76,6 +77,9 @@ interface CreateShopOrderDto {
   shippingAddress?: ShopAddress;
   billingAddress?: ShopAddress;
   userId?: string;
+  shippingMethod?: 'standard' | 'priority';
+  shippingAmount?: number;
+  couponCode?: string;
 }
 
 interface CaptureOrderDto {
@@ -96,6 +100,7 @@ export class PayPalController {
     private readonly invoicesService: InvoicesService,
     private readonly shopService: ShopService,
     private readonly taxService: TaxService,
+    private readonly couponsService: CouponsService,
     private readonly supabaseAdmin: SupabaseAdminService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -305,6 +310,30 @@ export class PayPalController {
       throw new BadRequestException(`Some items are out of stock: ${unavailableNames}`);
     }
 
+    // Validate coupon if provided
+    let shopDiscountAmount = 0;
+    let shopCouponId: string | undefined;
+    if (data.couponCode) {
+      const products = await this.shopService.getProductsByIds(data.items.map((i) => i.productId));
+      let subtotal = 0;
+      for (const item of data.items) {
+        const product = products.find((p) => p.id === item.productId);
+        if (product) subtotal += Number(product.price) * item.quantity;
+      }
+      const validation = await this.couponsService.validateCoupon(data.couponCode, {
+        scope: 'shop',
+        subtotal,
+        productIds: data.items.map((i) => i.productId),
+        userId: data.userId,
+        email: data.email,
+      });
+      if (!validation.valid) {
+        throw new BadRequestException(validation.message);
+      }
+      shopDiscountAmount = validation.discountAmount!;
+      shopCouponId = validation.couponId;
+    }
+
     // Create order in pending state
     const shopOrder = await this.shopService.createOrder({
       userId: data.userId,
@@ -313,8 +342,10 @@ export class PayPalController {
       items: data.items,
       shippingAddress: data.shippingAddress,
       billingAddress: data.billingAddress,
-      shippingMethod: (data as any).shippingMethod || 'standard',
-      shippingAmount: (data as any).shippingAmount || 0,
+      shippingMethod: data.shippingMethod || 'standard',
+      shippingAmount: data.shippingAmount || 0,
+      discountAmount: shopDiscountAmount,
+      couponCode: data.couponCode?.toUpperCase(),
     });
 
     const metadata: Record<string, string> = {
@@ -325,6 +356,11 @@ export class PayPalController {
       itemCount: String(data.items.length),
     };
     if (data.userId) metadata.userId = data.userId;
+    if (data.couponCode && shopCouponId) {
+      metadata.couponCode = data.couponCode.toUpperCase();
+      metadata.couponId = shopCouponId;
+      metadata.discountAmount = shopDiscountAmount.toFixed(2);
+    }
 
     const order = await this.paypalService.createOrder({
       amount: Number(shopOrder.totalAmount),

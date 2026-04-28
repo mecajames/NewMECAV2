@@ -25,6 +25,9 @@ import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { getStorageUrl } from '@/lib/storage';
 import { trackBeginCheckout, trackAddShippingInfo, trackPurchase } from '@/lib/gtag';
+import { PaymentMethodSelector, SelectedPaymentMethod } from '@/shared/components/PaymentMethodSelector';
+import { PayPalPaymentButton } from '@/shared/components/PayPalPaymentButton';
+import { paypalApi } from '@/paypal/paypal.api-client';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
 const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
@@ -290,6 +293,9 @@ export function CheckoutPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<SelectedPaymentMethod>(
+    isStripeConfigured ? 'stripe' : 'paypal'
+  );
 
   // Shipping state
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
@@ -449,7 +455,24 @@ export function CheckoutPage() {
         return;
       }
 
-      // Create payment intent with shipping
+      // PayPal flow: defer order creation to PayPalPaymentButton.createOrderFn
+      if (selectedPaymentMethod === 'paypal' || !isStripeConfigured) {
+        setStep('payment');
+        trackAddShippingInfo(
+          items.map(item => ({
+            item_id: item.productId,
+            item_name: item.product.name,
+            price: Number(item.product.price),
+            quantity: item.quantity,
+            item_category: item.product.category,
+          })),
+          orderTotal,
+          selectedShippingMethod,
+        );
+        return;
+      }
+
+      // Stripe flow: create payment intent now to get clientSecret for Elements
       const result = await shopApi.createPaymentIntent({
         items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         email: formData.email,
@@ -460,6 +483,14 @@ export function CheckoutPage() {
         shippingAmount: shippingCost,
         couponCode: couponCode || undefined,
       });
+
+      // Backend may return staging-mode sentinel — surface it instead of feeding Stripe a bogus secret
+      const stagingMode = (result as any).stagingMode;
+      const stagingMessage = (result as any).message;
+      if (stagingMode || result.clientSecret === 'staging_mode_blocked') {
+        setError(stagingMessage || 'Payments are blocked in staging mode. Switch to PayPal or contact an admin.');
+        return;
+      }
 
       setClientSecret(result.clientSecret);
       setOrderId(result.orderId);
@@ -476,12 +507,40 @@ export function CheckoutPage() {
         orderTotal,
         selectedShippingMethod,
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating payment intent:', err);
-      setError('Failed to initialize checkout. Please try again.');
+      const message =
+        err?.response?.data?.message ||
+        (err?.message?.includes('Network') ? 'Could not connect to the server. Make sure the backend is running on port 3001.' : null) ||
+        'Failed to initialize checkout. Please try again.';
+      setError(message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePayPalSuccess = async (captureId: string) => {
+    // Refetch our shop order id from the most recent paypal create (orderId set in PayPal create flow below)
+    const finalOrderId = orderId;
+    trackPurchase(
+      finalOrderId || '',
+      items.map(item => ({
+        item_id: item.productId,
+        item_name: item.product.name,
+        price: Number(item.product.price),
+        quantity: item.quantity,
+        item_category: item.product.category,
+      })),
+      orderTotal,
+      shippingCost,
+    );
+    clearCart();
+    if (finalOrderId) {
+      navigate(`/shop/orders/${finalOrderId}/confirmation`);
+    } else {
+      navigate('/shop/orders');
+    }
+    void captureId;
   };
 
   const handlePaymentSuccess = async (_paymentIntentId: string) => {
@@ -653,6 +712,14 @@ export function CheckoutPage() {
                   )}
                 </div>
 
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-6">
+                  <PaymentMethodSelector
+                    selected={selectedPaymentMethod}
+                    onChange={setSelectedPaymentMethod}
+                    stripeAvailable={isStripeConfigured}
+                  />
+                </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -669,8 +736,20 @@ export function CheckoutPage() {
                 </button>
               </form>
             ) : (
-              clientSecret && (
-                <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+              <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+                <PaymentMethodSelector
+                  selected={selectedPaymentMethod}
+                  onChange={(method) => {
+                    setSelectedPaymentMethod(method);
+                    // Switching to Stripe but no clientSecret yet — send back to address step to create one
+                    if (method === 'stripe' && !clientSecret && isStripeConfigured) {
+                      setStep('address');
+                    }
+                  }}
+                  stripeAvailable={isStripeConfigured}
+                />
+
+                {selectedPaymentMethod === 'stripe' && clientSecret && isStripeConfigured && (
                   <Elements
                     stripe={stripePromise}
                     options={{
@@ -694,8 +773,43 @@ export function CheckoutPage() {
                       total={orderTotal}
                     />
                   </Elements>
-                </div>
-              )
+                )}
+
+                {selectedPaymentMethod === 'paypal' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center text-sm text-gray-400 mb-2">
+                      <Lock className="h-4 w-4 mr-2" />
+                      Your payment information is secure and encrypted
+                    </div>
+                    <PayPalPaymentButton
+                      paymentType="shop"
+                      createOrderFn={async () => {
+                        const result = await paypalApi.createShopOrder({
+                          items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+                          email: formData.email,
+                          shippingAddress: formData.shippingAddress,
+                          billingAddress: formData.sameAsShipping ? formData.shippingAddress : formData.billingAddress,
+                          userId: user?.id,
+                          shippingMethod: selectedShippingMethod,
+                          shippingAmount: shippingCost,
+                          couponCode: couponCode || undefined,
+                        });
+                        setOrderId(result.orderId || null);
+                        return result.paypalOrderId;
+                      }}
+                      onSuccess={handlePayPalSuccess}
+                      onError={(err) => setError(err)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setStep('address')}
+                      className="w-full py-2 text-gray-400 hover:text-white transition-colors text-sm"
+                    >
+                      Back to shipping
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

@@ -89,6 +89,9 @@ export const paypalApi = {
     shippingAddress?: any;
     billingAddress?: any;
     userId?: string;
+    shippingMethod?: 'standard' | 'priority';
+    shippingAmount?: number;
+    couponCode?: string;
   }): Promise<CreateOrderResponse> {
     const response = await axios.post('/api/paypal/create-shop-order', data);
     return response.data;
