@@ -109,6 +109,20 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface MyTransaction {
+  id: string;
+  source: 'event_registration' | 'membership' | 'shop_order';
+  type: string;
+  reference: string;
+  description: string;
+  status: string;
+  amount: number;
+  currency: string;
+  date: string;
+  invoiceId?: string;
+  detailUrl?: string;
+}
+
 export interface OrderListParams {
   page?: number;
   limit?: number;
@@ -319,6 +333,14 @@ export const billingApi = {
     const response = await axios.get('/api/billing/my/invoices', {
       params,
     });
+    return response.data;
+  },
+
+  /**
+   * Get unified transaction history (event registrations + memberships + shop orders)
+   */
+  getMyAllTransactions: async (): Promise<{ data: MyTransaction[]; total: number }> => {
+    const response = await axios.get('/api/billing/my/all-transactions');
     return response.data;
   },
 

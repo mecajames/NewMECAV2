@@ -1888,7 +1888,7 @@ export default function MyMecaDashboardPage() {
                 <FileText className="h-7 w-7 text-purple-500" />
               </div>
               <div>
-                <h3 className="text-white font-semibold text-lg">Billing & Invoices</h3>
+                <h3 className="text-white font-semibold text-lg">Payments and Invoices</h3>
                 <p className="text-gray-400 text-sm mt-1">View your payment history and invoices</p>
               </div>
             </div>

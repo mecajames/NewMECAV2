@@ -13,23 +13,30 @@ import {
   Eye,
   Pencil,
   Car,
+  Calendar,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
-import { billingApi, Order, Invoice } from '../../api-client/billing.api-client';
+import { billingApi, Invoice, MyTransaction } from '../../api-client/billing.api-client';
 import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 
 export default function BillingPage() {
   const navigate = useNavigate();
   const { profile, user } = useAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [transactions, setTransactions] = useState<MyTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'invoices'>('overview');
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'memberships' | 'shop_orders' | 'event_registrations' | 'invoices'
+  >('overview');
   const [membership, setMembership] = useState<Membership | null>(null);
   const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
   const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
   const [showEditSecondaryModal, setShowEditSecondaryModal] = useState(false);
   const [editingSecondary, setEditingSecondary] = useState<SecondaryMembershipInfo | null>(null);
+
+  const membershipTxs = transactions.filter((t) => t.source === 'membership');
+  const shopTxs = transactions.filter((t) => t.source === 'shop_order');
+  const eventTxs = transactions.filter((t) => t.source === 'event_registration');
 
   useEffect(() => {
     if (profile?.id) {
@@ -42,14 +49,14 @@ export default function BillingPage() {
 
     try {
       setLoading(true);
-      const [ordersRes, invoicesRes, membershipRes] = await Promise.all([
-        billingApi.getMyOrders({ limit: 10 }),
+      const [invoicesRes, membershipRes, transactionsRes] = await Promise.all([
         billingApi.getMyInvoices({ limit: 10 }),
         membershipsApi.getUserActiveMembership(profile.id),
+        billingApi.getMyAllTransactions().catch(() => ({ data: [], total: 0 })),
       ]);
-      setOrders(ordersRes.data || []);
       setInvoices(invoicesRes.data || []);
       setMembership(membershipRes);
+      setTransactions(transactionsRes.data || []);
 
       // If this is a master membership, fetch secondaries
       if (membershipRes?.id) {
@@ -144,9 +151,9 @@ export default function BillingPage() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <CreditCard className="h-10 w-10 text-orange-500" />
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Billing</h1>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Payments and Invoices</h1>
             </div>
-            <p className="text-gray-400">Manage your payments and view invoices</p>
+            <p className="text-gray-400">Review your memberships, shop orders, event registrations, and invoices</p>
           </div>
           <button
             onClick={() => navigate(-1)}
@@ -246,7 +253,7 @@ export default function BillingPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-6">
+        <div className="flex flex-wrap gap-2 sm:gap-4 mb-6">
           <button
             onClick={() => setActiveTab('overview')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -258,14 +265,34 @@ export default function BillingPage() {
             Overview
           </button>
           <button
-            onClick={() => setActiveTab('orders')}
+            onClick={() => setActiveTab('memberships')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'orders'
+              activeTab === 'memberships'
                 ? 'bg-orange-600 text-white'
                 : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
             }`}
           >
-            Orders ({orders.length})
+            Memberships ({membershipTxs.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('shop_orders')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'shop_orders'
+                ? 'bg-orange-600 text-white'
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            Shop Orders ({shopTxs.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('event_registrations')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'event_registrations'
+                ? 'bg-orange-600 text-white'
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            Event Registrations ({eventTxs.length})
           </button>
           <button
             onClick={() => setActiveTab('invoices')}
@@ -289,49 +316,42 @@ export default function BillingPage() {
         {/* Overview Tab */}
         {!loading && activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Recent Orders */}
+            {/* Recent Activity (memberships, shop orders, event registrations combined) */}
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                   <ShoppingCart className="h-5 w-5 text-blue-400" />
-                  Recent Orders
+                  Recent Activity
                 </h3>
-                {orders.length > 0 && (
-                  <button
-                    onClick={() => setActiveTab('orders')}
-                    className="text-sm text-orange-400 hover:text-orange-300"
-                  >
-                    View all →
-                  </button>
-                )}
               </div>
-              {orders.length === 0 ? (
-                <p className="text-gray-400 text-center py-8">No orders yet</p>
+              {transactions.length === 0 ? (
+                <p className="text-gray-400 text-center py-8">No transactions yet</p>
               ) : (
                 <div className="space-y-3">
-                  {orders.slice(0, 3).map((order) => (
-                    <div
-                      key={order.id}
-                      className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg"
+                  {transactions.slice(0, 5).map((tx) => (
+                    <button
+                      key={tx.id}
+                      onClick={() => {
+                        if (tx.source === 'membership') setActiveTab('memberships');
+                        else if (tx.source === 'shop_order') setActiveTab('shop_orders');
+                        else setActiveTab('event_registrations');
+                      }}
+                      className="w-full flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors text-left"
                     >
                       <div>
-                        <p className="text-white font-medium">{order.orderNumber}</p>
-                        <p className="text-gray-400 text-sm">{formatDate(order.createdAt)}</p>
-                        {order.metadata?.subscription_id && (
-                          <p className="text-gray-500 text-xs font-mono mt-0.5">
-                            Sub: {String(order.metadata.subscription_id)}
-                          </p>
-                        )}
+                        <p className="text-white font-medium">{tx.type}</p>
+                        <p className="text-gray-400 text-sm">{tx.reference}</p>
+                        <p className="text-gray-500 text-xs mt-0.5">{formatDate(tx.date)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-white font-medium">{formatCurrency(order.total)}</p>
+                        <p className="text-white font-medium">{formatCurrency(tx.amount)}</p>
                         <span
-                          className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(order.status).bg} ${getStatusColor(order.status).text}`}
+                          className={`text-xs px-2 py-0.5 rounded-full capitalize ${getStatusColor(tx.status).bg} ${getStatusColor(tx.status).text}`}
                         >
-                          {order.status}
+                          {tx.status}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -418,75 +438,40 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Orders Tab */}
-        {!loading && activeTab === 'orders' && (
-          <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
-            {orders.length === 0 ? (
-              <div className="text-center py-12">
-                <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-gray-500" />
-                <p className="text-gray-400">No orders found</p>
-              </div>
-            ) : (
-              <table className="min-w-full divide-y divide-slate-700">
-                <thead className="bg-slate-700/50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                      Order
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                      Subscription
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">
-                      Total
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700">
-                  {orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-700/30">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {order.orderNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {order.orderType?.replace('_', ' ')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {order.metadata?.subscription_id ? (
-                          <span className="font-mono text-xs text-blue-400">
-                            {String(order.metadata.subscription_id)}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs rounded-full ${getStatusColor(order.status).bg} ${getStatusColor(order.status).text}`}
-                        >
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white text-right">
-                        {formatCurrency(order.total)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                        {formatDate(order.createdAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+        {/* Memberships Tab */}
+        {!loading && activeTab === 'memberships' && (
+          <TransactionTable
+            transactions={membershipTxs}
+            emptyIcon={<CreditCard className="h-16 w-16 mx-auto mb-4 text-gray-500" />}
+            emptyText="No memberships found"
+            referenceLabel="Membership"
+            descriptionLabel="Plan"
+            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+          />
+        )}
+
+        {/* Shop Orders Tab */}
+        {!loading && activeTab === 'shop_orders' && (
+          <TransactionTable
+            transactions={shopTxs}
+            emptyIcon={<ShoppingCart className="h-16 w-16 mx-auto mb-4 text-gray-500" />}
+            emptyText="No shop orders found"
+            referenceLabel="Order #"
+            descriptionLabel="Description"
+            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+          />
+        )}
+
+        {/* Event Registrations Tab */}
+        {!loading && activeTab === 'event_registrations' && (
+          <TransactionTable
+            transactions={eventTxs}
+            emptyIcon={<Calendar className="h-16 w-16 mx-auto mb-4 text-gray-500" />}
+            emptyText="No event registrations found"
+            referenceLabel="Reference"
+            descriptionLabel="Event"
+            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+          />
         )}
 
         {/* Invoices Tab */}
@@ -619,6 +604,117 @@ export default function BillingPage() {
           onSuccess={handleSecondaryEdited}
         />
       )}
+    </div>
+  );
+}
+
+interface TransactionTableProps {
+  transactions: MyTransaction[];
+  emptyIcon: React.ReactNode;
+  emptyText: string;
+  referenceLabel: string;
+  descriptionLabel: string;
+  onView?: (tx: MyTransaction) => void;
+}
+
+function TransactionTable({
+  transactions,
+  emptyIcon,
+  emptyText,
+  referenceLabel,
+  descriptionLabel,
+  onView,
+}: TransactionTableProps) {
+  const formatDate = (iso: string) => {
+    const date = new Date(iso);
+    if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'N/A';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const statusColor = (status: string): { bg: string; text: string } => {
+    const map: Record<string, { bg: string; text: string }> = {
+      paid: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      completed: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      shipped: { bg: 'bg-blue-900/50', text: 'text-blue-400' },
+      delivered: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      processing: { bg: 'bg-blue-900/50', text: 'text-blue-400' },
+      pending: { bg: 'bg-yellow-900/50', text: 'text-yellow-400' },
+      cancelled: { bg: 'bg-gray-800/50', text: 'text-gray-400' },
+      refunded: { bg: 'bg-orange-900/50', text: 'text-orange-400' },
+      failed: { bg: 'bg-red-900/50', text: 'text-red-400' },
+    };
+    return map[status] || { bg: 'bg-gray-800/50', text: 'text-gray-400' };
+  };
+
+  if (transactions.length === 0) {
+    return (
+      <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+        <div className="text-center py-12">
+          {emptyIcon}
+          <p className="text-gray-400">{emptyText}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+      <table className="min-w-full divide-y divide-slate-700">
+        <thead className="bg-slate-700/50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">{referenceLabel}</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">{descriptionLabel}</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Amount</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-700">
+          {transactions.map((tx) => {
+            const c = statusColor(tx.status);
+            return (
+              <tr key={tx.id} className="hover:bg-slate-700/30">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{tx.reference}</td>
+                <td className="px-6 py-4 text-sm text-gray-300">{tx.description}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`px-2 py-1 text-xs rounded-full capitalize ${c.bg} ${c.text}`}>{tx.status}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-white text-right">{formatCurrency(tx.amount)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDate(tx.date)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <div className="flex items-center gap-3">
+                    {onView && tx.detailUrl && (
+                      <button
+                        onClick={() => onView(tx)}
+                        className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View
+                      </button>
+                    )}
+                    {tx.invoiceId && (
+                      <button
+                        onClick={() =>
+                          billingApi.viewMyInvoicePdf(tx.invoiceId!).catch((err) => {
+                            console.error('Error viewing invoice:', err);
+                            alert('Failed to view invoice. Please try again.');
+                          })
+                        }
+                        className="flex items-center gap-1 text-green-400 hover:text-green-300"
+                      >
+                        <Download className="h-4 w-4" />
+                        Invoice
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

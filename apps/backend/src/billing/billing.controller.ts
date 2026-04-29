@@ -34,6 +34,9 @@ import { InvoicesService } from '../invoices/invoices.service';
 import { InvoicePdfService } from '../invoices/pdf/invoice-pdf.service';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
 import { Order } from '../orders/orders.entity';
+import { Membership } from '../memberships/memberships.entity';
+import { ShopOrder } from '../shop/entities/shop-order.entity';
+import { Invoice } from '../invoices/invoices.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
@@ -227,6 +230,130 @@ export class BillingController {
     // Get userId from authenticated user - users can only access their own invoices
     const user = await this.getCurrentUser(authHeader);
     return this.invoicesService.findByUser(user.id, page, limit);
+  }
+
+  /**
+   * Unified transaction history for the current user — pulls from event_registrations,
+   * memberships, and shop_orders so users see every paid/pending purchase in one table
+   * (the `orders` table alone misses comp memberships, pre-migration data, and
+   * pending shop carts).
+   */
+  @Get('my/all-transactions')
+  async getMyAllTransactions(
+    @Headers('authorization') authHeader: string,
+  ) {
+    const user = await this.getCurrentUser(authHeader);
+    const em = this.em.fork();
+
+    const [registrations, memberships, shopOrders, billingOrders] = await Promise.all([
+      em.find(
+        EventRegistration,
+        { user: user.id },
+        { populate: ['event'], orderBy: { createdAt: 'DESC' } },
+      ),
+      em.find(
+        Membership,
+        { user: user.id },
+        { populate: ['membershipTypeConfig'], orderBy: { createdAt: 'DESC' } },
+      ),
+      em.find(
+        ShopOrder,
+        { user: user.id },
+        { orderBy: { createdAt: 'DESC' } },
+      ),
+      em.find(
+        Order,
+        { member: user.id },
+        { orderBy: { createdAt: 'DESC' } },
+      ),
+    ]);
+
+    // Build lookups so a source-of-truth row can surface its associated invoice
+    const orderByPaymentIntentId = new Map<string, Order>();
+    const orderByShopRef = new Map<string, Order>();
+    for (const o of billingOrders) {
+      const pi = (o.metadata as any)?.paymentIntentId || (o.metadata as any)?.stripe_payment_intent_id;
+      if (pi) orderByPaymentIntentId.set(String(pi), o);
+      const shopId = o.shopOrderReference?.shopOrderId;
+      if (shopId) orderByShopRef.set(shopId, o);
+    }
+
+    type Transaction = {
+      id: string;
+      source: 'event_registration' | 'membership' | 'shop_order';
+      type: string;
+      reference: string;
+      description: string;
+      status: string;
+      amount: number;
+      currency: string;
+      date: string;
+      invoiceId?: string;
+      detailUrl?: string;
+    };
+
+    const txs: Transaction[] = [];
+
+    for (const r of registrations) {
+      const linkedOrder = r.stripePaymentIntentId
+        ? orderByPaymentIntentId.get(r.stripePaymentIntentId)
+        : undefined;
+      txs.push({
+        id: `event_registration:${r.id}`,
+        source: 'event_registration',
+        type: 'Event Registration',
+        reference: linkedOrder?.orderNumber || r.id.slice(0, 8),
+        description: `Event Registration${r.event?.title ? `: ${r.event.title}` : ''}`,
+        status: r.paymentStatus,
+        amount: Number(r.amountPaid ?? 0),
+        currency: 'USD',
+        date: (r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt as any)).toISOString(),
+        invoiceId: linkedOrder?.invoiceId,
+        detailUrl: r.event?.id ? `/events/${r.event.id}` : undefined,
+      });
+    }
+
+    for (const m of memberships) {
+      const linkedOrder = m.stripePaymentIntentId
+        ? orderByPaymentIntentId.get(m.stripePaymentIntentId)
+        : undefined;
+      txs.push({
+        id: `membership:${m.id}`,
+        source: 'membership',
+        type: 'Membership',
+        reference: linkedOrder?.orderNumber || (m.mecaId ? `#${m.mecaId}` : m.id.slice(0, 8)),
+        description: `Membership${m.membershipTypeConfig?.name ? `: ${m.membershipTypeConfig.name}` : ''}`,
+        status: m.paymentStatus,
+        amount: Number(m.amountPaid ?? 0),
+        currency: 'USD',
+        date: m.startDate
+          ? (m.startDate instanceof Date ? m.startDate : new Date(m.startDate as any)).toISOString()
+          : new Date().toISOString(),
+        invoiceId: linkedOrder?.invoiceId,
+        detailUrl: '/dashboard/membership',
+      });
+    }
+
+    for (const s of shopOrders) {
+      const linkedOrder = orderByShopRef.get(s.id)
+        || (s.stripePaymentIntentId ? orderByPaymentIntentId.get(s.stripePaymentIntentId) : undefined);
+      txs.push({
+        id: `shop_order:${s.id}`,
+        source: 'shop_order',
+        type: 'Shop Purchase',
+        reference: s.orderNumber,
+        description: `Shop Order ${s.orderNumber}`,
+        status: s.status,
+        amount: Number(s.totalAmount ?? 0),
+        currency: 'USD',
+        date: (s.createdAt instanceof Date ? s.createdAt : new Date(s.createdAt as any)).toISOString(),
+        invoiceId: linkedOrder?.invoiceId,
+        detailUrl: `/shop/orders/${s.id}`,
+      });
+    }
+
+    txs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    return { data: txs, total: txs.length };
   }
 
   /**

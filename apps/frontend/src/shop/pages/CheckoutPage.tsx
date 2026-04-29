@@ -293,6 +293,7 @@ export function CheckoutPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentDone, setPaymentDone] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<SelectedPaymentMethod>(
     isStripeConfigured ? 'stripe' : 'paypal'
   );
@@ -418,6 +419,48 @@ export function CheckoutPage() {
     }
   }, [items, orderId, navigate]);
 
+  // If the user navigates back to a checkout page tied to an already-paid order,
+  // bounce them straight to the confirmation page (covers bfcache restoration too).
+  useEffect(() => {
+    if (!orderId) return;
+    let alreadyPaid = false;
+    try {
+      alreadyPaid = sessionStorage.getItem(`shop_order_paid:${orderId}`) === '1';
+    } catch {
+      /* ignore */
+    }
+    if (alreadyPaid || paymentDone) {
+      navigate(`/shop/orders/${orderId}/confirmation`, { replace: true });
+    }
+  }, [orderId, paymentDone, navigate]);
+
+  // Detect bfcache page-show: if the page is restored from bfcache after a
+  // successful payment, force a navigation away so stale form state can't be
+  // resubmitted.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      let paidId: string | null = null;
+      try {
+        // Find any paid order key — small footprint, only set during this flow.
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const k = sessionStorage.key(i);
+          if (k && k.startsWith('shop_order_paid:') && sessionStorage.getItem(k) === '1') {
+            paidId = k.slice('shop_order_paid:'.length);
+            break;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      if (paidId) {
+        navigate(`/shop/orders/${paidId}/confirmation`, { replace: true });
+      }
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [navigate]);
+
   // Track begin_checkout on mount
   useEffect(() => {
     if (items.length > 0) {
@@ -519,8 +562,26 @@ export function CheckoutPage() {
     }
   };
 
+  const markPaidAndExit = (paidOrderId: string | null) => {
+    setPaymentDone(true);
+    if (paidOrderId) {
+      try {
+        sessionStorage.setItem(`shop_order_paid:${paidOrderId}`, '1');
+      } catch {
+        /* sessionStorage unavailable — not fatal */
+      }
+    }
+    clearCart();
+    // replace: true wipes the checkout entry from history so the browser
+    // back button goes to the shop page, not back to the payment form.
+    if (paidOrderId) {
+      navigate(`/shop/orders/${paidOrderId}/confirmation`, { replace: true });
+    } else {
+      navigate('/shop/orders', { replace: true });
+    }
+  };
+
   const handlePayPalSuccess = async (captureId: string) => {
-    // Refetch our shop order id from the most recent paypal create (orderId set in PayPal create flow below)
     const finalOrderId = orderId;
     trackPurchase(
       finalOrderId || '',
@@ -534,12 +595,7 @@ export function CheckoutPage() {
       orderTotal,
       shippingCost,
     );
-    clearCart();
-    if (finalOrderId) {
-      navigate(`/shop/orders/${finalOrderId}/confirmation`);
-    } else {
-      navigate('/shop/orders');
-    }
+    markPaidAndExit(finalOrderId);
     void captureId;
   };
 
@@ -556,11 +612,18 @@ export function CheckoutPage() {
       orderTotal,
       shippingCost,
     );
-    clearCart();
-    navigate(`/shop/orders/${orderId}/confirmation`);
+    markPaidAndExit(orderId);
   };
 
   if (items.length === 0 && !orderId) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <Loader2 className="h-12 w-12 text-orange-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (paymentDone) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <Loader2 className="h-12 w-12 text-orange-500 animate-spin" />
