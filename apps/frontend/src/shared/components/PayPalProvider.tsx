@@ -46,6 +46,7 @@ export function PayPalProvider({ children }: PayPalProviderProps) {
         clientId: paypalConfig.clientId,
         currency: 'USD',
         intent: 'capture',
+        disableFunding: 'paylater',
       }}
     >
       {children}
