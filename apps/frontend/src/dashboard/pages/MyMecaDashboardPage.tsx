@@ -12,7 +12,7 @@ import axios from '@/lib/axios';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
 import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
-import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink } from 'lucide-react';
+import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink, ShoppingBag } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
 import type { Judge } from '@newmeca/shared';
@@ -1907,6 +1907,21 @@ export default function MyMecaDashboardPage() {
                 <p className="text-gray-400 text-sm mt-1">
                   {activeMembership ? 'Manage your membership and billing' : 'View membership options and upgrade your plan'}
                 </p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigate('/shop/orders')}
+            className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                <ShoppingBag className="h-7 w-7 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">My Shop Orders</h3>
+                <p className="text-gray-400 text-sm mt-1">View your shop order history and track shipments</p>
               </div>
             </div>
           </button>
