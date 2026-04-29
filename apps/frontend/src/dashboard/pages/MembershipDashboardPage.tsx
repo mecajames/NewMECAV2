@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertCircle, AlertTriangle, Eye } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { membershipsApi, Membership, MemberCancelMembershipModal, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
+import { billingApi, MyTransaction } from '@/api-client/billing.api-client';
 
 export default function MembershipDashboardPage() {
   const navigate = useNavigate();
@@ -32,6 +33,10 @@ export default function MembershipDashboardPage() {
   const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
   const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
   const [editingSecondary, setEditingSecondary] = useState<SecondaryMembershipInfo | null>(null);
+  const [transactions, setTransactions] = useState<MyTransaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+
+  const membershipHistory = transactions.filter((t) => t.source === 'membership');
 
   useEffect(() => {
     const fetchMembershipData = async () => {
@@ -78,6 +83,27 @@ export default function MembershipDashboardPage() {
     };
 
     fetchMembershipData();
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    let cancelled = false;
+    setTransactionsLoading(true);
+    billingApi
+      .getMyAllTransactions()
+      .then((res) => {
+        if (!cancelled) setTransactions(res.data || []);
+      })
+      .catch((err) => {
+        console.error('Error fetching transactions:', err);
+        if (!cancelled) setTransactions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setTransactionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [profile?.id]);
 
   const handleOpenBillingPortal = async () => {
@@ -495,18 +521,21 @@ export default function MembershipDashboardPage() {
           )}
         </div>
 
-        {/* Renew Early Section */}
+        {/* Membership History */}
         <div className="mt-6 bg-slate-800 rounded-xl p-6 shadow-lg">
-          <h2 className="text-xl font-bold text-white mb-4">Membership Options</h2>
-          <p className="text-gray-400 mb-4">
-            Want to upgrade your membership or explore other options?
-          </p>
-          <button
-            onClick={() => navigate('/membership')}
-            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-medium rounded-lg transition-colors"
-          >
-            View All Membership Options
-          </button>
+          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-orange-500" />
+            Membership History
+          </h2>
+          <HistoryTable
+            transactions={membershipHistory}
+            loading={transactionsLoading}
+            emptyText="No membership history yet"
+            emptyIcon={<CreditCard className="h-12 w-12 mx-auto mb-3 text-gray-500" />}
+            referenceLabel="Plan / MECA ID"
+            descriptionLabel="Plan"
+            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+          />
         </div>
       </div>
 
@@ -593,6 +622,111 @@ export default function MembershipDashboardPage() {
           secondary={editingSecondary}
         />
       )}
+    </div>
+  );
+}
+
+interface HistoryTableProps {
+  transactions: MyTransaction[];
+  loading: boolean;
+  emptyText: string;
+  emptyIcon: React.ReactNode;
+  referenceLabel: string;
+  descriptionLabel: string;
+  onView?: (tx: MyTransaction) => void;
+}
+
+function HistoryTable({
+  transactions,
+  loading,
+  emptyText,
+  emptyIcon,
+  referenceLabel,
+  descriptionLabel,
+  onView,
+}: HistoryTableProps) {
+  const formatDate = (iso: string) => {
+    const date = new Date(iso);
+    if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'N/A';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const statusColor = (status: string): { bg: string; text: string } => {
+    const map: Record<string, { bg: string; text: string }> = {
+      paid: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      completed: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      shipped: { bg: 'bg-blue-900/50', text: 'text-blue-400' },
+      delivered: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      processing: { bg: 'bg-blue-900/50', text: 'text-blue-400' },
+      pending: { bg: 'bg-yellow-900/50', text: 'text-yellow-400' },
+      cancelled: { bg: 'bg-gray-800/50', text: 'text-gray-400' },
+      refunded: { bg: 'bg-orange-900/50', text: 'text-orange-400' },
+      failed: { bg: 'bg-red-900/50', text: 'text-red-400' },
+    };
+    return map[status] || { bg: 'bg-gray-800/50', text: 'text-gray-400' };
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 text-orange-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (transactions.length === 0) {
+    return (
+      <div className="text-center py-8">
+        {emptyIcon}
+        <p className="text-gray-400">{emptyText}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-slate-700">
+        <thead className="bg-slate-700/50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{referenceLabel}</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{descriptionLabel}</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Amount</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-700">
+          {transactions.map((tx) => {
+            const c = statusColor(tx.status);
+            return (
+              <tr key={tx.id} className="hover:bg-slate-700/30">
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-white">{tx.reference}</td>
+                <td className="px-4 py-3 text-sm text-gray-300">{tx.description}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={`px-2 py-1 text-xs rounded-full capitalize ${c.bg} ${c.text}`}>{tx.status}</span>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-white text-right">{formatCurrency(tx.amount)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{formatDate(tx.date)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                  {onView && tx.detailUrl ? (
+                    <button
+                      onClick={() => onView(tx)}
+                      className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                    >
+                      <Eye className="h-4 w-4" />
+                      View
+                    </button>
+                  ) : (
+                    <span className="text-gray-500">—</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
