@@ -10,6 +10,8 @@ import { EmailVerificationToken } from '../auth/email-verification-token.entity'
 import { RegistrationStatus, PaymentStatus, VerificationPurpose } from '@newmeca/shared';
 import { QrCodeService } from './qr-code.service';
 import { EmailService } from '../email/email.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface CreateRegistrationDto {
   eventId: string;
@@ -104,7 +106,32 @@ export class EventRegistrationsService {
     private readonly em: EntityManager,
     private readonly qrCodeService: QrCodeService,
     private readonly emailService: EmailService,
+    private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  private async notifyAdminsOfNewRegistration(registration: EventRegistration, isPreRegistration = false): Promise<void> {
+    try {
+      const event = registration.event as Event;
+      const classes = registration.classes?.getItems() || [];
+      const classNames = classes.map(c => `${c.format} - ${c.className}`);
+      const fullName = `${registration.firstName || ''} ${registration.lastName || ''}`.trim() || registration.email || 'Unknown';
+
+      await this.adminNotificationsService.notifyNewEventRegistration({
+        registrationId: registration.id,
+        eventName: event?.title || 'Event',
+        eventDate: event?.eventDate || null,
+        registrantName: fullName,
+        registrantEmail: registration.email || '',
+        classes: classNames,
+        amountPaid: registration.amountPaid ?? null,
+        isFree: !registration.amountPaid || registration.amountPaid === 0,
+        isPreRegistration,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send admin event registration notification: ${error}`);
+    }
+  }
 
   async findById(id: string): Promise<EventRegistration> {
     const em = this.em.fork();
@@ -268,6 +295,9 @@ export class EventRegistrationsService {
 
     // Send confirmation email
     await this.sendRegistrationConfirmationEmail(registration);
+
+    // Notify admins of new event registration
+    await this.notifyAdminsOfNewRegistration(registration);
 
     return registration;
   }
@@ -608,6 +638,9 @@ export class EventRegistrationsService {
 
     // Send confirmation email
     await this.sendRegistrationConfirmationEmail(registration);
+
+    // Notify admins of new event registration
+    await this.notifyAdminsOfNewRegistration(registration);
 
     return registration;
   }
@@ -1106,6 +1139,19 @@ export class EventRegistrationsService {
       this.logger.error(`Failed to send registration confirmation email: ${error}`, error instanceof Error ? error.stack : undefined);
       // Don't throw - email failure shouldn't fail the registration
     }
+
+    // Bell notification for the user (only when there is a logged-in user account behind this registration)
+    const userId = (registration.user as any)?.id;
+    if (userId) {
+      const event = registration.event as Event;
+      await this.notificationsService.createForUser({
+        userId,
+        title: `Registered for ${event?.title || 'event'}`,
+        message: `Your registration is confirmed. Check-in code: ${registration.checkInCode || 'TBD'}.`,
+        type: 'info',
+        link: `/events/${event?.id || ''}`,
+      });
+    }
   }
 
   /**
@@ -1136,6 +1182,19 @@ export class EventRegistrationsService {
     } catch (error) {
       this.logger.error(`Failed to send registration cancelled email: ${error}`, error instanceof Error ? error.stack : undefined);
       // Don't throw - email failure shouldn't fail the cancellation
+    }
+
+    const userId = (registration.user as any)?.id;
+    if (userId) {
+      const event = registration.event as Event;
+      const refundLine = refundAmount && refundAmount > 0 ? ` A refund of $${refundAmount.toFixed(2)} has been issued.` : '';
+      await this.notificationsService.createForUser({
+        userId,
+        title: `Registration cancelled — ${event?.title || 'event'}`,
+        message: `Your registration for ${event?.title || 'this event'} has been cancelled.${refundLine}`,
+        type: 'info',
+        link: `/events/${event?.id || ''}`,
+      });
     }
   }
 

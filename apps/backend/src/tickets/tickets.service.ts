@@ -22,6 +22,7 @@ import {
 import { TicketRoutingService } from './ticket-routing.service';
 import { TicketStaffService } from './ticket-staff.service';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TicketsService {
@@ -36,6 +37,7 @@ export class TicketsService {
     @Inject(forwardRef(() => TicketStaffService))
     private readonly staffService: TicketStaffService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // ==========================================================================
@@ -623,6 +625,16 @@ export class TicketsService {
       });
     }
 
+    if (ticket.reporter?.id) {
+      await this.notificationsService.createForUser({
+        userId: ticket.reporter.id,
+        title: `Ticket ${ticket.ticketNumber} created`,
+        message: `Your support ticket has been received. We'll respond shortly.`,
+        type: 'info',
+        link: `/support/tickets/${ticket.ticketNumber}`,
+      });
+    }
+
     // Send alert email to department staff
     if (departmentId) {
       await this.sendStaffAlertEmails(ticket, departmentId, viewTicketUrl);
@@ -690,6 +702,16 @@ export class TicketsService {
       newStatus,
       viewTicketUrl,
     });
+
+    if (ticket.reporter?.id) {
+      await this.notificationsService.createForUser({
+        userId: ticket.reporter.id,
+        title: `Ticket ${ticket.ticketNumber} updated`,
+        message: `Status changed from "${oldStatus}" to "${newStatus}".`,
+        type: 'info',
+        link: `/support/tickets/${ticket.ticketNumber}`,
+      });
+    }
   }
 
   /**
@@ -722,6 +744,14 @@ export class TicketsService {
           isStaffReply: true,
           viewTicketUrl,
         });
+
+        await this.notificationsService.createForUser({
+          userId: ticket.reporter.id,
+          title: `New reply on ticket ${ticket.ticketNumber}`,
+          message: `${replierName} replied to your ticket.`,
+          type: 'message',
+          link: `/support/tickets/${ticket.ticketNumber}`,
+        });
       }
     } else {
       // User replied - notify assigned staff
@@ -735,6 +765,14 @@ export class TicketsService {
           replierName,
           isStaffReply: false,
           viewTicketUrl,
+        });
+
+        await this.notificationsService.createForUser({
+          userId: ticket.assignedTo.id,
+          title: `New reply on ticket ${ticket.ticketNumber}`,
+          message: `${replierName} replied to a ticket assigned to you.`,
+          type: 'message',
+          link: `/admin/tickets/${ticket.id}`,
         });
       }
     }

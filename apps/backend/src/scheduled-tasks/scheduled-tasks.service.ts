@@ -8,6 +8,7 @@ import { SiteSettingsService } from '../site-settings/site-settings.service';
 import { UserActivityService } from '../user-activity/user-activity.service';
 import { StripeService } from '../stripe/stripe.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Membership } from '../memberships/memberships.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
@@ -30,6 +31,7 @@ export class ScheduledTasksService {
     @Inject(forwardRef(() => StripeService))
     private readonly stripeService: StripeService,
     private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // =============================================================================
@@ -81,6 +83,15 @@ export class ScheduledTasksService {
           step: desiredStep as 1 | 2 | 3 | 4,
           portalUrl: portalBase,
         });
+        if (m.user?.id) {
+          await this.notificationsService.createForUser({
+            userId: m.user.id,
+            title: `Payment failed — action required`,
+            message: `Your ${m.membershipTypeConfig?.name || 'membership'} renewal payment of $${Number(m.amountPaid).toFixed(2)} failed (attempt ${desiredStep}). Update your payment method to avoid suspension.`,
+            type: 'alert',
+            link: '/billing',
+          });
+        }
         m.lastDunningStep = desiredStep;
         m.lastDunningAt = new Date();
         sent++;
@@ -253,6 +264,16 @@ export class ScheduledTasksService {
           renewalUrl: `${process.env.FRONTEND_URL || 'https://www.maborc.com'}/membership/renew`,
         });
         this.logger.log(`Sent ${daysRemaining}-day expiration warning to ${membership.user.email}`);
+
+        if (membership.user?.id) {
+          await this.notificationsService.createForUser({
+            userId: membership.user.id,
+            title: `Membership expires in ${daysRemaining} days`,
+            message: `Your ${membership.membershipTypeConfig?.name || 'membership'} expires on ${new Date(membership.endDate!).toLocaleDateString()}. Renew now to keep your benefits.`,
+            type: 'alert',
+            link: '/membership/renew',
+          });
+        }
       } catch (error) {
         this.logger.error(`Failed to send expiration email to ${membership.user.email}:`, error);
       }
@@ -301,6 +322,16 @@ export class ScheduledTasksService {
           renewalUrl: `${process.env.FRONTEND_URL || 'https://www.maborc.com'}/membership/renew`,
         });
         this.logger.log(`Sent expiration notification to ${membership.user.email}`);
+
+        if (membership.user?.id) {
+          await this.notificationsService.createForUser({
+            userId: membership.user.id,
+            title: `Your MECA membership has expired`,
+            message: `Your ${membership.membershipTypeConfig?.name || 'membership'} expired on ${new Date(membership.endDate!).toLocaleDateString()}. Renew now to restore access.`,
+            type: 'alert',
+            link: '/membership/renew',
+          });
+        }
       } catch (error) {
         this.logger.error(`Failed to send expired email to ${membership.user.email}:`, error);
       }
@@ -396,6 +427,16 @@ export class ScheduledTasksService {
           qrCodeData: registration.qrCodeData || undefined,
         });
         this.logger.log(`Sent event reminder to ${email}`);
+
+        if (registration.user?.id) {
+          await this.notificationsService.createForUser({
+            userId: registration.user.id,
+            title: `Reminder: ${event.title} is tomorrow`,
+            message: `Don't forget — ${event.title} starts ${new Date(event.eventDate).toLocaleDateString()}. Your check-in code is ${registration.checkInCode || 'TBD'}.`,
+            type: 'info',
+            link: `/events/${event.id}`,
+          });
+        }
       } catch (error) {
         this.logger.error(`Failed to send event reminder to ${email}:`, error);
       }
@@ -426,6 +467,15 @@ export class ScheduledTasksService {
       }
 
       try {
+        if (registration.user?.id) {
+          await this.notificationsService.createForUser({
+            userId: registration.user.id,
+            title: `${event.title} is coming up`,
+            message: `You showed interest in ${event.title} on ${new Date(event.eventDate).toLocaleDateString()}. Register now to compete.`,
+            type: 'info',
+            link: `/events/${event.id}`,
+          });
+        }
         await this.emailService.sendEventInterestReminderEmail({
           to: email,
           firstName: registration.firstName || registration.user?.first_name || undefined,
@@ -621,6 +671,17 @@ export class ScheduledTasksService {
             this.logger.log(`Sent auto-cancel notification to ${invoice.user.email} for invoice ${invoice.invoiceNumber}`);
           } catch (emailError) {
             this.logger.error(`Failed to send auto-cancel email for invoice ${invoice.invoiceNumber}:`, emailError);
+          }
+
+          // Skip user in-app when their main membership was cancelled — they can no longer log in.
+          if (invoice.user?.id && !membershipCancelled) {
+            await this.notificationsService.createForUser({
+              userId: invoice.user.id,
+              title: `Invoice ${invoice.invoiceNumber} cancelled`,
+              message: `Your invoice has been automatically cancelled because it remained unpaid past the due date.`,
+              type: 'alert',
+              link: `/billing/invoice/${invoice.id}`,
+            });
           }
         }
 

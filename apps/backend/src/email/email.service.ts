@@ -186,6 +186,39 @@ export interface SendInvoiceAutoCancelledEmailDto {
   reason: string;
 }
 
+export interface SendInvoiceOverdueEmailDto {
+  to: string;
+  firstName?: string;
+  invoiceNumber: string;
+  amountDue: number;
+  daysOverdue: number;
+  dueDate: Date;
+  paymentUrl: string;
+}
+
+export interface SendRefundConfirmationEmailDto {
+  to: string;
+  firstName?: string;
+  refundAmount: number;
+  paymentDescription: string;
+  refundDate: Date;
+  paymentMethod: 'stripe' | 'paypal';
+  transactionId: string;
+  isPartialRefund: boolean;
+}
+
+export interface SendSubscriptionCancelledEmailDto {
+  to: string;
+  firstName?: string;
+  membershipType: string;
+  mecaId?: number | string;
+  cancellationDate: Date;
+  cancellationReason?: string;
+  endDate?: Date | null;
+  renewalUrl: string;
+  paymentMethod: 'stripe' | 'paypal';
+}
+
 // ==========================================================================
 // Ticket Email DTOs
 // ==========================================================================
@@ -1086,6 +1119,65 @@ export class EmailService {
       html,
       text,
       from: this.fromAddresses.billing,
+    });
+  }
+
+  /**
+   * Send notification when an invoice transitions to OVERDUE
+   */
+  async sendInvoiceOverdueEmail(dto: SendInvoiceOverdueEmailDto): Promise<{ success: boolean; error?: string }> {
+    const subject = `MECA Invoice ${dto.invoiceNumber} - Past Due`;
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+
+    const html = this.getInvoiceOverdueEmailTemplate(greeting, dto);
+    const text = this.getInvoiceOverdueEmailText(greeting, dto);
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.billing,
+    });
+  }
+
+  /**
+   * Send refund confirmation to the customer
+   */
+  async sendRefundConfirmationEmail(dto: SendRefundConfirmationEmailDto): Promise<{ success: boolean; error?: string }> {
+    const subject = dto.isPartialRefund
+      ? `Your MECA partial refund has been processed`
+      : `Your MECA refund has been processed`;
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+
+    const html = this.getRefundConfirmationEmailTemplate(greeting, dto);
+    const text = this.getRefundConfirmationEmailText(greeting, dto);
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.billing,
+    });
+  }
+
+  /**
+   * Send notification when a subscription has been cancelled, expired, or suspended
+   */
+  async sendSubscriptionCancelledEmail(dto: SendSubscriptionCancelledEmailDto): Promise<{ success: boolean; error?: string }> {
+    const subject = `Your MECA Subscription Has Ended`;
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+
+    const html = this.getSubscriptionCancelledEmailTemplate(greeting, dto);
+    const text = this.getSubscriptionCancelledEmailText(greeting, dto);
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.memberships,
     });
   }
 
@@ -3345,6 +3437,194 @@ Reason: ${dto.reason}
 
 ${membershipSection}
 If you believe this was a mistake or would like to reinstate your membership, visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+  }
+
+  // ==========================================================================
+  // Invoice Overdue Email Templates
+  // ==========================================================================
+
+  private getInvoiceOverdueEmailTemplate(
+    greeting: string,
+    dto: SendInvoiceOverdueEmailDto,
+  ): string {
+    const dueDateStr = dto.dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    return `
+${this.getEmailHeaderHtml('Invoice Past Due', `Invoice ${dto.invoiceNumber} is now overdue`, `Your MECA invoice ${dto.invoiceNumber} is ${dto.daysOverdue} day(s) past due — pay now to avoid cancellation`)}
+    <p style="font-size: 16px;">${greeting},</p>
+
+    <p>This is a reminder that your MECA invoice <strong>${dto.invoiceNumber}</strong> is now <strong>${dto.daysOverdue} day(s) past due</strong>.</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef2f2; border: 1px solid #ef4444; padding: 20px;">
+      <h3 style="margin: 0 0 10px 0; color: #991b1b;">Payment Required</h3>
+      <p style="margin: 5px 0; color: #991b1b;"><strong>Invoice:</strong> ${dto.invoiceNumber}</p>
+      <p style="margin: 5px 0; color: #991b1b;"><strong>Amount Due:</strong> $${dto.amountDue.toFixed(2)}</p>
+      <p style="margin: 5px 0; color: #991b1b;"><strong>Due Date:</strong> ${dueDateStr}</p>
+      <p style="margin: 5px 0; color: #991b1b;"><strong>Days Past Due:</strong> ${dto.daysOverdue}</p>
+    </td></tr></table>
+
+    <p>To avoid automatic cancellation of any associated membership or service, please pay this invoice as soon as possible.</p>
+
+    ${this.getEmailButton('Pay Invoice Now', dto.paymentUrl)}
+${this.getEmailFooterHtml()}
+    `.trim();
+  }
+
+  private getInvoiceOverdueEmailText(
+    greeting: string,
+    dto: SendInvoiceOverdueEmailDto,
+  ): string {
+    const dueDateStr = dto.dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    return `
+${greeting},
+
+This is a reminder that your MECA invoice ${dto.invoiceNumber} is now ${dto.daysOverdue} day(s) past due.
+
+PAYMENT REQUIRED
+----------------
+Invoice: ${dto.invoiceNumber}
+Amount Due: $${dto.amountDue.toFixed(2)}
+Due Date: ${dueDateStr}
+Days Past Due: ${dto.daysOverdue}
+
+To avoid automatic cancellation of any associated membership or service, please pay this invoice as soon as possible.
+
+Pay invoice: ${dto.paymentUrl}
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+  }
+
+  // ==========================================================================
+  // Refund Confirmation Email Templates
+  // ==========================================================================
+
+  private getRefundConfirmationEmailTemplate(
+    greeting: string,
+    dto: SendRefundConfirmationEmailDto,
+  ): string {
+    const refundDateStr = dto.refundDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const providerLabel = dto.paymentMethod === 'stripe' ? 'credit card' : 'PayPal account';
+    const refundType = dto.isPartialRefund ? 'Partial Refund' : 'Refund';
+    return `
+${this.getEmailHeaderHtml(`${refundType} Processed`, `Your refund of $${dto.refundAmount.toFixed(2)} is on its way`, `MECA has processed a ${dto.isPartialRefund ? 'partial ' : ''}refund of $${dto.refundAmount.toFixed(2)}`)}
+    <p style="font-size: 16px;">${greeting},</p>
+
+    <p>We've processed a ${dto.isPartialRefund ? 'partial ' : ''}refund for your recent MECA purchase. The funds will be returned to your original ${providerLabel} within 5-10 business days, depending on your bank.</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #f0fdf4; border: 1px solid #22c55e; padding: 20px;">
+      <h3 style="margin: 0 0 15px 0; color: #166534;">Refund Details</h3>
+      <p style="margin: 5px 0;"><strong>Refund Type:</strong> ${refundType}</p>
+      <p style="margin: 5px 0;"><strong>Amount:</strong> $${dto.refundAmount.toFixed(2)}</p>
+      <p style="margin: 5px 0;"><strong>For:</strong> ${dto.paymentDescription}</p>
+      <p style="margin: 5px 0;"><strong>Processed:</strong> ${refundDateStr}</p>
+      <p style="margin: 5px 0;"><strong>Transaction ID:</strong> ${dto.transactionId}</p>
+    </td></tr></table>
+
+    <p>If you have any questions about this refund, please reach out and we'll be happy to help.</p>
+${this.getEmailFooterHtml()}
+    `.trim();
+  }
+
+  private getRefundConfirmationEmailText(
+    greeting: string,
+    dto: SendRefundConfirmationEmailDto,
+  ): string {
+    const refundDateStr = dto.refundDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const providerLabel = dto.paymentMethod === 'stripe' ? 'credit card' : 'PayPal account';
+    const refundType = dto.isPartialRefund ? 'Partial Refund' : 'Refund';
+    return `
+${greeting},
+
+We've processed a ${dto.isPartialRefund ? 'partial ' : ''}refund for your recent MECA purchase. The funds will be returned to your original ${providerLabel} within 5-10 business days, depending on your bank.
+
+REFUND DETAILS
+--------------
+Refund Type: ${refundType}
+Amount: $${dto.refundAmount.toFixed(2)}
+For: ${dto.paymentDescription}
+Processed: ${refundDateStr}
+Transaction ID: ${dto.transactionId}
+
+If you have any questions about this refund, please reach out and we'll be happy to help.
+
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+
+Fun, Fair, Loud and Clear!
+© 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.
+    `.trim();
+  }
+
+  // ==========================================================================
+  // Subscription Cancelled Email Templates
+  // ==========================================================================
+
+  private getSubscriptionCancelledEmailTemplate(
+    greeting: string,
+    dto: SendSubscriptionCancelledEmailDto,
+  ): string {
+    const cancellationDateStr = dto.cancellationDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const endDateSection = dto.endDate
+      ? `<p style="margin: 5px 0;"><strong>Access Through:</strong> ${dto.endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>`
+      : '';
+    const reasonSection = dto.cancellationReason
+      ? `<p style="margin: 5px 0;"><strong>Reason:</strong> ${dto.cancellationReason}</p>`
+      : '';
+    return `
+${this.getEmailHeaderHtml('Subscription Ended', `Your MECA ${dto.membershipType} subscription has ended`, `Your MECA ${dto.membershipType} subscription has been cancelled`)}
+    <p style="font-size: 16px;">${greeting},</p>
+
+    <p>Your MECA <strong>${dto.membershipType}</strong> subscription has ended. We're sorry to see you go.</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
+      <h3 style="margin: 0 0 15px 0; color: #1e293b;">Subscription Details</h3>
+      <p style="margin: 5px 0;"><strong>Membership Type:</strong> ${dto.membershipType}</p>
+      ${dto.mecaId ? `<p style="margin: 5px 0;"><strong>MECA ID:</strong> ${dto.mecaId}</p>` : ''}
+      <p style="margin: 5px 0;"><strong>Cancelled On:</strong> ${cancellationDateStr}</p>
+      <p style="margin: 5px 0;"><strong>Payment Method:</strong> ${dto.paymentMethod === 'paypal' ? 'PayPal' : 'Credit Card'}</p>
+      ${endDateSection}
+      ${reasonSection}
+    </td></tr></table>
+
+    <p>Once your access ends, you will no longer be able to register for MECA events as a member or access member-only benefits. You can renew at any time to restore access.</p>
+
+    ${this.getEmailButton('Renew Membership', dto.renewalUrl)}
+${this.getEmailFooterHtml()}
+    `.trim();
+  }
+
+  private getSubscriptionCancelledEmailText(
+    greeting: string,
+    dto: SendSubscriptionCancelledEmailDto,
+  ): string {
+    const cancellationDateStr = dto.cancellationDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const endDateLine = dto.endDate
+      ? `Access Through: ${dto.endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
+      : '';
+    const reasonLine = dto.cancellationReason ? `Reason: ${dto.cancellationReason}` : '';
+    return `
+${greeting},
+
+Your MECA ${dto.membershipType} subscription has ended. We're sorry to see you go.
+
+SUBSCRIPTION DETAILS
+--------------------
+Membership Type: ${dto.membershipType}
+${dto.mecaId ? `MECA ID: ${dto.mecaId}` : ''}
+Cancelled On: ${cancellationDateStr}
+Payment Method: ${dto.paymentMethod === 'paypal' ? 'PayPal' : 'Credit Card'}
+${endDateLine}
+${reasonLine}
+
+Once your access ends, you will no longer be able to register for MECA events as a member or access member-only benefits. You can renew at any time to restore access.
+
+Renew membership: ${dto.renewalUrl}
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
 Fun, Fair, Loud and Clear!
 © 1997 - ${new Date().getFullYear()} MECA Inc. All Rights Reserved.

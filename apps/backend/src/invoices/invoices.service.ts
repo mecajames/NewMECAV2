@@ -27,6 +27,7 @@ import { Team } from '../teams/team.entity';
 import { TeamMember } from '../teams/team-member.entity';
 import { EmailService } from '../email/email.service';
 import { StripeService } from '../stripe/stripe.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Default MECA company info
 const DEFAULT_COMPANY_INFO = {
@@ -52,6 +53,7 @@ export class InvoicesService {
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
     private readonly stripeService: StripeService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -626,6 +628,8 @@ export class InvoicesService {
     const overdueInvoices = await em.find(Invoice, {
       status: InvoiceStatus.SENT,
       dueDate: { $lt: now },
+    }, {
+      populate: ['user'],
     });
 
     for (const invoice of overdueInvoices) {
@@ -633,6 +637,43 @@ export class InvoicesService {
     }
 
     await em.flush();
+
+    // Send overdue notification to each affected user (one-shot per invoice — only fires on transition).
+    const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+    for (const invoice of overdueInvoices) {
+      const recipientEmail = invoice.user?.email || invoice.guestEmail || undefined;
+      if (!recipientEmail) {
+        this.logger.warn(`Invoice ${invoice.invoiceNumber} marked overdue but has no recipient email`);
+        continue;
+      }
+
+      const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : now;
+      const daysOverdue = Math.max(1, Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+      try {
+        await this.emailService.sendInvoiceOverdueEmail({
+          to: recipientEmail,
+          firstName: invoice.user?.first_name || undefined,
+          invoiceNumber: invoice.invoiceNumber,
+          amountDue: parseFloat(invoice.total),
+          daysOverdue,
+          dueDate,
+          paymentUrl: `${baseUrl}/billing/invoice/${invoice.id}`,
+        });
+      } catch (err) {
+        this.logger.error(`Failed to send overdue email for invoice ${invoice.invoiceNumber}: ${err}`);
+      }
+
+      if (invoice.user?.id) {
+        await this.notificationsService.createForUser({
+          userId: invoice.user.id,
+          title: `Invoice ${invoice.invoiceNumber} is past due`,
+          message: `Your invoice for $${parseFloat(invoice.total).toFixed(2)} is ${daysOverdue} day(s) overdue. Pay now to avoid cancellation.`,
+          type: 'alert',
+          link: `/billing/invoice/${invoice.id}`,
+        });
+      }
+    }
 
     return overdueInvoices.length;
   }
@@ -834,6 +875,16 @@ export class InvoicesService {
 
     this.logger.log(`Invoice ${invoice.invoiceNumber} sent to ${email}`);
 
+    if (user?.id) {
+      await this.notificationsService.createForUser({
+        userId: user.id,
+        title: `Invoice ${invoice.invoiceNumber} ready`,
+        message: `An invoice for $${parseFloat(invoice.total).toFixed(2)} is ready for payment.`,
+        type: 'info',
+        link: `/billing/invoice/${invoice.id}`,
+      });
+    }
+
     return {
       success: true,
       invoice,
@@ -906,6 +957,16 @@ export class InvoicesService {
     }
 
     this.logger.log(`Invoice ${invoice.invoiceNumber} resent to ${email}`);
+
+    if (user?.id) {
+      await this.notificationsService.createForUser({
+        userId: user.id,
+        title: `Invoice ${invoice.invoiceNumber} reminder`,
+        message: `Reminder: invoice for $${parseFloat(invoice.total).toFixed(2)} is awaiting payment.`,
+        type: 'info',
+        link: `/billing/invoice/${invoice.id}`,
+      });
+    }
 
     return {
       success: true,

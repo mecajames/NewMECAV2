@@ -19,7 +19,7 @@ import { LoginPage, ChangePasswordPage, AuthCallbackPage } from '@/auth';
 import { EventsPage, EventDetailPage } from '@/events';
 import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage, TeamStandingsPage, TeamLeaderboardPage } from '@/competition-results';
 import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
-import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage } from '@/profiles';
+import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage, MemberGalleryPage } from '@/profiles';
 import { TeamDirectoryPage, TeamPublicProfilePage } from '@/teams';
 import { RetailerDirectoryPage, RetailerProfilePage, ManufacturerDirectoryPage, ManufacturerProfilePage, ManufacturerPartnerInfoPage } from '@/business-listings';
 import { MembershipPage } from '@/memberships';
@@ -28,7 +28,7 @@ import { ClassCalculatorPage } from '@/competition-classes';
 import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
 import { JudgesDirectoryPage, JudgeProfilePage } from '@/judges';
 import { EventDirectorsDirectoryPage, EventDirectorProfilePage } from '@/event-directors';
-import { MyRegistrationsPage } from '@/event-registrations';
+import { MyRegistrationsPage, MyRegistrationDetailPage } from '@/event-registrations';
 // Ticket pages
 import {
   TicketsPage,
@@ -53,6 +53,8 @@ const BusinessListingDashboardPage = lazy(() => import('@/dashboard/pages/Busine
 const MembershipDashboardPage = lazy(() => import('@/dashboard/pages/MembershipDashboardPage'));
 const BillingPage = lazy(() => import('@/billing/pages/BillingPage'));
 const InvoicePaymentPage = lazy(() => import('@/billing/pages/InvoicePaymentPage'));
+const InvoiceViewPage = lazy(() => import('@/billing/pages/InvoiceViewPage'));
+const MembershipReceiptPage = lazy(() => import('@/billing/pages/MembershipReceiptPage'));
 
 // Lazy-loaded pages - Checkout pages (Stripe loaded on demand)
 const EventRegistrationCheckoutPage = lazy(() => import('@/event-registrations/pages/EventRegistrationCheckoutPage'));
@@ -95,6 +97,7 @@ const EventDirectorsAdminPage = lazy(() => import('@/admin/pages/EventDirectorsA
 const AdminEventDirectorDetailPage = lazy(() => import('@/admin/pages/EventDirectorDetailPage'));
 const RatingsAdminPage = lazy(() => import('@/admin/pages/RatingsAdminPage'));
 const NotificationsAdminPage = lazy(() => import('@/admin/pages/NotificationsAdminPage'));
+const EmailTestingPage = lazy(() => import('@/admin/pages/EmailTestingPage'));
 const WorldFinalsAdminPage = lazy(() => import('@/admin/pages/WorldFinalsAdminPage'));
 const WorldFinalsPreRegisterPage = lazy(() => import('@/world-finals/pages/WorldFinalsPreRegisterPage'));
 const AchievementsAdminPage = lazy(() => import('@/achievements/pages/AchievementsAdminPage'));
@@ -114,6 +117,8 @@ const AdminShopOrdersPage = lazy(() => import('@/admin/pages/AdminShopOrdersPage
 const MembershipCardsAdminPage = lazy(() => import('@/admin/pages/MembershipCardsAdminPage'));
 const FinalsVotingAdminPage = lazy(() => import('@/admin/pages/FinalsVotingAdminPage'));
 const CardRedirectPage = lazy(() => import('@/memberships/pages/CardRedirectPage'));
+const MembershipCardPage = lazy(() => import('@/memberships/pages/MembershipCardPage'));
+const MembershipBillingPage = lazy(() => import('@/dashboard/pages/MembershipBillingPage'));
 const FinalsVotingPage = lazy(() => import('@/finals-voting/pages/FinalsVotingPage'));
 const VotingResultsPage = lazy(() => import('@/finals-voting/pages/VotingResultsPage'));
 const AnalyticsPage = lazy(() => import('@/admin/pages/AnalyticsPage'));
@@ -258,12 +263,18 @@ function App() {
               <Route path="/dashboard/admin" element={<L><AdminDashboardPage /></L>} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/public-profile" element={<PublicProfilePage />} />
+              <Route path="/member-profile-gallery" element={<MemberGalleryPage />} />
               <Route path="/billing" element={<L><BillingPage /></L>} />
+              <Route path="/invoice/:invoiceId" element={<L><InvoiceViewPage /></L>} />
+              <Route path="/membership/:membershipId/receipt" element={<L><MembershipReceiptPage /></L>} />
               <Route path="/membership" element={<MembershipPage />} />
               <Route path="/membership/checkout/:membershipId" element={<L><MembershipCheckoutPage /></L>} />
               <Route path="/apply/judge" element={<L><JudgeApplicationPage /></L>} />
               <Route path="/apply/event-director" element={<L><EventDirectorApplicationPage /></L>} />
               <Route path="/my-registrations" element={<MyRegistrationsPage />} />
+              <Route path="/my-registrations/:registrationId" element={<MyRegistrationDetailPage />} />
+              <Route path="/membership-billing" element={<L><MembershipBillingPage /></L>} />
+              <Route path="/membership/card" element={<L><MembershipCardPage /></L>} />
 
               {/* Support Ticket Routes (Authenticated) */}
               <Route path="/tickets" element={<TicketsPage />} />
@@ -298,6 +309,7 @@ function App() {
               <Route path="/admin/event-directors/:id" element={<L><AdminEventDirectorDetailPage /></L>} />
               <Route path="/admin/ratings" element={<L><RatingsAdminPage /></L>} />
               <Route path="/admin/notifications" element={<L><NotificationsAdminPage /></L>} />
+              <Route path="/admin/email-testing" element={<L><EmailTestingPage /></L>} />
               <Route path="/admin/world-finals" element={<L><WorldFinalsAdminPage /></L>} />
               <Route path="/admin/achievements" element={<L><AchievementsAdminPage /></L>} />
               <Route path="/admin/audit-log" element={<L><AuditLogAdminPage /></L>} />

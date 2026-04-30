@@ -1,14 +1,51 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
-import { Notification } from './notifications.entity';
+import { Notification, NotificationType } from './notifications.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { Season } from '../seasons/seasons.entity';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
+
+  /**
+   * Create an in-app notification for a single user, only if the user account exists.
+   * Wraps errors so notification failure never blocks the calling flow.
+   */
+  async createForUser(args: {
+    userId: string;
+    title: string;
+    message: string;
+    type: NotificationType;
+    link?: string;
+    fromUserId?: string;
+  }): Promise<void> {
+    try {
+      const em = this.em.fork();
+      const user = await em.findOne(Profile, { id: args.userId }, { fields: ['id'] });
+      if (!user) {
+        this.logger.warn(`Skipped in-app notification — user ${args.userId} not found`);
+        return;
+      }
+      const notification = em.create(Notification, {
+        user: args.userId,
+        fromUser: args.fromUserId || undefined,
+        title: args.title,
+        message: args.message,
+        type: args.type,
+        link: args.link || undefined,
+        read: false,
+      } as any);
+      await em.persistAndFlush(notification);
+    } catch (error) {
+      this.logger.error(`Failed to create in-app notification for user ${args.userId}: ${error}`);
+    }
+  }
 
   async findByUserId(userId: string, limit: number = 10): Promise<Notification[]> {
     const em = this.em.fork();
@@ -86,6 +123,8 @@ export class NotificationsService {
     type?: string;
     read?: boolean;
     search?: string;
+    seasonId?: string;
+    dateRange?: '7' | '30' | '45' | '90' | 'all';
     limit?: number;
     offset?: number;
   }): Promise<{ notifications: Notification[]; total: number }> {
@@ -97,6 +136,37 @@ export class NotificationsService {
     }
     if (filters?.read !== undefined) {
       where.read = filters.read;
+    }
+
+    // Date range — relative to now (intersects with season filter below)
+    const createdAtConstraints: { $gte?: Date; $lte?: Date } = {};
+    if (filters?.dateRange && filters.dateRange !== 'all') {
+      const days = parseInt(filters.dateRange, 10);
+      if (!isNaN(days) && days > 0) {
+        const since = new Date();
+        since.setDate(since.getDate() - days);
+        createdAtConstraints.$gte = since;
+      }
+    }
+
+    // Season filter — bounds notifications to the season's start/end dates
+    if (filters?.seasonId) {
+      const season = await em.findOne(Season, { id: filters.seasonId });
+      if (season) {
+        const seasonStart = new Date(season.startDate);
+        const seasonEnd = new Date(season.endDate);
+        // Intersect with any existing relative-date $gte: pick the later of the two
+        if (!createdAtConstraints.$gte || seasonStart > createdAtConstraints.$gte) {
+          createdAtConstraints.$gte = seasonStart;
+        }
+        // Cap at end of season (whichever is earlier — now, or end of season)
+        const now = new Date();
+        createdAtConstraints.$lte = seasonEnd < now ? seasonEnd : now;
+      }
+    }
+
+    if (createdAtConstraints.$gte || createdAtConstraints.$lte) {
+      where.createdAt = createdAtConstraints;
     }
 
     // If search is provided, we need to filter by user fields

@@ -281,6 +281,222 @@ export class AdminNotificationsService {
     }
   }
 
+  async notifyDisputeCreated(args: {
+    disputeId: string;
+    amountCents: number;
+    reason: string;
+    paymentIntentId: string;
+    evidenceDueBy?: Date | null;
+    customerEmail?: string | null;
+    customerName?: string | null;
+    paymentType?: string | null;
+  }): Promise<void> {
+    try {
+      const amount = (args.amountCents / 100).toFixed(2);
+      const dueByStr = args.evidenceDueBy ? this.formatDate(args.evidenceDueBy) : 'Not provided';
+
+      await this.notifyAllAdmins(
+        'CHARGEBACK OPENED',
+        `Dispute ${args.disputeId} - $${amount} (${args.reason}). Evidence due ${dueByStr}.`,
+        '/admin/billing/orders',
+      );
+
+      const fields = [
+        { label: 'Dispute ID', value: args.disputeId },
+        { label: 'Amount', value: `$${amount}` },
+        { label: 'Reason', value: args.reason || 'Not specified' },
+        { label: 'Evidence Due By', value: dueByStr },
+        { label: 'Payment Intent', value: args.paymentIntentId },
+      ];
+      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
+      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      if (args.paymentType) fields.push({ label: 'Payment Type', value: args.paymentType });
+
+      await this.sendAlertToAllAdmins({
+        title: `[URGENT] Chargeback Opened: $${amount}`,
+        subtitle: `Reason: ${args.reason || 'Not specified'} - Evidence due ${dueByStr}`,
+        fields,
+        dashboardPath: '/admin/billing/orders',
+        dashboardLabel: 'View Orders',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send dispute-created admin notification: ${error}`);
+    }
+  }
+
+  async notifyDisputeLost(args: {
+    disputeId: string;
+    amountCents: number;
+    reason: string;
+    paymentIntentId: string;
+    customerEmail?: string | null;
+    customerName?: string | null;
+    paymentType?: string | null;
+  }): Promise<void> {
+    try {
+      const amount = (args.amountCents / 100).toFixed(2);
+
+      await this.notifyAllAdmins(
+        'CHARGEBACK LOST',
+        `Dispute ${args.disputeId} closed as LOST - $${amount} debited.`,
+        '/admin/billing/orders',
+      );
+
+      const fields = [
+        { label: 'Dispute ID', value: args.disputeId },
+        { label: 'Amount Lost', value: `$${amount}` },
+        { label: 'Reason', value: args.reason || 'Not specified' },
+        { label: 'Payment Intent', value: args.paymentIntentId },
+      ];
+      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
+      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      if (args.paymentType) fields.push({ label: 'Payment Type', value: args.paymentType });
+
+      await this.sendAlertToAllAdmins({
+        title: `[URGENT] Chargeback LOST: $${amount}`,
+        subtitle: `Funds have been debited from your account`,
+        fields,
+        dashboardPath: '/admin/billing/orders',
+        dashboardLabel: 'View Orders',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send dispute-lost admin notification: ${error}`);
+    }
+  }
+
+  async notifyOneTimePaymentFailed(args: {
+    transactionId: string;
+    amountCents?: number | null;
+    paymentMethod: 'stripe' | 'paypal';
+    paymentType?: string | null;
+    customerEmail?: string | null;
+    customerName?: string | null;
+    failureCode?: string | null;
+    failureMessage?: string | null;
+  }): Promise<void> {
+    try {
+      const amount = typeof args.amountCents === 'number' ? `$${(args.amountCents / 100).toFixed(2)}` : 'Unknown';
+      const provider = args.paymentMethod === 'stripe' ? 'Stripe' : 'PayPal';
+      const typeLabel = args.paymentType || 'Payment';
+
+      await this.notifyAllAdmins(
+        'Payment Failed',
+        `${provider} ${typeLabel} payment of ${amount} failed${args.customerEmail ? ` for ${args.customerEmail}` : ''}.`,
+        '/admin/billing/orders',
+      );
+
+      const fields = [
+        { label: 'Provider', value: provider },
+        { label: 'Type', value: typeLabel },
+        { label: 'Amount', value: amount },
+        { label: 'Transaction ID', value: args.transactionId },
+      ];
+      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
+      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      if (args.failureCode) fields.push({ label: 'Failure Code', value: args.failureCode });
+      if (args.failureMessage) fields.push({ label: 'Failure Reason', value: args.failureMessage });
+      fields.push({ label: 'Date', value: this.formatDate(new Date()) });
+
+      await this.sendAlertToAllAdmins({
+        title: `${provider} Payment Failed: ${amount}`,
+        subtitle: typeLabel,
+        fields,
+        dashboardPath: '/admin/billing/orders',
+        dashboardLabel: 'View Orders',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send one-time-payment-failed admin notification: ${error}`);
+    }
+  }
+
+  async notifyRefundIssued(args: {
+    amountCents: number;
+    paymentMethod: 'stripe' | 'paypal';
+    paymentType?: string | null;
+    transactionId: string;
+    customerEmail?: string | null;
+    customerName?: string | null;
+    isPartialRefund: boolean;
+  }): Promise<void> {
+    try {
+      const amount = (args.amountCents / 100).toFixed(2);
+      const provider = args.paymentMethod === 'stripe' ? 'Stripe' : 'PayPal';
+      const refundType = args.isPartialRefund ? 'Partial refund' : 'Refund';
+      const typeLabel = args.paymentType || 'purchase';
+
+      await this.notifyAllAdmins(
+        `${refundType} Issued`,
+        `${refundType} of $${amount} on ${provider} (${typeLabel}) for ${args.customerEmail || 'unknown'}.`,
+        '/admin/billing/orders',
+      );
+
+      const fields = [
+        { label: 'Refund Type', value: refundType },
+        { label: 'Amount', value: `$${amount}` },
+        { label: 'Provider', value: provider },
+        { label: 'Type', value: typeLabel },
+        { label: 'Transaction ID', value: args.transactionId },
+      ];
+      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
+      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      fields.push({ label: 'Date', value: this.formatDate(new Date()) });
+
+      await this.sendAlertToAllAdmins({
+        title: `${refundType} Issued: $${amount}`,
+        subtitle: `${provider} ${typeLabel}`,
+        fields,
+        dashboardPath: '/admin/billing/orders',
+        dashboardLabel: 'View Orders',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send refund-issued admin notification: ${error}`);
+    }
+  }
+
+  async notifyNewEventRegistration(args: {
+    registrationId: string;
+    eventName: string;
+    eventDate?: Date | null;
+    registrantName: string;
+    registrantEmail: string;
+    classes?: string[];
+    amountPaid?: number | null;
+    isFree?: boolean;
+    isPreRegistration?: boolean;
+  }): Promise<void> {
+    try {
+      const amount = typeof args.amountPaid === 'number' ? `$${args.amountPaid.toFixed(2)}` : (args.isFree ? 'Free' : 'N/A');
+      const classesStr = args.classes && args.classes.length > 0 ? args.classes.join(', ') : 'No classes selected';
+      const labelPrefix = args.isPreRegistration ? 'Pre-Registration' : 'Registration';
+
+      await this.notifyAllAdmins(
+        `New Event ${labelPrefix}`,
+        `${args.registrantName} registered for ${args.eventName} (${amount})`,
+        '/admin/event-registrations',
+      );
+
+      const fields = [
+        { label: 'Event', value: args.eventName },
+        { label: 'Registrant', value: args.registrantName },
+        { label: 'Email', value: args.registrantEmail },
+        { label: 'Classes', value: classesStr },
+        { label: 'Amount', value: amount },
+      ];
+      if (args.eventDate) fields.push({ label: 'Event Date', value: this.formatDate(args.eventDate) });
+      fields.push({ label: 'Date', value: this.formatDate(new Date()) });
+
+      await this.sendAlertToAllAdmins({
+        title: `New ${labelPrefix}: ${args.registrantName}`,
+        subtitle: `${args.eventName} - ${amount}`,
+        fields,
+        dashboardPath: '/admin/event-registrations',
+        dashboardLabel: 'View Registrations',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send new-event-registration admin notification: ${error}`);
+    }
+  }
+
   // ── Weekly Digest ──────────────────────────────────────────────────────────
 
   @Cron('0 9 * * 1') // Monday at 9 AM

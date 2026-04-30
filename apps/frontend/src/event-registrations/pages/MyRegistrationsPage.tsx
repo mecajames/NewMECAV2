@@ -13,6 +13,7 @@ import {
   Loader2,
   ClipboardList,
   AlertCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { eventRegistrationsApi, EventRegistration } from '@/event-registrations';
@@ -187,11 +188,20 @@ export default function MyRegistrationsPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">My Registrations</h1>
-          <p className="text-gray-400">
-            View and manage your event registrations
-          </p>
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">My Registrations</h1>
+            <p className="text-gray-400">
+              View and manage your event registrations
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/membership-billing')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex-shrink-0"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Go Back
+          </button>
         </div>
 
         {/* Filter Tabs */}

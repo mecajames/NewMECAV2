@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CreditCard,
   FileText,
@@ -19,15 +19,44 @@ import { useAuth } from '@/auth/contexts/AuthContext';
 import { billingApi, Invoice, MyTransaction } from '../../api-client/billing.api-client';
 import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 
+type BillingTab = 'overview' | 'memberships' | 'shop_orders' | 'event_registrations' | 'invoices';
+
 export default function BillingPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { profile, user } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [transactions, setTransactions] = useState<MyTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<
-    'overview' | 'memberships' | 'shop_orders' | 'event_registrations' | 'invoices'
-  >('overview');
+  const initialTab = (searchParams.get('tab') as BillingTab) || 'overview';
+  const validTabs: BillingTab[] = ['overview', 'memberships', 'shop_orders', 'event_registrations', 'invoices'];
+  const [activeTab, setActiveTabState] = useState<BillingTab>(
+    validTabs.includes(initialTab) ? initialTab : 'overview',
+  );
+
+  // Wrapper that also keeps the URL in sync so links from elsewhere can land on a specific tab.
+  const setActiveTab = (tab: BillingTab) => {
+    setActiveTabState(tab);
+    if (tab === 'overview') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ tab });
+    }
+  };
+
+  // Keep tab in sync if URL changes externally (e.g., back/forward navigation).
+  useEffect(() => {
+    const urlTab = searchParams.get('tab') as BillingTab | null;
+    if (urlTab && validTabs.includes(urlTab) && urlTab !== activeTab) {
+      setActiveTabState(urlTab);
+    } else if (!urlTab && activeTab !== 'overview') {
+      setActiveTabState('overview');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Row to highlight after navigating from another page (e.g., the Membership History "View" button).
+  const highlightedId = searchParams.get('highlight');
   const [membership, setMembership] = useState<Membership | null>(null);
   const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
   const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
@@ -194,6 +223,18 @@ export default function BillingPage() {
                       {membership.paymentStatus === 'paid' ? 'Active' : 'Pending Payment'}
                     </p>
                   </div>
+                  {membership.startDate && (
+                    <div>
+                      <p className="text-gray-400 text-sm">Start Date</p>
+                      <p className="text-lg font-semibold text-white">
+                        {new Date(membership.startDate).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  )}
                   {membership.endDate && (
                     <div>
                       <p className="text-gray-400 text-sm">Expires</p>
@@ -446,7 +487,19 @@ export default function BillingPage() {
             emptyText="No memberships found"
             referenceLabel="Membership"
             descriptionLabel="Plan"
-            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+            highlightedId={highlightedId}
+            onView={(tx) => {
+              if (tx.invoiceId) {
+                // Has a formal invoice — show the in-app invoice viewer (which has its own Print button).
+                navigate(`/invoice/${tx.invoiceId}`);
+              } else {
+                // No formal invoice (comp / admin-assigned / $0 upgrade) — show the in-app receipt
+                // viewer (same dark-theme look). The Print button on that page opens the clean
+                // printable HTML in a new tab.
+                const membershipId = tx.id.replace(/^membership:/, '');
+                navigate(`/membership/${membershipId}/receipt`);
+              }
+            }}
           />
         )}
 
@@ -470,7 +523,26 @@ export default function BillingPage() {
             emptyText="No event registrations found"
             referenceLabel="Reference"
             descriptionLabel="Event"
-            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+            onView={(tx) => {
+              const registrationId = tx.id.replace(/^event_registration:/, '');
+              navigate(`/my-registrations/${registrationId}`);
+            }}
+            extraActions={(tx) => {
+              if (tx.status !== 'pending') return null;
+              const registrationId = tx.id.replace(/^event_registration:/, '');
+              // Pull the eventId out of the detailUrl (`/events/<id>`) so we can route to checkout.
+              const eventId = tx.detailUrl?.replace(/^\/events\//, '');
+              if (!eventId) return null;
+              return (
+                <button
+                  onClick={() => navigate(`/events/${eventId}/register?registrationId=${registrationId}`)}
+                  className="flex items-center gap-1 text-orange-400 hover:text-orange-300"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Pay Now
+                </button>
+              );
+            }}
           />
         )}
 
@@ -615,6 +687,8 @@ interface TransactionTableProps {
   referenceLabel: string;
   descriptionLabel: string;
   onView?: (tx: MyTransaction) => void;
+  highlightedId?: string | null;
+  extraActions?: (tx: MyTransaction) => React.ReactNode;
 }
 
 function TransactionTable({
@@ -624,7 +698,16 @@ function TransactionTable({
   referenceLabel,
   descriptionLabel,
   onView,
+  highlightedId,
+  extraActions,
 }: TransactionTableProps) {
+  const highlightedRowRef = useRef<HTMLTableRowElement>(null);
+
+  useEffect(() => {
+    if (highlightedId && highlightedRowRef.current) {
+      highlightedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightedId, transactions]);
   const formatDate = (iso: string) => {
     const date = new Date(iso);
     if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'N/A';
@@ -674,8 +757,17 @@ function TransactionTable({
         <tbody className="divide-y divide-slate-700">
           {transactions.map((tx) => {
             const c = statusColor(tx.status);
+            const isHighlighted = highlightedId === tx.id;
             return (
-              <tr key={tx.id} className="hover:bg-slate-700/30">
+              <tr
+                key={tx.id}
+                ref={isHighlighted ? highlightedRowRef : undefined}
+                className={`transition-colors ${
+                  isHighlighted
+                    ? 'bg-orange-500/15 ring-2 ring-orange-500/60 ring-inset'
+                    : 'hover:bg-slate-700/30'
+                }`}
+              >
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{tx.reference}</td>
                 <td className="px-6 py-4 text-sm text-gray-300">{tx.description}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -684,8 +776,9 @@ function TransactionTable({
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-white text-right">{formatCurrency(tx.amount)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDate(tx.date)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <div className="flex items-center gap-3">
-                    {onView && tx.detailUrl && (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {extraActions && extraActions(tx)}
+                    {onView && (
                       <button
                         onClick={() => onView(tx)}
                         className="flex items-center gap-1 text-blue-400 hover:text-blue-300"

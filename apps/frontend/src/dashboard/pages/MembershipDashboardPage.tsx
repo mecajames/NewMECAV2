@@ -163,7 +163,7 @@ export default function MembershipDashboardPage() {
               <h1 className="text-2xl sm:text-3xl font-bold text-white">Membership</h1>
             </div>
             <button
-              onClick={() => navigate('/dashboard/mymeca?tab=profile')}
+              onClick={() => navigate('/membership-billing')}
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -194,7 +194,7 @@ export default function MembershipDashboardPage() {
               <h1 className="text-2xl sm:text-3xl font-bold text-white">Membership</h1>
             </div>
             <button
-              onClick={() => navigate('/dashboard/mymeca?tab=profile')}
+              onClick={() => navigate('/membership-billing')}
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -228,7 +228,7 @@ export default function MembershipDashboardPage() {
             <p className="text-gray-400 mt-1">Manage your membership and billing</p>
           </div>
           <button
-            onClick={() => navigate('/dashboard/mymeca?tab=profile')}
+            onClick={() => navigate('/membership-billing')}
             className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -277,7 +277,23 @@ export default function MembershipDashboardPage() {
           </div>
 
           {/* Membership Details */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {/* Start Date */}
+            <div className="bg-slate-700/50 rounded-lg p-4">
+              <p className="text-gray-400 text-sm mb-1">Start Date</p>
+              {activeMembership.startDate ? (
+                <p className="text-lg font-semibold text-white">
+                  {new Date(activeMembership.startDate).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </p>
+              ) : (
+                <p className="text-white text-lg font-semibold">N/A</p>
+              )}
+            </div>
+
             {/* Expiration / Renewal Date */}
             <div className="bg-slate-700/50 rounded-lg p-4">
               <p className="text-gray-400 text-sm mb-1">
@@ -440,7 +456,7 @@ export default function MembershipDashboardPage() {
 
             {/* View Membership Card */}
             <button
-              onClick={() => navigate('/dashboard/mymeca?tab=card')}
+              onClick={() => navigate('/membership/card')}
               className="px-5 py-2.5 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
             >
               <CreditCard className="h-4 w-4" />
@@ -534,7 +550,7 @@ export default function MembershipDashboardPage() {
             emptyIcon={<CreditCard className="h-12 w-12 mx-auto mb-3 text-gray-500" />}
             referenceLabel="Plan / MECA ID"
             descriptionLabel="Plan"
-            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+            onView={(tx) => navigate(`/billing?tab=memberships&highlight=${encodeURIComponent(tx.id)}`)}
           />
         </div>
       </div>

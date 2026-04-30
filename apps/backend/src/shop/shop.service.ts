@@ -24,6 +24,7 @@ import { OrdersService } from '../orders/orders.service';
 import { Order } from '../orders/orders.entity';
 import { InvoicesService } from '../invoices/invoices.service';
 import { Invoice } from '../invoices/invoices.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface CartItem {
   productId: string;
@@ -50,7 +51,13 @@ export class ShopService {
     private readonly emailService: EmailService,
     private readonly ordersService: OrdersService,
     private readonly invoicesService: InvoicesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  private getOrderUserId(order: ShopOrder): string | undefined {
+    const user = (order as any).user;
+    return user?.id;
+  }
 
   // =============================================================================
   // PRODUCT METHODS
@@ -752,6 +759,17 @@ export class ShopService {
     } catch (error) {
       this.logger.error(`Failed to send order confirmation email for order ${order.orderNumber}: ${error}`);
     }
+
+    const userId = this.getOrderUserId(order);
+    if (userId) {
+      await this.notificationsService.createForUser({
+        userId,
+        title: `Order ${order.orderNumber} placed`,
+        message: `Your order for $${Number(order.totalAmount).toFixed(2)} has been received. We'll notify you when it ships.`,
+        type: 'info',
+        link: `/shop/orders/${order.id}`,
+      });
+    }
   }
 
   private async sendPaymentReceiptEmail(order: ShopOrder, last4?: string): Promise<void> {
@@ -804,6 +822,18 @@ export class ShopService {
     } catch (error) {
       this.logger.error(`Failed to send shipping notification email for order ${order.orderNumber}: ${error}`);
     }
+
+    const userId = this.getOrderUserId(order);
+    if (userId) {
+      const trackingLine = order.trackingNumber ? ` Tracking: ${order.trackingNumber}.` : '';
+      await this.notificationsService.createForUser({
+        userId,
+        title: `Order ${order.orderNumber} shipped`,
+        message: `Your order is on the way.${trackingLine}`,
+        type: 'info',
+        link: `/shop/orders/${order.id}`,
+      });
+    }
   }
 
   private async sendDeliveryConfirmationEmail(order: ShopOrder): Promise<void> {
@@ -824,6 +854,17 @@ export class ShopService {
       this.logger.log(`Delivery confirmation email sent for order ${order.orderNumber}`);
     } catch (error) {
       this.logger.error(`Failed to send delivery confirmation email for order ${order.orderNumber}: ${error}`);
+    }
+
+    const userId = this.getOrderUserId(order);
+    if (userId) {
+      await this.notificationsService.createForUser({
+        userId,
+        title: `Order ${order.orderNumber} delivered`,
+        message: `Your order has been delivered. Thanks for shopping with MECA!`,
+        type: 'info',
+        link: `/shop/orders/${order.id}`,
+      });
     }
   }
 

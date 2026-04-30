@@ -37,6 +37,8 @@ import { Order } from '../orders/orders.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { ShopOrder } from '../shop/entities/shop-order.entity';
 import { Invoice } from '../invoices/invoices.entity';
+import { InvoiceItem } from '../invoices/invoice-items.entity';
+import { InvoiceItemType } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
@@ -245,7 +247,7 @@ export class BillingController {
     const user = await this.getCurrentUser(authHeader);
     const em = this.em.fork();
 
-    const [registrations, memberships, shopOrders, billingOrders] = await Promise.all([
+    const [registrations, memberships, shopOrders, billingOrders, userInvoices] = await Promise.all([
       em.find(
         EventRegistration,
         { user: user.id },
@@ -266,6 +268,11 @@ export class BillingController {
         { member: user.id },
         { orderBy: { createdAt: 'DESC' } },
       ),
+      em.find(
+        Invoice,
+        { user: user.id },
+        { populate: ['masterMembership', 'items'], orderBy: { createdAt: 'DESC' } },
+      ),
     ]);
 
     // Build lookups so a source-of-truth row can surface its associated invoice
@@ -276,6 +283,27 @@ export class BillingController {
       if (pi) orderByPaymentIntentId.set(String(pi), o);
       const shopId = o.shopOrderReference?.shopOrderId;
       if (shopId) orderByShopRef.set(shopId, o);
+    }
+
+    // Also build invoice-side lookups so $0 / comp memberships and registrations (which have no linked Order)
+    // can still surface their associated Invoice. Maps go from source-of-truth id → invoice.
+    const invoiceByMembershipId = new Map<string, Invoice>();
+    const invoiceByRegistrationId = new Map<string, Invoice>();
+    for (const inv of userInvoices) {
+      const mm = (inv.masterMembership as any)?.id || inv.masterMembership;
+      if (mm && !invoiceByMembershipId.has(String(mm))) {
+        invoiceByMembershipId.set(String(mm), inv);
+      }
+      const items = inv.items?.getItems?.() ?? [];
+      for (const it of items as InvoiceItem[]) {
+        if (!it.referenceId) continue;
+        if (it.itemType === InvoiceItemType.MEMBERSHIP && !invoiceByMembershipId.has(it.referenceId)) {
+          invoiceByMembershipId.set(it.referenceId, inv);
+        } else if (it.itemType === InvoiceItemType.EVENT_CLASS && !invoiceByRegistrationId.has(it.referenceId)) {
+          // EVENT_CLASS items reference the registrationId
+          invoiceByRegistrationId.set(it.referenceId, inv);
+        }
+      }
     }
 
     type Transaction = {
@@ -298,6 +326,7 @@ export class BillingController {
       const linkedOrder = r.stripePaymentIntentId
         ? orderByPaymentIntentId.get(r.stripePaymentIntentId)
         : undefined;
+      const invoiceId = linkedOrder?.invoiceId || invoiceByRegistrationId.get(r.id)?.id;
       txs.push({
         id: `event_registration:${r.id}`,
         source: 'event_registration',
@@ -308,7 +337,7 @@ export class BillingController {
         amount: Number(r.amountPaid ?? 0),
         currency: 'USD',
         date: (r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt as any)).toISOString(),
-        invoiceId: linkedOrder?.invoiceId,
+        invoiceId,
         detailUrl: r.event?.id ? `/events/${r.event.id}` : undefined,
       });
     }
@@ -317,6 +346,7 @@ export class BillingController {
       const linkedOrder = m.stripePaymentIntentId
         ? orderByPaymentIntentId.get(m.stripePaymentIntentId)
         : undefined;
+      const invoiceId = linkedOrder?.invoiceId || invoiceByMembershipId.get(m.id)?.id;
       txs.push({
         id: `membership:${m.id}`,
         source: 'membership',
@@ -329,7 +359,7 @@ export class BillingController {
         date: m.startDate
           ? (m.startDate instanceof Date ? m.startDate : new Date(m.startDate as any)).toISOString()
           : new Date().toISOString(),
-        invoiceId: linkedOrder?.invoiceId,
+        invoiceId,
         detailUrl: '/dashboard/membership',
       });
     }
@@ -378,6 +408,38 @@ export class BillingController {
     }
 
     const html = this.pdfService.generateInvoiceHtml(invoice);
+    res.send(html);
+  }
+
+  /**
+   * Get current user's membership receipt as printable HTML.
+   * Used for memberships that have no formal Invoice record (comp / admin / $0).
+   */
+  @Get('my/memberships/:id/receipt-pdf')
+  @Header('Content-Type', 'text/html')
+  async getMyMembershipReceiptPdf(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Res() res: Response,
+  ) {
+    const user = await this.getCurrentUser(authHeader);
+    const em = this.em.fork();
+
+    const membership = await em.findOne(
+      Membership,
+      { id },
+      { populate: ['user', 'membershipTypeConfig'] },
+    );
+    if (!membership) {
+      throw new ForbiddenException('Membership not found');
+    }
+
+    // Verify membership belongs to the authenticated user
+    if ((membership.user as any)?.id !== user.id) {
+      throw new ForbiddenException('You do not have permission to access this membership receipt');
+    }
+
+    const html = this.pdfService.generateMembershipReceiptHtml(membership);
     res.send(html);
   }
 

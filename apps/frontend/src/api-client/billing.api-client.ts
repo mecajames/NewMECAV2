@@ -359,6 +359,26 @@ export const billingApi = {
   },
 
   /**
+   * View user's membership receipt (for memberships without a formal invoice) in a new tab.
+   * Renders the HTML client-side from the membership data (mirrors the invoice template,
+   * labeled "Receipt"). Avoids needing a dedicated backend endpoint while still producing
+   * the same blob-URL flow as viewMyInvoicePdf.
+   */
+  viewMyMembershipReceipt: async (membershipId: string): Promise<void> => {
+    // Lazy-import to keep the receipt template out of the main billing API bundle until needed.
+    const [{ membershipsApi }, { renderMembershipReceiptHtml }] = await Promise.all([
+      import('@/memberships'),
+      import('@/billing/membershipReceiptHtml'),
+    ]);
+    const membership = await membershipsApi.getById(membershipId);
+    const html = renderMembershipReceiptHtml(membership);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  },
+
+  /**
    * Download user's invoice PDF (with auth)
    */
   downloadMyInvoicePdf: async (id: string, invoiceNumber?: string): Promise<void> => {

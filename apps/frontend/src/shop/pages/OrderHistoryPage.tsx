@@ -8,6 +8,7 @@ import {
   Loader2,
   Truck,
   ExternalLink,
+  ArrowLeft,
 } from 'lucide-react';
 import { ShopOrder } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
@@ -56,18 +57,27 @@ export function OrderHistoryPage() {
     <div className="min-h-screen bg-slate-900">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold text-white">Order History</h1>
             <p className="text-gray-400 mt-1">View and track your orders</p>
           </div>
-          <Link
-            to="/shop"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors"
-          >
-            <ShoppingBag className="h-5 w-5" />
-            Shop
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/membership-billing')}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Go Back
+            </button>
+            <Link
+              to="/shop"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors"
+            >
+              <ShoppingBag className="h-5 w-5" />
+              Shop
+            </Link>
+          </div>
         </div>
 
         {error && (

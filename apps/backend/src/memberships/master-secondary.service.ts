@@ -9,6 +9,7 @@ import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // DTO for creating a secondary membership
 export interface CreateSecondaryMembershipDto {
@@ -86,6 +87,7 @@ export class MasterSecondaryService {
     private readonly mecaIdService: MecaIdService,
     private readonly supabaseAdminService: SupabaseAdminService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -359,6 +361,16 @@ export class MasterSecondaryService {
           expiryDate: secondary.endDate!,
         });
         this.logger.log(`Sent secondary member welcome email for membership ${secondaryMembershipId} to ${secondaryProfile.email}`);
+      }
+
+      if (secondaryProfile?.id) {
+        await this.notificationsService.createForUser({
+          userId: secondaryProfile.id,
+          title: `Welcome to MECA — ${membershipConfig?.name || 'Membership'}`,
+          message: `Your secondary membership is active. Your MECA ID is ${secondary.mecaId}.`,
+          type: 'info',
+          link: '/dashboard',
+        });
       }
     } catch (emailError) {
       this.logger.error(`Failed to send secondary member welcome email for membership ${secondaryMembershipId}:`, emailError);
