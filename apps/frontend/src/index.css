@@ -26,3 +26,58 @@ html, body {
     transform: translateX(-50%);
   }
 }
+
+/* =============================================================================
+   Print styles — applied when the user prints any page (e.g., a receipt or
+   invoice via window.print()). Hides global chrome and forces a clean
+   black-on-white render on print only; on-screen styling is unchanged.
+   ========================================================================== */
+@media print {
+  /* Strip site chrome */
+  nav,
+  footer,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Force a clean print background */
+  html,
+  body,
+  #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    max-width: none !important;
+  }
+
+  /* Anything inside .printable becomes pure black-on-white. We scope this
+     so we don't fight every dark-theme element on every page — only the
+     content explicitly opted in via .printable gets the inversion. */
+  .printable,
+  .printable * {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border-color: #d1d5db !important;
+  }
+
+  /* Keep the orange accent for status pills and totals so receipts still
+     look on-brand when printed. */
+  .printable .print-accent,
+  .printable .print-accent * {
+    color: #ea580c !important;
+  }
+
+  /* Drop rounded corners and shadows on the main card for a sheet-of-paper
+     look; keep section dividers visible. */
+  .printable .printable-card {
+    border: 1px solid #d1d5db !important;
+    border-radius: 0 !important;
+  }
+
+  /* Page setup */
+  @page {
+    margin: 0.5in;
+  }
+}

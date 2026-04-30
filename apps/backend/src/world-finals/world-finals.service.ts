@@ -14,6 +14,8 @@ import { Profile } from '../profiles/profiles.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { Notification } from '../notifications/notifications.entity';
 import { EmailService } from '../email/email.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Only load the Profile fields we actually need (avoids failures when DB is missing newer columns)
 const PROFILE_FIELDS = ['id', 'email', 'meca_id', 'first_name', 'last_name', 'full_name'] as const;
@@ -44,6 +46,8 @@ export class WorldFinalsService {
     @Inject('EntityManager')
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
+    private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private async loadProfile(em: EntityManager, profileId: string): Promise<Profile | null> {
@@ -197,6 +201,17 @@ export class WorldFinalsService {
       // Update qualification record (will be flushed by caller)
       qualification.emailSent = true;
       qualification.emailSentAt = new Date();
+
+      const userId = (qualification.user as any)?.id;
+      if (userId) {
+        await this.notificationsService.createForUser({
+          userId,
+          title: `You qualified for World Finals!`,
+          message: `Congrats! You qualified in ${competitionClass} with ${qualification.totalPoints} points for the ${season.name} season.`,
+          type: 'info',
+          link: '/world-finals',
+        });
+      }
     } catch (error) {
       console.error(`[WorldFinals] Failed to send qualification email to ${email}:`, error);
     }
@@ -360,6 +375,17 @@ export class WorldFinalsService {
         seasonName: (season as Season).name,
         registrationUrl,
       });
+
+      const userId = (qualification.user as any)?.id;
+      if (userId) {
+        await this.notificationsService.createForUser({
+          userId,
+          title: `World Finals invitation`,
+          message: `You're invited to register for the ${(season as Season).name} World Finals.`,
+          type: 'info',
+          link: '/world-finals',
+        });
+      }
     } catch (error) {
       console.error(`[WorldFinals] Failed to send invitation email to ${email}:`, error);
     }
@@ -1397,6 +1423,27 @@ export class WorldFinalsService {
     reg.registrationStatus = 'confirmed';
     reg.stripePaymentIntentId = paymentIntentId;
     await em.flush();
+
+    try {
+      const fullName = `${reg.firstName || ''} ${reg.lastName || ''}`.trim() || reg.email || 'Unknown';
+      const classes = reg.competitionClass ? [reg.competitionClass] : [];
+      this.adminNotificationsService.notifyNewEventRegistration({
+        registrationId: reg.id,
+        eventName: 'World Finals',
+        eventDate: null,
+        registrantName: fullName,
+        registrantEmail: reg.email || '',
+        classes,
+        amountPaid: reg.totalAmount ?? null,
+        isFree: !reg.totalAmount || Number(reg.totalAmount) === 0,
+        isPreRegistration: true,
+      }).catch((err) => {
+        this.logger.error(`Failed to send admin World Finals pre-reg notification: ${err}`);
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send admin World Finals pre-reg notification: ${error}`);
+    }
+
     return reg;
   }
 

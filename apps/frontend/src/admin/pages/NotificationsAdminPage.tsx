@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import axios from '@/lib/axios';
 import { profilesApi } from '@/profiles';
+import { seasonsApi, Season } from '@/seasons';
 
 interface NotificationItem {
   id: string;
@@ -61,6 +62,10 @@ export default function NotificationsAdminPage() {
   const [filterRead, setFilterRead] = useState<string>('');
   const [filterSearch, setFilterSearch] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  const [filterSeasonId, setFilterSeasonId] = useState<string>('');
+  const [filterDateRange, setFilterDateRange] = useState<'7' | '30' | '45' | '90' | 'all'>('30');
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasonsLoaded, setSeasonsLoaded] = useState(false);
   const filterSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Send notification modal
@@ -97,9 +102,26 @@ export default function NotificationsAdminPage() {
     };
   }, [filterSearch]);
 
+  // Load seasons once and default to current season
   useEffect(() => {
+    (async () => {
+      try {
+        const all = await seasonsApi.getAll();
+        setSeasons(all);
+        const current = all.find(s => s.isCurrent || s.is_current);
+        if (current) setFilterSeasonId(current.id);
+      } catch (err) {
+        console.error('Failed to load seasons:', err);
+      } finally {
+        setSeasonsLoaded(true);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!seasonsLoaded) return; // Wait for default season to settle so we don't double-fetch
     fetchData();
-  }, [filterType, filterRead, debouncedSearch]);
+  }, [filterType, filterRead, debouncedSearch, filterSeasonId, filterDateRange, seasonsLoaded]);
 
   // Fetch counts when mode changes to allActive or allUsers
   useEffect(() => {
@@ -174,6 +196,8 @@ export default function NotificationsAdminPage() {
       if (filterType) params.append('type', filterType);
       if (filterRead) params.append('read', filterRead);
       if (debouncedSearch) params.append('search', debouncedSearch);
+      if (filterSeasonId) params.append('seasonId', filterSeasonId);
+      if (filterDateRange) params.append('dateRange', filterDateRange);
       params.append('limit', '100');
 
       const [notifResponse, analyticsResponse] = await Promise.all([
@@ -422,6 +446,33 @@ export default function NotificationsAdminPage() {
               <option value="">All Status</option>
               <option value="false">Unread</option>
               <option value="true">Read</option>
+            </select>
+
+            <select
+              value={filterSeasonId}
+              onChange={(e) => setFilterSeasonId(e.target.value)}
+              className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-orange-500"
+              title="Season"
+            >
+              <option value="">All Seasons</option>
+              {seasons.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{(s.isCurrent || s.is_current) ? ' (Current)' : ''}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filterDateRange}
+              onChange={(e) => setFilterDateRange(e.target.value as any)}
+              className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-orange-500"
+              title="Date Range"
+            >
+              <option value="7">Last 7 Days</option>
+              <option value="30">Last 30 Days</option>
+              <option value="45">Last 45 Days</option>
+              <option value="90">Last 90 Days</option>
+              <option value="all">All Time</option>
             </select>
 
             <div className="relative">

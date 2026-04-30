@@ -37,6 +37,8 @@ import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
 import { WorldFinalsService } from '../world-finals/world-finals.service';
 import { PaymentFulfillmentService } from '../payments/payment-fulfillment.service';
@@ -138,6 +140,8 @@ export class StripeController {
     private readonly paymentFulfillmentService: PaymentFulfillmentService,
     private readonly couponsService: CouponsService,
     private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -1067,6 +1071,26 @@ export class StripeController {
       error: paymentIntent.last_payment_error?.message,
       code: paymentIntent.last_payment_error?.code,
     });
+
+    // Subscription renewal failures are surfaced via invoice.payment_failed already - skip here to avoid duplicates.
+    const paymentType = metadata?.paymentType;
+    const isSubscriptionRenewal = paymentType === 'membership_renewal' || paymentType === 'subscription_renewal';
+    if (isSubscriptionRenewal) {
+      return;
+    }
+
+    this.adminNotificationsService.notifyOneTimePaymentFailed({
+      transactionId: paymentIntent.id,
+      amountCents: paymentIntent.amount,
+      paymentMethod: 'stripe',
+      paymentType: paymentType || null,
+      customerEmail: metadata?.email || null,
+      customerName: metadata?.competitorName || metadata?.firstName || null,
+      failureCode: paymentIntent.last_payment_error?.code || null,
+      failureMessage: paymentIntent.last_payment_error?.message || null,
+    }).catch((err) => {
+      console.error(`Failed to notify admins of payment failure: ${err}`);
+    });
   }
 
   private async handlePaymentIntentProcessing(paymentIntent: Stripe.PaymentIntent): Promise<void> {
@@ -1142,6 +1166,18 @@ export class StripeController {
 
     if (dispute.status === 'lost') {
       console.error(`[CRITICAL] Dispute LOST: ${dispute.id}, Amount: $${dispute.amount / 100}`);
+
+      this.adminNotificationsService.notifyDisputeLost({
+        disputeId: dispute.id,
+        amountCents: dispute.amount,
+        reason: dispute.reason || 'Not specified',
+        paymentIntentId,
+        customerEmail: (payment?.paymentMetadata as any)?.email || null,
+        customerName: (payment?.paymentMetadata as any)?.customerName || null,
+        paymentType: payment?.paymentType || null,
+      }).catch((err) => {
+        console.error(`Failed to notify admins of lost dispute: ${err}`);
+      });
     } else if (dispute.status === 'won') {
       console.log(`Dispute WON: ${dispute.id}, Amount: $${dispute.amount / 100}`);
     }
@@ -1165,10 +1201,10 @@ export class StripeController {
 
     const em = this.em.fork();
 
-    // Find the payment record by stripe payment intent ID
+    // Find the payment record by stripe payment intent ID, populate user + membership for downstream email/in-app logic
     const payment = await em.findOne(Payment, {
       stripePaymentIntentId: paymentIntentId,
-    });
+    }, { populate: ['user', 'membership'] });
 
     if (!payment) {
       console.log(`No payment record found for refunded charge, payment intent: ${paymentIntentId}`);
@@ -1181,19 +1217,76 @@ export class StripeController {
     payment.refundedAt = new Date();
     payment.refundReason = charge.refunds?.data[0]?.reason || 'Refunded via Stripe';
 
-    // If this payment is associated with a membership, update membership status
+    // If this payment is associated with a membership, update membership status. Determine if this is a master/independent (a.k.a. "main") refund — those skip user in-app per requirements.
+    let isMainMembershipRefund = false;
     if (payment.membership) {
-      const membership = await em.findOne('Membership', { id: payment.membership.id });
+      const Membership = (await import('../memberships/memberships.entity')).Membership;
+      const membership = await em.findOne(Membership, { id: payment.membership.id });
       if (membership) {
-        (membership as any).paymentStatus = PaymentStatus.REFUNDED;
-        console.log(`Membership ${payment.membership.id} marked as refunded`);
+        membership.paymentStatus = PaymentStatus.REFUNDED;
+        isMainMembershipRefund = membership.isMaster() || membership.isIndependent();
+        console.log(`Membership ${payment.membership.id} marked as refunded (main=${isMainMembershipRefund})`);
       }
     }
 
     await em.flush();
     console.log(`Payment ${payment.id} marked as refunded`);
 
-    // TODO: Send refund confirmation email to user
+    // Send refund confirmation email to user
+    const refundAmountCents = charge.refunds?.data[0]?.amount ?? charge.amount_refunded ?? 0;
+    const refundAmount = refundAmountCents / 100;
+    const isPartial = charge.amount_refunded > 0 && charge.amount_refunded < charge.amount;
+    const recipientEmail = payment.user?.email || (payment.paymentMetadata as any)?.email;
+    const recipientFirstName = payment.user?.first_name || (payment.paymentMetadata as any)?.firstName;
+
+    if (recipientEmail && refundAmount > 0) {
+      this.emailService.sendRefundConfirmationEmail({
+        to: recipientEmail,
+        firstName: recipientFirstName,
+        refundAmount,
+        paymentDescription: payment.description || payment.paymentType || 'MECA purchase',
+        refundDate: new Date(),
+        paymentMethod: 'stripe',
+        transactionId: charge.id,
+        isPartialRefund: isPartial,
+      }).catch((err) => {
+        console.error(`Failed to send refund confirmation email: ${err}`);
+      });
+
+      // In-app notification for the user (skip for main membership refunds — user account is being cancelled)
+      if (payment.user?.id && !isMainMembershipRefund && refundAmount > 0) {
+        const refundType = isPartial ? 'Partial refund' : 'Refund';
+        this.notificationsService.createForUser({
+          userId: payment.user.id,
+          title: `${refundType} processed`,
+          message: `${refundType} of $${refundAmount.toFixed(2)} for ${payment.description || payment.paymentType || 'your purchase'}`,
+          type: 'info',
+          link: '/billing',
+        }).catch((err) => {
+          console.error(`Failed to create user refund in-app notification: ${err}`);
+        });
+      }
+    } else {
+      console.warn(`Skipping refund email - missing recipient email or zero amount (paymentId=${payment.id})`);
+    }
+
+    // Notify admins of the refund (email + in-app via the helper)
+    if (refundAmount > 0) {
+      this.adminNotificationsService.notifyRefundIssued({
+        amountCents: refundAmountCents,
+        paymentMethod: 'stripe',
+        paymentType: payment.paymentType || null,
+        transactionId: charge.id,
+        customerEmail: recipientEmail || null,
+        customerName: payment.user
+          ? `${payment.user.first_name || ''} ${payment.user.last_name || ''}`.trim() || null
+          : null,
+        isPartialRefund: isPartial,
+      }).catch((err) => {
+        console.error(`Failed to notify admins of refund: ${err}`);
+      });
+    }
+
     // TODO: Create QuickBooks credit memo if QB is connected
   }
 
@@ -1252,15 +1345,30 @@ export class StripeController {
     }
 
     // Log critical alert for admin attention
+    const evidenceDueBy = dispute.evidence_details?.due_by
+      ? new Date(dispute.evidence_details.due_by * 1000)
+      : null;
     console.error(`[CRITICAL] Payment dispute created:`, {
       disputeId: dispute.id,
       amount: dispute.amount / 100,
       reason: dispute.reason,
       paymentIntentId,
-      evidence_due_by: new Date(dispute.evidence_details?.due_by || 0 * 1000).toISOString(),
+      evidence_due_by: evidenceDueBy?.toISOString() || 'unknown',
     });
 
-    // TODO: Send email notification to admin
+    this.adminNotificationsService.notifyDisputeCreated({
+      disputeId: dispute.id,
+      amountCents: dispute.amount,
+      reason: dispute.reason || 'Not specified',
+      paymentIntentId,
+      evidenceDueBy,
+      customerEmail: (payment?.paymentMetadata as any)?.email || null,
+      customerName: (payment?.paymentMetadata as any)?.customerName || null,
+      paymentType: payment?.paymentType || null,
+    }).catch((err) => {
+      console.error(`Failed to notify admins of new dispute: ${err}`);
+    });
+
     // TODO: Consider freezing associated membership until dispute is resolved
   }
 
@@ -1316,6 +1424,25 @@ export class StripeController {
       this.adminNotificationsService.notifySubscriptionCancelled(membership).catch((err) => {
         console.error('Admin notification failed (non-critical):', err);
       });
+
+      // Notify the user that their subscription ended
+      const userEmail = membership.user?.email;
+      if (userEmail) {
+        const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+        this.emailService.sendSubscriptionCancelledEmail({
+          to: userEmail,
+          firstName: membership.user?.first_name,
+          membershipType: membership.membershipTypeConfig?.name || 'Membership',
+          mecaId: membership.mecaId ?? undefined,
+          cancellationDate: membership.cancelledAt || new Date(),
+          cancellationReason: membership.cancellationReason || undefined,
+          endDate: membership.endDate || null,
+          renewalUrl: `${baseUrl}/membership`,
+          paymentMethod: 'stripe',
+        }).catch((err) => {
+          console.error(`Failed to send Stripe subscription cancel email to user: ${err}`);
+        });
+      }
     }
   }
 

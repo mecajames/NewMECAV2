@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Mail, Calendar, Shield, CreditCard, Lock, ArrowLeft, Phone, MapPin, Building, Pencil, Save, X, Users, Car, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import ChangePassword from '@/profiles/components/ChangePassword';
+import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
 import { CountrySelect, StateProvinceSelect, PhoneInput } from '@/shared/fields';
 import { MecaIdSwitcher } from '@/shared/components';
 import { profilesApi, Profile as ProfileType } from '../profiles.api-client';
@@ -368,7 +369,7 @@ export default function ProfilePage() {
             {isViewingSecondary ? 'Secondary Member Profile' : 'Account Settings'}
           </h2>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/dashboard/mymeca')}
             className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -883,11 +884,14 @@ export default function ProfilePage() {
           ) : (
             /* Own Profile Information */
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
-                  <User className="h-5 w-5 text-orange-500" />
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                    <User className="h-5 w-5 text-orange-500" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">Profile Information</h2>
                 </div>
-                <h2 className="text-2xl font-bold text-white">Profile Information</h2>
+                <ProfileViewSelector active="member-billing" />
               </div>
 
               <div className="grid md:grid-cols-2 gap-6">

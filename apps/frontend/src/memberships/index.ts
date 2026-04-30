@@ -7,3 +7,4 @@ export { AddSecondaryModal } from './components/AddSecondaryModal';
 export { EditSecondaryModal } from './components/EditSecondaryModal';
 export { default as MemberCancelMembershipModal } from './components/MemberCancelMembershipModal';
 export { default as MembershipCard } from './components/MembershipCard';
+export { default as MembershipCardPage } from './pages/MembershipCardPage';

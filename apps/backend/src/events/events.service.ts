@@ -8,6 +8,7 @@ import { EventStatus, RegistrationStatus, MultiDayResultsMode } from '@newmeca/s
 import { randomUUID } from 'crypto';
 import { EmailService } from '../email/email.service';
 import { GeocodingService } from '../geocoding/geocoding.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class EventsService {
@@ -18,6 +19,7 @@ export class EventsService {
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
     private readonly geocodingService: GeocodingService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findAll(page: number = 1, limit: number = 10): Promise<Event[]> {
@@ -802,6 +804,16 @@ export class EventsService {
         } else {
           failed++;
           errors.push(`Failed to send to ${email}: ${result.error}`);
+        }
+
+        if (registration.user?.id) {
+          await this.notificationsService.createForUser({
+            userId: registration.user.id,
+            title: `Rate your experience at ${event.title}`,
+            message: `How was the event? Take a moment to share your feedback.`,
+            type: 'info',
+            link: ratingUrl.startsWith('http') ? ratingUrl : '/events',
+          });
         }
       } catch (error) {
         failed++;

@@ -438,6 +438,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/audit-log',
         },
         {
+          icon: Mail,
+          title: 'Email Testing',
+          description: 'Send test admin alert emails to diagnose delivery issues',
+          action: 'email-testing',
+          color: 'orange',
+          navigateTo: '/admin/email-testing',
+        },
+        {
           icon: Settings,
           title: 'Site Settings',
           description: 'Configure homepage and site-wide settings',

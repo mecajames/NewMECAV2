@@ -106,14 +106,22 @@ export class NotificationsController {
     @Query('type') type?: string,
     @Query('read') read?: string,
     @Query('search') search?: string,
+    @Query('seasonId') seasonId?: string,
+    @Query('dateRange') dateRange?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
     await this.requireAdmin(authHeader);
+    const allowedRanges = ['7', '30', '45', '90', 'all'] as const;
+    const safeDateRange = (allowedRanges as readonly string[]).includes(dateRange ?? '')
+      ? (dateRange as '7' | '30' | '45' | '90' | 'all')
+      : undefined;
     const result = await this.notificationsService.getAllNotifications({
       type,
       read: read === 'true' ? true : read === 'false' ? false : undefined,
       search,
+      seasonId: seasonId || undefined,
+      dateRange: safeDateRange,
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });

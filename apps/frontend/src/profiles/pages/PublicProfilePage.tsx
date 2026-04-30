@@ -1,21 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Car, Music, Eye, EyeOff, Upload, X, Check, Loader2, Image as ImageIcon, Save, ArrowLeft, Users } from 'lucide-react';
+import { Car, Music, Eye, EyeOff, Loader2, Save, ArrowLeft, Users } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { profilesApi, Profile as ProfileType } from '@/profiles';
 import { membershipsApi, ControlledMecaId, Membership, RELATIONSHIP_TYPES } from '@/memberships';
 import { MecaIdSwitcher } from '@/shared/components';
-import { uploadFile } from '@/api-client/uploads.api-client';
+import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
 
 export default function PublicProfilePage() {
   const navigate = useNavigate();
   const { profile, user, refreshProfile } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const audioSystemRef = useRef<HTMLTextAreaElement>(null);
 
   const [_loading, _setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -27,11 +25,9 @@ export default function PublicProfilePage() {
   const [primaryMembership, setPrimaryMembership] = useState<Membership | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
-  // Form state - Profile fields
+  // Form state - Profile fields (gallery managed on its own page)
   const [isPublic, setIsPublic] = useState(false);
   const [carAudioSystem, setCarAudioSystem] = useState('');
-  const [profileImages, setProfileImages] = useState<string[]>([]);
-  const [selectedProfilePicture, setSelectedProfilePicture] = useState<string | null>(null);
 
   // Competitor name (per membership/MECA ID)
   const [competitorName, setCompetitorName] = useState('');
@@ -65,8 +61,6 @@ export default function PublicProfilePage() {
     if (profile && !isViewingSecondary) {
       setIsPublic(profile.is_public || false);
       setCarAudioSystem(profile.car_audio_system || '');
-      setProfileImages(profile.profile_images || []);
-      setSelectedProfilePicture(profile.profile_picture_url || null);
     }
   }, [profile, isViewingSecondary]);
 
@@ -111,8 +105,6 @@ export default function PublicProfilePage() {
       // Initialize form with secondary's data
       setIsPublic(secondaryProfile.is_public || false);
       setCarAudioSystem(secondaryProfile.car_audio_system || '');
-      setProfileImages(secondaryProfile.profile_images || []);
-      setSelectedProfilePicture(secondaryProfile.profile_picture_url || null);
       setCompetitorName(membership.competitorName || selectedMecaInfo?.competitorName || `${secondaryProfile.first_name || ''} ${secondaryProfile.last_name || ''}`.trim());
       // Get relationshipToMaster from controlled MECA IDs data
       setRelationshipToMaster(selectedMecaInfo?.relationshipToMaster || '');
@@ -125,61 +117,6 @@ export default function PublicProfilePage() {
     } finally {
       setLoadingProfile(false);
     }
-  };
-
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user) return;
-
-    if (profileImages.length >= 6) {
-      setError('Maximum 6 images allowed');
-      return;
-    }
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file');
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be less than 5MB');
-      return;
-    }
-
-    setUploadingImage(true);
-    setError(null);
-
-    try {
-      const result = await uploadFile(file, 'gallery-images');
-
-      setProfileImages(prev => [...prev, result.publicUrl]);
-      setSuccess('Image uploaded successfully');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Error uploading image:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to upload image');
-    } finally {
-      setUploadingImage(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleRemoveImage = async (imageUrl: string) => {
-    // Remove from local state
-    setProfileImages(prev => prev.filter(url => url !== imageUrl));
-
-    // If this was the selected profile picture, clear it
-    if (selectedProfilePicture === imageUrl) {
-      setSelectedProfilePicture(null);
-    }
-  };
-
-  const handleSelectProfilePicture = (imageUrl: string) => {
-    setSelectedProfilePicture(imageUrl);
   };
 
   const handleSave = async () => {
@@ -200,12 +137,10 @@ export default function PublicProfilePage() {
     setSuccess(null);
 
     try {
-      // Save profile public data
+      // Save profile public data (gallery fields are managed on the dedicated gallery page)
       await profilesApi.update(targetProfile.id, {
         is_public: isPublic,
         car_audio_system: carAudioSystem,
-        profile_images: profileImages,
-        profile_picture_url: selectedProfilePicture || undefined,
       });
 
       // Save competitor name and relationship for the membership
@@ -284,7 +219,7 @@ export default function PublicProfilePage() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-400">Profile Settings</h2>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/dashboard/mymeca')}
             className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -368,6 +303,11 @@ export default function PublicProfilePage() {
         <div className="grid gap-6">
           {/* Visibility Toggle */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+            {!isViewingSecondary && (
+              <div className="flex justify-end mb-4">
+                <ProfileViewSelector active="public" />
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center">
@@ -461,88 +401,7 @@ export default function PublicProfilePage() {
             </div>
           )}
 
-          {/* Profile Images */}
-          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
-                <ImageIcon className="h-5 w-5 text-purple-500" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white">Profile Images</h2>
-                <p className="text-gray-400 text-sm">Upload up to 5 images and select one as your profile picture</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
-              {profileImages.map((imageUrl, index) => (
-                <div key={index} className="relative group">
-                  <img
-                    src={imageUrl}
-                    alt={`Profile image ${index + 1}`}
-                    className={`w-full aspect-square object-cover rounded-lg border-2 transition-colors ${
-                      selectedProfilePicture === imageUrl
-                        ? 'border-orange-500'
-                        : 'border-transparent hover:border-slate-600'
-                    }`}
-                  />
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
-                    <button
-                      onClick={() => handleSelectProfilePicture(imageUrl)}
-                      className={`p-2 rounded-full ${
-                        selectedProfilePicture === imageUrl
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                      }`}
-                      title="Set as profile picture"
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleRemoveImage(imageUrl)}
-                      className="p-2 rounded-full bg-red-600 text-white hover:bg-red-700"
-                      title="Remove image"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  {selectedProfilePicture === imageUrl && (
-                    <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs px-2 py-1 rounded-full">
-                      Profile
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {profileImages.length < 5 && (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingImage}
-                  className="w-full aspect-square border-2 border-dashed border-slate-600 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-white hover:border-slate-500 transition-colors disabled:opacity-50"
-                >
-                  {uploadingImage ? (
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  ) : (
-                    <>
-                      <Upload className="h-8 w-8" />
-                      <span className="text-sm">Upload</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-
-            <p className="text-gray-500 text-xs">
-              {profileImages.length}/5 images uploaded. Click on an image to set it as your profile picture.
-            </p>
-          </div>
+          {/* Photo gallery moved to its own page at /member-profile-gallery — switch via the dropdown above. */}
 
           {/* Vehicle Information - Display from membership data */}
           {(primaryMembership || (isViewingSecondary && selectedMembership)) && (
@@ -614,7 +473,7 @@ export default function PublicProfilePage() {
           {/* Save Button */}
           <div className="flex justify-end gap-4">
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/dashboard/mymeca')}
               className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
             >
               Cancel

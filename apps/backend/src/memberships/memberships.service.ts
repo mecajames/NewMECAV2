@@ -26,6 +26,7 @@ import { EmailService } from '../email/email.service';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Validates that a team name does not contain variations of the word "team".
@@ -157,6 +158,7 @@ export class MembershipsService {
     private readonly stripeService: StripeService,
     private readonly adminAuditService: AdminAuditService,
     private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findById(id: string): Promise<Membership> {
@@ -512,6 +514,14 @@ export class MembershipsService {
       // Don't fail the membership creation if email fails
     }
 
+    await this.notificationsService.createForUser({
+      userId: data.userId,
+      title: `Welcome to MECA — ${config.name}`,
+      message: `Your ${config.name} membership is active. Your MECA ID is ${membership.mecaId}.`,
+      type: 'info',
+      link: '/dashboard',
+    });
+
     return membership;
   }
 
@@ -735,6 +745,14 @@ export class MembershipsService {
       this.logger.error(`Failed to send welcome email for admin-assigned membership ${membership.id}:`, emailError);
       // Don't fail the membership assignment if email fails
     }
+
+    await this.notificationsService.createForUser({
+      userId: data.userId,
+      title: `Welcome to MECA — ${membershipConfig.name}`,
+      message: `Your ${membershipConfig.name} membership is active. Your MECA ID is ${membership.mecaId}.`,
+      type: 'info',
+      link: '/dashboard',
+    });
 
     return membership;
   }
@@ -1065,6 +1083,14 @@ export class MembershipsService {
         this.logger.error(`Failed to send welcome email for admin-created membership ${managedMembership.id}:`, emailError);
         // Don't fail the membership creation if email fails
       }
+
+      await this.notificationsService.createForUser({
+        userId: data.userId,
+        title: `Welcome to MECA — ${membershipConfig.name}`,
+        message: `Your ${membershipConfig.name} membership is active. Your MECA ID is ${managedMembership.mecaId}.`,
+        type: 'info',
+        link: '/dashboard',
+      });
     }
 
     // Build response message

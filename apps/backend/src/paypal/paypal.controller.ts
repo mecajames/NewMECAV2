@@ -25,6 +25,8 @@ import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { EmailService } from '../email/email.service';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
@@ -102,6 +104,8 @@ export class PayPalController {
     private readonly taxService: TaxService,
     private readonly couponsService: CouponsService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly emailService: EmailService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -501,10 +505,29 @@ export class PayPalController {
           this.logger.log(`PayPal capture completed webhook: ${eventId}`);
           webhookRecord.processingResult = 'success';
           break;
-        case 'PAYMENT.CAPTURE.DENIED':
+        case 'PAYMENT.CAPTURE.DENIED': {
           this.logger.warn(`PayPal capture denied webhook: ${eventId}`);
+          const denied = event.resource;
+          const denyAmountCents = denied?.amount?.value
+            ? Math.round(parseFloat(denied.amount.value) * 100)
+            : null;
+          this.adminNotificationsService.notifyOneTimePaymentFailed({
+            transactionId: denied?.id || eventId,
+            amountCents: denyAmountCents,
+            paymentMethod: 'paypal',
+            paymentType: 'PayPal capture',
+            customerEmail: denied?.payer?.email_address || null,
+            customerName: denied?.payer?.name?.given_name
+              ? `${denied.payer.name.given_name} ${denied.payer.name.surname || ''}`.trim()
+              : null,
+            failureCode: denied?.status_details?.reason || null,
+            failureMessage: denied?.status_details?.reason || null,
+          }).catch((err) => {
+            this.logger.error(`Failed to notify admins of PayPal capture denial: ${err}`);
+          });
           webhookRecord.processingResult = 'success';
           break;
+        }
         case 'PAYMENT.CAPTURE.REFUNDED':
           this.logger.log(`PayPal capture refunded webhook: ${eventId}`);
           webhookRecord.processingResult = 'success';
@@ -514,7 +537,9 @@ export class PayPalController {
         case 'BILLING.SUBSCRIPTION.SUSPENDED': {
           const paypalSubId = event.resource?.id;
           if (paypalSubId) {
-            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId });
+            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId }, {
+              populate: ['user', 'membershipTypeConfig'],
+            });
             if (m && !m.cancelledAt) {
               m.paymentStatus = PaymentStatus.CANCELLED;
               m.cancelledAt = new Date();
@@ -522,6 +547,28 @@ export class PayPalController {
               m.cancelledBy = 'paypal_webhook';
               await em.flush();
               this.logger.warn(`Marked membership ${m.id} cancelled (PayPal ${eventType})`);
+
+              this.adminNotificationsService.notifySubscriptionCancelled(m).catch((err) => {
+                this.logger.error(`Failed to notify admins of PayPal subscription cancel: ${err}`);
+              });
+
+              const userEmail = m.user?.email;
+              if (userEmail) {
+                const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+                this.emailService.sendSubscriptionCancelledEmail({
+                  to: userEmail,
+                  firstName: m.user?.first_name,
+                  membershipType: m.membershipTypeConfig?.name || 'Membership',
+                  mecaId: m.mecaId ?? undefined,
+                  cancellationDate: m.cancelledAt || new Date(),
+                  cancellationReason: m.cancellationReason || undefined,
+                  endDate: m.endDate || null,
+                  renewalUrl: `${baseUrl}/membership`,
+                  paymentMethod: 'paypal',
+                }).catch((err) => {
+                  this.logger.error(`Failed to send PayPal subscription cancel email to user: ${err}`);
+                });
+              }
             }
           }
           webhookRecord.processingResult = 'success';
@@ -530,11 +577,26 @@ export class PayPalController {
         case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED': {
           const paypalSubId = event.resource?.id;
           if (paypalSubId) {
-            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId });
+            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId }, {
+              populate: ['user', 'membershipTypeConfig'],
+            });
             if (m && m.paymentStatus !== PaymentStatus.FAILED) {
               m.paymentStatus = PaymentStatus.FAILED;
               await em.flush();
               this.logger.warn(`Marked membership ${m.id} FAILED (PayPal subscription payment failed)`);
+
+              const failedAmountCents = event.resource?.billing_info?.last_failed_payment?.amount?.value
+                ? Math.round(parseFloat(event.resource.billing_info.last_failed_payment.amount.value) * 100)
+                : 0;
+              const attemptCount = event.resource?.billing_info?.failed_payments_count || 1;
+
+              this.adminNotificationsService.notifyInvoicePaymentFailed(m, {
+                attemptCount,
+                amountDueCents: failedAmountCents,
+                hostedInvoiceUrl: null,
+              }).catch((err) => {
+                this.logger.error(`Failed to notify admins of PayPal subscription payment failure: ${err}`);
+              });
             }
           }
           webhookRecord.processingResult = 'success';

@@ -45,7 +45,7 @@ interface EventHostingRequest {
   createdAt: string;
 }
 
-type TabType = 'overview' | 'profile' | 'gallery' | 'team' | 'events' | 'results' | 'analytics' | 'card';
+type TabType = 'overview' | 'profile' | 'team' | 'support' | 'billing' | 'results' | 'analytics';
 
 export default function MyMecaDashboardPage() {
   const navigate = useNavigate();
@@ -279,12 +279,7 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  // Fetch card data when tab becomes active
-  useEffect(() => {
-    if (activeTab === 'card' && !cardData && !cardLoading && profile) {
-      fetchCardData();
-    }
-  }, [activeTab, profile]);
+  // (Membership Card data is now loaded on the standalone /membership/card page; no dashboard prefetch.)
 
   // Open Stripe Billing Portal for managing payment methods and subscriptions
   const handleOpenBillingPortal = async () => {
@@ -429,7 +424,7 @@ export default function MyMecaDashboardPage() {
     const action = searchParams.get('action');
 
     // Set active tab from URL parameter
-    if (tab && ['overview', 'profile', 'gallery', 'team', 'card', 'events', 'results', 'analytics'].includes(tab)) {
+    if (tab && ['overview', 'profile', 'team', 'support', 'billing', 'results', 'analytics'].includes(tab)) {
       setActiveTab(tab as TabType);
     }
 
@@ -1012,8 +1007,17 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  // Helper to change tabs and update URL for browser history
+  // Helper to change tabs and update URL for browser history.
+  // For tabs that route to a separate page (support, billing), navigate instead of switching active tab.
   const handleTabChange = (tab: TabType) => {
+    const externalRoute: Partial<Record<TabType, string>> = {
+      support: '/tickets',
+      billing: '/membership-billing',
+    };
+    if (externalRoute[tab]) {
+      navigate(externalRoute[tab]!);
+      return;
+    }
     setActiveTab(tab);
     if (tab === 'overview') {
       setSearchParams({});
@@ -1158,10 +1162,9 @@ export default function MyMecaDashboardPage() {
   const tabs: { id: TabType; label: string; icon: any }[] = [
     { id: 'overview', label: 'Overview', icon: User },
     { id: 'profile', label: 'Profile', icon: Settings },
-    { id: 'gallery', label: 'Gallery', icon: Image },
-    { id: 'team', label: 'Team', icon: Users },
-    { id: 'card', label: 'Membership Card', icon: CreditCard },
-    { id: 'events', label: 'Event Registrations', icon: Calendar },
+    { id: 'team', label: 'Teams', icon: Users },
+    { id: 'support', label: 'Support', icon: Ticket },
+    { id: 'billing', label: 'Membership & Billing', icon: CreditCard },
     { id: 'results', label: 'Results', icon: Trophy },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   ];
@@ -1172,14 +1175,8 @@ export default function MyMecaDashboardPage() {
         return renderOverview();
       case 'profile':
         return renderProfile();
-      case 'gallery':
-        return renderGallery();
-      case 'card':
-        return renderCard();
       case 'team':
         return renderTeam();
-      case 'events':
-        return renderEvents();
       case 'results':
         return renderResults();
       case 'analytics':
@@ -1391,7 +1388,7 @@ export default function MyMecaDashboardPage() {
         </button>
 
         <button
-          onClick={() => handleTabChange('gallery')}
+          onClick={() => navigate('/member-profile-gallery')}
           className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
         >
           <div className="flex items-center gap-4">
@@ -1846,9 +1843,12 @@ export default function MyMecaDashboardPage() {
   const renderProfile = () => (
     <div className="space-y-6">
       <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-        <h2 className="text-2xl font-bold text-white mb-6">Profile Settings</h2>
+        <h2 className="text-2xl font-bold text-white mb-2">Profile</h2>
+        <p className="text-gray-400 text-sm mb-6">
+          Open the editor to update your account details, manage your public visibility, or curate your photo gallery.
+        </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <button
             onClick={() => navigate('/profile')}
             className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
@@ -1858,8 +1858,8 @@ export default function MyMecaDashboardPage() {
                 <Settings className="h-7 w-7 text-blue-500" />
               </div>
               <div>
-                <h3 className="text-white font-semibold text-lg">Personal Profile</h3>
-                <p className="text-gray-400 text-sm mt-1">Edit your account details, contact info, and vehicle information</p>
+                <h3 className="text-white font-semibold text-lg">Member &amp; Billing Profile</h3>
+                <p className="text-gray-400 text-sm mt-1">Edit your account, contact, and vehicle info</p>
               </div>
             </div>
           </button>
@@ -1874,69 +1874,22 @@ export default function MyMecaDashboardPage() {
               </div>
               <div>
                 <h3 className="text-white font-semibold text-lg">Public Profile</h3>
-                <p className="text-gray-400 text-sm mt-1">Manage your public presence, bio, and visibility settings</p>
+                <p className="text-gray-400 text-sm mt-1">Manage your public presence and visibility</p>
               </div>
             </div>
           </button>
 
           <button
-            onClick={() => navigate('/billing')}
+            onClick={() => navigate('/member-profile-gallery')}
             className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
           >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                <FileText className="h-7 w-7 text-purple-500" />
+                <Image className="h-7 w-7 text-purple-500" />
               </div>
               <div>
-                <h3 className="text-white font-semibold text-lg">Payments and Invoices</h3>
-                <p className="text-gray-400 text-sm mt-1">View your payment history and invoices</p>
-              </div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate(activeMembership ? '/dashboard/membership' : '/membership')}
-            className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-                <CreditCard className="h-7 w-7 text-orange-500" />
-              </div>
-              <div>
-                <h3 className="text-white font-semibold text-lg">Membership</h3>
-                <p className="text-gray-400 text-sm mt-1">
-                  {activeMembership ? 'Manage your membership and billing' : 'View membership options and upgrade your plan'}
-                </p>
-              </div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate('/shop/orders')}
-            className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                <ShoppingBag className="h-7 w-7 text-blue-500" />
-              </div>
-              <div>
-                <h3 className="text-white font-semibold text-lg">My Shop Orders</h3>
-                <p className="text-gray-400 text-sm mt-1">View your shop order history and track shipments</p>
-              </div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate('/tickets')}
-            className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-pink-500/10 flex items-center justify-center group-hover:bg-pink-500/20 transition-colors">
-                <Ticket className="h-7 w-7 text-pink-500" />
-              </div>
-              <div>
-                <h3 className="text-white font-semibold text-lg">Support Tickets</h3>
-                <p className="text-gray-400 text-sm mt-1">View your support tickets or submit a new request</p>
+                <h3 className="text-white font-semibold text-lg">Gallery</h3>
+                <p className="text-gray-400 text-sm mt-1">Upload and manage your competition photos</p>
               </div>
             </div>
           </button>

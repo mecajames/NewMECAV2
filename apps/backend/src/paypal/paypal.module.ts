@@ -10,6 +10,7 @@ import { SiteSettingsModule } from '../site-settings/site-settings.module';
 import { ShopModule } from '../shop/shop.module';
 import { TaxModule } from '../tax/tax.module';
 import { CouponsModule } from '../coupons/coupons.module';
+import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CouponsModule } from '../coupons/coupons.module';
     forwardRef(() => ShopModule),
     TaxModule,
     CouponsModule,
+    AdminNotificationsModule,
   ],
   providers: [PayPalService],
   controllers: [PayPalController],
