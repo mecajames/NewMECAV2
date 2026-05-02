@@ -13,7 +13,7 @@ initializeGA4();
 // once to fetch fresh index.html. Guarded by sessionStorage to avoid loops.
 const handleStaleChunk = (err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err ?? '');
-  if (!/Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk \d+ failed|ChunkLoadError/i.test(msg)) {
+  if (!/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Loading chunk \d+ failed|ChunkLoadError|Failed to load module script|Unable to preload CSS for/i.test(msg)) {
     return;
   }
   if (sessionStorage.getItem('chunk-reload') === '1') return;

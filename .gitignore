@@ -51,6 +51,11 @@ deploy/.env.staging
 deploy/.env.backend
 deploy/deployment.json
 
+# Cached previous-deploy hashed assets, carried into the next image for
+# stale-tab grace. Populated by deploy.ps1 — do not commit contents.
+deploy/.legacy-assets/*
+!deploy/.legacy-assets/.gitkeep
+
 # User data dumps
 auth_users_dump.csv
 db_emails.txt

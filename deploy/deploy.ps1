@@ -93,6 +93,14 @@ if (-not $SkipBuild) {
     if (-not $BackendOnly) {
         Write-Host "[2/5] Building nginx/frontend Docker image..." -ForegroundColor Yellow
 
+        # Ensure legacy-assets cache directory exists so the Dockerfile COPY
+        # succeeds even on the very first deploy with this change.
+        $LegacyAssetsDir = Join-Path $RepoRoot "deploy\.legacy-assets"
+        if (-not (Test-Path $LegacyAssetsDir)) {
+            New-Item -ItemType Directory -Path $LegacyAssetsDir | Out-Null
+            New-Item -ItemType File -Path (Join-Path $LegacyAssetsDir ".gitkeep") -Force | Out-Null
+        }
+
         $buildArgs = @(
             "--build-arg", "VITE_SUPABASE_URL=$($EnvVars['VITE_SUPABASE_URL'])",
             "--build-arg", "VITE_SUPABASE_ANON_KEY=$($EnvVars['VITE_SUPABASE_ANON_KEY'])",
@@ -110,6 +118,24 @@ if (-not $SkipBuild) {
             .
         if ($LASTEXITCODE -ne 0) { Write-Host "Nginx/frontend build failed!" -ForegroundColor Red; exit 1 }
         Write-Host "Nginx/frontend image built successfully." -ForegroundColor Green
+
+        # Refresh the legacy-assets cache from the just-built image so the NEXT
+        # deploy can carry these hashed assets forward for stale-tab grace.
+        Write-Host "  Refreshing legacy-assets cache from new image..." -ForegroundColor DarkGray
+        $tempContainer = docker create newmeca-nginx:latest
+        if ($LASTEXITCODE -ne 0 -or -not $tempContainer) {
+            Write-Host "  WARN: Could not create temp container to refresh legacy-assets cache." -ForegroundColor Yellow
+        } else {
+            Remove-Item -Recurse -Force $LegacyAssetsDir -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $LegacyAssetsDir | Out-Null
+            docker cp "${tempContainer}:/usr/share/nginx/html/assets/." $LegacyAssetsDir
+            $cpExit = $LASTEXITCODE
+            docker rm $tempContainer | Out-Null
+            New-Item -ItemType File -Path (Join-Path $LegacyAssetsDir ".gitkeep") -Force | Out-Null
+            if ($cpExit -ne 0) {
+                Write-Host "  WARN: docker cp of /usr/share/nginx/html/assets/ failed (exit $cpExit). Next deploy will lack legacy assets." -ForegroundColor Yellow
+            }
+        }
     }
 } else {
     Write-Host "[1-2/5] Skipping builds (--SkipBuild flag)" -ForegroundColor DarkGray

@@ -280,7 +280,7 @@ export function OrderDetailPage() {
                 If you have questions about your order, please contact our support team.
               </p>
               <Link
-                to="/support"
+                to="/member-support"
                 className="text-orange-500 hover:text-orange-400 font-medium text-sm"
               >
                 Contact Support →
