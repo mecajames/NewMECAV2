@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, ClipboardCheck, Plus, ChevronRight, CheckCircle2,
+  ArrowLeft, ClipboardCheck, Plus, ChevronRight, ChevronDown, CheckCircle2,
   AlertCircle, Clock, Circle, Users, BarChart3, ArrowRightFromLine,
   Pencil, PauseCircle, PlayCircle, Trash2,
 } from 'lucide-react';
@@ -18,6 +18,22 @@ export default function QAChecklistPage() {
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // Master-item picker for the create modal — lazy-loaded when the modal opens
+  const [masterSections, setMasterSections] = useState<any[]>([]);
+  const [loadingMaster, setLoadingMaster] = useState(false);
+  const [selectedMasterIds, setSelectedMasterIds] = useState<Set<string>>(new Set());
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set());
+  // Pending custom items the admin has added but not yet submitted
+  const [pendingCustomItems, setPendingCustomItems] = useState<Array<{
+    title: string; steps: string[]; expectedResult: string; pageUrl?: string; promoteToMaster: boolean;
+  }>>([]);
+  // Draft of the custom-item form
+  const [customDraftTitle, setCustomDraftTitle] = useState('');
+  const [customDraftSteps, setCustomDraftSteps] = useState('');
+  const [customDraftExpected, setCustomDraftExpected] = useState('');
+  const [customDraftPageUrl, setCustomDraftPageUrl] = useState('');
+  const [customDraftPromote, setCustomDraftPromote] = useState(false);
 
   // Inline edit modal — driven from the round-list cards so admins don't have
   // to drill into the round detail just to tweak a title.
@@ -105,17 +121,108 @@ export default function QAChecklistPage() {
     }
   };
 
+  const openCreateModal = async () => {
+    setShowCreateModal(true);
+    setCreateTitle('');
+    setCreateDescription('');
+    setPendingCustomItems([]);
+    setCustomDraftTitle(''); setCustomDraftSteps(''); setCustomDraftExpected(''); setCustomDraftPageUrl(''); setCustomDraftPromote(false);
+    setLoadingMaster(true);
+    try {
+      const sections = await qaApi.listMasterItems();
+      setMasterSections(sections);
+      // Default: every master item selected. Sections collapsed for visual scan.
+      const allIds = new Set<string>();
+      sections.forEach((s: any) => s.items.forEach((i: any) => allIds.add(i.id)));
+      setSelectedMasterIds(allIds);
+      setExpandedSectionIds(new Set());
+    } catch (err) {
+      console.error('Failed to load master items:', err);
+    } finally {
+      setLoadingMaster(false);
+    }
+  };
+
+  const toggleSectionExpanded = (sectionId: string) => {
+    setExpandedSectionIds(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  };
+
+  const toggleItemSelected = (itemId: string) => {
+    setSelectedMasterIds(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const toggleSectionAll = (section: any) => {
+    const ids = section.items.map((i: any) => i.id);
+    const allOn = ids.every((id: string) => selectedMasterIds.has(id));
+    setSelectedMasterIds(prev => {
+      const next = new Set(prev);
+      if (allOn) ids.forEach((id: string) => next.delete(id));
+      else       ids.forEach((id: string) => next.add(id));
+      return next;
+    });
+  };
+
+  const selectAllMaster = () => {
+    const ids = new Set<string>();
+    masterSections.forEach(s => s.items.forEach((i: any) => ids.add(i.id)));
+    setSelectedMasterIds(ids);
+  };
+  const deselectAllMaster = () => setSelectedMasterIds(new Set());
+
+  const addPendingCustomItem = () => {
+    if (!customDraftTitle.trim() || !customDraftExpected.trim()) {
+      alert('Title and expected result are required');
+      return;
+    }
+    const steps = customDraftSteps.split('\n').map(s => s.trim()).filter(Boolean);
+    if (steps.length === 0) {
+      alert('Add at least one step (one per line)');
+      return;
+    }
+    setPendingCustomItems(prev => [...prev, {
+      title: customDraftTitle.trim(),
+      steps,
+      expectedResult: customDraftExpected.trim(),
+      pageUrl: customDraftPageUrl.trim() || undefined,
+      promoteToMaster: customDraftPromote,
+    }]);
+    setCustomDraftTitle(''); setCustomDraftSteps(''); setCustomDraftExpected(''); setCustomDraftPageUrl(''); setCustomDraftPromote(false);
+  };
+
+  const removePendingCustomItem = (idx: number) => {
+    setPendingCustomItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleCreateRound = async () => {
     if (!createTitle.trim()) return;
     setCreating(true);
     try {
-      await qaApi.createRound({ title: createTitle, description: createDescription || undefined });
+      await qaApi.createRound({
+        title: createTitle,
+        description: createDescription || undefined,
+        selection: {
+          masterItemIds: Array.from(selectedMasterIds),
+          customItems: pendingCustomItems,
+        },
+      });
       setShowCreateModal(false);
       setCreateTitle('');
       setCreateDescription('');
+      setSelectedMasterIds(new Set());
+      setPendingCustomItems([]);
       await loadData();
-    } catch (err) {
-      console.error('Failed to create round:', err);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to create round');
     } finally {
       setCreating(false);
     }
@@ -159,7 +266,7 @@ export default function QAChecklistPage() {
             <p className="text-slate-400 mt-1">Manage QA testing rounds, assign reviewers, and track progress</p>
           </div>
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateModal}
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-medium transition-colors"
           >
             <Plus className="h-4 w-4" /> New QA Round
@@ -222,7 +329,7 @@ export default function QAChecklistPage() {
             <h3 className="text-xl font-bold text-white mb-2">No QA Rounds Yet</h3>
             <p className="text-slate-400 mb-6">Create your first QA round to start testing the site.</p>
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={openCreateModal}
               className="px-6 py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-medium transition-colors"
             >
               Create First Round
@@ -372,44 +479,192 @@ export default function QAChecklistPage() {
         )}
 
         {/* Create Modal */}
-        {showCreateModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
-              <h3 className="text-white font-bold text-lg mb-4">Create New QA Round</h3>
-              <p className="text-slate-400 text-sm mb-4">
-                This creates a new QA round with the current master checklist (every section and item). You can then assign reviewers to walk through the site and sign off.
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-slate-300 text-sm font-medium block mb-1">Title *</label>
-                  <input
-                    type="text"
-                    value={createTitle}
-                    onChange={(e) => setCreateTitle(e.target.value)}
-                    placeholder="e.g., Initial QA Review"
-                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                  />
+        {showCreateModal && (() => {
+          const totalMaster = masterSections.reduce((n, s) => n + s.items.length, 0);
+          return (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+              <div className="bg-slate-800 rounded-xl border border-slate-700 max-w-3xl w-full max-h-[90vh] flex flex-col">
+                <div className="p-6 border-b border-slate-700">
+                  <h3 className="text-white font-bold text-lg mb-1">Create New QA Round</h3>
+                  <p className="text-slate-400 text-sm">Pick which checklist items reviewers should walk. You can also add custom items now or later.</p>
                 </div>
-                <div>
-                  <label className="text-slate-300 text-sm font-medium block mb-1">Description (optional)</label>
-                  <textarea
-                    value={createDescription}
-                    onChange={(e) => setCreateDescription(e.target.value)}
-                    placeholder="Notes about this round..."
-                    rows={3}
-                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none resize-y"
-                  />
+
+                <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                  <div>
+                    <label className="text-slate-300 text-sm font-medium block mb-1">Title *</label>
+                    <input
+                      type="text"
+                      value={createTitle}
+                      onChange={(e) => setCreateTitle(e.target.value)}
+                      placeholder="e.g., Initial QA Review"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 text-sm font-medium block mb-1">Description (optional)</label>
+                    <textarea
+                      value={createDescription}
+                      onChange={(e) => setCreateDescription(e.target.value)}
+                      placeholder="Notes about this round..."
+                      rows={2}
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none resize-y"
+                    />
+                  </div>
+
+                  {/* Master items picker */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-slate-300 text-sm font-medium">
+                        Items to include
+                        <span className="text-slate-500 font-normal ml-2">{selectedMasterIds.size} of {totalMaster} selected</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <button onClick={selectAllMaster} className="text-xs text-orange-400 hover:text-orange-300">Select all</button>
+                        <span className="text-slate-600 text-xs">·</span>
+                        <button onClick={deselectAllMaster} className="text-xs text-slate-400 hover:text-slate-200">Clear</button>
+                      </div>
+                    </div>
+                    {loadingMaster ? (
+                      <div className="text-slate-400 text-sm py-4 text-center">Loading checklist…</div>
+                    ) : (
+                      <div className="border border-slate-700 rounded-lg max-h-72 overflow-y-auto">
+                        {masterSections.map((section: any) => {
+                          const ids = section.items.map((i: any) => i.id);
+                          const selectedInSection = ids.filter((id: string) => selectedMasterIds.has(id)).length;
+                          const allOn = selectedInSection === ids.length && ids.length > 0;
+                          const someOn = selectedInSection > 0 && selectedInSection < ids.length;
+                          const expanded = expandedSectionIds.has(section.id);
+                          return (
+                            <div key={section.id} className="border-b border-slate-700/60 last:border-b-0">
+                              <div className="flex items-center gap-2 px-3 py-2 hover:bg-slate-700/40">
+                                <input
+                                  type="checkbox"
+                                  checked={allOn}
+                                  ref={el => { if (el) el.indeterminate = someOn; }}
+                                  onChange={() => toggleSectionAll(section)}
+                                  className="cursor-pointer"
+                                />
+                                <button onClick={() => toggleSectionExpanded(section.id)} className="flex-1 flex items-center gap-2 text-left">
+                                  {expanded
+                                    ? <ChevronDown className="h-4 w-4 text-slate-400" />
+                                    : <ChevronRight className="h-4 w-4 text-slate-400" />}
+                                  <span className="text-white text-sm font-medium truncate">{section.title}</span>
+                                  <span className="text-slate-500 text-xs">{selectedInSection}/{ids.length}</span>
+                                </button>
+                              </div>
+                              {expanded && (
+                                <div className="pl-9 pr-3 py-1 bg-slate-900/30 space-y-1">
+                                  {section.items.map((item: any) => (
+                                    <label key={item.id} className="flex items-start gap-2 py-1 cursor-pointer hover:bg-slate-700/30 rounded px-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedMasterIds.has(item.id)}
+                                        onChange={() => toggleItemSelected(item.id)}
+                                        className="mt-0.5 cursor-pointer"
+                                      />
+                                      <span className="text-slate-200 text-xs flex-1">{item.title}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Custom items composer */}
+                  <div>
+                    <label className="text-slate-300 text-sm font-medium block mb-2">
+                      Custom items <span className="text-slate-500 font-normal">({pendingCustomItems.length})</span>
+                    </label>
+                    {pendingCustomItems.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {pendingCustomItems.map((c, idx) => (
+                          <div key={idx} className="bg-slate-900/40 border border-slate-700 rounded-lg p-3 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-white text-sm font-medium flex items-center gap-2">
+                                {c.title}
+                                {c.promoteToMaster && (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-emerald-700/40 text-emerald-200 rounded font-semibold uppercase tracking-wide">Master</span>
+                                )}
+                              </div>
+                              <p className="text-slate-400 text-xs mt-1">{c.steps.length} step{c.steps.length === 1 ? '' : 's'} · expects: {c.expectedResult.slice(0, 80)}{c.expectedResult.length > 80 ? '…' : ''}</p>
+                            </div>
+                            <button onClick={() => removePendingCustomItem(idx)} className="text-red-400 hover:text-red-300 flex-shrink-0">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="bg-slate-900/30 border border-slate-700 rounded-lg p-3 space-y-2">
+                      <input
+                        type="text"
+                        value={customDraftTitle}
+                        onChange={(e) => setCustomDraftTitle(e.target.value)}
+                        placeholder="Item title (e.g., Verify new search filter)"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 outline-none"
+                      />
+                      <textarea
+                        value={customDraftSteps}
+                        onChange={(e) => setCustomDraftSteps(e.target.value)}
+                        placeholder="Steps (one per line)&#10;Open the search page&#10;Type a query&#10;Click apply"
+                        rows={3}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 outline-none resize-y font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={customDraftExpected}
+                        onChange={(e) => setCustomDraftExpected(e.target.value)}
+                        placeholder="Expected result"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={customDraftPageUrl}
+                        onChange={(e) => setCustomDraftPageUrl(e.target.value)}
+                        placeholder="Page URL (optional, e.g., /admin/events)"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm placeholder-slate-400 focus:ring-2 focus:ring-orange-500 outline-none"
+                      />
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 text-slate-300 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={customDraftPromote}
+                            onChange={(e) => setCustomDraftPromote(e.target.checked)}
+                            className="cursor-pointer"
+                          />
+                          Also save to the master checklist for future rounds
+                        </label>
+                        <button
+                          onClick={addPendingCustomItem}
+                          disabled={!customDraftTitle.trim() || !customDraftExpected.trim() || !customDraftSteps.trim()}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                        >
+                          + Add Custom Item
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-3 justify-end mt-6">
-                <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">Cancel</button>
-                <button onClick={handleCreateRound} disabled={!createTitle.trim() || creating} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
-                  {creating ? 'Creating...' : 'Create Round'}
-                </button>
+
+                <div className="flex gap-3 justify-end p-6 border-t border-slate-700">
+                  <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">Cancel</button>
+                  <button
+                    onClick={handleCreateRound}
+                    disabled={!createTitle.trim() || creating || (selectedMasterIds.size === 0 && pendingCustomItems.length === 0)}
+                    title={selectedMasterIds.size === 0 && pendingCustomItems.length === 0 ? 'Pick at least one item or add a custom one' : undefined}
+                    className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {creating ? 'Creating…' : `Create Round (${selectedMasterIds.size + pendingCustomItems.length} items)`}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

@@ -28,8 +28,58 @@ export async function listRounds() {
   return response.data;
 }
 
-export async function createRound(data: { title: string; description?: string }) {
+export interface CustomItemInput {
+  sectionId?: string;
+  sectionTitle?: string;
+  title: string;
+  steps: string[];
+  expectedResult: string;
+  pageUrl?: string;
+  promoteToMaster?: boolean;
+}
+
+export interface RoundItemSelection {
+  /** Master item IDs to include. Omit to include every active master item. */
+  masterItemIds?: string[];
+  customItems?: CustomItemInput[];
+}
+
+export async function createRound(data: { title: string; description?: string; selection?: RoundItemSelection }) {
   const response = await axios.post('/api/qa/rounds', data);
+  return response.data;
+}
+
+// =============================================================================
+// MASTER ITEMS + ROUND ITEM MANAGEMENT
+// =============================================================================
+
+export async function listMasterItems() {
+  const response = await axios.get('/api/qa/master-items');
+  return response.data;
+}
+
+export async function getRoundItems(roundId: string) {
+  const response = await axios.get(`/api/qa/rounds/${roundId}/items`);
+  return response.data;
+}
+
+export async function addMasterItemsToRound(roundId: string, masterItemIds: string[]) {
+  const response = await axios.post(`/api/qa/rounds/${roundId}/items/master`, { masterItemIds });
+  return response.data;
+}
+
+export async function addCustomItemToRound(roundId: string, item: CustomItemInput) {
+  const response = await axios.post(`/api/qa/rounds/${roundId}/items/custom`, item);
+  return response.data;
+}
+
+export async function promoteItemToMaster(itemId: string) {
+  const response = await axios.post(`/api/qa/items/${itemId}/promote`);
+  return response.data;
+}
+
+export async function removeRoundItem(itemId: string) {
+  const response = await axios.delete(`/api/qa/items/${itemId}`);
   return response.data;
 }
 
@@ -157,4 +207,10 @@ export const qaApi = {
   submitResponse,
   submitFix,
   getAdminUsers,
+  listMasterItems,
+  getRoundItems,
+  addMasterItemsToRound,
+  addCustomItemToRound,
+  promoteItemToMaster,
+  removeRoundItem,
 };
