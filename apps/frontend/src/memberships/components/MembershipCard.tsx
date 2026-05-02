@@ -55,7 +55,7 @@ export default function MembershipCard({
         </style>
       </head>
       <body>
-        ${printContent.innerHTML}
+        ${printContent.outerHTML}
         <script>window.onload = function() { window.print(); window.close(); }<\/script>
       </body>
       </html>

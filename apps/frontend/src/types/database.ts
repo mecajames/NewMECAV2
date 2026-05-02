@@ -68,6 +68,12 @@ export interface Profile {
   ed_certification_expires?: string;
   force_password_change?: boolean;
   cover_image_position?: { x: number; y: number };
+  // Login access control
+  maintenance_login_allowed?: boolean;
+  login_banned?: boolean;
+  login_banned_at?: string;
+  login_banned_by?: string;
+  login_banned_reason?: string;
   member_since: string;
   created_at: string;
   updated_at: string;

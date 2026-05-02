@@ -181,6 +181,30 @@ export class Profile {
   @OneToMany(() => Profile, profile => profile.master_profile)
   secondary_profiles = new Collection<Profile>(this);
 
+  // =============================================================================
+  // Login Access Control (admin-managed via the Members page bulk actions)
+  // =============================================================================
+
+  // When site-wide maintenance mode is on, normally only admins can sign in.
+  // Setting this lets a specific member through — used to grant temporary
+  // access (e.g. a beta tester or contractor) without elevating to staff.
+  @Property({ type: 'boolean', default: false, fieldName: 'maintenance_login_allowed' })
+  maintenance_login_allowed: boolean = false;
+
+  // Hard ban. Enforced both in Supabase Auth (ban_duration kicks active
+  // sessions and blocks future sign-ins) and at the API guard layer.
+  @Property({ type: 'boolean', default: false, fieldName: 'login_banned' })
+  login_banned: boolean = false;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'login_banned_at' })
+  login_banned_at?: Date;
+
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'login_banned_by' })
+  login_banned_by?: Profile;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'login_banned_reason' })
+  login_banned_reason?: string;
+
   // Original membership date (preserved from V1 migration or set on profile creation)
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'member_since' })
   member_since?: Date;

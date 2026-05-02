@@ -414,6 +414,26 @@ export class ProfilesController {
     return this.profilesService.generateImpersonationLink(id, redirectTo);
   }
 
+  // ===== Login Access Control =====
+
+  /**
+   * Bulk-toggle login access for selected profiles. Backs the new buttons
+   * on the admin Members page (Allow/Revoke Maintenance Login, Ban, Unban).
+   */
+  @Post('admin/bulk-login-control')
+  @HttpCode(HttpStatus.OK)
+  async bulkLoginControl(
+    @Headers('authorization') authHeader: string,
+    @Body() body: {
+      profileIds: string[];
+      action: 'allow_maintenance' | 'revoke_maintenance' | 'ban' | 'unban';
+      reason?: string;
+    },
+  ) {
+    const { profile: admin } = await this.requireAdmin(authHeader);
+    return this.profilesService.bulkLoginControl(admin.id, body);
+  }
+
   // ===== Member Statistics Endpoints =====
 
   /**
