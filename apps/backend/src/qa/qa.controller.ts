@@ -7,7 +7,7 @@ import { UserRole, QaResponseStatus, QaFixStatus } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
-import { QaService } from './qa.service';
+import { QaService, RoundItemSelection, CustomItemInput } from './qa.service';
 
 @Controller('api/qa')
 export class QaController {
@@ -55,10 +55,10 @@ export class QaController {
   @Post('rounds')
   async createRound(
     @Headers('authorization') authHeader: string,
-    @Body() body: { title: string; description?: string },
+    @Body() body: { title: string; description?: string; selection?: RoundItemSelection },
   ) {
     const { profile } = await this.requireAdmin(authHeader);
-    return this.qaService.createRound(body.title, body.description, profile.id);
+    return this.qaService.createRound(body.title, body.description, profile.id, body.selection);
   }
 
   @Post('rounds/from-previous/:id')
@@ -96,6 +96,43 @@ export class QaController {
   ) {
     await this.requireAdmin(authHeader);
     return this.qaService.completeRound(roundId);
+  }
+
+  @Put('rounds/:id')
+  async updateRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+    @Body() body: { title?: string; description?: string | null },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.updateRound(roundId, body);
+  }
+
+  @Post('rounds/:id/suspend')
+  async suspendRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.setSuspended(roundId, true);
+  }
+
+  @Post('rounds/:id/resume')
+  async resumeRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.setSuspended(roundId, false);
+  }
+
+  @Delete('rounds/:id')
+  async deleteRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.deleteRound(roundId);
   }
 
   @Get('rounds/:id/failed-items')
@@ -167,6 +204,61 @@ export class QaController {
   ) {
     const { profile } = await this.requireAdmin(authHeader);
     return this.qaService.submitFix(responseId, body, profile.id);
+  }
+
+  // ── Master Checklist + Round Item Management ──
+
+  @Get('master-items')
+  async listMasterItems(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.listMasterSections();
+  }
+
+  @Get('rounds/:id/items')
+  async getRoundItems(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.getRoundItems(roundId);
+  }
+
+  @Post('rounds/:id/items/master')
+  async addMasterItems(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+    @Body() body: { masterItemIds: string[] },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.addMasterItemsToRound(roundId, body.masterItemIds);
+  }
+
+  @Post('rounds/:id/items/custom')
+  async addCustomItem(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+    @Body() body: CustomItemInput,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.addCustomItemToRound(roundId, body);
+  }
+
+  @Post('items/:id/promote')
+  async promoteItemToMaster(
+    @Headers('authorization') authHeader: string,
+    @Param('id') itemId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.promoteCustomItemToMaster(itemId);
+  }
+
+  @Delete('items/:id')
+  async removeItem(
+    @Headers('authorization') authHeader: string,
+    @Param('id') itemId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.removeItemFromRound(itemId);
   }
 
   // ── Admin Users ──

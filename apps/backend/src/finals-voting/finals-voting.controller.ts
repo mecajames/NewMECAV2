@@ -151,6 +151,33 @@ export class FinalsVotingController {
     return this.finalsVotingService.finalizeSession(id);
   }
 
+  @Post('admin/sessions/:id/suspend')
+  async suspendSession(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.finalsVotingService.setSuspended(id, true);
+  }
+
+  @Post('admin/sessions/:id/unsuspend')
+  async unsuspendSession(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.finalsVotingService.setSuspended(id, false);
+  }
+
+  @Post('admin/sessions/:id/cancel')
+  async cancelSession(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.finalsVotingService.cancelSession(id);
+  }
+
   @Post('admin/sessions/:id/clone')
   @HttpCode(HttpStatus.CREATED)
   async cloneSession(

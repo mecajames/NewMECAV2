@@ -28,6 +28,13 @@ export class VotingSession {
   @Property({ fieldName: 'status' })
   status: VotingSessionStatus = VotingSessionStatus.DRAFT;
 
+  // Admin-controlled override that hides the session from the public homepage
+  // card and the member-facing active-session lookup, independent of dates or
+  // status. Used to pause a live session for edits or retire a test session
+  // without deleting it.
+  @Property({ type: 'boolean', default: false, fieldName: 'suspended' })
+  suspended: boolean = false;
+
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'results_finalized_at' })
   resultsFinalizedAt?: Date;
 

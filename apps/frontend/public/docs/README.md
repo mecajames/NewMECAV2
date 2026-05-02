@@ -2,89 +2,88 @@
 
 Welcome to the MECA Car Audio platform documentation. This directory contains all technical documentation organized by category.
 
+> **Looking for a top-level admin walkthrough?** Start with the [Admin Dashboard Overview](./Admin-Dashboard-Overview.html) — it covers every section of the admin dashboard with links to the deeper guides.
+
 ## 📚 Documentation Categories
 
-### 🚀 Getting Started
-Essential documentation for new developers and contributors.
+### 🛠️ Admin Guides
+End-to-end documentation for site owners and operators.
 
-- **[ONBOARDING.md](./getting-started/ONBOARDING.md)** - Complete developer onboarding guide with architecture overview
-- **[README.md](./getting-started/README.md)** - Main project README with overview and quick start
-- **[QUICK-COMMANDS.md](./getting-started/QUICK-COMMANDS.md)** - Quick reference for common commands
+- **[Admin Dashboard Overview](./Admin-Dashboard-Overview.html)** — every admin section explained, with links to detailed guides
+- **[Achievement System](./Admin-Achievements-Guide.html)** — badge catalog, earning rules, manual awards
+- **[Judge & Event Director Management](./Admin-Judge-EventDirector-Guide.html)** — application → approval → certification lifecycle
+- **[Secondary Memberships](./Admin-Secondary-Memberships-Guide.html)** — family / team sub-account model
+- **[User Membership Workflows](./Admin-User-Membership-Workflows.html)** — purchase / renewal / upgrade / refund flows
+- **[Points Configuration](./Points-Configuration-Guide.html)** — point values per place, class, format
+- **[Master / Secondary System Flow](./Master-Secondary-System-Flow.html)** — visual flowchart
+- **[MECA ID System](./MECA-ID-System.html)** — assignment logic and flowchart
+
+### 🧪 QA & Testing
+- **[QA Checklist (legacy reference)](./MECA-QA-Checklist.html)** — earlier checklist content; live owner-driven checklist now lives at `/admin/qa-checklist`
+- **[QA Testing: Secondary Memberships](./QA-Testing-Secondary-Memberships.html)**
+
+### 👤 User Guides
+- **[Family & Team Memberships](./User-Guide-Family-Team-Memberships.html)** — how members manage sub-accounts
+
+### 🧩 System & Architecture
+- **[Judge & Event Director System (architecture)](./MECA-Judge-EventDirector-System.html)**
+- **[Judge & Event Director System Specification](./MECA-Judge-EventDirector-System-Prompt.html)** — full development specification
+- **[Business Logic (Overview)](./BUSINESS_LOGIC_OVERVIEW.html)** — high-level cross-module dependencies
+- **[Business Logic (Detailed)](./BUSINESS_LOGIC_DETAILED.html)** — full architectural reference
+
+### 📋 Results & Operations
+- **[Results Entry System](./Results-Entry-System.html)** — manual, Excel, and TermLab import
+- **[Results Entry Business Logic](./Results-Entry-Business-Logic.html)** — MECA ID and membership reconciliation rules
 
 ### 🚢 Deployment
-Documentation for deploying, backing up, and managing the application in production.
+Production deployment, backup, and environment management.
 
-- **[DEPLOYMENT-GUIDE.md](./deployment/DEPLOYMENT-GUIDE.md)** - Complete deployment instructions
-- **[README-DEPLOYMENT.md](./deployment/README-DEPLOYMENT.md)** - Deployment README and overview
-- **[DOCKER.md](./deployment/DOCKER.md)** - Docker setup and container management
-- **[BACKUP-RESTORE-GUIDE.md](./deployment/BACKUP-RESTORE-GUIDE.md)** - Database backup and restore procedures
-- **[EXPORT_IMPORT_GUIDE.md](./deployment/EXPORT_IMPORT_GUIDE.md)** - Data export and import procedures
+- **[DEPLOYMENT-GUIDE.md](./deployment/DEPLOYMENT-GUIDE.md)** — complete deployment instructions
+- **[README-DEPLOYMENT.md](./deployment/README-DEPLOYMENT.md)** — deployment overview
+- **[DOCKER.md](./deployment/DOCKER.md)** — Docker setup and container management
+- **[BACKUP-RESTORE-GUIDE.md](./deployment/BACKUP-RESTORE-GUIDE.md)** — database backup and restore procedures
+- **[EXPORT_IMPORT_GUIDE.md](./deployment/EXPORT_IMPORT_GUIDE.md)** — data export and import procedures
 
 ### ⚙️ Backend
-Backend-specific documentation and setup guides.
-
-- **[MIKRO_ORM_SETUP.md](./backend/MIKRO_ORM_SETUP.md)** - MikroORM configuration and entity setup
+- **[MIKRO_ORM_SETUP.md](./backend/MIKRO_ORM_SETUP.md)** — MikroORM configuration and entity setup
 
 ### 🎨 Frontend
-Frontend-specific documentation, setup guides, and security information.
-
-- **[README.md](./frontend/README.md)** - Frontend project overview
-- **[SETUP_GUIDE.md](./frontend/SETUP_GUIDE.md)** - Frontend setup and configuration
-- **[QUICK_START.md](./frontend/QUICK_START.md)** - Quick start guide for frontend development
-- **[SUPABASE_SETUP.md](./frontend/SUPABASE_SETUP.md)** - Supabase integration and setup
-- **[SECURITY_FIXES.md](./frontend/SECURITY_FIXES.md)** - Security patches and fixes
+- **[README.md](./frontend/README.md)** — frontend project overview
+- **[SETUP_GUIDE.md](./frontend/SETUP_GUIDE.md)** — frontend setup and configuration
+- **[QUICK_START.md](./frontend/QUICK_START.md)** — quick start guide for frontend development
+- **[SUPABASE_SETUP.md](./frontend/SUPABASE_SETUP.md)** — Supabase integration and setup
+- **[SECURITY_FIXES.md](./frontend/SECURITY_FIXES.md)** — security patches and fixes
 
 ### ✨ Features
-Documentation for specific features and integrations.
-
-- **[RECAPTCHA_SETUP.md](./features/RECAPTCHA_SETUP.md)** - Google reCAPTCHA v3 setup guide
-- **[RECAPTCHA_IMPLEMENTATION_SUMMARY.md](./features/RECAPTCHA_IMPLEMENTATION_SUMMARY.md)** - reCAPTCHA implementation summary
-- **[RECAPTCHA_CHECKLIST.md](./features/RECAPTCHA_CHECKLIST.md)** - reCAPTCHA testing and deployment checklist
-- **[RECAPTCHA_ARCHITECTURE.md](./features/RECAPTCHA_ARCHITECTURE.md)** - reCAPTCHA architecture and diagrams
+- **[RECAPTCHA_SETUP.md](./features/RECAPTCHA_SETUP.md)** — Google reCAPTCHA v3 setup guide
+- **[RECAPTCHA_IMPLEMENTATION_SUMMARY.md](./features/RECAPTCHA_IMPLEMENTATION_SUMMARY.md)** — implementation summary
+- **[RECAPTCHA_CHECKLIST.md](./features/RECAPTCHA_CHECKLIST.md)** — testing and deployment checklist
+- **[RECAPTCHA_ARCHITECTURE.md](./features/RECAPTCHA_ARCHITECTURE.md)** — architecture and diagrams
 
 ### 📜 Scripts
-Documentation for utility scripts and automation.
-
-- **[README.md](./scripts/README.md)** - Scripts documentation and usage
+- **[scripts/README.md](./scripts/README.md)** — utility scripts documentation
+- **[scripts/md_to_themed_html.py](./scripts/md_to_themed_html.py)** — markdown→themed-HTML converter used to regenerate doc pages
 
 ## 🗂️ Directory Structure
 
 ```
 docs/
-├── README.md                    # This file
-├── getting-started/             # New developer onboarding
-│   ├── ONBOARDING.md
-│   ├── README.md
-│   └── QUICK-COMMANDS.md
-├── deployment/                  # Production deployment
-│   ├── DEPLOYMENT-GUIDE.md
-│   ├── README-DEPLOYMENT.md
-│   ├── DOCKER.md
-│   ├── BACKUP-RESTORE-GUIDE.md
-│   └── EXPORT_IMPORT_GUIDE.md
-├── backend/                     # Backend documentation
-│   └── MIKRO_ORM_SETUP.md
-├── frontend/                    # Frontend documentation
-│   ├── README.md
-│   ├── SETUP_GUIDE.md
-│   ├── QUICK_START.md
-│   ├── SUPABASE_SETUP.md
-│   └── SECURITY_FIXES.md
-├── features/                    # Feature-specific docs
-│   ├── RECAPTCHA_SETUP.md
-│   ├── RECAPTCHA_IMPLEMENTATION_SUMMARY.md
-│   ├── RECAPTCHA_CHECKLIST.md
-│   └── RECAPTCHA_ARCHITECTURE.md
-└── scripts/                     # Scripts documentation
-    └── README.md
+├── index.html                   # Public docs landing page
+├── README.html / README.md      # This index
+├── *.html                       # Themed admin & system guides
+├── deployment/                  # Production deployment docs (markdown)
+├── backend/                     # Backend technical docs (markdown)
+├── frontend/                    # Frontend technical docs (markdown)
+├── features/                    # Feature-specific docs (markdown)
+└── scripts/                     # Documentation utility scripts
 ```
 
 ## 🎯 Quick Links
 
-**New to the project?** Start here:
-1. [Getting Started README](./getting-started/README.md)
-2. [Developer Onboarding Guide](./getting-started/ONBOARDING.md)
-3. [Quick Commands Reference](./getting-started/QUICK-COMMANDS.md)
+**Owner / operator looking for admin docs?**
+- [Admin Dashboard Overview](./Admin-Dashboard-Overview.html)
+- [Judge & Event Director Management](./Admin-Judge-EventDirector-Guide.html)
+- [Achievement System](./Admin-Achievements-Guide.html)
 
 **Setting up the development environment?**
 - [Frontend Setup Guide](./frontend/SETUP_GUIDE.md)
@@ -101,46 +100,33 @@ docs/
 
 When adding new documentation:
 
-1. **Choose the appropriate directory:**
-   - Getting started guides → `getting-started/`
-   - Deployment/operations docs → `deployment/`
-   - Backend technical docs → `backend/`
-   - Frontend technical docs → `frontend/`
-   - Feature-specific docs → `features/`
-   - Script documentation → `scripts/`
+1. **Choose the appropriate location:**
+   - Admin / system guides intended to be browsed in HTML → top-level `docs/` as `.html`
+   - Feature, deployment, or technical reference docs → existing subdirectories as `.md`
+2. **Update this index** with a link to your new document
+3. **For new admin / system guides written as markdown**, run the converter to produce a themed HTML version:
 
-2. **Update this index** (README.md) with a link to your new document
+   ```bash
+   python docs/scripts/md_to_themed_html.py docs/Your-Doc.md docs/Your-Doc.html "Your Doc Title"
+   ```
 
-3. **Follow the existing format:**
+4. **Follow the existing format:**
    - Use clear, descriptive titles
-   - Include table of contents for longer docs
+   - Include a table of contents for longer docs
    - Add code examples where appropriate
    - Include troubleshooting sections
-
-4. **Keep documentation up-to-date:**
-   - Update docs when code changes
-   - Remove outdated information
-   - Add version/date information when relevant
-
-## 🔍 Search Tips
-
-Most code editors allow you to search across all files. Use these patterns to find specific documentation:
-
-- Architecture patterns: Search in `getting-started/ONBOARDING.md`
-- Deployment steps: Search in `deployment/DEPLOYMENT-GUIDE.md`
-- Feature setup: Search in `features/` directory
-- Quick commands: Check `getting-started/QUICK-COMMANDS.md`
+5. **Keep documentation up-to-date when code changes** — remove outdated information and add version/date stamps when relevant.
 
 ## 📧 Questions?
 
 If you can't find what you're looking for:
 
-1. Check the [main README](./getting-started/README.md)
-2. Review the [ONBOARDING guide](./getting-started/ONBOARDING.md)
+1. Browse the public docs landing at [`index.html`](./index.html)
+2. Start with the [Admin Dashboard Overview](./Admin-Dashboard-Overview.html)
 3. Search across all docs in your editor
 4. Ask the team in the project chat
 
 ---
 
-**Last Updated:** November 13, 2025
-**Documentation Version:** 1.0
+**Last Updated:** May 2, 2026
+**Documentation Version:** 2.0

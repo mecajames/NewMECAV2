@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retailer &amp; Manufacturer Account Setup - MECA Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
+    </style>
+</head>
+<body>
+    <nav style="margin-bottom: 24px; font-size: 0.9rem;">
+        <a href="index.html" style="color:#64748b;">← Documentation Index</a>
+    </nav>
+
+    <h1>Retailer &amp; Manufacturer Account Setup</h1>
+    <p class="subtitle">How retailer / manufacturer accounts and listings work, and how to create them end-to-end</p>
+
+<p><span class="nav-path">/admin/business-listings · /admin/members</span></p>
+
+<div class="info-box">
+  <h4>How retailers and manufacturers fit into the platform</h4>
+  <p>A "retailer" or "manufacturer" on MECA is a business that sells car-audio products and wants to be discoverable by competitors. They get a public directory listing, can offer member-only discount codes, can participate as event sponsors, and can advertise via the banner system. Setting one up has both a <strong>profile</strong> (member account with retailer / manufacturer role) and a <strong>listing</strong> (the directory entry).</p>
+</div>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ul>
+    <li><a href="#concept">The data model — member account vs listing</a></li>
+    <li><a href="#new-retailer">Create a new retailer account from scratch</a></li>
+    <li><a href="#new-manufacturer">Create a new manufacturer account from scratch</a></li>
+    <li><a href="#approve">Approving a self-submitted listing</a></li>
+    <li><a href="#fields">Field reference — what each field does</a></li>
+    <li><a href="#sponsor">Sponsor settings &amp; member discount codes</a></li>
+    <li><a href="#deactivate">Deactivate or remove a listing</a></li>
+  </ul>
+</div>
+
+<h2 id="concept">1. The data model — member account vs listing</h2>
+
+<table>
+  <thead><tr><th>Concept</th><th>Where it lives</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Profile</strong> with <code>role = retailer</code> or <code>role = manufacturer</code></td><td><code>profiles</code> table</td><td>The login account. Has email, password, MECA ID. Can log in and manage their own listing.</td></tr>
+    <tr><td><strong>RetailerListing</strong> or <strong>ManufacturerListing</strong></td><td><code>retailer_listings</code> / <code>manufacturer_listings</code> tables</td><td>The directory entry. Business name, description, logo, address, gallery, special offer text. Linked to the profile via <code>user_id</code>.</td></tr>
+    <tr><td><strong>Membership</strong> with category retail / manufacturer</td><td><code>memberships</code> table</td><td>Optional — if the retailer wants premium placement / sponsor benefits, they purchase a membership. Without it the listing still works but with reduced perks.</td></tr>
+  </tbody>
+</table>
+
+<p>One member can have BOTH a retailer listing and a manufacturer listing if they wear both hats (rare). Most have one or the other.</p>
+
+<h2 id="new-retailer">2. Create a new retailer account from scratch</h2>
+
+<div class="workflow-container">
+  <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Create the user account</div><div class="step-details">From <code>/admin/members</code> click "+ New Member". Set role = <code>retailer</code>. Account type = Member. Fill name, business email, phone. Password approach: send-reset-link so they set their own.</div></div></div>
+  <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Optionally assign retailer membership</div><div class="step-details">If the retailer is a paying sponsor, assign the appropriate retailer-tier membership and select payment method.</div></div></div>
+  <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Create the listing</div><div class="step-details">Open <code>/admin/business-listings</code>. Click "+ New Retailer Listing". Pick the user account you just created. Fill business name, description, address, store type (brick-and-mortar / online / both), business email, phone, website.</div></div></div>
+  <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Upload images</div><div class="step-details">Profile/logo image (square; ~512×512 minimum). Gallery (up to 6 images, optional product link per image). Cover image position adjusted by drag.</div></div></div>
+  <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Set offer text (optional)</div><div class="step-details">A short pitch for MECA members — discount code, exclusive deal, anything that runs on the public retailer profile.</div></div></div>
+  <div class="step"><div class="step-number">6</div><div class="step-content"><div class="step-title">Approve / activate</div><div class="step-details">Toggle <code>isActive</code> and <code>isApproved</code> on. Save. The listing appears on the public Retailers directory and on the user's "My Business" page when they log in.</div></div></div>
+</div>
+
+<h2 id="new-manufacturer">3. Create a new manufacturer account from scratch</h2>
+<p>Same flow as retailer, but role = <code>manufacturer</code>, listing goes into <code>/admin/business-listings</code> → Manufacturers tab, and there's no <code>storeType</code> field. The manufacturer listing has additional fields like product categories and supported formats. Otherwise the click-through is identical.</p>
+
+<h2 id="approve">4. Approving a self-submitted listing</h2>
+<p>If a retailer / manufacturer signed up themselves and filled their listing, it lands in <code>/admin/business-listings</code> with <code>isApproved = false</code>. To approve:</p>
+<div class="workflow-container">
+  <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Filter pending</div><div class="step-details">Open <code>/admin/business-listings</code> and filter by approval status = Pending.</div></div></div>
+  <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Verify the business</div><div class="step-details">Open the listing — confirm the business actually exists (Google their website, check Maps for the address, verify the phone). Make sure the description is appropriate.</div></div></div>
+  <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Approve or reject</div><div class="step-details">Approve flips <code>isApproved = true</code> and the listing goes live in the public directory. Reject with a reason — the user is notified.</div></div></div>
+</div>
+
+<h2 id="fields">5. Field reference</h2>
+<table>
+  <thead><tr><th>Field</th><th>Required?</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Business name</td><td>Yes</td><td>Top of the listing card.</td></tr>
+    <tr><td>Description</td><td>No</td><td>The pitch — what they sell, what makes them different. Plain text, ~500 chars.</td></tr>
+    <tr><td>Offer text</td><td>No</td><td>Member-exclusive pitch — coupon code, "10% off for MECA members", etc. Shown prominently on the public profile.</td></tr>
+    <tr><td>Business email / phone / website</td><td>Recommended</td><td>Public contact for the listing. Independent of the user-account email.</td></tr>
+    <tr><td>Store type (retailer only)</td><td>Yes — defaults to "both"</td><td>Brick-and-mortar / online / both. Drives directory filtering.</td></tr>
+    <tr><td>Address</td><td>Recommended for brick-and-mortar</td><td>Street, city, state, postal code, country. Used for the map pin and "near me" filtering.</td></tr>
+    <tr><td>Profile image (logo)</td><td>Recommended</td><td>Square crop. Shown as the listing card avatar.</td></tr>
+    <tr><td>Gallery (up to 6)</td><td>Optional</td><td>Marketing images. Each image can have a caption and an optional click-through product URL.</td></tr>
+    <tr><td>Cover image position</td><td>Optional</td><td>Adjust which part of a wide image shows in the header crop.</td></tr>
+    <tr><td>isSponsor</td><td>Toggled by admin</td><td>Promotes the listing on the homepage and gives priority placement in the directory.</td></tr>
+    <tr><td>isActive</td><td>Toggle</td><td>Inactive listings are hidden from the public directory but kept in the DB.</td></tr>
+    <tr><td>isApproved</td><td>Toggle</td><td>Set to true once an admin verifies the listing.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="sponsor">6. Sponsor settings &amp; member discount codes</h2>
+<ul>
+  <li><strong>Sponsor flag</strong> — flip <code>isSponsor</code> = true to give the listing priority placement in the directory and a slot on the homepage carousel.</li>
+  <li><strong>Member discount codes</strong> — the offer text field is the simple way; for actual coupon-code redemption at the MECA Shop, create a coupon at <code>/admin/coupons</code> and tell the retailer to advertise it via their offer text.</li>
+  <li><strong>Banner ads</strong> — sponsors typically also run banner ads. See the <a href="Admin-Banner-Ads-Guide.html">Banner Ads guide</a>.</li>
+</ul>
+
+<h2 id="deactivate">7. Deactivate or remove a listing</h2>
+<ul>
+  <li><strong>Deactivate</strong> — toggle <code>isActive = false</code>. Removes from the public directory but the data is kept. Use for businesses that close temporarily.</li>
+  <li><strong>Delete</strong> — use only for clearly-named test entries or duplicates. Cascades any references and cannot be undone.</li>
+  <li><strong>Suspend the user account</strong> — if the retailer is misbehaving (spamming, fraudulent offers), <a href="Admin-Login-Access-Control-Guide.html">ban the underlying user account</a>; the listing automatically becomes hidden because the underlying user can no longer log in to manage it.</li>
+</ul>
+    <footer>
+        <p>MECA Admin Documentation · For platform administrators only — members do not have access to these guides.</p>
+    </footer>
+</body>
+</html>

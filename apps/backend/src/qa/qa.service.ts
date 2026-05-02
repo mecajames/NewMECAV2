@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { QaRoundStatus, QaAssignmentStatus, QaResponseStatus, QaFixStatus } from '@newmeca/shared';
 import { QaRound } from './qa-round.entity';
@@ -6,11 +6,34 @@ import { QaRoundAssignment } from './qa-round-assignment.entity';
 import { QaChecklistItem } from './qa-checklist-item.entity';
 import { QaItemResponse } from './qa-item-response.entity';
 import { QaDeveloperFix } from './qa-developer-fix.entity';
+import { QaMasterItem } from './qa-master-item.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CHECKLIST_SECTIONS } from './qa-checklist-data';
 
+// Shape used by both round-creation and mid-round add for new custom items.
+export interface CustomItemInput {
+  sectionId?: string;        // optional — defaults to a 'custom' bucket
+  sectionTitle?: string;
+  title: string;
+  steps: string[];
+  expectedResult: string;
+  pageUrl?: string;
+  promoteToMaster?: boolean; // if true, also written to qa_master_items
+}
+
+// What the round-creation endpoint accepts. Backwards-compatible: omitting
+// both fields seeds the round with every active master item.
+export interface RoundItemSelection {
+  /** Master item IDs to include. Omit to include every active master item. */
+  masterItemIds?: string[];
+  /** Custom items to add to the round on creation. */
+  customItems?: CustomItemInput[];
+}
+
 @Injectable()
 export class QaService {
+  private readonly logger = new Logger(QaService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -20,8 +43,105 @@ export class QaService {
   // ROUNDS
   // =========================================================================
 
-  async createRound(title: string, description: string | undefined, createdById: string) {
+  /**
+   * Lazy-seed the master items table from the hard-coded CHECKLIST_SECTIONS
+   * constant. After the first call the database is the source of truth, so
+   * subsequent edits to the constant won't propagate (intentional — keeps
+   * the source-of-truth in one place once admins start editing master).
+   */
+  private async ensureMasterSeeded(em = this.em.fork()): Promise<void> {
+    const count = await em.count(QaMasterItem, {});
+    if (count > 0) return;
+
+    let sectionOrder = 0;
+    for (const section of CHECKLIST_SECTIONS) {
+      let itemOrder = 0;
+      for (const item of section.items) {
+        const master = em.create(QaMasterItem, {
+          sectionId: section.id,
+          sectionTitle: section.title,
+          sectionDescription: section.description,
+          sectionOrder,
+          itemKey: item.id,
+          itemTitle: item.title,
+          itemOrder,
+          steps: item.steps,
+          expectedResult: item.expectedResult,
+          pageUrl: item.pageUrl,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        em.persist(master);
+        itemOrder++;
+      }
+      sectionOrder++;
+    }
+    await em.flush();
+    this.logger.log(`Seeded ${CHECKLIST_SECTIONS.length} master sections into qa_master_items`);
+  }
+
+  /**
+   * List active master items grouped by section. Used by the round-creation
+   * picker and the "Add from master" modal on the round detail page.
+   */
+  async listMasterSections() {
     const em = this.em.fork();
+    await this.ensureMasterSeeded(em);
+
+    const items = await em.find(QaMasterItem, { isActive: true }, {
+      orderBy: { sectionOrder: 'ASC', itemOrder: 'ASC' },
+    });
+
+    type SectionRow = {
+      id: string;
+      title: string;
+      description?: string;
+      sectionOrder: number;
+      items: Array<{
+        id: string;
+        key: string;
+        title: string;
+        steps: string[];
+        expectedResult: string;
+        pageUrl?: string;
+        order: number;
+      }>;
+    };
+    const sections = new Map<string, SectionRow>();
+    for (const it of items) {
+      let sec = sections.get(it.sectionId);
+      if (!sec) {
+        sec = {
+          id: it.sectionId,
+          title: it.sectionTitle,
+          description: it.sectionDescription,
+          sectionOrder: it.sectionOrder,
+          items: [],
+        };
+        sections.set(it.sectionId, sec);
+      }
+      sec.items.push({
+        id: it.id,
+        key: it.itemKey,
+        title: it.itemTitle,
+        steps: it.steps,
+        expectedResult: it.expectedResult,
+        pageUrl: it.pageUrl,
+        order: it.itemOrder,
+      });
+    }
+    return Array.from(sections.values()).sort((a, b) => a.sectionOrder - b.sectionOrder);
+  }
+
+  async createRound(
+    title: string,
+    description: string | undefined,
+    createdById: string,
+    selection?: RoundItemSelection,
+  ) {
+    const em = this.em.fork();
+    await this.ensureMasterSeeded(em);
 
     // Auto-increment version number
     const existingRounds = await em.find(QaRound, {}, { orderBy: { versionNumber: 'DESC' }, limit: 1 });
@@ -32,38 +152,348 @@ export class QaService {
       description,
       versionNumber,
       status: QaRoundStatus.DRAFT,
+      suspended: false,
       createdBy: em.getReference(Profile, createdById),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-
     await em.persistAndFlush(round);
 
-    // Seed checklist items from master data
-    let sectionOrder = 0;
-    for (const section of CHECKLIST_SECTIONS) {
-      let itemOrder = 0;
-      for (const item of section.items) {
-        const checklistItem = em.create(QaChecklistItem, {
+    // Resolve master items for the round. If the caller didn't pick a
+    // subset, include every active master item — matches old behaviour.
+    const masterFilter = selection?.masterItemIds && selection.masterItemIds.length > 0
+      ? { id: { $in: selection.masterItemIds }, isActive: true }
+      : { isActive: true };
+    const masters = await em.find(QaMasterItem, masterFilter, {
+      orderBy: { sectionOrder: 'ASC', itemOrder: 'ASC' },
+    });
+
+    // Snapshot master items into the round
+    let nextItemOrder = 0;
+    let lastSectionId = '';
+    for (const m of masters) {
+      if (m.sectionId !== lastSectionId) { nextItemOrder = 0; lastSectionId = m.sectionId; }
+      const checklistItem = em.create(QaChecklistItem, {
+        round: em.getReference(QaRound, round.id),
+        sectionId: m.sectionId,
+        sectionTitle: m.sectionTitle,
+        sectionDescription: m.sectionDescription,
+        sectionOrder: m.sectionOrder,
+        itemKey: m.itemKey,
+        itemTitle: m.itemTitle,
+        itemOrder: nextItemOrder++,
+        steps: m.steps,
+        expectedResult: m.expectedResult,
+        pageUrl: m.pageUrl,
+        isCustom: false,
+        sourceMasterId: m.id,
+      });
+      em.persist(checklistItem);
+    }
+
+    // Persist custom items provided alongside round creation. They go into
+    // a 'custom' section at the end so reviewers see them grouped.
+    if (selection?.customItems?.length) {
+      const customSectionOrder = (masters[masters.length - 1]?.sectionOrder ?? 0) + 1;
+      let customOrder = 0;
+      for (const c of selection.customItems) {
+        const sectionId = c.sectionId || 'custom';
+        const sectionTitle = c.sectionTitle || 'Custom Items';
+        if (c.promoteToMaster) {
+          await this.upsertMasterFromCustom(em, c, sectionId, sectionTitle, customSectionOrder, customOrder);
+        }
+        const ci = em.create(QaChecklistItem, {
           round: em.getReference(QaRound, round.id),
-          sectionId: section.id,
-          sectionTitle: section.title,
-          sectionDescription: section.description,
-          sectionOrder,
-          itemKey: item.id,
-          itemTitle: item.title,
-          itemOrder,
-          steps: item.steps,
-          expectedResult: item.expectedResult,
+          sectionId,
+          sectionTitle,
+          sectionOrder: customSectionOrder,
+          itemKey: `custom-${Date.now()}-${customOrder}`,
+          itemTitle: c.title,
+          itemOrder: customOrder++,
+          steps: c.steps,
+          expectedResult: c.expectedResult,
+          pageUrl: c.pageUrl,
+          isCustom: true,
         });
-        em.persist(checklistItem);
-        itemOrder++;
+        em.persist(ci);
       }
-      sectionOrder++;
     }
 
     await em.flush();
     return this.getRound(round.id);
+  }
+
+  /**
+   * Adds master items to an existing round (any status — including ACTIVE).
+   * For each existing assignment, a NOT_STARTED response row is created so
+   * the new item shows up in the reviewer's checklist immediately.
+   *
+   * Idempotent: master items already represented in the round (matched by
+   * sourceMasterId) are silently skipped.
+   */
+  async addMasterItemsToRound(roundId: string, masterItemIds: string[]) {
+    if (!masterItemIds.length) return this.getRound(roundId);
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+    if (round.status === QaRoundStatus.COMPLETED) {
+      throw new BadRequestException('Cannot add items to a completed round');
+    }
+
+    const masters = await em.find(QaMasterItem, { id: { $in: masterItemIds }, isActive: true });
+    if (masters.length === 0) {
+      throw new NotFoundException('No matching master items found');
+    }
+
+    const existing = await em.find(QaChecklistItem, {
+      round: { id: roundId },
+      sourceMasterId: { $in: masters.map(m => m.id) },
+    });
+    const alreadyHave = new Set(existing.map(e => e.sourceMasterId));
+
+    const assignments = await em.find(QaRoundAssignment, { round: { id: roundId } });
+
+    // Group new items by section so we can compute itemOrder per section
+    const orderBySection = new Map<string, number>();
+    const existingItems = await em.find(QaChecklistItem, { round: { id: roundId } });
+    for (const it of existingItems) {
+      orderBySection.set(it.sectionId, Math.max(orderBySection.get(it.sectionId) ?? -1, it.itemOrder));
+    }
+
+    for (const m of masters) {
+      if (alreadyHave.has(m.id)) continue;
+      const nextOrder = (orderBySection.get(m.sectionId) ?? -1) + 1;
+      orderBySection.set(m.sectionId, nextOrder);
+      const item = em.create(QaChecklistItem, {
+        round: em.getReference(QaRound, roundId),
+        sectionId: m.sectionId,
+        sectionTitle: m.sectionTitle,
+        sectionDescription: m.sectionDescription,
+        sectionOrder: m.sectionOrder,
+        itemKey: m.itemKey,
+        itemTitle: m.itemTitle,
+        itemOrder: nextOrder,
+        steps: m.steps,
+        expectedResult: m.expectedResult,
+        pageUrl: m.pageUrl,
+        isCustom: false,
+        sourceMasterId: m.id,
+      });
+      em.persist(item);
+      await em.flush();
+
+      // Create NOT_STARTED responses for each existing assignment so the new
+      // item shows up in everyone's checklist
+      for (const a of assignments) {
+        em.persist(em.create(QaItemResponse, {
+          item: em.getReference(QaChecklistItem, item.id),
+          assignment: em.getReference(QaRoundAssignment, a.id),
+          reviewer: a.assignee,
+          status: QaResponseStatus.NOT_STARTED,
+        }));
+      }
+      await em.flush();
+    }
+
+    return this.getRound(roundId);
+  }
+
+  /**
+   * Add a single custom item to an existing round. Optionally also writes
+   * it to qa_master_items so future rounds inherit it.
+   */
+  async addCustomItemToRound(roundId: string, input: CustomItemInput) {
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+    if (round.status === QaRoundStatus.COMPLETED) {
+      throw new BadRequestException('Cannot add items to a completed round');
+    }
+    if (!input.title?.trim()) throw new BadRequestException('Item title is required');
+    if (!input.expectedResult?.trim()) throw new BadRequestException('Expected result is required');
+    if (!Array.isArray(input.steps) || input.steps.length === 0) {
+      throw new BadRequestException('At least one step is required');
+    }
+
+    const sectionId = input.sectionId || 'custom';
+    const sectionTitle = input.sectionTitle || 'Custom Items';
+
+    // Pick a sectionOrder that puts custom items at the end if 'custom',
+    // or matches the existing section if a real section was chosen.
+    let sectionOrder: number;
+    if (sectionId === 'custom') {
+      const max = await em.find(QaChecklistItem, { round: { id: roundId } }, {
+        orderBy: { sectionOrder: 'DESC' }, limit: 1,
+      });
+      sectionOrder = (max[0]?.sectionOrder ?? -1) + 1;
+    } else {
+      const sample = await em.findOne(QaChecklistItem, { round: { id: roundId }, sectionId });
+      sectionOrder = sample?.sectionOrder ?? 9999;
+    }
+
+    const itemsInSection = await em.find(QaChecklistItem, {
+      round: { id: roundId }, sectionId,
+    });
+    const itemOrder = itemsInSection.reduce((mx, it) => Math.max(mx, it.itemOrder), -1) + 1;
+
+    if (input.promoteToMaster) {
+      await this.upsertMasterFromCustom(em, input, sectionId, sectionTitle, sectionOrder, itemOrder);
+    }
+
+    const item = em.create(QaChecklistItem, {
+      round: em.getReference(QaRound, roundId),
+      sectionId,
+      sectionTitle,
+      sectionOrder,
+      itemKey: `custom-${Date.now()}-${itemOrder}`,
+      itemTitle: input.title.trim(),
+      itemOrder,
+      steps: input.steps.map(s => s.trim()).filter(Boolean),
+      expectedResult: input.expectedResult.trim(),
+      pageUrl: input.pageUrl?.trim() || undefined,
+      isCustom: true,
+    });
+    em.persist(item);
+    await em.flush();
+
+    // Create responses for existing assignments
+    const assignments = await em.find(QaRoundAssignment, { round: { id: roundId } });
+    for (const a of assignments) {
+      em.persist(em.create(QaItemResponse, {
+        item: em.getReference(QaChecklistItem, item.id),
+        assignment: em.getReference(QaRoundAssignment, a.id),
+        reviewer: a.assignee,
+        status: QaResponseStatus.NOT_STARTED,
+      }));
+    }
+    await em.flush();
+
+    return this.getRound(roundId);
+  }
+
+  /**
+   * Promote an existing custom round-item to the master checklist so future
+   * rounds inherit it. Rejected if the item is already from master.
+   */
+  async promoteCustomItemToMaster(itemId: string) {
+    const em = this.em.fork();
+    const item = await em.findOneOrFail(QaChecklistItem, itemId);
+    if (!item.isCustom) {
+      throw new BadRequestException('Only custom items can be promoted to the master checklist');
+    }
+    await this.ensureMasterSeeded(em);
+
+    const master = await this.upsertMasterFromCustom(em,
+      {
+        title: item.itemTitle,
+        steps: item.steps,
+        expectedResult: item.expectedResult,
+        pageUrl: item.pageUrl,
+      },
+      item.sectionId,
+      item.sectionTitle,
+      item.sectionOrder,
+      item.itemOrder,
+    );
+
+    item.sourceMasterId = master.id;
+    await em.flush();
+    return { promoted: true, masterId: master.id };
+  }
+
+  /**
+   * Helper: create or update a master item from a custom-item payload. Idempotent
+   * on (sectionId, itemKey-derived). The same custom item being promoted twice
+   * just updates the existing master row.
+   */
+  private async upsertMasterFromCustom(
+    em: EntityManager,
+    c: { title: string; steps: string[]; expectedResult: string; pageUrl?: string },
+    sectionId: string,
+    sectionTitle: string,
+    sectionOrder: number,
+    itemOrder: number,
+  ): Promise<QaMasterItem> {
+    const itemKey = `custom-${c.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)}`;
+    const existing = await em.findOne(QaMasterItem, { sectionId, itemKey });
+    if (existing) {
+      existing.itemTitle = c.title;
+      existing.steps = c.steps;
+      existing.expectedResult = c.expectedResult;
+      existing.pageUrl = c.pageUrl;
+      existing.isActive = true;
+      await em.flush();
+      return existing;
+    }
+    const master = em.create(QaMasterItem, {
+      sectionId,
+      sectionTitle,
+      sectionOrder,
+      itemKey,
+      itemTitle: c.title,
+      itemOrder,
+      steps: c.steps,
+      expectedResult: c.expectedResult,
+      pageUrl: c.pageUrl,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(master);
+    await em.flush();
+    return master;
+  }
+
+  /**
+   * Remove a single item from a round. Cascades responses + dev fixes. Allowed
+   * in any non-completed status — the admin UI confirms when responses exist.
+   */
+  async removeItemFromRound(itemId: string) {
+    const em = this.em.fork();
+    const item = await em.findOneOrFail(QaChecklistItem, itemId, { populate: ['round'] });
+    if (item.round.status === QaRoundStatus.COMPLETED) {
+      throw new BadRequestException('Cannot remove items from a completed round');
+    }
+    await em.transactional(async (txEm) => {
+      await txEm.getConnection().execute(
+        `DELETE FROM qa_developer_fixes
+         WHERE response_id IN (SELECT id FROM qa_item_responses WHERE item_id = ?)`,
+        [itemId],
+      );
+      await txEm.nativeDelete(QaItemResponse, { item: { id: itemId } });
+      await txEm.nativeDelete(QaChecklistItem, { id: itemId });
+    });
+    return { removed: true };
+  }
+
+  /**
+   * Returns the items currently in a round, grouped by section. Used by the
+   * "Manage Items" panel on the round detail page.
+   */
+  async getRoundItems(roundId: string) {
+    const em = this.em.fork();
+    const items = await em.find(QaChecklistItem, { round: { id: roundId } }, {
+      orderBy: { sectionOrder: 'ASC', itemOrder: 'ASC' },
+    });
+    type SectionRow = {
+      id: string; title: string; description?: string; sectionOrder: number;
+      items: Array<{
+        id: string; key: string; title: string; steps: string[]; expectedResult: string;
+        pageUrl?: string; isCustom: boolean; sourceMasterId?: string;
+      }>;
+    };
+    const sections = new Map<string, SectionRow>();
+    for (const it of items) {
+      let sec = sections.get(it.sectionId);
+      if (!sec) {
+        sec = { id: it.sectionId, title: it.sectionTitle, description: it.sectionDescription, sectionOrder: it.sectionOrder, items: [] };
+        sections.set(it.sectionId, sec);
+      }
+      sec.items.push({
+        id: it.id, key: it.itemKey, title: it.itemTitle, steps: it.steps,
+        expectedResult: it.expectedResult, pageUrl: it.pageUrl,
+        isCustom: it.isCustom, sourceMasterId: it.sourceMasterId,
+      });
+    }
+    return Array.from(sections.values()).sort((a, b) => a.sectionOrder - b.sectionOrder);
   }
 
   async createRoundFromPrevious(previousRoundId: string, title: string, createdById: string) {
@@ -93,6 +523,7 @@ export class QaService {
       title,
       versionNumber: previousRound.versionNumber + 1,
       status: QaRoundStatus.DRAFT,
+      suspended: false,
       parentRound: em.getReference(QaRound, previousRoundId),
       createdBy: em.getReference(Profile, createdById),
       createdAt: new Date(),
@@ -117,6 +548,10 @@ export class QaService {
         expectedResult: failedItem.expectedResult,
         pageUrl: failedItem.pageUrl,
         sourceItem: em.getReference(QaChecklistItem, failedItem.id),
+        // Preserve custom-vs-master classification across re-test rounds so a
+        // failed custom item carries its custom badge into the next round.
+        isCustom: failedItem.isCustom,
+        sourceMasterId: failedItem.sourceMasterId,
       });
       em.persist(newItem);
       itemIdx++;
@@ -156,6 +591,73 @@ export class QaService {
     round.status = QaRoundStatus.COMPLETED;
     await em.flush();
     return this.getRound(roundId);
+  }
+
+  /**
+   * Edit round metadata. Title and description are always editable; we don't
+   * touch status/version/parent. Useful for typo fixes or clarifying scope
+   * after reviewers report confusion.
+   */
+  async updateRound(roundId: string, data: { title?: string; description?: string | null }) {
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+    if (data.title !== undefined) {
+      const trimmed = data.title.trim();
+      if (!trimmed) throw new BadRequestException('Title cannot be empty');
+      round.title = trimmed;
+    }
+    if (data.description !== undefined) {
+      round.description = data.description?.trim() || undefined;
+    }
+    await em.flush();
+    return this.getRound(roundId);
+  }
+
+  /**
+   * Toggle the suspension flag. When suspended:
+   *   - reviewers see the round but submitResponse will reject
+   *   - developers can't submit fixes
+   * Reversible — clearing the flag returns the round to its prior state.
+   */
+  async setSuspended(roundId: string, suspended: boolean) {
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+    round.suspended = suspended;
+    await em.flush();
+    return this.getRound(roundId);
+  }
+
+  /**
+   * Hard-delete a round and everything attached to it: developer fixes,
+   * responses, assignments, and checklist items. Wrapped in a transaction
+   * so a partial delete can't strand orphan rows.
+   *
+   * Allowed in any state. The admin UI confirms before invoking, including
+   * for ACTIVE/COMPLETED rounds where reviewer work is being thrown away.
+   */
+  async deleteRound(roundId: string) {
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+
+    await em.transactional(async (txEm) => {
+      // Developer fixes reference responses → delete them first
+      await txEm.getConnection().execute(
+        `DELETE FROM qa_developer_fixes
+         WHERE response_id IN (
+           SELECT r.id FROM qa_item_responses r
+           JOIN qa_round_assignments a ON a.id = r.assignment_id
+           WHERE a.round_id = ?
+         )`,
+        [roundId],
+      );
+      // Responses → assignments → items → round
+      await txEm.nativeDelete(QaItemResponse, { assignment: { round: { id: roundId } } });
+      await txEm.nativeDelete(QaRoundAssignment, { round: { id: roundId } });
+      await txEm.nativeDelete(QaChecklistItem, { round: { id: roundId } });
+      await txEm.nativeDelete(QaRound, { id: roundId });
+    });
+
+    return { id: round.id, deleted: true };
   }
 
   async getRound(roundId: string) {
@@ -213,6 +715,7 @@ export class QaService {
       title: round.title,
       description: round.description,
       status: round.status,
+      suspended: round.suspended,
       parentRoundId: round.parentRound?.id || null,
       createdBy: {
         id: round.createdBy.id,
@@ -253,6 +756,7 @@ export class QaService {
         versionNumber: round.versionNumber,
         title: round.title,
         status: round.status,
+        suspended: round.suspended,
         createdBy: {
           id: round.createdBy.id,
           firstName: round.createdBy.first_name,
@@ -323,13 +827,21 @@ export class QaService {
       populate: ['round'],
     });
 
-    if (assignment.round.status !== QaRoundStatus.DRAFT) {
-      throw new BadRequestException('Can only remove assignments from draft rounds');
-    }
-
-    // Delete responses first (cascades via FK but be explicit)
-    await em.nativeDelete(QaItemResponse, { assignment: { id: assignmentId } });
-    await em.removeAndFlush(assignment);
+    // Removal is allowed in any round status — admins occasionally pick the
+    // wrong reviewer or someone needs to be swapped mid-round. Anything the
+    // reviewer has submitted is cascade-deleted (caller is expected to confirm).
+    await em.transactional(async (txEm) => {
+      // Developer fixes reference responses → wipe them first
+      await txEm.getConnection().execute(
+        `DELETE FROM qa_developer_fixes
+         WHERE response_id IN (
+           SELECT id FROM qa_item_responses WHERE assignment_id = ?
+         )`,
+        [assignmentId],
+      );
+      await txEm.nativeDelete(QaItemResponse, { assignment: { id: assignmentId } });
+      await txEm.nativeDelete(QaRoundAssignment, { id: assignmentId });
+    });
   }
 
   async getMyAssignments(profileId: string) {
@@ -358,6 +870,7 @@ export class QaService {
           versionNumber: a.round.versionNumber,
           title: a.round.title,
           status: a.round.status,
+          suspended: a.round.suspended,
         },
         status: a.status,
         assignedAt: a.assignedAt,
@@ -437,6 +950,7 @@ export class QaService {
         versionNumber: assignment.round.versionNumber,
         title: assignment.round.title,
         status: assignment.round.status,
+        suspended: assignment.round.suspended,
       },
       assignee: {
         id: assignment.assignee.id,
@@ -470,7 +984,15 @@ export class QaService {
       throw new BadRequestException('A comment is required when marking an item as FAIL');
     }
 
-    const assignment = await em.findOneOrFail(QaRoundAssignment, assignmentId);
+    const assignment = await em.findOneOrFail(QaRoundAssignment, assignmentId, {
+      populate: ['round'],
+    });
+    if (assignment.round.suspended) {
+      throw new BadRequestException('This QA round is currently paused by an admin. Try again once it is resumed.');
+    }
+    if (assignment.round.status === QaRoundStatus.COMPLETED) {
+      throw new BadRequestException('This QA round is closed and no longer accepting responses.');
+    }
 
     // Verify reviewer matches
     const response = await em.findOneOrFail(QaItemResponse, {
@@ -582,7 +1104,12 @@ export class QaService {
   async submitFix(responseId: string, data: { fixNotes: string; status: QaFixStatus }, developerId: string) {
     const em = this.em.fork();
 
-    await em.findOneOrFail(QaItemResponse, responseId);
+    const response = await em.findOneOrFail(QaItemResponse, responseId, {
+      populate: ['assignment.round'],
+    });
+    if (response.assignment.round.suspended) {
+      throw new BadRequestException('Cannot record fixes on a paused round. Resume the round first.');
+    }
 
     // Check for existing fix
     let fix = await em.findOne(QaDeveloperFix, { response: { id: responseId } });

@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Logic Overview - MECA</title>
+    <title>Business Logic (Overview) - MECA</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
@@ -15,6 +20,17 @@
             padding: 40px 20px;
             background: #f8fafc;
         }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
         h1 {
             text-align: center;
             color: #ea580c;
@@ -23,8 +39,16 @@
             border-bottom: 3px solid #ea580c;
             padding-bottom: 15px;
         }
-        .subtitle { text-align: center; color: #64748b; font-size: 1.1rem; margin-bottom: 40px; }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
         h2 {
+            color: #0f172a;
             font-size: 1.8rem;
             margin: 40px 0 20px 0;
             padding: 15px;
@@ -32,6 +56,7 @@
             color: white;
             border-radius: 8px;
         }
+
         h3 {
             color: #334155;
             font-size: 1.3rem;
@@ -39,14 +64,85 @@
             border-left: 4px solid #ea580c;
             padding-left: 15px;
         }
-        p { margin-bottom: 15px; color: #475569; }
-        .container {
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
             background: white;
             border-radius: 12px;
             padding: 30px;
             margin: 20px 0;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -56,6 +152,7 @@
             overflow: hidden;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
+
         th {
             background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
             color: white;
@@ -63,22 +160,20 @@
             text-align: left;
             font-weight: 600;
         }
-        td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; }
-        tr:nth-child(even) { background: #f8fafc; }
-        tr:hover { background: #fef3c7; }
-        .toc {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            margin: 30px 0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
         }
-        .toc h3 { margin-top: 0; border-left: none; padding-left: 0; }
-        .toc ul { list-style: none; margin-top: 15px; }
-        .toc li { padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
-        .toc li:last-child { border-bottom: none; }
-        .toc a { color: #ea580c; text-decoration: none; font-weight: 500; }
-        .toc a:hover { text-decoration: underline; }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
         .info-box {
             background: #eff6ff;
             border: 1px solid #3b82f6;
@@ -86,9 +181,139 @@
             padding: 20px;
             margin: 20px 0;
         }
-        .info-box h4 { color: #1e40af; margin-bottom: 10px; margin-top: 0; }
-        ul, ol { margin-left: 20px; margin-bottom: 15px; }
-        li { margin: 8px 0; color: #475569; }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
         code {
             background: #f1f5f9;
             padding: 2px 6px;
@@ -97,308 +322,1107 @@
             font-size: 0.9em;
             color: #ea580c;
         }
-        .code-block {
-            background: #0f172a;
-            color: #e2e8f0;
-            padding: 15px;
+
+        .flow-diagram {
+            background: #f1f5f9;
             border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
             font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-            overflow-x: auto;
-            margin: 15px 0;
-            white-space: pre;
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
             font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
             font-weight: 500;
         }
-        .badge-green { background: #dcfce7; color: #166534; }
-        .badge-red { background: #fee2e2; color: #991b1b; }
-        .badge-yellow { background: #fef3c7; color: #92400e; }
-        .badge-blue { background: #dbeafe; color: #1e40af; }
-        footer {
-            text-align: center;
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 2px solid #e2e8f0;
-            color: #64748b;
+
+        a:hover {
+            text-decoration: underline;
         }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
     </style>
 </head>
 <body>
-    <h1>NewMECA V2 - Business Logic Overview</h1>
-    <p class="subtitle">Comprehensive overview of business logic for stakeholder review</p>
-
-    <div class="toc">
-        <h3>Table of Contents</h3>
-        <ul>
-            <li><a href="#overview">1. System Overview</a></li>
-            <li><a href="#roles">2. User Roles & Permissions</a></li>
-            <li><a href="#membership">3. Membership System</a></li>
-            <li><a href="#teams">4. Team System</a></li>
-            <li><a href="#events">5. Events System</a></li>
-            <li><a href="#hosting">6. Event Hosting Request Workflow</a></li>
-            <li><a href="#results">7. Competition Results & Points</a></li>
-            <li><a href="#payments">8. Payment Processing</a></li>
-            <li><a href="#integrations">9. External Integrations</a></li>
-        </ul>
-    </div>
-
-    <h2 id="overview">1. System Overview</h2>
-    <div class="container">
-        <p>NewMECA V2 is a full-stack web application for the <strong>Mobile Electronics Competition Association (MECA)</strong> - an organization that manages car audio competitions across the United States.</p>
-
-        <h3 style="margin-top: 20px; border-left: none; padding-left: 0;">Core Capabilities</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Feature</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td><strong>Member Management</strong></td><td>User registration, profiles, membership purchases</td></tr>
-                <tr><td><strong>Team Management</strong></td><td>Team creation, membership, roles, and collaboration</td></tr>
-                <tr><td><strong>Event Management</strong></td><td>Event hosting requests, approval workflows, event listings</td></tr>
-                <tr><td><strong>Competition Results</strong></td><td>Result entry, points calculation, leaderboards</td></tr>
-                <tr><td><strong>Financial Integration</strong></td><td>Stripe payments, QuickBooks accounting sync</td></tr>
-                <tr><td><strong>Public Content</strong></td><td>Event calendars, leaderboards, member directories</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <h2 id="roles">2. User Roles & Permissions</h2>
-
-    <h3>Role Definitions</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Role</th>
-                <th>Description</th>
-                <th>Key Permissions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><strong>USER</strong></td>
-                <td>Standard member</td>
-                <td>View events, register for competitions, manage profile, join/create teams</td>
-            </tr>
-            <tr>
-                <td><strong>EVENT_DIRECTOR</strong></td>
-                <td>Assigned to review hosting requests</td>
-                <td>Review assigned hosting requests, manage competition results at their events</td>
-            </tr>
-            <tr>
-                <td><strong>RETAILER</strong></td>
-                <td>Business/retail member</td>
-                <td>Retailer-specific features, business profile</td>
-            </tr>
-            <tr>
-                <td><strong>ADMIN</strong></td>
-                <td>System administrator</td>
-                <td>Full access: manage users, events, memberships, approve hosting requests</td>
-            </tr>
-        </tbody>
-    </table>
-
-    <h2 id="membership">3. Membership System</h2>
-
-    <h3>Membership Categories</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Category</th>
-                <th>Description</th>
-                <th>Typical Use</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td><strong>COMPETITOR</strong></td><td>Individual competitor membership</td><td>Car audio competitors</td></tr>
-            <tr><td><strong>TEAM</strong></td><td>Team membership add-on</td><td>Teams wanting official MECA team status</td></tr>
-            <tr><td><strong>RETAIL</strong></td><td>Retail business membership</td><td>Car audio shops/retailers</td></tr>
-            <tr><td><strong>MANUFACTURER</strong></td><td>Equipment manufacturer</td><td>Audio equipment manufacturers</td></tr>
-        </tbody>
-    </table>
-
-    <h3>Payment Status Flow</h3>
-    <div class="code-block">PENDING → PAID → (optional) REFUNDED
+    <nav class="docs-nav">
+        <a href="index.html">← Documentation Index</a>
+    </nav>
+<h1 id="newmeca-v2-business-logic-overview">NewMECA V2 - Business Logic Overview</h1>
+<p><strong>Document Version:</strong> 1.0
+<strong>Last Updated:</strong> December 10, 2025
+<strong>Purpose:</strong> Comprehensive overview of business logic for stakeholder review</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-system-overview">System Overview</a></li>
+<li><a href="#2-user-roles--permissions">User Roles &amp; Permissions</a></li>
+<li><a href="#3-membership-system">Membership System</a></li>
+<li><a href="#4-team-system">Team System</a></li>
+<li><a href="#5-events-system">Events System</a></li>
+<li><a href="#6-event-hosting-request-workflow">Event Hosting Request Workflow</a></li>
+<li><a href="#7-competition-results--points">Competition Results &amp; Points</a></li>
+<li><a href="#8-payment-processing-stripe">Payment Processing (Stripe)</a></li>
+<li><a href="#9-accounting-integration-quickbooks">Accounting Integration (QuickBooks)</a></li>
+<li><a href="#10-seasons--championships">Seasons &amp; Championships</a></li>
+<li><a href="#11-data-relationships">Data Relationships</a></li>
+<li><a href="#12-key-business-constants">Key Business Constants</a></li>
+</ol>
+<hr />
+<h2 id="1-system-overview">1. System Overview</h2>
+<p>NewMECA V2 is a full-stack web application for the <strong>Mobile Electronics Competition Association (MECA)</strong> - an organization that manages car audio competitions across the United States.</p>
+<h3 id="core-capabilities">Core Capabilities</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Member Management</strong></td>
+<td>User registration, profiles, membership purchases</td>
+</tr>
+<tr>
+<td><strong>Team Management</strong></td>
+<td>Team creation, membership, roles, and collaboration</td>
+</tr>
+<tr>
+<td><strong>Event Management</strong></td>
+<td>Event hosting requests, approval workflows, event listings</td>
+</tr>
+<tr>
+<td><strong>Competition Results</strong></td>
+<td>Result entry, points calculation, leaderboards</td>
+</tr>
+<tr>
+<td><strong>Financial Integration</strong></td>
+<td>Stripe payments, QuickBooks accounting sync</td>
+</tr>
+<tr>
+<td><strong>Public Content</strong></td>
+<td>Event calendars, leaderboards, member directories</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-user-roles-permissions">2. User Roles &amp; Permissions</h2>
+<h3 id="role-definitions">Role Definitions</h3>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Description</th>
+<th>Key Permissions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>USER</strong></td>
+<td>Standard member</td>
+<td>View events, register for competitions, manage profile, join/create teams</td>
+</tr>
+<tr>
+<td><strong>EVENT_DIRECTOR</strong></td>
+<td>Assigned to review hosting requests</td>
+<td>Review assigned hosting requests, manage competition results at their events</td>
+</tr>
+<tr>
+<td><strong>RETAILER</strong></td>
+<td>Business/retail member</td>
+<td>Retailer-specific features, business profile</td>
+</tr>
+<tr>
+<td><strong>ADMIN</strong></td>
+<td>System administrator</td>
+<td>Full access: manage users, events, memberships, approve hosting requests, system configuration</td>
+</tr>
+</tbody>
+</table>
+<h3 id="permission-matrix">Permission Matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>USER</th>
+<th>EVENT_DIRECTOR</th>
+<th>RETAILER</th>
+<th>ADMIN</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>View public events</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Register for events</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Create team (with team membership)</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Submit hosting request</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Review assigned hosting requests</td>
+<td>❌</td>
+<td>✅</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Enter competition results</td>
+<td>❌</td>
+<td>✅ (own events)</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Manage all events</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Manage all memberships</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Admin dashboard access</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-membership-system">3. Membership System</h2>
+<h3 id="membership-categories">Membership Categories</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Description</th>
+<th>Typical Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>COMPETITOR</strong></td>
+<td>Individual competitor membership</td>
+<td>Car audio competitors</td>
+</tr>
+<tr>
+<td><strong>TEAM</strong></td>
+<td>Team membership add-on</td>
+<td>Teams wanting official MECA team status</td>
+</tr>
+<tr>
+<td><strong>RETAIL</strong></td>
+<td>Retail business membership</td>
+<td>Car audio shops/retailers</td>
+</tr>
+<tr>
+<td><strong>MANUFACTURER</strong></td>
+<td>Equipment manufacturer</td>
+<td>Audio equipment manufacturers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="manufacturer-tiers">Manufacturer Tiers</h3>
+<p>Manufacturer memberships have three tiers with escalating benefits:</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Benefits Level</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>BRONZE</strong></td>
+<td>Basic manufacturer benefits</td>
+</tr>
+<tr>
+<td><strong>SILVER</strong></td>
+<td>Enhanced manufacturer benefits</td>
+</tr>
+<tr>
+<td><strong>GOLD</strong></td>
+<td>Premium manufacturer benefits</td>
+</tr>
+</tbody>
+</table>
+<h3 id="membership-type-configuration">Membership Type Configuration</h3>
+<p>Each membership product is configured with:</p>
+<ul>
+<li><strong>Basic Info:</strong> Name, description, category, tier (if manufacturer)</li>
+<li><strong>Pricing:</strong> Price, currency, Stripe price ID/product ID</li>
+<li><strong>Benefits:</strong> List of included benefits</li>
+<li><strong>Required/Optional Fields:</strong> What info is collected during purchase</li>
+<li><strong>Display Settings:</strong> Active, featured, show on public site, display order</li>
+<li><strong>Upgrade Rules:</strong> <code>isUpgradeOnly</code> flag for add-ons (e.g., team membership requires active competitor membership)</li>
+<li><strong>Accounting:</strong> QuickBooks item ID and account ID for sync</li>
+</ul>
+<h3 id="payment-status-flow">Payment Status Flow</h3>
+<pre><code>PENDING → PAID → (optional) REFUNDED
        ↘ FAILED
-       ↘ CANCELLED</div>
-
-    <div class="info-box">
-        <h4>Membership Business Rules</h4>
-        <ul>
-            <li><strong>Guest Checkout:</strong> Memberships can be purchased without an account</li>
-            <li><strong>Account Linking:</strong> Orphan memberships are auto-linked when user creates an account</li>
-            <li><strong>Membership Duration:</strong> Default is 1 year from purchase date</li>
-            <li><strong>Active Definition:</strong> endDate >= current date AND paymentStatus = PAID</li>
-        </ul>
-    </div>
-
-    <h2 id="teams">4. Team System</h2>
-
-    <h3>Team Member Roles</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Role</th>
-                <th>Permissions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td><strong>OWNER</strong></td><td>Full control - edit team, manage all members, change roles, transfer ownership, delete team</td></tr>
-            <tr><td><strong>CO_OWNER</strong></td><td>Edit team info, manage members (add/remove below their role), cannot delete team</td></tr>
-            <tr><td><strong>MODERATOR</strong></td><td>Add/remove regular members only</td></tr>
-            <tr><td><strong>MEMBER</strong></td><td>Basic membership, can view team info and leave</td></tr>
-        </tbody>
-    </table>
-
-    <div class="info-box">
-        <h4>Team Business Rules</h4>
-        <ul>
-            <li><strong>One Team Per User:</strong> Users can only be a member of one team at a time</li>
-            <li><strong>Team Creation Requirement:</strong> Must have active TEAM category membership</li>
-            <li><strong>Default Team Capacity:</strong> 50 members maximum (configurable)</li>
-            <li><strong>Owner Restrictions:</strong> Team owner must transfer ownership before leaving</li>
-        </ul>
-    </div>
-
-    <h2 id="events">5. Events System</h2>
-
-    <h3>Event Status Flow</h3>
-    <div class="code-block">PENDING → UPCOMING → ONGOING → COMPLETED
-                ↘ CANCELLED
-NOT_PUBLIC (hidden from public view)</div>
-
-    <h3>Event Types & Point Multipliers</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Event Type</th>
-                <th>Multiplier</th>
-                <th>Description</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td><strong>1x Event</strong></td><td>1x</td><td>Standard local event</td></tr>
-            <tr><td><strong>2x Event</strong></td><td>2x</td><td>Regional event (default)</td></tr>
-            <tr><td><strong>3x Event (SOUNDFEST)</strong></td><td>3x</td><td>Major SOUNDFEST events</td></tr>
-            <tr><td><strong>4x Event</strong></td><td>4x</td><td>Special competitions (SQ, Install, RTA)</td></tr>
-        </tbody>
-    </table>
-
-    <h2 id="hosting">6. Event Hosting Request Workflow</h2>
-
-    <h3>Status Definitions</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Status</th>
-                <th>Description</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td><span class="status-badge badge-yellow">PENDING</span></td><td>New request submitted, awaiting admin review</td></tr>
-            <tr><td><span class="status-badge badge-blue">ASSIGNED_TO_ED</span></td><td>Admin assigned to an Event Director</td></tr>
-            <tr><td><span class="status-badge badge-blue">ED_REVIEWING</span></td><td>Event Director is reviewing the request</td></tr>
-            <tr><td><span class="status-badge badge-green">APPROVED</span></td><td>Request approved, event created</td></tr>
-            <tr><td><span class="status-badge badge-red">REJECTED</span></td><td>Request rejected</td></tr>
-            <tr><td><span class="status-badge badge-red">CANCELLED</span></td><td>Request cancelled by requestor</td></tr>
-        </tbody>
-    </table>
-
-    <h2 id="results">7. Competition Results & Points</h2>
-
-    <h3>Eligible Competition Formats</h3>
-    <p>Only these formats earn points toward standings:</p>
-    <table>
-        <thead>
-            <tr>
-                <th>Format</th>
-                <th>Description</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td><strong>SPL</strong></td><td>Sound Pressure Level (loudness)</td></tr>
-            <tr><td><strong>SQL</strong></td><td>Sound Quality League</td></tr>
-            <tr><td><strong>SSI</strong></td><td>Show and Shine Install</td></tr>
-            <tr><td><strong>MK</strong></td><td>MECA Kids</td></tr>
-        </tbody>
-    </table>
-
-    <h3>Points by Placement</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Placement</th>
-                <th>1x Event</th>
-                <th>2x Event</th>
-                <th>3x Event</th>
-                <th>4x Event</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td><strong>1st</strong></td><td>5</td><td>10</td><td>15</td><td>20</td></tr>
-            <tr><td><strong>2nd</strong></td><td>4</td><td>8</td><td>12</td><td>19</td></tr>
-            <tr><td><strong>3rd</strong></td><td>3</td><td>6</td><td>9</td><td>18</td></tr>
-            <tr><td><strong>4th</strong></td><td>2</td><td>4</td><td>6</td><td>17</td></tr>
-            <tr><td><strong>5th</strong></td><td>1</td><td>2</td><td>3</td><td>16</td></tr>
-            <tr><td><strong>6th+</strong></td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        </tbody>
-    </table>
-
-    <div class="info-box">
-        <h4>Point Eligibility Rules</h4>
-        <p>A competitor earns points only if ALL of the following are true:</p>
-        <ul>
-            <li>MECA ID is NOT <code>999999</code> (guest competitor)</li>
-            <li>MECA ID is NOT <code>0</code> or <code>null</code> (unassigned)</li>
-            <li>MECA ID does NOT start with <code>99</code> (test/special entries)</li>
-            <li>Membership status is <code>active</code></li>
-            <li>Membership is NOT expired</li>
-        </ul>
-    </div>
-
-    <h2 id="payments">8. Payment Processing</h2>
-    <div class="container">
-        <h3 style="margin-top: 0; border-left: none; padding-left: 0;">Payment Flow</h3>
-        <ol>
-            <li>User selects membership type</li>
-            <li>Frontend creates PaymentIntent via API</li>
-            <li>Backend validates membership config is active</li>
-            <li>Backend creates Stripe PaymentIntent with metadata</li>
-            <li>Frontend displays Stripe checkout</li>
-            <li>User completes payment</li>
-            <li>Stripe sends webhook: <code>payment_intent.succeeded</code></li>
-            <li>Backend creates membership record</li>
-            <li>User sees confirmation</li>
-        </ol>
-    </div>
-
-    <h2 id="integrations">9. External Integrations</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Service</th>
-                <th>Purpose</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td><strong>Stripe</strong></td><td>Payment processing</td></tr>
-            <tr><td><strong>QuickBooks</strong></td><td>Accounting sync</td></tr>
-            <tr><td><strong>Twilio</strong></td><td>SMS notifications</td></tr>
-            <tr><td><strong>reCAPTCHA v3</strong></td><td>Form spam protection</td></tr>
-            <tr><td><strong>Supabase</strong></td><td>Database + Authentication</td></tr>
-        </tbody>
-    </table>
-
+       ↘ CANCELLED
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PENDING</strong></td>
+<td>Payment initiated but not completed</td>
+</tr>
+<tr>
+<td><strong>PAID</strong></td>
+<td>Payment successful, membership active</td>
+</tr>
+<tr>
+<td><strong>REFUNDED</strong></td>
+<td>Payment was refunded</td>
+</tr>
+<tr>
+<td><strong>FAILED</strong></td>
+<td>Payment attempt failed</td>
+</tr>
+<tr>
+<td><strong>CANCELLED</strong></td>
+<td>Payment/membership cancelled</td>
+</tr>
+</tbody>
+</table>
+<h3 id="membership-business-rules">Membership Business Rules</h3>
+<ol>
+<li>
+<p><strong>Guest Checkout:</strong> Memberships can be purchased without an account (guest checkout with email)</p>
+</li>
+<li>
+<p><strong>Account Linking:</strong> When a user creates an account, any orphan memberships matching their email are automatically linked to their account</p>
+</li>
+<li>
+<p><strong>Membership Duration:</strong> Default is 1 year from purchase date</p>
+</li>
+<li>
+<p><strong>Active Membership Definition:</strong>
+   - <code>endDate &gt;= current date</code> AND
+   - <code>paymentStatus = PAID</code></p>
+</li>
+<li>
+<p><strong>Admin Assignment:</strong> Admins can assign memberships without payment (marked as PAID with transaction ID <code>ADMIN-{timestamp}</code>)</p>
+</li>
+<li>
+<p><strong>Upgrade Memberships:</strong> Some membership types (e.g., team add-on) require an existing active competitor membership</p>
+</li>
+</ol>
+<hr />
+<h2 id="4-team-system">4. Team System</h2>
+<h3 id="team-membership-requirements">Team Membership Requirements</h3>
+<p><strong>To CREATE a team, user must:</strong>
+1. Have an active TEAM category membership with <code>paymentStatus = PAID</code>
+2. NOT already be a member of another team</p>
+<p><strong>To JOIN a team:</strong>
+1. Have an active MECA membership
+2. NOT already be a member of another team</p>
+<h3 id="team-member-roles">Team Member Roles</h3>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Permissions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OWNER</strong></td>
+<td>Full control - edit team, manage all members, change roles, transfer ownership, delete team</td>
+</tr>
+<tr>
+<td><strong>CO_OWNER</strong></td>
+<td>Edit team info, manage members (add/remove below their role), cannot delete team</td>
+</tr>
+<tr>
+<td><strong>MODERATOR</strong></td>
+<td>Add/remove regular members only</td>
+</tr>
+<tr>
+<td><strong>MEMBER</strong></td>
+<td>Basic membership, can view team info and leave</td>
+</tr>
+</tbody>
+</table>
+<h3 id="team-member-status">Team Member Status</h3>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ACTIVE</strong></td>
+<td>Full team member</td>
+</tr>
+<tr>
+<td><strong>PENDING_INVITE</strong></td>
+<td>Invited by team, awaiting user acceptance</td>
+</tr>
+<tr>
+<td><strong>PENDING_APPROVAL</strong></td>
+<td>User requested to join, awaiting team approval</td>
+</tr>
+</tbody>
+</table>
+<h3 id="team-business-rules">Team Business Rules</h3>
+<ol>
+<li>
+<p><strong>One Team Per User:</strong> Users can only be a member of one team at a time</p>
+</li>
+<li>
+<p><strong>Team Name Sanitization:</strong> System automatically removes variants of "team" from team names (including leetspeak variations like "t34m", "te4m", etc.)</p>
+</li>
+<li>
+<p><strong>Join Flow:</strong>
+   - If team <code>requiresApproval = false</code>: User joins immediately
+   - If team <code>requiresApproval = true</code>: Creates pending request, owner/co-owner must approve
+   - Special case: If user has a pending invite when they request to join → auto-approved</p>
+</li>
+<li>
+<p><strong>Invite Flow:</strong>
+   - Owner/co-owner invites by MECA ID
+   - Target user must have active MECA membership
+   - Special case: If target has pending join request → auto-approved</p>
+</li>
+<li>
+<p><strong>Owner Restrictions:</strong> Team owner cannot leave the team. They must either:
+   - Transfer ownership to another member first, OR
+   - Delete the team entirely</p>
+</li>
+<li>
+<p><strong>Role Hierarchy Enforcement:</strong>
+   - Members can only remove users with roles BELOW their own
+   - Co-owners cannot promote anyone to co-owner (only owner can)</p>
+</li>
+<li>
+<p><strong>Default Team Capacity:</strong> 50 members maximum (configurable per team)</p>
+</li>
+</ol>
+<hr />
+<h2 id="5-events-system">5. Events System</h2>
+<h3 id="event-status-flow">Event Status Flow</h3>
+<pre><code>PENDING → UPCOMING → ONGOING → COMPLETED
+                  ↘ CANCELLED
+NOT_PUBLIC (hidden from public view)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PENDING</strong></td>
+<td>Event created but not yet confirmed</td>
+</tr>
+<tr>
+<td><strong>UPCOMING</strong></td>
+<td>Confirmed event, visible to public</td>
+</tr>
+<tr>
+<td><strong>ONGOING</strong></td>
+<td>Event currently in progress</td>
+</tr>
+<tr>
+<td><strong>COMPLETED</strong></td>
+<td>Event finished</td>
+</tr>
+<tr>
+<td><strong>CANCELLED</strong></td>
+<td>Event was cancelled</td>
+</tr>
+<tr>
+<td><strong>NOT_PUBLIC</strong></td>
+<td>Event hidden from public listings</td>
+</tr>
+</tbody>
+</table>
+<h3 id="event-types-point-multipliers">Event Types &amp; Point Multipliers</h3>
+<table>
+<thead>
+<tr>
+<th>Event Type</th>
+<th>Multiplier</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1x Event</strong></td>
+<td>1x</td>
+<td>Standard local event</td>
+</tr>
+<tr>
+<td><strong>2x Event</strong></td>
+<td>2x</td>
+<td>Regional event (default)</td>
+</tr>
+<tr>
+<td><strong>3x Event (SOUNDFEST)</strong></td>
+<td>3x</td>
+<td>Major SOUNDFEST events</td>
+</tr>
+<tr>
+<td><strong>4x Event</strong></td>
+<td>4x</td>
+<td>Special competitions (SQ, Install, RTA, SQ2/SQ2+)</td>
+</tr>
+<tr>
+<td><strong>Branded Event</strong></td>
+<td>Variable</td>
+<td>Manufacturer-branded event</td>
+</tr>
+<tr>
+<td><strong>Sponsored Event</strong></td>
+<td>Variable</td>
+<td>Sponsored event</td>
+</tr>
+<tr>
+<td><strong>Other</strong></td>
+<td>Variable</td>
+<td>Other event types</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-event-hosting-request-workflow">6. Event Hosting Request Workflow</h2>
+<h3 id="status-definitions">Status Definitions</h3>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PENDING</strong></td>
+<td>New request submitted, awaiting admin review</td>
+</tr>
+<tr>
+<td><strong>ASSIGNED_TO_ED</strong></td>
+<td>Admin assigned to an Event Director</td>
+</tr>
+<tr>
+<td><strong>ED_REVIEWING</strong></td>
+<td>Event Director is reviewing the request</td>
+</tr>
+<tr>
+<td><strong>ED_ACCEPTED</strong></td>
+<td>Event Director accepted the assignment</td>
+</tr>
+<tr>
+<td><strong>ED_REJECTED</strong></td>
+<td>Event Director rejected (returns to admin)</td>
+</tr>
+<tr>
+<td><strong>UNDER_REVIEW</strong></td>
+<td>Admin is directly reviewing</td>
+</tr>
+<tr>
+<td><strong>APPROVED</strong></td>
+<td>Request approved, event created</td>
+</tr>
+<tr>
+<td><strong>APPROVED_PENDING_INFO</strong></td>
+<td>Approved but needs additional information</td>
+</tr>
+<tr>
+<td><strong>PENDING_INFO</strong></td>
+<td>Waiting for additional info from requestor</td>
+</tr>
+<tr>
+<td><strong>REJECTED</strong></td>
+<td>Request rejected</td>
+</tr>
+<tr>
+<td><strong>CANCELLED</strong></td>
+<td>Request cancelled by requestor</td>
+</tr>
+</tbody>
+</table>
+<h3 id="workflow-diagram">Workflow Diagram</h3>
+<pre><code>                    ┌─────────────────────────────────────────────┐
+                    │                                             │
+                    ▼                                             │
+┌─────────┐    ┌─────────────────┐    ┌──────────────┐    ┌──────────────┐
+│ PENDING │───▶│ ASSIGNED_TO_ED  │───▶│ ED_REVIEWING │───▶│ ED_ACCEPTED  │
+└─────────┘    └─────────────────┘    └──────────────┘    └──────────────┘
+     │                                       │                    │
+     │                                       ▼                    │
+     │                               ┌──────────────┐             │
+     │                               │ ED_REJECTED  │─────────────┤
+     │                               └──────────────┘             │
+     │                                                            │
+     ▼                                                            ▼
+┌──────────────┐                                          ┌────────────┐
+│ UNDER_REVIEW │─────────────────────────────────────────▶│  APPROVED  │
+└──────────────┘                                          └────────────┘
+     │                                                            │
+     │         ┌─────────────────────┐                           │
+     ├────────▶│ APPROVED_PENDING_INFO│◀──────────────────────────┤
+     │         └─────────────────────┘                           │
+     │         ┌─────────────────┐                               │
+     ├────────▶│  PENDING_INFO   │◀──────────────────────────────┤
+     │         └─────────────────┘                               │
+     │         ┌─────────────────┐                               │
+     └────────▶│    REJECTED     │                               │
+               └─────────────────┘                               │
+                                                                  │
+                                               ▼ (On APPROVED)
+                                      ┌─────────────────┐
+                                      │ EVENT CREATED   │
+                                      │ (auto-generated)│
+                                      └─────────────────┘
+</code></pre>
+<h3 id="messaging-system">Messaging System</h3>
+<ul>
+<li><strong>Private Messages:</strong> Visible only to Event Directors and Admins</li>
+<li><strong>Public Messages:</strong> Visible to the requestor (and ED/Admin)</li>
+<li>Notifications are sent based on recipient type and message privacy settings</li>
+</ul>
+<hr />
+<h2 id="7-competition-results-points">7. Competition Results &amp; Points</h2>
+<h3 id="eligible-competition-formats">Eligible Competition Formats</h3>
+<p>Only these formats earn points toward standings:</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SPL</strong></td>
+<td>Sound Pressure Level (loudness)</td>
+</tr>
+<tr>
+<td><strong>SQL</strong></td>
+<td>Sound Quality League</td>
+</tr>
+<tr>
+<td><strong>SSI</strong></td>
+<td>Show and Shine Install</td>
+</tr>
+<tr>
+<td><strong>MK</strong></td>
+<td>MECA Kids</td>
+</tr>
+</tbody>
+</table>
+<h3 id="points-by-placement">Points by Placement</h3>
+<p>Points are awarded only to TOP 5 placements:</p>
+<table>
+<thead>
+<tr>
+<th>Placement</th>
+<th>1x Event</th>
+<th>2x Event</th>
+<th>3x Event (SOUNDFEST)</th>
+<th>4x Event (SQ/Install/RTA)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1st</td>
+<td>5</td>
+<td>10</td>
+<td>15</td>
+<td>20</td>
+</tr>
+<tr>
+<td>2nd</td>
+<td>4</td>
+<td>8</td>
+<td>12</td>
+<td>19</td>
+</tr>
+<tr>
+<td>3rd</td>
+<td>3</td>
+<td>6</td>
+<td>9</td>
+<td>18</td>
+</tr>
+<tr>
+<td>4th</td>
+<td>2</td>
+<td>4</td>
+<td>6</td>
+<td>17</td>
+</tr>
+<tr>
+<td>5th</td>
+<td>1</td>
+<td>2</td>
+<td>3</td>
+<td>16</td>
+</tr>
+<tr>
+<td>6th+</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="point-eligibility-rules">Point Eligibility Rules</h3>
+<p>A competitor earns points only if ALL of the following are true:</p>
+<ol>
+<li>MECA ID is NOT <code>999999</code> (guest competitor)</li>
+<li>MECA ID is NOT <code>0</code> or <code>null</code> (unassigned)</li>
+<li>MECA ID does NOT start with <code>99</code> (test/special entries)</li>
+<li>Membership status is <code>active</code></li>
+<li>Membership is NOT expired</li>
+</ol>
+<h3 id="results-import-methods">Results Import Methods</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Manual Entry</strong></td>
+<td>Single result entered via form</td>
+</tr>
+<tr>
+<td><strong>Excel Import</strong></td>
+<td>Bulk import from spreadsheet</td>
+</tr>
+<tr>
+<td><strong>Termlab Import</strong></td>
+<td>Import from Termlab competition software</td>
+</tr>
+</tbody>
+</table>
+<h3 id="import-logic">Import Logic</h3>
+<ol>
+<li><strong>MECA ID provided + matches active member:</strong> Use system profile data, eligible for points</li>
+<li><strong>MECA ID provided + no match:</strong> Keep file MECA ID, NOT eligible for points</li>
+<li><strong>No MECA ID + name matches active member:</strong> Use system profile data, eligible for points</li>
+<li><strong>No MECA ID + no match:</strong> Assign MECA ID <code>999999</code> (guest), NOT eligible for points</li>
+</ol>
+<h3 id="duplicate-handling-during-import">Duplicate Handling During Import</h3>
+<p>System checks for duplicates by:
+- <strong>For members:</strong> Format + Class + MECA ID
+- <strong>For non-members:</strong> Format + Class + Name (when MECA ID is 999999)</p>
+<p>Options when duplicate found:
+- <strong>Skip:</strong> Keep existing result
+- <strong>Replace:</strong> Use imported result</p>
+<h3 id="audit-trail">Audit Trail</h3>
+<p>All result changes are logged with:
+- Entry method (manual, excel, termlab)
+- Action type (create, update, delete)
+- Session tracking for batch imports
+- Old and new data captured
+- Revision count incremented on updates
+- Uploaded files saved to <code>audit-logs/uploads/{eventId}/</code>
+- Manual entries exported to <code>audit-logs/sessions/{eventId}/</code></p>
+<hr />
+<h2 id="8-payment-processing-stripe">8. Payment Processing (Stripe)</h2>
+<h3 id="payment-flow">Payment Flow</h3>
+<pre><code>1. User selects membership type
+              ↓
+2. Frontend creates PaymentIntent via API
+              ↓
+3. Backend validates membership config is active
+              ↓
+4. Backend creates Stripe PaymentIntent with metadata:
+   - email
+   - membershipCategory
+   - billing info
+   - team/business info (if applicable)
+              ↓
+5. Frontend displays Stripe checkout
+              ↓
+6. User completes payment
+              ↓
+7. Stripe sends webhook: payment_intent.succeeded
+              ↓
+8. Backend webhook handler:
+   a. Creates membership record
+   b. Links to user account (or stores as guest)
+   c. Triggers QuickBooks sync (async)
+              ↓
+9. User sees confirmation
+</code></pre>
+<h3 id="webhook-events-handled">Webhook Events Handled</h3>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>payment_intent.succeeded</code></td>
+<td>Create membership, sync to QuickBooks</td>
+</tr>
+<tr>
+<td><code>payment_intent.payment_failed</code></td>
+<td>Log failure</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-accounting-integration-quickbooks">9. Accounting Integration (QuickBooks)</h2>
+<h3 id="oauth-connection">OAuth Connection</h3>
+<ul>
+<li>Supports both sandbox and production environments</li>
+<li>Stores OAuth tokens with expiration tracking</li>
+<li>Auto-refreshes access tokens (with 5-minute buffer before expiry)</li>
+</ul>
+<h3 id="sales-receipt-creation">Sales Receipt Creation</h3>
+<p>On successful payment:</p>
+<ol>
+<li>Find or create QuickBooks customer by email</li>
+<li>Map membership type to QuickBooks item (via <code>quickbooksItemId</code> in membership config)</li>
+<li>Create sales receipt with:
+   - Customer info
+   - Line items (membership product)
+   - Billing address
+   - Deposit account (via <code>quickbooksAccountId</code> in membership config)</li>
+</ol>
+<h3 id="sync-behavior">Sync Behavior</h3>
+<ul>
+<li>Sync happens asynchronously (non-blocking)</li>
+<li>Errors are logged but don't fail the payment</li>
+<li>Last sync timestamp tracked for monitoring</li>
+</ul>
+<hr />
+<h2 id="10-seasons-championships">10. Seasons &amp; Championships</h2>
+<h3 id="season-definition">Season Definition</h3>
+<p>Each season has:
+- <strong>Name:</strong> Season name (e.g., "2025 Season")
+- <strong>Year:</strong> Competition year
+- <strong>Start Date / End Date:</strong> Season boundaries
+- <strong>isActive:</strong> Flag indicating current season</p>
+<h3 id="championship-archives">Championship Archives</h3>
+<p>Historical data preserved:
+- Championship awards by year
+- Winner information
+- Competition results archive
+- Legacy standings data</p>
+<hr />
+<h2 id="11-data-relationships">11. Data Relationships</h2>
+<pre><code>┌─────────────┐
+│   Profile   │
+│  (User)     │
+└─────────────┘
+       │
+       ├──────────────────┬───────────────────┬──────────────────┬──────────────────┐
+       │                  │                   │                  │                  │
+       ▼                  ▼                   ▼                  ▼                  ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Memberships │    │ TeamMember  │    │   Events    │    │ Competition │    │   Event     │
+│    (N)      │    │    (N)      │    │(as director)│    │   Results   │    │  Hosting    │
+└─────────────┘    └─────────────┘    └─────────────┘    │    (N)      │    │  Requests   │
+       │                  │                   │          └─────────────┘    └─────────────┘
+       ▼                  ▼                   │                                    │
+┌─────────────┐    ┌─────────────┐           │                                    │
+│ Membership  │    │    Team     │           │                                    │
+│ TypeConfig  │    │             │           │                                    │
+└─────────────┘    └─────────────┘           │                                    │
+                                              │                                    │
+                                              ▼                                    │
+                                       ┌─────────────┐                            │
+                                       │   Season    │                            │
+                                       └─────────────┘                            │
+                                                                                   │
+                                              ┌────────────────────────────────────┘
+                                              │ (On approval, creates)
+                                              ▼
+                                       ┌─────────────┐
+                                       │    Event    │
+                                       └─────────────┘
+</code></pre>
+<hr />
+<h2 id="12-key-business-constants">12. Key Business Constants</h2>
+<h3 id="special-meca-ids">Special MECA IDs</h3>
+<table>
+<thead>
+<tr>
+<th>MECA ID</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>999999</code></td>
+<td>Guest competitor (no membership)</td>
+</tr>
+<tr>
+<td><code>0</code> or <code>null</code></td>
+<td>Unassigned</td>
+</tr>
+<tr>
+<td>Starting with <code>99</code></td>
+<td>Test/special entries</td>
+</tr>
+</tbody>
+</table>
+<h3 id="defaults">Defaults</h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Membership duration</td>
+<td>1 year</td>
+</tr>
+<tr>
+<td>Team max members</td>
+<td>50</td>
+</tr>
+<tr>
+<td>Event point multiplier</td>
+<td>2x</td>
+</tr>
+</tbody>
+</table>
+<h3 id="external-service-integrations">External Service Integrations</h3>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Stripe</strong></td>
+<td>Payment processing</td>
+</tr>
+<tr>
+<td><strong>QuickBooks</strong></td>
+<td>Accounting sync</td>
+</tr>
+<tr>
+<td><strong>Twilio</strong></td>
+<td>SMS notifications</td>
+</tr>
+<tr>
+<td><strong>reCAPTCHA v3</strong></td>
+<td>Form spam protection</td>
+</tr>
+<tr>
+<td><strong>Supabase</strong></td>
+<td>Database + Authentication</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="questions-for-review">Questions for Review</h2>
+<p>Please review this document and let me know if any of the following need revision:</p>
+<ol>
+<li><strong>User Roles:</strong> Are the permissions correct for each role?</li>
+<li><strong>Membership Categories:</strong> Are all membership types represented?</li>
+<li><strong>Team Rules:</strong> Are the team join/invite rules accurate?</li>
+<li><strong>Event Workflow:</strong> Is the hosting request workflow correct?</li>
+<li><strong>Points System:</strong> Are the point values and eligibility rules correct?</li>
+<li><strong>Any Missing Features:</strong> Are there features not documented here?</li>
+</ol>
+<hr />
+<p><em>End of Document</em></p>
     <footer>
-        <p>MECA Competition System - Business Logic Overview</p>
-        <p style="font-size: 0.9rem; margin-top: 5px;">Last Updated: December 2025</p>
+        <p>MECA Car Audio Documentation · For platform admins and the development team</p>
     </footer>
 </body>
 </html>

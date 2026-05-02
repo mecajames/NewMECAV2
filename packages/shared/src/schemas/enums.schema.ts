@@ -440,6 +440,7 @@ export enum VotingSessionStatus {
   OPEN = 'open',
   CLOSED = 'closed',
   FINALIZED = 'finalized',
+  CANCELED = 'canceled',
 }
 
 export const VotingSessionStatusSchema = z.nativeEnum(VotingSessionStatus);

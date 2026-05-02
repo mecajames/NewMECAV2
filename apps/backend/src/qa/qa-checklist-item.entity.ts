@@ -41,4 +41,15 @@ export class QaChecklistItem {
 
   @ManyToOne(() => QaChecklistItem, { nullable: true, fieldName: 'source_item_id' })
   sourceItem?: QaChecklistItem;
+
+  // True for items added by the admin (round-scoped or promoted) rather than
+  // copied from the master checklist. Lets the UI flag and group them.
+  @Property({ fieldName: 'is_custom', type: 'boolean', default: false })
+  isCustom: boolean = false;
+
+  // For master-copied items: id of the source master row. Lets us avoid
+  // duplicate-add when an admin re-runs the picker, and supports "edits to
+  // master propagate to in-progress rounds" if we ever want it.
+  @Property({ fieldName: 'source_master_id', type: 'uuid', nullable: true })
+  sourceMasterId?: string;
 }

@@ -1,0 +1,2356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MECA Judge & Event Director System Specification - MECA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
+    </style>
+</head>
+<body>
+    <nav class="docs-nav">
+        <a href="index.html">← Documentation Index</a>
+    </nav>
+<h1 id="meca-judge-event-director-management-system">MECA Judge &amp; Event Director Management System</h1>
+<h2 id="complete-development-specification-for-ai-developer-agent">Complete Development Specification for AI Developer Agent</h2>
+<hr />
+<h2 id="executive-summary">Executive Summary</h2>
+<p>Build a comprehensive Judge and Event Director management system for the MECA Car Audio competition platform. This system will manage the full lifecycle of judges and event directors from application through seasonal certification, event assignment, and public recognition. The system must integrate seamlessly with the existing application infrastructure, utilizing current database connections, APIs, user/member systems, events, and seasons.</p>
+<p><strong>Critical Requirement</strong>: Before creating any new tables, models, or API endpoints, thoroughly analyze the existing codebase to understand current patterns, naming conventions, and available resources. Reuse existing infrastructure wherever possible.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-system-overview">System Overview</a></li>
+<li><a href="#2-prerequisites--dependencies">Prerequisites &amp; Dependencies</a></li>
+<li><a href="#3-judge-application-system">Judge Application System</a></li>
+<li><a href="#4-admin-dashboard---judge-management">Admin Dashboard - Judge Management</a></li>
+<li><a href="#5-approved-judges-management">Approved Judges Management</a></li>
+<li><a href="#6-judge-levels--progression">Judge Levels &amp; Progression</a></li>
+<li><a href="#7-event-director-system">Event Director System</a></li>
+<li><a href="#8-event-assignment-workflow">Event Assignment Workflow</a></li>
+<li><a href="#9-public-directory">Public Directory</a></li>
+<li><a href="#10-rating-system">Rating System</a></li>
+<li><a href="#11-data-models">Data Models</a></li>
+<li><a href="#12-api-endpoints">API Endpoints</a></li>
+<li><a href="#13-uiux-requirements">UI/UX Requirements</a></li>
+<li><a href="#14-integration-points">Integration Points</a></li>
+<li><a href="#15-business-rules--validation">Business Rules &amp; Validation</a></li>
+</ol>
+<hr />
+<h2 id="1-system-overview">1. System Overview</h2>
+<h3 id="11-purpose">1.1 Purpose</h3>
+<p>Create an official, tracked system for managing MECA's pool of certified judges and event directors. Judges and event directors are independent contractors, not employees. This system establishes certification standards, tracks performance, and provides transparency to the MECA community.</p>
+<h3 id="12-core-user-roles">1.2 Core User Roles</h3>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Public/Guest</strong></td>
+<td>Can view public directory, informational pages</td>
+</tr>
+<tr>
+<td><strong>MECA Member</strong></td>
+<td>Can apply to become a judge or event director</td>
+</tr>
+<tr>
+<td><strong>Judge (Approved)</strong></td>
+<td>Can manage availability, request to work events, view assignments</td>
+</tr>
+<tr>
+<td><strong>Event Director (Approved)</strong></td>
+<td>Can view judge assignments, view their event assignments (uses existing <code>event_director</code> role)</td>
+</tr>
+<tr>
+<td><strong>Admin</strong></td>
+<td>Full system access: review applications, manage qualifications, assign events, create applications on behalf of members</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> The system already has an <code>event_director</code> role - use the existing role rather than creating a new one.</p>
+<h3 id="13-system-scope">1.3 System Scope</h3>
+<p><strong>In Scope:</strong>
+- Judge recruitment and application pipeline
+- Event Director recruitment and application pipeline
+- Application review and approval workflow
+- Admin ability to create applications on behalf of members
+- Seasonal qualification management
+- Judge level progression tracking
+- Event assignment and tracking
+- Performance statistics and history
+- Public-facing directory with ratings
+- Availability management
+- Event volunteer/request system</p>
+<p><strong>Out of Scope:</strong>
+- Payment/compensation tracking (handled externally)
+- Background check integration (manual process)
+- Event Director event management functionality (future development)</p>
+<hr />
+<h2 id="2-prerequisites-dependencies">2. Prerequisites &amp; Dependencies</h2>
+<h3 id="21-membership-requirement">2.1 Membership Requirement</h3>
+<p><strong>Critical Business Rule</strong>: Only active MECA members can apply to become judges or event directors. The application process must verify membership status before allowing form submission.</p>
+<p><strong>Implementation:</strong>
+- When user clicks "Apply to Become a Judge" or "Apply to Become an Event Director"
+- System checks if user is logged in
+- If not logged in → redirect to login with return URL
+- If logged in → verify active membership status
+- If no active membership → display message explaining requirement with link to membership signup
+- If active membership AND already logged in → <strong>proceed directly to application form</strong> (skip email verification)
+- If active membership AND coming from guest/public page → proceed with email verification step</p>
+<h3 id="22-existing-system-dependencies">2.2 Existing System Dependencies</h3>
+<p>The following existing system components must be utilized:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Users/Members</strong></td>
+<td>Link judge/ED profiles to existing user accounts</td>
+</tr>
+<tr>
+<td><strong>Events</strong></td>
+<td>Attach judges and event directors to events</td>
+</tr>
+<tr>
+<td><strong>Seasons</strong></td>
+<td>Seasonal qualification tracking</td>
+</tr>
+<tr>
+<td><strong>Authentication</strong></td>
+<td>Use existing auth system for login/verification</td>
+</tr>
+<tr>
+<td><strong>File Upload / Photo Gallery</strong></td>
+<td>Use existing upload infrastructure; headshot is a separate image type in user's gallery</td>
+</tr>
+<tr>
+<td><strong>Email System</strong></td>
+<td>Use existing email infrastructure for verification</td>
+</tr>
+<tr>
+<td><strong>Event Director Role</strong></td>
+<td>Use existing <code>event_director</code> role - do not create a new role</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-judge-application-system">3. Judge Application System</h2>
+<h3 id="31-public-information-page">3.1 Public Information Page</h3>
+<p>Create a compelling, informational page that explains the judge program.</p>
+<p><strong>Route:</strong> <code>/judges/become-a-judge</code> or <code>/become-a-judge</code></p>
+<p><strong>Content Sections:</strong></p>
+<ol>
+<li>
+<p><strong>Hero Section</strong>
+   - Headline: "Become a MECA Certified Judge"
+   - Subheadline: "Join the elite group of professionals who shape the future of car audio competition"
+   - Hero image/banner of judges in action</p>
+</li>
+<li>
+<p><strong>Why Become a Judge</strong>
+   - Be part of the car audio community at the highest level
+   - Share your expertise and passion
+   - Travel to events across your region
+   - Build your reputation in the industry
+   - Network with industry professionals and enthusiasts</p>
+</li>
+<li>
+<p><strong>What We Look For</strong>
+   - Car audio industry experience
+   - Technical knowledge in SQL (Sound Quality) and/or SPL (Sound Pressure Level)
+   - Professional demeanor and integrity
+   - Availability for weekend events
+   - Willingness to travel within your designated region</p>
+</li>
+<li>
+<p><strong>The Application Process</strong>
+   - Step 1: Submit your application
+   - Step 2: Application review by MECA staff
+   - Step 3: Training and certification (if approved)
+   - Step 4: Begin judging at local events</p>
+</li>
+<li>
+<p><strong>Judge Levels</strong>
+   - In-Training: New judges learning under supervision
+   - Certified: Fully qualified to judge independently
+   - Head Judge: Lead judge at events, mentors others
+   - Master Judge: Elite status, national-level events</p>
+</li>
+<li>
+<p><strong>Call to Action</strong>
+   - "Ready to Apply?" button
+   - Note: "Active MECA membership required"</p>
+</li>
+</ol>
+<h3 id="32-application-access-flow">3.2 Application Access Flow</h3>
+<p><strong>Purpose:</strong> Ensure only qualified members can apply, with streamlined access for logged-in users.</p>
+<p><strong>Flow:</strong></p>
+<ol>
+<li>User clicks "Apply Now" on information page</li>
+<li>System checks login status and membership (see 2.1)</li>
+<li><strong>If user is already logged in with active membership:</strong>
+   - Skip email verification entirely
+   - Take user directly to the application form</li>
+<li><strong>If user is NOT logged in:</strong>
+   - Redirect to login with return URL to application
+   - After login, check membership
+   - If active membership → display email verification screen:<ul>
+<li>"Before we begin, let's verify your email address"</li>
+<li>Display user's email from their account</li>
+<li>"Send Verification Email" button</li>
+<li>User clicks button → system sends verification email</li>
+<li>Email contains:</li>
+<li>Subject: "MECA Judge Application - Verify Your Email"</li>
+<li>Body: Brief message + verification link</li>
+<li>Link expires in 24 hours</li>
+<li>User clicks link → taken directly to application form</li>
+<li>If link expired → show message with option to resend</li>
+</ul>
+</li>
+</ol>
+<p><strong>Verification Token (for non-logged-in flow only):</strong>
+- Generate unique token stored in database
+- Associate with user ID and timestamp
+- Mark as used after successful verification
+- Token format: UUID or secure random string</p>
+<h3 id="33-judge-application-form">3.3 Judge Application Form</h3>
+<p><strong>Route:</strong> <code>/judges/apply</code> (accessible via verification link OR directly if logged in)</p>
+<p><strong>Form Sections:</strong></p>
+<h4 id="section-1-personal-information">Section 1: Personal Information</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full Legal Name</td>
+<td>Text</td>
+<td>Yes</td>
+<td>Pre-filled from account if available</td>
+</tr>
+<tr>
+<td>Preferred Name/Nickname</td>
+<td>Text</td>
+<td>No</td>
+<td>Name to display on badge/directory</td>
+</tr>
+<tr>
+<td>Date of Birth</td>
+<td>Date</td>
+<td>Yes</td>
+<td>Must be 18+ to apply</td>
+</tr>
+<tr>
+<td>Phone Number</td>
+<td>Phone</td>
+<td>Yes</td>
+<td>Primary contact</td>
+</tr>
+<tr>
+<td>Secondary Phone</td>
+<td>Phone</td>
+<td>No</td>
+<td>Backup contact</td>
+</tr>
+</tbody>
+</table>
+<h4 id="section-1b-profile-headshot">Section 1b: Profile Headshot</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Judge/ED Headshot</td>
+<td>Image Upload</td>
+<td>Yes</td>
+<td>Professional headshot photo</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Headshot Image Requirements:</strong>
+- This is a <strong>separate image type</strong> from regular profile photos
+- Stored within the user's photo gallery but flagged as <code>headshot</code> type
+- Minimum dimensions: 400x400px
+- Maximum file size: 5MB
+- <strong>Only displays publicly if user is an approved Judge or Event Director</strong>
+- Can be managed/updated from user's photo gallery settings
+- Should be a professional head and shoulders shot</p>
+<h4 id="section-2-location-availability">Section 2: Location &amp; Availability</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Country</td>
+<td>Dropdown</td>
+<td>Yes</td>
+<td>Pre-populated list</td>
+</tr>
+<tr>
+<td>State/Province</td>
+<td>Dropdown</td>
+<td>Yes</td>
+<td>Dynamic based on country</td>
+</tr>
+<tr>
+<td>City</td>
+<td>Text</td>
+<td>Yes</td>
+<td></td>
+</tr>
+<tr>
+<td>ZIP/Postal Code</td>
+<td>Text</td>
+<td>Yes</td>
+<td></td>
+</tr>
+<tr>
+<td>Travel Radius</td>
+<td>Dropdown</td>
+<td>Yes</td>
+<td>Options: 25mi, 50mi, 100mi, 150mi, 200mi, 250mi+</td>
+</tr>
+<tr>
+<td>Additional States/Regions</td>
+<td>Multi-select</td>
+<td>No</td>
+<td>Other areas willing to travel to</td>
+</tr>
+<tr>
+<td>Weekend Availability</td>
+<td>Checkboxes</td>
+<td>Yes</td>
+<td>Saturday, Sunday, Both</td>
+</tr>
+<tr>
+<td>Typical Availability</td>
+<td>Text Area</td>
+<td>No</td>
+<td>"Most weekends except holidays" etc.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="section-3-experience-qualifications">Section 3: Experience &amp; Qualifications</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Years in Car Audio Industry</td>
+<td>Number</td>
+<td>Yes</td>
+<td></td>
+</tr>
+<tr>
+<td>Current/Past Industry Positions</td>
+<td>Text Area</td>
+<td>Yes</td>
+<td>Installer, retailer, manufacturer, etc.</td>
+</tr>
+<tr>
+<td>Company/Shop Names</td>
+<td>Text Area</td>
+<td>No</td>
+<td>Where they've worked</td>
+</tr>
+<tr>
+<td>Relevant Education/Training</td>
+<td>Text Area</td>
+<td>No</td>
+<td>Technical schools, certifications</td>
+</tr>
+<tr>
+<td>Competition History</td>
+<td>Text Area</td>
+<td>No</td>
+<td>As competitor or other involvement</td>
+</tr>
+<tr>
+<td>Judging Experience</td>
+<td>Text Area</td>
+<td>No</td>
+<td>Other organizations, informal judging</td>
+</tr>
+</tbody>
+</table>
+<h4 id="section-4-specialties">Section 4: Specialties</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primary Specialty</td>
+<td>Radio buttons</td>
+<td>Yes</td>
+<td>SQL (Sound Quality), SPL (Sound Pressure Level), Both</td>
+</tr>
+<tr>
+<td>SQL Sub-specialties</td>
+<td>Checkboxes</td>
+<td>Conditional</td>
+<td>If SQL selected: Install Quality, Sound Quality, RTA, etc.</td>
+</tr>
+<tr>
+<td>SPL Sub-specialties</td>
+<td>Checkboxes</td>
+<td>Conditional</td>
+<td>If SPL selected: dB Drag, Bass Race, etc.</td>
+</tr>
+<tr>
+<td>Additional Skills</td>
+<td>Text Area</td>
+<td>No</td>
+<td>Other relevant expertise</td>
+</tr>
+</tbody>
+</table>
+<h4 id="section-5-references-highly-encouraged">Section 5: References (Highly Encouraged)</h4>
+<p><strong>Note:</strong> References are <strong>not required but highly encouraged</strong>. Display message: "While not required, providing professional references significantly strengthens your application and may expedite the review process."</p>
+<p>Collect up to 5 non-family professional references.</p>
+<p>For each reference (1-5):
+| Field | Type | Required |
+|-------|------|----------|
+| Full Name | Text | No |
+| Relationship | Text | No |
+| Company/Organization | Text | No |
+| Phone Number | Phone | No |
+| Email Address | Email | No |
+| Years Known | Number | No |</p>
+<p><strong>Display:</strong> Show counter: "References provided: X of 5 (recommended)"</p>
+<p><strong>Validation:</strong> If any field in a reference row is filled, require at minimum: Name, Phone or Email</p>
+<h4 id="section-6-additional-information">Section 6: Additional Information</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Why do you want to become a MECA Judge?</td>
+<td>Text Area</td>
+<td>Yes</td>
+<td>Min 100 characters</td>
+</tr>
+<tr>
+<td>What makes you qualified?</td>
+<td>Text Area</td>
+<td>Yes</td>
+<td>Min 100 characters</td>
+</tr>
+<tr>
+<td>Anything else we should know?</td>
+<td>Text Area</td>
+<td>No</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="section-7-acknowledgment">Section 7: Acknowledgment</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Independent Contractor Acknowledgment</td>
+<td>Checkbox</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Code of Conduct Agreement</td>
+<td>Checkbox</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Background Check Consent</td>
+<td>Checkbox</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Terms and Conditions</td>
+<td>Checkbox</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Acknowledgment Text Examples:</strong>
+- "I understand that MECA Judges are independent contractors, not employees of MECA."
+- "I agree to conduct myself professionally and uphold MECA's Code of Conduct."
+- "I consent to a background check if required for certification."</p>
+<h3 id="34-application-submission">3.4 Application Submission</h3>
+<p><strong>On Submit:</strong>
+1. Validate all required fields
+2. Save application to database with status "Pending"
+3. Save timestamp of submission (Application Date)
+4. Upload and store headshot image (flagged as headshot type in user gallery)
+5. Display confirmation page:
+   - "Thank you for your application!"
+   - "A MECA representative will reach out when an opening becomes available."
+   - "Application Reference Number: [JAPP-XXXX]"
+   - "You can check your application status in your member dashboard."
+6. Send confirmation email to applicant
+7. Send notification email to admin(s) about new application</p>
+<hr />
+<h2 id="4-admin-dashboard-judge-management">4. Admin Dashboard - Judge Management</h2>
+<h3 id="41-pending-applications-section">4.1 Pending Applications Section</h3>
+<p><strong>Route:</strong> <code>/admin/judges/applications</code> or within existing admin structure</p>
+<p><strong>List View Features:</strong></p>
+<p><strong>Columns:</strong>
+| Column | Sortable | Notes |
+|--------|----------|-------|
+| Application Date | Yes | The date the application was submitted; Default sort: newest first |
+| Applicant Name | Yes | Click to view full application |
+| Location | Yes | City, State format |
+| Specialty | Yes | SQL, SPL, or Both |
+| Age | Yes | Calculated from DOB |
+| References | Yes | Count of references provided (0-5) |
+| Status | Yes | Pending, Under Review, Approved, Rejected |
+| Actions | No | View, Quick Actions |</p>
+<p><strong>Filters Panel:</strong>
+| Filter | Type | Options |
+|--------|------|---------|
+| Status | Multi-select | Pending, Under Review, Approved, Rejected |
+| Country | Dropdown | All countries in applications |
+| State | Dropdown | Dynamic based on country |
+| City | Text search | Autocomplete from applications |
+| Specialty | Multi-select | SQL, SPL, Both |
+| Age Range | Range slider | 18-70+ |
+| Application Date | Date picker | Filter by specific date or date range |
+| Availability | Multi-select | Saturday, Sunday, Both |
+| Has References | Toggle | Yes/No filter for applications with references |</p>
+<p><strong>Bulk Actions:</strong>
+- Mark selected as "Under Review"
+- Export selected to CSV</p>
+<h3 id="42-admin-create-application-judge-entry">4.2 Admin Create Application / Judge Entry</h3>
+<p><strong>Purpose:</strong> Allow admins to enter an application on behalf of a member, or directly create a judge/event director entry.</p>
+<p><strong>Route:</strong> <code>/admin/judges/applications/create</code> or modal from applications list</p>
+<p><strong>Two Options:</strong></p>
+<h4 id="option-a-create-application-on-behalf-of-member">Option A: Create Application on Behalf of Member</h4>
+<ol>
+<li>Admin clicks "Create Application" button</li>
+<li>Search/select existing member from user database</li>
+<li>Fill in application form with same fields as public form</li>
+<li>Application is saved with status "Pending"</li>
+<li>Appears in pending applications list like any other application</li>
+<li>Can be approved/rejected through normal workflow</li>
+<li>Record shows "Entered by: [Admin Name]" in audit trail</li>
+</ol>
+<h4 id="option-b-direct-judgeed-creation-expedited">Option B: Direct Judge/ED Creation (Expedited)</h4>
+<ol>
+<li>Admin clicks "Add Judge Directly" or "Add Event Director Directly"</li>
+<li>Search/select existing member from user database</li>
+<li>Fill in abbreviated form (key fields only):
+   - Headshot
+   - Location
+   - Specialty
+   - Level (for judges)
+   - Admin notes</li>
+<li>Judge/ED is created with status "Pending" in the approved list</li>
+<li>Admin can then go to detail page and change status to "Approved"</li>
+<li>This bypasses the application process for known qualified individuals</li>
+</ol>
+<p><strong>Audit Trail:</strong> All admin-created entries must record:
+- Created by (admin user ID)
+- Created date
+- Method (application on behalf / direct creation)</p>
+<h3 id="43-application-detail-view">4.3 Application Detail View</h3>
+<p><strong>Route:</strong> <code>/admin/judges/applications/[id]</code></p>
+<p><strong>Layout:</strong> Full page or modal showing all submitted information</p>
+<p><strong>Sections:</strong>
+1. <strong>Header</strong>
+   - Headshot photo (large)
+   - Name and location
+   - Application date
+   - Current status badge
+   - Status action buttons
+   - If admin-entered: "Entered by [Admin Name] on [Date]"</p>
+<ol start="2">
+<li>
+<p><strong>Personal Information</strong> - All fields from Section 1</p>
+</li>
+<li>
+<p><strong>Location &amp; Availability</strong> - All fields from Section 2 with map visualization if possible</p>
+</li>
+<li>
+<p><strong>Experience &amp; Qualifications</strong> - All fields from Section 3</p>
+</li>
+<li>
+<p><strong>Specialties</strong> - Visual display of SQL/SPL with sub-specialties</p>
+</li>
+<li>
+<p><strong>References</strong> - Table of provided references (0-5) with:
+   - Contact information
+   - "Reference Checked" checkbox for admin to mark
+   - Notes field for reference check results
+   - If no references: Display "No references provided"</p>
+</li>
+<li>
+<p><strong>Additional Information</strong> - Essay responses</p>
+</li>
+<li>
+<p><strong>Admin Notes Section</strong>
+   - Text area for internal notes
+   - Notes history with timestamp and admin name
+   - Only visible to admins</p>
+</li>
+<li>
+<p><strong>Status Actions</strong>
+   - <strong>Keep Pending</strong> - No action taken yet
+   - <strong>Mark Under Review</strong> - Admin is actively reviewing
+   - <strong>Approve Application</strong> - Move to approved judges pool
+   - <strong>Reject Application</strong> - Mark as rejected (no notification sent)</p>
+</li>
+</ol>
+<h3 id="44-application-status-workflow">4.4 Application Status Workflow</h3>
+<pre><code>[New Application] → PENDING
+       ↓
+  Admin reviews → UNDER REVIEW (optional intermediate status)
+       ↓
+   Decision made
+      ↙    ↘
+APPROVED    REJECTED
+    ↓
+[Moves to Approved Judges Pool]
+</code></pre>
+<p><strong>On Approval:</strong>
+1. Update application status to "Approved"
+2. Create Judge Profile record linked to user account
+3. Set initial judge level to "In-Training"
+4. Send approval email to applicant (optional - configurable)
+5. Add to current season as "Qualification Pending" or auto-qualify based on admin setting</p>
+<p><strong>On Rejection:</strong>
+1. Update application status to "Rejected"
+2. Record rejection date
+3. No notification sent to applicant
+4. Application retained in database for records</p>
+<hr />
+<h2 id="5-approved-judges-management">5. Approved Judges Management</h2>
+<h3 id="51-judges-list">5.1 Judges List</h3>
+<p><strong>Route:</strong> <code>/admin/judges</code> or <code>/admin/judges/list</code></p>
+<p><strong>List View Features:</strong></p>
+<p><strong>Columns:</strong>
+| Column | Sortable | Notes |
+|--------|----------|-------|
+| Judge Name | Yes | With headshot thumbnail |
+| Level | Yes | In-Training, Certified, Head Judge, Master Judge |
+| Location | Yes | City, State |
+| Specialty | Yes | SQL, SPL, Both |
+| Season Status | Yes | Qualified, Pending, Inactive for current season |
+| Events Judged | Yes | Total count |
+| Rating | Yes | Average star rating |
+| Actions | No | View, Edit, Manage |</p>
+<p><strong>Filters:</strong>
+| Filter | Type |
+|--------|------|
+| Judge Level | Multi-select |
+| Season Status | Multi-select |
+| Country/State/City | Cascading dropdowns |
+| Specialty | Multi-select |
+| Rating Range | Range slider |
+| Active/Inactive | Toggle |</p>
+<p><strong>Bulk Actions:</strong>
+- Qualify selected for season (dropdown to select season)
+- Change level for selected
+- Export to CSV</p>
+<h3 id="52-seasonal-qualification">5.2 Seasonal Qualification</h3>
+<p><strong>Purpose:</strong> Each season, judges must be re-qualified to judge events.</p>
+<p><strong>Individual Qualification:</strong>
+- On judge detail page, section showing season qualification history
+- Button: "Qualify for Season" with season dropdown
+- Table showing: Season | Qualified Date | Qualified By | Status</p>
+<p><strong>Bulk Qualification:</strong>
+1. On judges list, select multiple judges via checkbox
+2. Click "Qualify for Season" bulk action
+3. Select season from dropdown (pulled from existing seasons in system)
+4. Confirm action
+5. All selected judges marked as qualified for that season</p>
+<p><strong>Season Qualification Statuses:</strong>
+- <strong>Qualified</strong>: Approved to judge events this season
+- <strong>Pending</strong>: Not yet qualified for season
+- <strong>Inactive</strong>: Chose not to participate or not approved
+- <strong>Suspended</strong>: Temporarily unable to judge</p>
+<h3 id="53-judge-profiledetail-view-admin">5.3 Judge Profile/Detail View (Admin)</h3>
+<p><strong>Route:</strong> <code>/admin/judges/[id]</code></p>
+<p><strong>Sections:</strong></p>
+<ol>
+<li>
+<p><strong>Profile Header</strong>
+   - Large headshot photo
+   - Name, level badge, rating stars
+   - Location
+   - Quick stats: Events judged, years as judge, specialty
+   - Edit Profile button</p>
+</li>
+<li>
+<p><strong>Contact Information</strong>
+   - Phone, email
+   - Full address
+   - Emergency contact (if collected)</p>
+</li>
+<li>
+<p><strong>Qualifications</strong>
+   - Current level with progression history
+   - Specialty areas
+   - Training completed
+   - Original application date</p>
+</li>
+<li>
+<p><strong>Availability</strong>
+   - Travel radius
+   - Preferred regions
+   - Availability schedule/calendar</p>
+</li>
+<li>
+<p><strong>Season Qualifications</strong>
+   - Table of all seasons with qualification status
+   - Ability to qualify/disqualify for any season</p>
+</li>
+<li>
+<p><strong>Event History</strong>
+   - Table: Event Name | Date | Location | Event Director | Format | Role
+   - Filterable by season, format, location
+   - Link to event details</p>
+</li>
+<li>
+<p><strong>Performance Statistics</strong>
+   - Events judged by format (SQL, SPL)
+   - Events by region
+   - Event Directors worked with (list)
+   - Average rating
+   - Rating breakdown (star distribution)</p>
+</li>
+<li>
+<p><strong>Feedback &amp; Reviews</strong>
+   - List of ratings received (date, event, rating - no comments as per spec)
+   - Peer feedback (if implemented)</p>
+</li>
+<li>
+<p><strong>Admin Notes</strong>
+   - Private notes only visible to admins
+   - Notes history with timestamps
+   - Add new note functionality</p>
+</li>
+<li>
+<p><strong>Documents</strong> (Optional/Future)</p>
+<ul>
+<li>W-9</li>
+<li>Contracts</li>
+<li>Certifications</li>
+</ul>
+</li>
+<li>
+<p><strong>Account Actions</strong></p>
+<ul>
+<li>Change Level</li>
+<li>Suspend Judge</li>
+<li>Deactivate Judge</li>
+<li>View Original Application</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="6-judge-levels-progression">6. Judge Levels &amp; Progression</h2>
+<h3 id="61-level-definitions">6.1 Level Definitions</h3>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Description</th>
+<th>Typical Requirements</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>In-Training</strong></td>
+<td>New judges learning under supervision</td>
+<td>Initial approval, no events yet</td>
+</tr>
+<tr>
+<td><strong>Certified</strong></td>
+<td>Fully qualified to judge independently</td>
+<td>Completed training, X events supervised</td>
+</tr>
+<tr>
+<td><strong>Head Judge</strong></td>
+<td>Lead judge at events, can mentor others</td>
+<td>X years, X events, recommendation</td>
+</tr>
+<tr>
+<td><strong>Master Judge</strong></td>
+<td>Elite status, national-level events</td>
+<td>Extensive experience, exemplary record</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-level-management">6.2 Level Management</h3>
+<p><strong>Admin can manually change levels:</strong>
+- On judge detail page
+- Via bulk action on judges list</p>
+<p><strong>Level Change Tracking:</strong>
+- Record level changes with: date, previous level, new level, changed by, reason/notes</p>
+<p><strong>Future Enhancement:</strong> Automatic promotion suggestions based on criteria:
+- Events judged count
+- Ratings threshold
+- Time at current level
+- Training completion</p>
+<hr />
+<h2 id="7-event-director-system">7. Event Director System</h2>
+<h3 id="71-overview">7.1 Overview</h3>
+<p>The Event Director system parallels the Judge system with some differences:
+- Similar application process
+- Can be attached to specific events
+- Different information collected
+- Same public directory presence
+- <strong>Event Directors can view judge assignments and view their event assignments</strong>
+- <strong>Event Directors do NOT manage events within this system</strong> (event management functionality to be developed in future phase)</p>
+<p><strong>Important:</strong> Use the existing <code>event_director</code> role - do not create a new role.</p>
+<h3 id="72-event-director-application">7.2 Event Director Application</h3>
+<p><strong>Public Page Route:</strong> <code>/event-directors/become-an-event-director</code></p>
+<p><strong>Content:</strong> Similar structure to judge page, focused on event coordination responsibilities.</p>
+<p><strong>Application Access:</strong> Same flow as judges - logged in users with active membership go directly to form; others go through email verification.</p>
+<p><strong>Application Form Differences:</strong></p>
+<p>Fields specific to Event Directors:
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| Event Management Experience | Text Area | Yes | Prior event organization experience |
+| Team Management Experience | Text Area | Yes | Managing volunteers, coordinating teams |
+| Equipment/Resources Available | Text Area | No | Sound equipment, venue connections, etc. |
+| Specialized Event Formats | Multi-select | Yes | SQL, SPL, Combined |</p>
+<p><strong>Removed Fields (not applicable to Event Directors):</strong>
+- ~~Insurance/Liability Coverage~~
+- ~~Preferred Event Size~~</p>
+<p><strong>References:</strong> Same as judges - not required but highly encouraged (up to 5 non-family references).</p>
+<h3 id="73-event-director-admin-management">7.3 Event Director Admin Management</h3>
+<p><strong>Routes:</strong>
+- <code>/admin/event-directors/applications</code> - Pending applications
+- <code>/admin/event-directors</code> - Approved Event Directors list
+- <code>/admin/event-directors/[id]</code> - Individual detail view</p>
+<p><strong>Same features as Judge management:</strong>
+- Filtering
+- Status workflow (Pending → Approved/Rejected)
+- Seasonal qualification
+- Profile management
+- Event history
+- Notes
+- Admin ability to create application on behalf of member or add ED directly</p>
+<h3 id="74-event-director-capabilities">7.4 Event Director Capabilities</h3>
+<p><strong>Current Phase - What Event Directors CAN do:</strong>
+- View judge assignments for their events
+- View their own event assignments
+- View their profile and statistics
+- Manage their availability
+- View public judge directory</p>
+<p><strong>Future Phase - What will be added later:</strong>
+- Event management functionality
+- Judge request workflows
+- Additional ED-specific tools</p>
+<h3 id="75-event-assignment">7.5 Event Assignment</h3>
+<p><strong>Critical Change:</strong> Update existing event management to use approved Event Directors.</p>
+<p><strong>Current State:</strong> Event Director field pulls from all users.</p>
+<p><strong>New State:</strong> Event Director field should:
+- Pull from approved Event Directors list only
+- Show Event Director name, location, and rating
+- Allow search/filter within dropdown
+- Display selected ED's availability status</p>
+<p><strong>Event-to-Event Director Relationship:</strong>
+- One Event Director per event (primary)
+- Optional: Co-Event Director field
+- Track: Assignment date, assigned by</p>
+<p><strong>On Event Director Assignment:</strong>
+- Update Event Director's event history
+- Track under their profile statistics</p>
+<hr />
+<h2 id="8-event-assignment-workflow">8. Event Assignment Workflow</h2>
+<h3 id="81-judge-to-event-assignment">8.1 Judge-to-Event Assignment</h3>
+<p><strong>Methods of Assignment:</strong></p>
+<ol>
+<li>
+<p><strong>Event Director Request</strong> (Future Phase)
+   - ED views available qualified judges
+   - Filters by location, specialty, availability
+   - Sends request to specific judge(s)
+   - Judge accepts/declines</p>
+</li>
+<li>
+<p><strong>Judge Volunteer</strong>
+   - Judge views upcoming events needing judges
+   - Filters by location, date, format
+   - Submits volunteer request
+   - Admin approves/declines (or Event Director in future phase)</p>
+</li>
+<li>
+<p><strong>Admin Assignment</strong>
+   - Admin directly assigns judge to event
+   - Judge is notified of assignment</p>
+</li>
+</ol>
+<h3 id="82-event-assignment-data">8.2 Event Assignment Data</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Event ID</td>
+<td>Link to existing event</td>
+</tr>
+<tr>
+<td>Judge ID</td>
+<td>Link to approved judge</td>
+</tr>
+<tr>
+<td>Role</td>
+<td>Primary Judge, Supporting Judge, Trainee</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Requested, Accepted, Declined, Confirmed, Completed, No-Show</td>
+</tr>
+<tr>
+<td>Requested By</td>
+<td>User ID who initiated</td>
+</tr>
+<tr>
+<td>Request Date</td>
+<td>When request was made</td>
+</tr>
+<tr>
+<td>Response Date</td>
+<td>When judge responded</td>
+</tr>
+<tr>
+<td>Notes</td>
+<td>Any special instructions</td>
+</tr>
+</tbody>
+</table>
+<h3 id="83-judge-event-views">8.3 Judge Event Views</h3>
+<p><strong>Available Events View (for Judges):</strong></p>
+<p><strong>Route:</strong> <code>/judges/events/available</code> or in judge dashboard</p>
+<p>Shows events:
+- In judge's travel radius
+- Matching judge's specialty
+- Current or upcoming season
+- Needing judges</p>
+<p><strong>Columns:</strong>
+- Event Name
+- Date
+- Location (distance from judge)
+- Format (SQL/SPL)
+- Event Director
+- Judges Needed count
+- [Request to Work] button</p>
+<p><strong>My Assignments View:</strong></p>
+<p><strong>Route:</strong> <code>/judges/events/my-assignments</code> or in judge dashboard</p>
+<p>Shows:
+- Upcoming assigned events
+- Past events worked
+- Pending requests (awaiting response)</p>
+<h3 id="84-event-director-views">8.4 Event Director Views</h3>
+<p><strong>Route:</strong> <code>/event-directors/events</code> or in ED dashboard</p>
+<p>For Event Directors (current phase - view only):
+- View their assigned events
+- View judges assigned to their events
+- View judge profiles and ratings</p>
+<p><strong>Note:</strong> Full judge request/management functionality will be added in a future phase.</p>
+<hr />
+<h2 id="9-public-directory">9. Public Directory</h2>
+<h3 id="91-judges-directory">9.1 Judges Directory</h3>
+<p><strong>Route:</strong> <code>/judges</code> or <code>/judges/directory</code></p>
+<p><strong>Features:</strong></p>
+<p><strong>Search &amp; Filter:</strong>
+| Filter | Type |
+|--------|------|
+| Name Search | Text |
+| Location | State/Region dropdown |
+| Specialty | SQL, SPL, Both |
+| Level | All levels or specific |
+| Sort By | Name, Rating, Events Judged, Location |</p>
+<p><strong>Judge Cards Display:</strong>
+Each judge shown as a card with:
+- Headshot photo (only displayed for approved judges)
+- Name
+- Level badge
+- Location (City, State)
+- Specialty badges (SQL/SPL)
+- Star rating (average)
+- Events judged count
+- [View Profile] button</p>
+<p><strong>Individual Judge Public Profile:</strong></p>
+<p><strong>Route:</strong> <code>/judges/[slug]</code> or <code>/judges/[id]</code></p>
+<p><strong>Visible Information:</strong>
+- Headshot photo (large)
+- Name
+- Level
+- Location (City, State only - no full address)
+- Bio/About (from "Why do you want to be a judge" or separate bio field)
+- Specialty areas
+- Years as MECA Judge
+- Total events judged
+- Star rating with count
+- Recent events judged (last 5-10)
+- [Rate This Judge] button (if user is logged in and eligible)</p>
+<p><strong>NOT visible publicly:</strong>
+- Contact information
+- Full address
+- References
+- Admin notes
+- Application details</p>
+<h3 id="92-event-directors-directory">9.2 Event Directors Directory</h3>
+<p><strong>Route:</strong> <code>/event-directors</code> or <code>/event-directors/directory</code></p>
+<p><strong>Same structure as Judges Directory</strong> with appropriate field differences.</p>
+<p><strong>Individual Event Director Public Profile:</strong></p>
+<p><strong>Route:</strong> <code>/event-directors/[slug]</code> or <code>/event-directors/[id]</code></p>
+<p><strong>Visible Information:</strong>
+- Headshot photo (only displayed for approved EDs)
+- Name
+- Location
+- Bio
+- Years as MECA Event Director
+- Total events directed
+- Specialized event formats
+- Star rating
+- Upcoming events (if any)
+- Recent past events
+- [Rate This Event Director] button</p>
+<hr />
+<h2 id="10-rating-system">10. Rating System</h2>
+<h3 id="101-overview">10.1 Overview</h3>
+<ul>
+<li>Ratings only, no written comments</li>
+<li>Star-based system (1-5 stars)</li>
+<li>Anonymous to the rated party</li>
+<li>Visible who can rate (logged in members)</li>
+</ul>
+<h3 id="102-who-can-rate">10.2 Who Can Rate</h3>
+<table>
+<thead>
+<tr>
+<th>Rater</th>
+<th>Can Rate Judges</th>
+<th>Can Rate Event Directors</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Competitors</td>
+<td>Yes (after competing at their event)</td>
+<td>Yes (after competing at their event)</td>
+</tr>
+<tr>
+<td>Other Judges</td>
+<td>Yes (after working same event)</td>
+<td>Yes (after working at their event)</td>
+</tr>
+<tr>
+<td>Event Directors</td>
+<td>Yes (after judge worked their event)</td>
+<td>No (cannot rate themselves/peers)</td>
+</tr>
+<tr>
+<td>Admins</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>General Members</td>
+<td>Yes (after attending event as spectator - optional)</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="103-rating-eligibility-logic">10.3 Rating Eligibility Logic</h3>
+<p><strong>For Competitors:</strong>
+- Must have competed at an event where the judge/ED was assigned
+- Can only rate within X days of event completion (e.g., 30 days)
+- Can only rate once per event per person</p>
+<p><strong>For Judges/EDs:</strong>
+- Must have worked the same event
+- Same time and duplicate restrictions</p>
+<h3 id="104-rating-data-model">10.4 Rating Data Model</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ID</td>
+<td>Primary Key</td>
+<td></td>
+</tr>
+<tr>
+<td>Rater User ID</td>
+<td>Foreign Key</td>
+<td>Who gave the rating</td>
+</tr>
+<tr>
+<td>Rated Entity Type</td>
+<td>Enum</td>
+<td>Judge, Event Director</td>
+</tr>
+<tr>
+<td>Rated Entity ID</td>
+<td>Foreign Key</td>
+<td>Judge or ED ID</td>
+</tr>
+<tr>
+<td>Event ID</td>
+<td>Foreign Key</td>
+<td>Which event this relates to</td>
+</tr>
+<tr>
+<td>Rating</td>
+<td>Integer</td>
+<td>1-5 stars</td>
+</tr>
+<tr>
+<td>Created At</td>
+<td>Timestamp</td>
+<td>When rating was submitted</td>
+</tr>
+</tbody>
+</table>
+<h3 id="105-rating-display">10.5 Rating Display</h3>
+<p><strong>On Public Profiles:</strong>
+- Average rating (to 1 decimal: 4.7)
+- Total number of ratings
+- Star visualization</p>
+<p><strong>On Admin Views:</strong>
+- Same plus ability to see individual ratings
+- Can remove fraudulent ratings if needed</p>
+<h3 id="106-rating-submission-ui">10.6 Rating Submission UI</h3>
+<p><strong>Trigger:</strong> "Rate This Judge" button on profile or post-event prompt</p>
+<p><strong>Modal/Form:</strong>
+- Judge/ED photo and name
+- Event selector (events eligible to rate for)
+- 5-star selector (click to select)
+- [Submit Rating] button
+- Note: "Your rating is anonymous and helps maintain quality standards."</p>
+<hr />
+<h2 id="11-data-models">11. Data Models</h2>
+<h3 id="111-judge-application">11.1 Judge Application</h3>
+<pre><code>judge_applications
+├── id (PK)
+├── user_id (FK → users)
+├── status (enum: pending, under_review, approved, rejected)
+├── application_date (timestamp - when application was submitted)
+├── reviewed_date
+├── reviewed_by (FK → users, admin)
+├── entered_by (FK → users, admin) -- NULL if self-submitted, admin ID if entered on behalf
+├── entry_method (enum: self, admin_application, admin_direct) -- how entry was created
+├── personal_info (JSON or separate fields)
+│   ├── full_name
+│   ├── preferred_name
+│   ├── date_of_birth
+│   ├── phone
+│   └── secondary_phone
+├── headshot_image_id (FK → user_images or media table) -- separate headshot image
+├── location_info (JSON or separate fields)
+│   ├── country
+│   ├── state
+│   ├── city
+│   ├── zip
+│   ├── travel_radius
+│   └── additional_regions
+├── availability_info (JSON or separate fields)
+│   ├── weekend_availability
+│   └── notes
+├── experience_info (JSON or separate fields)
+│   ├── years_in_industry
+│   ├── positions
+│   ├── companies
+│   ├── education
+│   ├── competition_history
+│   └── judging_experience
+├── specialty (enum: sql, spl, both)
+├── sub_specialties (JSON array)
+├── essay_why_judge (text)
+├── essay_qualifications (text)
+├── essay_additional (text)
+├── acknowledgments (JSON: contractor, conduct, background, terms)
+├── admin_notes (text)
+├── created_at
+└── updated_at
+</code></pre>
+<h3 id="112-judge-application-references">11.2 Judge Application References</h3>
+<pre><code>judge_application_references
+├── id (PK)
+├── application_id (FK → judge_applications)
+├── full_name
+├── relationship
+├── company
+├── phone
+├── email
+├── years_known
+├── reference_checked (boolean)
+├── reference_notes (text, admin only)
+├── checked_by (FK → users)
+├── checked_date
+├── created_at
+└── updated_at
+
+-- Note: References are optional, so application_id may have 0-5 related records
+</code></pre>
+<h3 id="113-approved-judge-profile">11.3 Approved Judge Profile</h3>
+<pre><code>judges
+├── id (PK)
+├── user_id (FK → users) - UNIQUE
+├── application_id (FK → judge_applications) -- NULL if created directly by admin
+├── level (enum: in_training, certified, head_judge, master_judge)
+├── specialty (enum: sql, spl, both)
+├── sub_specialties (JSON array)
+├── headshot_image_id (FK → user_images or media table) -- separate headshot
+├── bio (text, for public profile)
+├── preferred_name
+├── location_country
+├── location_state
+├── location_city
+├── travel_radius
+├── additional_regions (JSON array)
+├── is_active (boolean)
+├── approved_date
+├── approved_by (FK → users)
+├── created_by (FK → users) -- admin who created if direct creation
+├── creation_method (enum: application, admin_direct)
+├── admin_notes (text)
+├── created_at
+└── updated_at
+</code></pre>
+<h3 id="114-judge-level-history">11.4 Judge Level History</h3>
+<pre><code>judge_level_history
+├── id (PK)
+├── judge_id (FK → judges)
+├── previous_level
+├── new_level
+├── changed_by (FK → users)
+├── reason (text)
+├── created_at
+</code></pre>
+<h3 id="115-judge-season-qualification">11.5 Judge Season Qualification</h3>
+<pre><code>judge_season_qualifications
+├── id (PK)
+├── judge_id (FK → judges)
+├── season_id (FK → seasons) - existing seasons table
+├── status (enum: qualified, pending, inactive, suspended)
+├── qualified_date
+├── qualified_by (FK → users)
+├── notes (text)
+├── created_at
+└── updated_at
+
+UNIQUE constraint on (judge_id, season_id)
+</code></pre>
+<h3 id="116-event-director-application">11.6 Event Director Application</h3>
+<pre><code>event_director_applications
+├── id (PK)
+├── user_id (FK → users)
+├── status (enum: pending, under_review, approved, rejected)
+├── application_date (timestamp)
+├── reviewed_date
+├── reviewed_by (FK → users)
+├── entered_by (FK → users) -- NULL if self-submitted
+├── entry_method (enum: self, admin_application, admin_direct)
+├── ... (similar personal/location structure to judge_applications)
+├── headshot_image_id (FK → user_images or media table)
+├── event_management_experience (text)
+├── team_management_experience (text)
+├── equipment_resources (text)
+├── specialized_formats (JSON array) -- SQL, SPL, Combined
+├── admin_notes (text)
+├── created_at
+└── updated_at
+</code></pre>
+<h3 id="117-approved-event-director-profile">11.7 Approved Event Director Profile</h3>
+<pre><code>event_directors
+├── id (PK)
+├── user_id (FK → users) - UNIQUE
+├── application_id (FK → event_director_applications) -- NULL if admin direct
+├── headshot_image_id (FK → user_images or media table)
+├── bio (text)
+├── preferred_name
+├── location_country
+├── location_state
+├── location_city
+├── specialized_formats (JSON array) -- SQL, SPL, Combined
+├── is_active (boolean)
+├── approved_date
+├── approved_by (FK → users)
+├── created_by (FK → users)
+├── creation_method (enum: application, admin_direct)
+├── admin_notes (text)
+├── created_at
+└── updated_at
+</code></pre>
+<h3 id="118-event-director-season-qualification">11.8 Event Director Season Qualification</h3>
+<pre><code>event_director_season_qualifications
+├── id (PK)
+├── event_director_id (FK → event_directors)
+├── season_id (FK → seasons)
+├── status (enum: qualified, pending, inactive, suspended)
+├── qualified_date
+├── qualified_by (FK → users)
+├── notes (text)
+├── created_at
+└── updated_at
+</code></pre>
+<h3 id="119-event-judge-assignment">11.9 Event Judge Assignment</h3>
+<pre><code>event_judge_assignments
+├── id (PK)
+├── event_id (FK → events) - existing events table
+├── judge_id (FK → judges)
+├── role (enum: primary, supporting, trainee)
+├── status (enum: requested, accepted, declined, confirmed, completed, no_show)
+├── requested_by (FK → users)
+├── request_type (enum: ed_request, judge_volunteer, admin_assign)
+├── request_date
+├── response_date
+├── notes (text)
+├── created_at
+└── updated_at
+
+UNIQUE constraint on (event_id, judge_id)
+</code></pre>
+<h3 id="1110-event-director-assignment-modify-existing-events">11.10 Event Director Assignment (Modify Existing Events)</h3>
+<p>Add to existing events table or create linking table:</p>
+<pre><code>-- Option A: Add column to existing events table
+events.event_director_id (FK → event_directors) -- replaces current user reference
+
+-- Option B: Separate linking table
+event_director_assignments
+├── id (PK)
+├── event_id (FK → events)
+├── event_director_id (FK → event_directors)
+├── is_primary (boolean)
+├── assigned_date
+├── assigned_by (FK → users)
+├── created_at
+└── updated_at
+</code></pre>
+<h3 id="1111-ratings">11.11 Ratings</h3>
+<pre><code>ratings
+├── id (PK)
+├── rater_user_id (FK → users)
+├── entity_type (enum: judge, event_director)
+├── entity_id (integer) -- judge_id or event_director_id
+├── event_id (FK → events)
+├── rating (integer, 1-5)
+├── created_at
+
+UNIQUE constraint on (rater_user_id, entity_type, entity_id, event_id)
+</code></pre>
+<h3 id="1112-email-verification-tokens">11.12 Email Verification Tokens</h3>
+<pre><code>email_verification_tokens
+├── id (PK)
+├── user_id (FK → users)
+├── token (string, unique)
+├── purpose (enum: judge_application, ed_application, other)
+├── expires_at
+├── used_at
+├── created_at
+</code></pre>
+<h3 id="1113-user-headshot-image">11.13 User Headshot Image</h3>
+<p><strong>Note:</strong> The headshot should be stored within the existing user image/media system but with a distinct type/flag.</p>
+<pre><code>-- If adding to existing user_images or media table, add:
+├── image_type (enum: profile, gallery, headshot, other)
+
+-- Headshot display rules:
+-- Only display publicly if user has approved judge OR event_director record
+-- Can be managed from user's photo gallery but treated as separate type
+</code></pre>
+<hr />
+<h2 id="12-api-endpoints">12. API Endpoints</h2>
+<h3 id="121-public-endpoints">12.1 Public Endpoints</h3>
+<pre><code>GET  /api/judges/directory          - List approved judges (public info only)
+GET  /api/judges/directory/:id      - Single judge public profile
+GET  /api/event-directors/directory - List approved EDs (public info only)
+GET  /api/event-directors/directory/:id - Single ED public profile
+</code></pre>
+<h3 id="122-member-endpoints-authenticated">12.2 Member Endpoints (Authenticated)</h3>
+<pre><code>-- Applications
+POST /api/judges/apply/verify-email      - Request email verification (only if not logged in flow)
+GET  /api/judges/apply/verify/:token     - Verify email token
+POST /api/judges/apply                   - Submit judge application
+GET  /api/judges/apply/status            - Check own application status
+GET  /api/judges/apply/can-apply         - Check if user can apply (logged in + member check)
+
+POST /api/event-directors/apply/verify-email
+GET  /api/event-directors/apply/verify/:token
+POST /api/event-directors/apply
+GET  /api/event-directors/apply/status
+GET  /api/event-directors/apply/can-apply
+
+-- Ratings
+POST /api/ratings                        - Submit a rating
+GET  /api/ratings/eligible               - Get entities user can rate
+
+-- Headshot Management
+POST /api/users/me/headshot              - Upload headshot image
+PUT  /api/users/me/headshot              - Update headshot image
+DELETE /api/users/me/headshot            - Remove headshot image
+</code></pre>
+<h3 id="123-judge-endpoints-authenticated-judge-role">12.3 Judge Endpoints (Authenticated + Judge Role)</h3>
+<pre><code>GET  /api/judges/me                      - Own judge profile
+PUT  /api/judges/me                      - Update own profile (limited fields)
+GET  /api/judges/me/events               - My assigned events
+GET  /api/judges/events/available        - Events available to work
+POST /api/judges/events/:eventId/volunteer - Request to work event
+PUT  /api/judges/events/:assignmentId/respond - Accept/decline assignment
+PUT  /api/judges/me/availability         - Update availability
+</code></pre>
+<h3 id="124-event-director-endpoints-authenticated-existing-ed-role">12.4 Event Director Endpoints (Authenticated + Existing ED Role)</h3>
+<pre><code>GET  /api/event-directors/me             - Own ED profile
+PUT  /api/event-directors/me             - Update own profile
+GET  /api/event-directors/me/events      - My events (view only)
+GET  /api/event-directors/events/:id/judges - View judges for my event (view only)
+GET  /api/event-directors/judges/directory - View available judges directory
+</code></pre>
+<h3 id="125-admin-endpoints">12.5 Admin Endpoints</h3>
+<pre><code>-- Judge Applications
+GET    /api/admin/judges/applications          - List all applications
+GET    /api/admin/judges/applications/:id      - Single application detail
+POST   /api/admin/judges/applications          - Create application on behalf of member
+PUT    /api/admin/judges/applications/:id      - Update application status
+PUT    /api/admin/judges/applications/:id/references/:refId - Update reference check
+
+-- Approved Judges
+GET    /api/admin/judges                       - List all approved judges
+GET    /api/admin/judges/:id                   - Single judge full detail
+POST   /api/admin/judges                       - Create judge directly (admin expedited)
+PUT    /api/admin/judges/:id                   - Update judge profile
+PUT    /api/admin/judges/:id/level             - Change judge level
+POST   /api/admin/judges/:id/notes             - Add admin note
+PUT    /api/admin/judges/:id/status            - Activate/deactivate
+POST   /api/admin/judges/:id/qualify           - Qualify for season
+POST   /api/admin/judges/bulk-qualify          - Bulk qualify for season
+
+-- Event Director Applications
+GET    /api/admin/event-directors/applications
+GET    /api/admin/event-directors/applications/:id
+POST   /api/admin/event-directors/applications  - Create application on behalf of member
+PUT    /api/admin/event-directors/applications/:id
+
+-- Approved Event Directors
+GET    /api/admin/event-directors
+GET    /api/admin/event-directors/:id
+POST   /api/admin/event-directors              - Create ED directly (admin expedited)
+PUT    /api/admin/event-directors/:id
+POST   /api/admin/event-directors/:id/qualify
+POST   /api/admin/event-directors/bulk-qualify
+
+-- Event Assignments
+GET    /api/admin/events/:id/assignments       - All assignments for event
+POST   /api/admin/events/:id/assignments       - Assign judge/ED to event
+PUT    /api/admin/assignments/:id              - Update assignment
+DELETE /api/admin/assignments/:id              - Remove assignment
+
+-- Ratings Admin
+GET    /api/admin/ratings                      - View all ratings
+DELETE /api/admin/ratings/:id                  - Remove fraudulent rating
+</code></pre>
+<hr />
+<h2 id="13-uiux-requirements">13. UI/UX Requirements</h2>
+<h3 id="131-public-pages">13.1 Public Pages</h3>
+<p><strong>Become a Judge Page:</strong>
+- Clean, inspiring design
+- Clear call-to-action
+- Mobile responsive
+- Fast loading
+- SEO optimized</p>
+<p><strong>Public Directory:</strong>
+- Card-based layout
+- Easy filtering
+- Infinite scroll or pagination
+- Quick profile preview on hover
+- Mobile: Stack cards vertically
+- Headshot photos only display for approved judges/EDs</p>
+<p><strong>Public Profiles:</strong>
+- Hero section with headshot photo
+- Clear information hierarchy
+- Rating prominently displayed
+- Recent activity visible
+- Social sharing options</p>
+<h3 id="132-application-forms">13.2 Application Forms</h3>
+<ul>
+<li>Multi-step wizard format (recommended for long form)</li>
+<li>Progress indicator</li>
+<li>Save draft functionality (optional but helpful)</li>
+<li>Clear validation messages</li>
+<li>Mobile-friendly inputs</li>
+<li>Headshot upload with preview and crop</li>
+<li>References section clearly marked as "optional but encouraged"</li>
+</ul>
+<h3 id="133-admin-dashboard">13.3 Admin Dashboard</h3>
+<ul>
+<li>Consistent with existing admin UI patterns</li>
+<li>Data tables with sorting and filtering</li>
+<li>Bulk action support</li>
+<li>Quick actions accessible</li>
+<li>Detail views in modals or full pages (match existing pattern)</li>
+<li>Search functionality throughout</li>
+<li>"Create Application" and "Add Directly" buttons prominently placed</li>
+<li>Clear indication when entry was admin-created vs self-submitted</li>
+</ul>
+<h3 id="134-judgeed-dashboard">13.4 Judge/ED Dashboard</h3>
+<ul>
+<li>Clean dashboard showing:</li>
+<li>Upcoming events</li>
+<li>Pending requests</li>
+<li>Quick stats</li>
+<li>Recent activity</li>
+<li>Calendar view for availability (optional)</li>
+<li>Notifications center</li>
+<li>Headshot management section</li>
+</ul>
+<hr />
+<h2 id="14-integration-points">14. Integration Points</h2>
+<h3 id="141-existing-user-system">14.1 Existing User System</h3>
+<ul>
+<li>Judge/ED profiles MUST link to existing user accounts</li>
+<li>Use existing authentication</li>
+<li>Respect existing role/permission system</li>
+<li>Use existing <code>event_director</code> role - do not create a new role</li>
+<li>Add <code>judge</code> role if not exists (or use existing equivalent)</li>
+</ul>
+<h3 id="142-existing-events-system">14.2 Existing Events System</h3>
+<ul>
+<li>Modify event director field to use new ED system</li>
+<li>Add judge assignment capability to events</li>
+<li>Ensure event display shows assigned judges/ED</li>
+<li>Event results should link to judge records</li>
+</ul>
+<h3 id="143-existing-seasons-system">14.3 Existing Seasons System</h3>
+<ul>
+<li>Use existing seasons for qualification tracking</li>
+<li>Dropdown selectors should pull from existing seasons</li>
+<li>Respect season date ranges for eligibility</li>
+</ul>
+<h3 id="144-existing-membership-system">14.4 Existing Membership System</h3>
+<ul>
+<li>Verify active membership before applications</li>
+<li>Pull member data for pre-filling forms</li>
+<li>Check membership status in validation</li>
+</ul>
+<h3 id="145-existing-email-system">14.5 Existing Email System</h3>
+<ul>
+<li>Use existing email infrastructure</li>
+<li>Templates needed:</li>
+<li>Email verification (for non-logged-in users only)</li>
+<li>Application received confirmation</li>
+<li>Application approved (optional)</li>
+<li>Event assignment notification</li>
+<li>Event request notification</li>
+</ul>
+<h3 id="146-existing-file-upload-photo-gallery-system">14.6 Existing File Upload / Photo Gallery System</h3>
+<ul>
+<li>Use existing upload infrastructure for headshot images</li>
+<li>Headshot is a <strong>separate image type</strong> within user's gallery</li>
+<li>Add <code>headshot</code> type to image type enum if needed</li>
+<li>Respect existing file size limits</li>
+<li>Use existing storage (S3, local, etc.)</li>
+<li>Headshot only displays publicly if user is approved judge/ED</li>
+</ul>
+<hr />
+<h2 id="15-business-rules-validation">15. Business Rules &amp; Validation</h2>
+<h3 id="151-application-rules">15.1 Application Rules</h3>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Must be logged in to apply</td>
+<td>Check auth before showing application</td>
+</tr>
+<tr>
+<td>Must be active MECA member</td>
+<td>Verify membership status from user record</td>
+</tr>
+<tr>
+<td>Skip email verification if logged in</td>
+<td>Logged-in users go directly to form</td>
+</tr>
+<tr>
+<td>Email verification for non-logged-in flow</td>
+<td>Token validation before form access</td>
+</tr>
+<tr>
+<td>Must be 18+ years old</td>
+<td>Calculate from DOB, block if under 18</td>
+</tr>
+<tr>
+<td>References optional but encouraged</td>
+<td>Display encouragement message, allow 0-5 references</td>
+</tr>
+<tr>
+<td>Must acknowledge all terms</td>
+<td>All checkboxes required</td>
+</tr>
+<tr>
+<td>One application per user</td>
+<td>Check for existing pending/approved application</td>
+</tr>
+<tr>
+<td>Admin can create on behalf of member</td>
+<td>Track entered_by and entry_method</td>
+</tr>
+</tbody>
+</table>
+<h3 id="152-judgeed-management-rules">15.2 Judge/ED Management Rules</h3>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cannot self-rate</td>
+<td>Exclude own profile from rating options</td>
+</tr>
+<tr>
+<td>Can only rate after event</td>
+<td>Check event completion and participation</td>
+</tr>
+<tr>
+<td>One rating per person per event</td>
+<td>Unique constraint in database</td>
+</tr>
+<tr>
+<td>Rating window</td>
+<td>30 days after event completion</td>
+</tr>
+<tr>
+<td>Season qualification required for assignment</td>
+<td>Check qualification before allowing assignment</td>
+</tr>
+<tr>
+<td>Headshot only public for approved judges/EDs</td>
+<td>Check approved status before displaying headshot</td>
+</tr>
+</tbody>
+</table>
+<h3 id="153-event-assignment-rules">15.3 Event Assignment Rules</h3>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Judge must be qualified for season</td>
+<td>Verify season qualification</td>
+</tr>
+<tr>
+<td>Judge specialty should match event format</td>
+<td>Warning if mismatch, not blocking</td>
+</tr>
+<tr>
+<td>Cannot double-book judges</td>
+<td>Check for existing assignments on same date</td>
+</tr>
+<tr>
+<td>Event Director cannot assign self as judge</td>
+<td>Block if IDs match</td>
+</tr>
+</tbody>
+</table>
+<h3 id="154-data-privacy-rules">15.4 Data Privacy Rules</h3>
+<table>
+<thead>
+<tr>
+<th>Data</th>
+<th>Public</th>
+<th>Judges/EDs</th>
+<th>Admin</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full name</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Headshot photo</td>
+<td>✓ (if approved)</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>City, State</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Full address</td>
+<td>✗</td>
+<td>Own only</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Phone/Email</td>
+<td>✗</td>
+<td>Own only</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Ratings</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Event history</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Application details</td>
+<td>✗</td>
+<td>Own only</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Admin notes</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>References</td>
+<td>✗</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="implementation-priority">Implementation Priority</h2>
+<h3 id="phase-1-core-judge-system">Phase 1: Core Judge System</h3>
+<ol>
+<li>Database models for applications and judges</li>
+<li>Headshot image type in existing media system</li>
+<li>Public information page</li>
+<li>Application access flow (with skip for logged-in users)</li>
+<li>Application form (with optional references)</li>
+<li>Admin application review dashboard</li>
+<li>Admin create application / add judge directly functionality</li>
+<li>Basic approved judges list</li>
+</ol>
+<h3 id="phase-2-event-integration">Phase 2: Event Integration</h3>
+<ol>
+<li>Judge-to-event assignment</li>
+<li>Event Director system (application + management)</li>
+<li>Modify events to use new ED system</li>
+<li>Judge assignment workflow (volunteer + admin assign)</li>
+</ol>
+<h3 id="phase-3-public-ratings">Phase 3: Public &amp; Ratings</h3>
+<ol>
+<li>Public judges directory</li>
+<li>Public ED directory</li>
+<li>Public profile pages with headshots</li>
+<li>Rating system implementation</li>
+</ol>
+<h3 id="phase-4-enhanced-features">Phase 4: Enhanced Features</h3>
+<ol>
+<li>Seasonal qualification management</li>
+<li>Bulk operations</li>
+<li>Judge levels and progression</li>
+<li>Availability management</li>
+<li>Event history and statistics</li>
+<li>Dashboard views for judges/EDs</li>
+</ol>
+<h3 id="future-phase-event-director-expanded-functionality">Future Phase: Event Director Expanded Functionality</h3>
+<ul>
+<li>Event Director event management features</li>
+<li>Judge request workflows for EDs</li>
+<li>Additional ED-specific tools</li>
+</ul>
+<hr />
+<h2 id="final-notes-for-developer">Final Notes for Developer</h2>
+<ol>
+<li>
+<p><strong>Analyze existing code first</strong> - Understand patterns, naming conventions, folder structure before creating new code.</p>
+</li>
+<li>
+<p><strong>Reuse existing infrastructure</strong> - Do not duplicate users, events, seasons, file uploads, email, or auth systems.</p>
+</li>
+<li>
+<p><strong>Use existing event_director role</strong> - Do not create a new role for event directors.</p>
+</li>
+<li>
+<p><strong>Headshot as separate image type</strong> - Store in existing media/gallery system but flagged as headshot type.</p>
+</li>
+<li>
+<p><strong>Match existing UI patterns</strong> - Admin pages should look and feel like existing admin pages. Public pages should match site design.</p>
+</li>
+<li>
+<p><strong>Database migrations</strong> - Create proper migrations for all new tables. Consider foreign key relationships carefully.</p>
+</li>
+<li>
+<p><strong>Testing</strong> - Include appropriate tests for critical flows (application submission, status changes, rating submission).</p>
+</li>
+<li>
+<p><strong>Error handling</strong> - Proper error messages for users, logging for debugging.</p>
+</li>
+<li>
+<p><strong>Performance</strong> - Use pagination for lists, optimize queries, consider caching for public directory.</p>
+</li>
+<li>
+<p><strong>Security</strong> - Validate all inputs, authorize all actions, protect admin endpoints, sanitize outputs.</p>
+</li>
+<li>
+<p><strong>Audit trail</strong> - Track admin-created entries with entered_by, entry_method, and timestamps.</p>
+</li>
+</ol>
+<hr />
+<p><em>End of Specification Document</em></p>
+    <footer>
+        <p>MECA Car Audio Documentation · For platform admins and the development team</p>
+    </footer>
+</body>
+</html>

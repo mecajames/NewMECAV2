@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Logic: Recognition &amp; Voting - MECA Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
+
+/* Feature block — used only on Business Logic Reference pages */
+.feature {
+    background: white;
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid #e2e8f0;
+}
+.feature h3 {
+    color: #0f172a;
+    font-size: 1.2rem;
+    margin: 0 0 14px 0;
+    padding: 0;
+    border: none;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 10px;
+}
+.feature .row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 6px 18px;
+    margin-bottom: 10px;
+    align-items: baseline;
+}
+@media (max-width: 720px) {
+    .feature .row { grid-template-columns: 1fr; gap: 2px; }
+}
+.feature .row:last-child { margin-bottom: 0; }
+.feature .label {
+    color: #ea580c;
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.feature .text {
+    color: #475569;
+}
+.feature .text code { font-size: 0.92em; }
+.feature .text strong { color: #0f172a; }
+.feature .text a { color: #ea580c; font-weight: 500; }
+.feature .text a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <nav style="margin-bottom: 24px; font-size: 0.9rem;">
+        <a href="index.html" style="color:#64748b; margin-right: 12px;">← Documentation Index</a>
+        <a href="Business-Logic-Reference.html" style="color:#64748b;">← Business Logic Reference</a>
+    </nav>
+    <h1>Business Logic: Recognition &amp; Voting</h1>
+    <p class="subtitle">How the platform celebrates achievements: Hall of Fame, Forever Members, World Records, season-end Finals Voting, and World Finals.</p>
+    <div class="feature">
+        <h3>Hall of Fame</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Manually-curated honored members with photo, induction year, and citation.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>hall_of_fame</code> table with FK to profile (or just text fields if the honoree predates the platform). Public Hall of Fame page lists by induction year.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Some honorees were inducted before the platform existed and don't have profiles. Allowing free-text honorees keeps the historical record intact.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/hall-of-fame. <a href="Admin-Hall-of-Fame-Guide.html">Hall of Fame guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Forever Members</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Lifetime membership granted to a curated list of contributors.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>forever_members</code> table separate from active memberships. The forever flag is informational — the active membership is still tracked in <code>memberships</code> with a special long-duration type.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Forever status is distinct from "active membership" — a forever member who hasn't logged in for two years is still a forever member. Modeling them separately makes that semantic explicit.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/forever-members. <a href="Admin-Forever-Members-Guide.html">Forever Members</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>SPL World Records</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Curated list of verified world records by class.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>spl_world_records</code> with class, score, holder profile, event, date. Public page sorts by class, score descending.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Records aren't auto-derived from results because verifying a world record requires manual confirmation (sealed equipment, clean run, no contestation). Manual curation guarantees data quality.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/world-records. <a href="Admin-SPL-World-Records-Guide.html">World Records guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Finals Voting</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Season-end member vote on awards (e.g. Spirit Award, Dueling Demos Champion).</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">Sessions go through Creating → Pending → Live → Completed. Plus two off-cycle states: Disabled (suspended), Canceled (admin-aborted). Members vote once per session via the public homepage card. Admin finalizes and publishes results.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Six-state machine (with the two off-cycle states) means admins can pause a live session for emergency edits without ending it, and cancel test sessions cleanly. Finalize is one-way — once published, results are public and immutable.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/finals-voting. <a href="Admin-Finals-Voting-Guide.html">Finals Voting guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>World Finals &amp; Pre-Registration</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Season-end championship event with its own pre-registration flow including t-shirt sizing and hotel info.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">Configuration page in admin defines dates, hotel info, t-shirt size availability, custom labels. Members pre-register through a member-facing page; their selections (size, extras) save to <code>world_finals_preregistrations</code>.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">WF has more logistics than a normal event (travel, lodging, swag) so it gets a richer pre-registration form. Modeling it as a separate workflow (rather than overloading event registration) keeps the WF complexity isolated.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/world-finals. <a href="Admin-World-Finals-Guide.html">World Finals guide</a>.</div></div>
+    </div>
+    <footer>
+        <p>MECA Admin Documentation · For platform administrators only.</p>
+    </footer>
+</body>
+</html>

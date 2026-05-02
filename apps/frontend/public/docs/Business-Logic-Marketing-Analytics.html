@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Logic: Marketing &amp; Analytics - MECA Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
+
+/* Feature block — used only on Business Logic Reference pages */
+.feature {
+    background: white;
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid #e2e8f0;
+}
+.feature h3 {
+    color: #0f172a;
+    font-size: 1.2rem;
+    margin: 0 0 14px 0;
+    padding: 0;
+    border: none;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 10px;
+}
+.feature .row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 6px 18px;
+    margin-bottom: 10px;
+    align-items: baseline;
+}
+@media (max-width: 720px) {
+    .feature .row { grid-template-columns: 1fr; gap: 2px; }
+}
+.feature .row:last-child { margin-bottom: 0; }
+.feature .label {
+    color: #ea580c;
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.feature .text {
+    color: #475569;
+}
+.feature .text code { font-size: 0.92em; }
+.feature .text strong { color: #0f172a; }
+.feature .text a { color: #ea580c; font-weight: 500; }
+.feature .text a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <nav style="margin-bottom: 24px; font-size: 0.9rem;">
+        <a href="index.html" style="color:#64748b; margin-right: 12px;">← Documentation Index</a>
+        <a href="Business-Logic-Reference.html" style="color:#64748b;">← Business Logic Reference</a>
+    </nav>
+    <h1>Business Logic: Marketing &amp; Analytics</h1>
+    <p class="subtitle">Banner advertising, business directory listings, SEO, and how the platform tracks engagement.</p>
+    <div class="feature">
+        <h3>Banner Ads</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">9 IAB-standard sizes × 15 placements, scheduled by date window, rotated by weight.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>banners</code> referencing an <code>advertiser</code>, with size, positions[], status, start/end dates, rotation_weight, max-impressions-per-user, click_url. Server-side rotation respects the weight and frequency caps when picking which banner to render in a slot.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Server-side rotation means we can change weights and caps without redeploying. Frequency capping keeps the experience tolerable — same banner 30 times a day annoys users and tanks CTR.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/banners + /admin/advertisers + /admin/banners/analytics. <a href="Admin-Banner-Ads-Guide.html">Banner Ad System deep guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Banner Engagement Tracking</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Every impression and click logged for advertiser reporting.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>banner_engagements</code> rows: banner id, user id (or anonymous session id), page URL, event type (impression / click), timestamp. Click events route through a server-side redirect for reliable attribution.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Server-side click redirect handles cases where the destination URL drops query params or fires its own analytics. The redirect captures the click reliably regardless.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/banners/analytics — per-banner totals, daily trend, CSV export. <a href="Admin-Banner-Analytics-Guide.html">Banner Analytics</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Retailer / Manufacturer Listings</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Public business directory with profile, gallery, member-discount offers, and sponsor placement.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>retailer_listings</code> and <code>manufacturer_listings</code> linked to a profile (the business owner's account). Plus is_active and is_approved flags. Sponsor flag drives premium placement.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Splitting "user account" from "listing" lets a single owner manage their listing. Approval flag is the gate that stops spam listings going public before admin review.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/business-listings. <a href="Admin-Retailer-Manufacturer-Setup-Guide.html">Retailer &amp; Manufacturer Setup deep guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Site Analytics</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">First-party pageview, session, and visitor tracking. No third-party tracker.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">Every server-rendered page logs a request to <code>analytics_events</code> with URL, user/session id, referrer, user agent, IP-derived country. Dashboard aggregates into pageviews, unique visitors, sessions (30-min idle), top pages, top referrers.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">First-party tracking respects privacy (no Google Analytics) and keeps data on platform infrastructure. The 30-minute session window is industry standard.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/analytics. <a href="Admin-Site-Analytics-Guide.html">Analytics deep guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Search Console (Google SEO)</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Pulls Google's view of the site: impressions, clicks, top queries, average position.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">OAuth integration with Google Search Console API. Daily fetch caches the data; admin dashboard reads from cache for fast rendering.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Site Analytics tells us what people did on the site. Search Console tells us how Google sees the site. Both are needed.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/search-console. <a href="Admin-Search-Console-Guide.html">Search Console guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>SEO Settings (per-page metadata)</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Override default meta tags on key pages to improve search snippets and social cards.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>seo_settings</code> table with overrides for meta title, meta description, canonical URL, structured data block, robots directives. Page render reads the override at request time.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Default metadata is fine for most pages but high-traffic pages (home, events, top retailer landing pages) deserve hand-crafted snippets to maximize CTR from search.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/seo-settings. <a href="Admin-SEO-Settings-Guide.html">SEO Settings</a>.</div></div>
+    </div>
+    <footer>
+        <p>MECA Admin Documentation · For platform administrators only.</p>
+    </footer>
+</body>
+</html>
