@@ -15,7 +15,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             color: #1e293b;
-            max-width: 1100px;
+            max-width: 1000px;
             margin: 0 auto;
             padding: 40px 20px;
             background: #f8fafc;
@@ -65,164 +65,154 @@
             padding-left: 15px;
         }
 
-        .test-case {
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
             background: white;
             border-radius: 12px;
-            padding: 25px;
+            padding: 30px;
             margin: 20px 0;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            border-left: 5px solid #3b82f6;
         }
 
-        .test-case.critical {
-            border-left-color: #ef4444;
-        }
-
-        .test-case.high {
-            border-left-color: #f97316;
-        }
-
-        .test-case.medium {
-            border-left-color: #eab308;
-        }
-
-        .test-case.low {
-            border-left-color: #22c55e;
-        }
-
-        .test-case h4 {
-            color: #0f172a;
-            font-size: 1.1rem;
-            margin-bottom: 15px;
+        .step {
             display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .test-id {
-            font-family: 'Courier New', monospace;
-            background: #f1f5f9;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            color: #64748b;
-        }
-
-        .priority-badge {
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .priority-badge.critical {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .priority-badge.high {
-            background: #ffedd5;
-            color: #9a3412;
-        }
-
-        .priority-badge.medium {
-            background: #fef9c3;
-            color: #854d0e;
-        }
-
-        .priority-badge.low {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .test-section {
-            margin: 15px 0;
-        }
-
-        .test-section-title {
-            font-weight: bold;
-            color: #334155;
-            margin-bottom: 8px;
-        }
-
-        .test-steps {
-            list-style: none;
-            counter-reset: step-counter;
-        }
-
-        .test-steps li {
-            counter-increment: step-counter;
-            padding: 8px 0 8px 35px;
+            align-items: flex-start;
+            margin: 20px 0;
             position: relative;
-            border-bottom: 1px dashed #e2e8f0;
         }
 
-        .test-steps li:last-child {
-            border-bottom: none;
-        }
-
-        .test-steps li::before {
-            content: counter(step-counter);
-            position: absolute;
-            left: 0;
-            top: 8px;
-            width: 24px;
-            height: 24px;
-            background: #ea580c;
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
             color: white;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.8rem;
             font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
         }
 
-        .expected-result {
-            background: #dcfce7;
-            border: 1px solid #22c55e;
-            border-radius: 6px;
-            padding: 12px;
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
             margin-top: 10px;
         }
 
-        .expected-result::before {
-            content: "✓ Expected Result: ";
-            font-weight: bold;
-            color: #166534;
+        .step-details li {
+            margin: 5px 0;
         }
 
-        .checklist {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
             margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
-        .checklist ul {
-            list-style: none;
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
         }
 
-        .checklist li {
-            padding: 10px 0 10px 35px;
-            position: relative;
+        td {
+            padding: 12px 15px;
             border-bottom: 1px solid #e2e8f0;
         }
 
-        .checklist li:last-child {
-            border-bottom: none;
+        tr:nth-child(even) {
+            background: #f8fafc;
         }
 
-        .checklist li::before {
-            content: "☐";
-            position: absolute;
-            left: 5px;
-            top: 10px;
-            font-size: 1.2rem;
-            color: #64748b;
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
         }
 
         .toc {
@@ -263,55 +253,6 @@
             text-decoration: underline;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        th {
-            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
-            color: white;
-            padding: 15px;
-            text-align: left;
-            font-weight: 600;
-        }
-
-        td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        tr:nth-child(even) {
-            background: #f8fafc;
-        }
-
-        .info-box {
-            background: #eff6ff;
-            border: 1px solid #3b82f6;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-
-        .info-box.warning {
-            background: #fef3c7;
-            border-color: #f59e0b;
-        }
-
-        .info-box h4 {
-            color: #1e40af;
-            margin-bottom: 10px;
-        }
-
-        .info-box.warning h4 {
-            color: #92400e;
-        }
-
         .nav-path {
             background: #f1f5f9;
             padding: 10px 15px;
@@ -319,6 +260,40 @@
             font-family: 'Courier New', monospace;
             font-size: 0.9rem;
             margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
         }
 
         footer {
@@ -329,37 +304,191 @@
             color: #64748b;
         }
 
-        .test-summary {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin: 20px 0;
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
         }
 
-        @media (max-width: 768px) {
-            .test-summary {
-                grid-template-columns: repeat(2, 1fr);
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
             }
         }
 
-        .summary-card {
-            background: white;
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
             border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
         }
 
-        .summary-card .count {
-            font-size: 2rem;
-            font-weight: bold;
-        }
-
-        .summary-card.critical .count { color: #ef4444; }
-        .summary-card.high .count { color: #f97316; }
-        .summary-card.medium .count { color: #eab308; }
-        .summary-card.low .count { color: #22c55e; }
-    </style>
+</style>
 </head>
 <body>
     <h1>QA Testing Guide</h1>

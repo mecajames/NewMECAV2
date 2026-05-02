@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Judge & Event Director System - Implementation Plan - MECA</title>
+    <title>MECA Judge & Event Director System - MECA</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
@@ -15,6 +20,17 @@
             padding: 40px 20px;
             background: #f8fafc;
         }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
         h1 {
             text-align: center;
             color: #ea580c;
@@ -23,8 +39,16 @@
             border-bottom: 3px solid #ea580c;
             padding-bottom: 15px;
         }
-        .subtitle { text-align: center; color: #64748b; font-size: 1.1rem; margin-bottom: 40px; }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
         h2 {
+            color: #0f172a;
             font-size: 1.8rem;
             margin: 40px 0 20px 0;
             padding: 15px;
@@ -32,6 +56,7 @@
             color: white;
             border-radius: 8px;
         }
+
         h3 {
             color: #334155;
             font-size: 1.3rem;
@@ -39,14 +64,85 @@
             border-left: 4px solid #ea580c;
             padding-left: 15px;
         }
-        p { margin-bottom: 15px; color: #475569; }
-        .container {
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
             background: white;
             border-radius: 12px;
             padding: 30px;
             margin: 20px 0;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -56,6 +152,7 @@
             overflow: hidden;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
+
         th {
             background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
             color: white;
@@ -63,22 +160,20 @@
             text-align: left;
             font-weight: 600;
         }
-        td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; }
-        tr:nth-child(even) { background: #f8fafc; }
-        tr:hover { background: #fef3c7; }
-        .toc {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            margin: 30px 0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
         }
-        .toc h3 { margin-top: 0; border-left: none; padding-left: 0; }
-        .toc ul { list-style: none; margin-top: 15px; }
-        .toc li { padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
-        .toc li:last-child { border-bottom: none; }
-        .toc a { color: #ea580c; text-decoration: none; font-weight: 500; }
-        .toc a:hover { text-decoration: underline; }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
         .info-box {
             background: #eff6ff;
             border: 1px solid #3b82f6;
@@ -86,24 +181,88 @@
             padding: 20px;
             margin: 20px 0;
         }
-        .info-box.success { background: #dcfce7; border-color: #22c55e; }
-        .info-box.success h4 { color: #166534; }
-        .info-box h4 { color: #1e40af; margin-bottom: 10px; margin-top: 0; }
-        ul, ol { margin-left: 20px; margin-bottom: 15px; }
-        li { margin: 8px 0; color: #475569; }
-        .phase-card {
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
             background: white;
             border-radius: 12px;
             padding: 25px;
-            margin: 20px 0;
+            margin: 30px 0;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            border-left: 4px solid #ea580c;
         }
-        .phase-card h4 {
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
             color: #ea580c;
-            font-size: 1.2rem;
-            margin-bottom: 15px;
+            text-decoration: none;
+            font-weight: 500;
         }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
         .status-badge {
             display: inline-block;
             padding: 4px 12px;
@@ -111,9 +270,32 @@
             font-size: 0.85rem;
             font-weight: 500;
         }
-        .badge-green { background: #dcfce7; color: #166534; }
-        .badge-yellow { background: #fef3c7; color: #92400e; }
-        .badge-blue { background: #dbeafe; color: #1e40af; }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
         footer {
             text-align: center;
             margin-top: 50px;
@@ -121,180 +303,809 @@
             border-top: 2px solid #e2e8f0;
             color: #64748b;
         }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
     </style>
 </head>
 <body>
-    <h1>MECA Judge & Event Director System</h1>
-    <p class="subtitle">Implementation Plan Overview</p>
-
-    <div class="toc">
-        <h3>Implementation Phases</h3>
-        <ul>
-            <li><a href="#phase1">Phase 1: Database Foundation</a></li>
-            <li><a href="#phase2">Phase 2: Judge Application System</a></li>
-            <li><a href="#phase3">Phase 3: Admin Judge Management</a></li>
-            <li><a href="#phase4">Phase 4: Event Director System</a></li>
-            <li><a href="#phase5">Phase 5: Dashboard Integration</a></li>
-            <li><a href="#phase6">Phase 6: Seasonal Qualification</a></li>
-            <li><a href="#phase7">Phase 7: Event Integration</a></li>
-            <li><a href="#phase8">Phase 8: Public Directories</a></li>
-            <li><a href="#phase9">Phase 9: Rating System</a></li>
-            <li><a href="#phase10">Phase 10: Enhanced Features</a></li>
-        </ul>
-    </div>
-
-    <h2 id="phase1">Phase 1: Database Foundation & Core Infrastructure</h2>
-    <div class="phase-card">
-        <h4>Goal: Create all database tables, migrations, and shared utilities</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Backend Tasks</h3>
-        <ul>
-            <li>Add judge role to UserRole enum</li>
-            <li>Create database migrations for judge/ED tables</li>
-            <li>Create MikroORM entities for all new tables</li>
-            <li>Create shared Zod schemas for DTOs</li>
-        </ul>
-        <p><strong>Deliverable:</strong> All database tables created and entities defined</p>
-    </div>
-
-    <h2 id="phase2">Phase 2: Judge Application System (Public-Facing)</h2>
-    <div class="phase-card">
-        <h4>Goal: Allow members to apply to become judges</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Public information page: <code>/judges/become-a-judge</code></li>
-            <li>Email verification for non-logged-in users</li>
-            <li>Multi-step application form with sections for personal info, headshot, location, experience, references</li>
-            <li>Application status tracking</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Members can visit info page and apply to become judges</p>
-    </div>
-
-    <h2 id="phase3">Phase 3: Admin - Judge Application Management</h2>
-    <div class="phase-card">
-        <h4>Goal: Admins can review, approve, and reject judge applications</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Admin applications list page with filters</li>
-            <li>Application detail page with reference check tracking</li>
-            <li>Admin ability to create applications on behalf of members</li>
-            <li>Approved judges list page</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Admins can view, review, approve/reject applications</p>
-    </div>
-
-    <h2 id="phase4">Phase 4: Event Director System</h2>
-    <div class="phase-card">
-        <h4>Goal: Parallel system for Event Directors</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>ED application system (mirrors judge system)</li>
-            <li>ED-specific fields (event management experience, team experience)</li>
-            <li>Admin ED management pages</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Full ED application and admin management system</p>
-    </div>
-
-    <h2 id="phase5">Phase 5: Judge & ED Dashboard Integration</h2>
-    <div class="phase-card">
-        <h4>Goal: Approved Judges/EDs can manage their profiles from dashboard</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Conditional "Judge Profile" tab for approved judges</li>
-            <li>Conditional "Event Director Profile" tab for approved EDs</li>
-            <li>Headshot management, bio editor, availability settings</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Users can manage their Judge/ED profiles</p>
-    </div>
-
-    <h2 id="phase6">Phase 6: Seasonal Qualification Management</h2>
-    <div class="phase-card">
-        <h4>Goal: Track and manage seasonal qualifications</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Season qualifications section in admin detail pages</li>
-            <li>Bulk qualify judges for season</li>
-            <li>Season status filtering</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Admins can qualify Judges/EDs for seasons</p>
-    </div>
-
-    <h2 id="phase7">Phase 7: Event Integration & Judge Assignments</h2>
-    <div class="phase-card">
-        <h4>Goal: Assign judges to events, update ED assignment</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Event Director dropdown shows only approved EDs</li>
-            <li>Judge assignments section on event detail page</li>
-            <li>Judge "Available Events" view in dashboard</li>
-            <li>Volunteer/request system for judges</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Admins can assign judges to events, judges can volunteer</p>
-    </div>
-
-    <h2 id="phase8">Phase 8: Public Directories</h2>
-    <div class="phase-card">
-        <h4>Goal: Public-facing directories for Judges and Event Directors</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Public judges directory: <code>/judges</code></li>
-            <li>Public ED directory: <code>/event-directors</code></li>
-            <li>Individual profile pages with headshot, bio, statistics</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Public can browse judge and ED directories</p>
-    </div>
-
-    <h2 id="phase9">Phase 9: Rating System</h2>
-    <div class="phase-card">
-        <h4>Goal: Allow eligible users to rate Judges and Event Directors</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Rating submission modal (5-star)</li>
-            <li>Eligibility verification (competed at same event)</li>
-            <li>30-day rating window</li>
-            <li>Admin ability to remove fraudulent ratings</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Users can rate judges/EDs they've interacted with</p>
-    </div>
-
-    <h2 id="phase10">Phase 10: Enhanced Features & Polish</h2>
-    <div class="phase-card">
-        <h4>Goal: Level progression, availability management, statistics</h4>
-        <h3 style="margin-top: 15px; border-left: none; padding-left: 0;">Key Features</h3>
-        <ul>
-            <li>Judge level change tracking with history</li>
-            <li>Availability calendar in dashboard</li>
-            <li>Bulk operations (level change, export, status change)</li>
-            <li>Email notification preferences</li>
-        </ul>
-        <p><strong>Deliverable:</strong> Complete level progression and availability management</p>
-    </div>
-
-    <h2>Phase Summary</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Phase</th>
-                <th>Description</th>
-                <th>Complexity</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td>1</td><td>Database Foundation</td><td><span class="status-badge badge-yellow">Medium</span></td></tr>
-            <tr><td>2</td><td>Judge Application (Public)</td><td><span class="status-badge badge-yellow">Medium</span></td></tr>
-            <tr><td>3</td><td>Admin Judge Management</td><td><span class="status-badge badge-blue">High</span></td></tr>
-            <tr><td>4</td><td>Event Director System</td><td><span class="status-badge badge-yellow">Medium</span></td></tr>
-            <tr><td>5</td><td>Dashboard Integration</td><td><span class="status-badge badge-yellow">Medium</span></td></tr>
-            <tr><td>6</td><td>Seasonal Qualification</td><td><span class="status-badge badge-green">Low-Medium</span></td></tr>
-            <tr><td>7</td><td>Event Integration</td><td><span class="status-badge badge-blue">High</span></td></tr>
-            <tr><td>8</td><td>Public Directories</td><td><span class="status-badge badge-yellow">Medium</span></td></tr>
-            <tr><td>9</td><td>Rating System</td><td><span class="status-badge badge-yellow">Medium</span></td></tr>
-            <tr><td>10</td><td>Enhanced Features</td><td><span class="status-badge badge-yellow">Medium</span></td></tr>
-        </tbody>
-    </table>
-
+    <nav class="docs-nav">
+        <a href="index.html">← Documentation Index</a>
+    </nav>
+<p>MECA Judge &amp; Event Director System - Implementation Plan</p>
+<p>Phase 1: Database Foundation &amp; Core Infrastructure</p>
+<p>Goal: Create all database tables, migrations, and shared utilities</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Add judge role to UserRole enum (packages/shared/src/schemas/enums.schema.ts)</li>
+<li>Create database migrations for:<ul>
+<li>judge_applications table</li>
+<li>judge_application_references table</li>
+<li>judges table (approved judges)</li>
+<li>judge_level_history table</li>
+<li>judge_season_qualifications table</li>
+<li>event_director_applications table</li>
+<li>event_director_application_references table</li>
+<li>event_directors table (approved EDs)</li>
+<li>event_director_season_qualifications table</li>
+<li>event_judge_assignments table</li>
+<li>ratings table</li>
+<li>email_verification_tokens table (for non-logged-in application flow)</li>
+</ul>
+</li>
+<li>Create MikroORM entities for all new tables</li>
+<li>Create shared Zod schemas for DTOs (packages/shared/src/schemas/)<ul>
+<li>Judge application schemas</li>
+<li>Event Director application schemas</li>
+<li>Rating schemas</li>
+<li>Assignment schemas</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ul>
+<li>None in this phase</li>
+</ul>
+<p>Deliverable</p>
+<ul>
+<li>All database tables created and entities defined</li>
+<li>Can verify via database inspection</li>
+</ul>
+<hr />
+<p>Phase 2: Judge Application System (Public-Facing)</p>
+<p>Goal: Allow members to apply to become judges</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Create judge-applications module:<ul>
+<li>judge-applications.entity.ts</li>
+<li>judge-application-references.entity.ts</li>
+<li>judge-applications.service.ts</li>
+<li>judge-applications.controller.ts</li>
+<li>judge-applications.module.ts</li>
+</ul>
+</li>
+<li>API Endpoints:<ul>
+<li>GET /api/judges/apply/can-apply - Check if user can apply (logged in + active membership)</li>
+<li>POST /api/judges/apply/verify-email - Send verification email (non-logged-in flow)</li>
+<li>GET /api/judges/apply/verify/:token - Verify email token</li>
+<li>POST /api/judges/apply - Submit application</li>
+<li>GET /api/judges/apply/status - Check own application status</li>
+</ul>
+</li>
+<li>Email templates:<ul>
+<li>Judge application email verification</li>
+<li>Judge application received confirmation</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Create public information page: /judges/become-a-judge<ul>
+<li>Hero section</li>
+<li>Why become a judge</li>
+<li>What we look for</li>
+<li>Application process</li>
+<li>Judge levels explanation</li>
+<li>CTA button</li>
+</ul>
+</li>
+<li>Create email verification page: /judges/apply/verify<ul>
+<li>Display for non-logged-in users only</li>
+<li>Send verification email button</li>
+</ul>
+</li>
+<li>Create application form: /judges/apply<ul>
+<li>Multi-step wizard with sections:<ul>
+<li>Personal Information</li>
+</ul>
+</li>
+<li>Headshot Upload</li>
+<li>Location &amp; Availability</li>
+<li>Experience &amp; Qualifications</li>
+<li>Specialties</li>
+<li>References (0-5, optional but encouraged)</li>
+<li>Additional Information (essays)</li>
+<li>Acknowledgments</li>
+<li>Progress indicator</li>
+<li>Form validation</li>
+<li>Submit and confirmation</li>
+</ul>
+</li>
+<li>Create application status page: /judges/apply/status<ul>
+<li>Show current application status</li>
+<li>Application reference number</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Members can visit info page and apply to become judges</li>
+<li>Applications stored in database with "Pending" status</li>
+<li>Confirmation email sent on submission</li>
+</ul>
+<hr />
+<p>Phase 3: Admin - Judge Application Management</p>
+<p>Goal: Admins can review, approve, and reject judge applications</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Create judges module (approved judges):<ul>
+<li>judges.entity.ts</li>
+<li>judges.service.ts</li>
+<li>judges.controller.ts</li>
+<li>judges.module.ts</li>
+</ul>
+</li>
+<li>Admin API Endpoints:<ul>
+<li>GET /api/admin/judges/applications - List all applications (with filters)</li>
+<li>GET /api/admin/judges/applications/:id - Single application detail</li>
+<li>POST /api/admin/judges/applications - Create application on behalf of member</li>
+<li>PUT /api/admin/judges/applications/:id - Update status (approve/reject)</li>
+<li>PUT /api/admin/judges/applications/:id/references/:refId - Update reference check</li>
+<li>POST /api/admin/judges - Create judge directly (expedited)</li>
+<li>GET /api/admin/judges - List approved judges</li>
+<li>GET /api/admin/judges/:id - Single judge detail</li>
+</ul>
+</li>
+<li>Email templates:<ul>
+<li>Application approved notification (optional, checkbox controlled)</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Create admin applications list page: /admin/judges/applications<ul>
+<li>Table with columns: Application Date, Name, Location, Specialty, Age, References count, Status</li>
+<li>Filters: Status, Location, Specialty, Age Range, Date Range, Has References</li>
+<li>Bulk actions: Mark Under Review, Export CSV</li>
+</ul>
+</li>
+<li>Create admin application detail page: /admin/judges/applications/:id<ul>
+<li>Full application display</li>
+<li>Reference check tracking</li>
+<li>Admin notes section</li>
+<li>Status action buttons (Pending → Under Review → Approve/Reject)</li>
+<li>"Entered by Admin" indicator if applicable</li>
+</ul>
+</li>
+<li>Create admin "Create Application" modal/page<ul>
+<li>Member search/select</li>
+<li>Same form fields as public application</li>
+<li>"Notify Applicant" checkbox</li>
+</ul>
+</li>
+<li>Create admin judges list page: /admin/judges<ul>
+<li>Table with columns: Name, Level, Location, Specialty, Season Status, Events Judged, Rating</li>
+<li>Filters: Level, Status, Location, Specialty, Rating Range</li>
+</ul>
+</li>
+<li>Create admin judge detail page: /admin/judges/:id<ul>
+<li>Profile header with headshot</li>
+<li>Contact information</li>
+<li>Qualifications &amp; Level</li>
+<li>Admin notes</li>
+<li>View original application link</li>
+<li>Actions: Change Level, Activate/Deactivate</li>
+</ul>
+</li>
+<li>Add navigation items to admin sidebar:<ul>
+<li>Judges section with Applications and Judges List</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Admins can view, review, approve/reject applications</li>
+<li>Admins can create applications on behalf of members</li>
+<li>Admins can directly add judges (expedited)</li>
+<li>Approved judges appear in judges list</li>
+</ul>
+<hr />
+<p>Phase 4: Event Director Application &amp; Management</p>
+<p>Goal: Parallel system for Event Directors</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Create event-director-applications module:<ul>
+<li>Similar structure to judge applications</li>
+<li>ED-specific fields (event management experience, team experience, equipment)</li>
+</ul>
+</li>
+<li>Create event-directors module (approved EDs):<ul>
+<li>event-directors.entity.ts</li>
+<li>event-directors.service.ts</li>
+<li>event-directors.controller.ts</li>
+</ul>
+</li>
+<li>API Endpoints (mirror judge endpoints):<ul>
+<li>GET/POST /api/event-directors/apply/*</li>
+<li>GET/POST/PUT /api/admin/event-directors/applications/*</li>
+<li>GET/POST/PUT /api/admin/event-directors/*</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Create ED public pages:<ul>
+<li>/event-directors/become-an-event-director - Info page</li>
+<li>/event-directors/apply - Application form (ED-specific fields)</li>
+<li>/event-directors/apply/status - Status check</li>
+</ul>
+</li>
+<li>Create admin ED pages:<ul>
+<li>/admin/event-directors/applications - Applications list</li>
+<li>/admin/event-directors/applications/:id - Application detail</li>
+<li>/admin/event-directors - Approved EDs list</li>
+<li>/admin/event-directors/:id - ED detail page</li>
+</ul>
+</li>
+<li>Add navigation items to admin sidebar:<ul>
+<li>Event Directors section</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Full ED application and admin management system</li>
+<li>Mirrors judge system with ED-specific fields</li>
+</ul>
+<hr />
+<p>Phase 5: Judge &amp; ED Dashboard Integration</p>
+<p>Goal: Approved Judges/EDs can manage their profiles from their member dashboard</p>
+<p>Backend Tasks</p>
+<ol>
+<li>API Endpoints for self-management:<ul>
+<li>GET /api/judges/me - Get own judge profile</li>
+<li>PUT /api/judges/me - Update own profile (bio, headshot, availability)</li>
+<li>GET /api/event-directors/me - Get own ED profile</li>
+<li>PUT /api/event-directors/me - Update own profile</li>
+</ul>
+</li>
+<li>API to check if user is Judge/ED:<ul>
+<li>GET /api/users/me/roles - Returns { isJudge: boolean, isEventDirector: boolean }</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Update member dashboard navigation:<ul>
+<li>Conditionally show "Judge Profile" tab if user is approved judge</li>
+<li>Conditionally show "Event Director Profile" tab if user is approved ED</li>
+</ul>
+</li>
+<li>Create Judge Profile tab content:<ul>
+<li>Headshot management (upload, preview, crop)</li>
+<li>Bio editor</li>
+<li>Public profile preview</li>
+<li>Availability settings</li>
+<li>Travel radius &amp; regions</li>
+<li>View statistics (events judged, rating)</li>
+</ul>
+</li>
+<li>Create Event Director Profile tab content:<ul>
+<li>Similar to Judge Profile</li>
+<li>ED-specific fields</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Approved Judges see "Judge Profile" tab in their dashboard</li>
+<li>Approved EDs see "Event Director Profile" tab</li>
+<li>Users can manage their Judge/ED profiles</li>
+</ul>
+<hr />
+<p>Phase 6: Seasonal Qualification Management</p>
+<p>Goal: Track and manage seasonal qualifications for Judges/EDs</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Create season qualification services:<ul>
+<li>judge-season-qualifications.service.ts</li>
+<li>event-director-season-qualifications.service.ts</li>
+</ul>
+</li>
+<li>API Endpoints:<ul>
+<li>POST /api/admin/judges/:id/qualify - Qualify judge for season</li>
+<li>POST /api/admin/judges/bulk-qualify - Bulk qualify judges</li>
+<li>GET /api/admin/judges/:id/seasons - Get qualification history</li>
+<li>Same for Event Directors</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Update admin judge detail page:<ul>
+<li>Season qualifications section</li>
+<li>Qualify for season action</li>
+<li>Qualification history table</li>
+</ul>
+</li>
+<li>Update admin judges list:<ul>
+<li>Season Status column</li>
+<li>Bulk qualify action</li>
+<li>Filter by season status</li>
+</ul>
+</li>
+<li>Same updates for Event Directors</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Admins can qualify Judges/EDs for seasons</li>
+<li>Bulk qualification support</li>
+<li>Season status visible in lists</li>
+</ul>
+<hr />
+<p>Phase 7: Event Integration &amp; Judge Assignments</p>
+<p>Goal: Assign judges to events, update ED assignment to use approved EDs</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Create event assignments service:<ul>
+<li>event-judge-assignments.service.ts</li>
+</ul>
+</li>
+<li>API Endpoints:<ul>
+<li>GET /api/admin/events/:id/judges - Get judges assigned to event</li>
+<li>POST /api/admin/events/:id/judges - Assign judge to event</li>
+<li>PUT /api/admin/assignments/:id - Update assignment status</li>
+<li>DELETE /api/admin/assignments/:id - Remove assignment</li>
+<li>GET /api/judges/events/available - Events available to work (for judges)</li>
+<li>POST /api/judges/events/:eventId/volunteer - Request to work event</li>
+<li>PUT /api/judges/events/:assignmentId/respond - Accept/decline</li>
+</ul>
+</li>
+<li>Update event service:<ul>
+<li>Modify event director field to validate against approved EDs</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Update admin event detail/edit page:<ul>
+<li>Event Director dropdown shows only approved EDs</li>
+<li>Judge assignments section</li>
+<li>Add/remove judges modal</li>
+<li>Judge role selection (Primary, Supporting, Trainee)</li>
+</ul>
+</li>
+<li>Create judge "Available Events" view:<ul>
+<li>In judge dashboard tab</li>
+<li>List events in travel radius</li>
+<li>Filter by date, format, location</li>
+<li>"Request to Work" button</li>
+</ul>
+</li>
+<li>Create judge "My Assignments" view:<ul>
+<li>In judge dashboard tab</li>
+<li>Upcoming events</li>
+<li>Past events</li>
+<li>Pending requests</li>
+</ul>
+</li>
+<li>Create ED "My Events" view (view only):<ul>
+<li>Events assigned as ED</li>
+<li>View judges assigned to their events</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Admins can assign judges to events</li>
+<li>ED dropdown on events only shows approved EDs</li>
+<li>Judges can view available events and volunteer</li>
+<li>Judges can see their assignments</li>
+<li>EDs can view their events and assigned judges</li>
+</ul>
+<hr />
+<p>Phase 8: Public Directories</p>
+<p>Goal: Public-facing directories for Judges and Event Directors</p>
+<p>Backend Tasks</p>
+<ol>
+<li>API Endpoints (public):<ul>
+<li>GET /api/judges/directory - List approved judges (public info only)</li>
+<li>GET /api/judges/directory/:id - Single judge public profile</li>
+<li>GET /api/event-directors/directory - List approved EDs</li>
+<li>GET /api/event-directors/directory/:id - Single ED public profile</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Create public judges directory: /judges or /judges/directory<ul>
+<li>Search by name</li>
+<li>Filter by location, specialty, level</li>
+<li>Sort by name, rating, events judged</li>
+<li>Card-based layout with headshot, name, level, location, rating</li>
+<li>Pagination or infinite scroll</li>
+</ul>
+</li>
+<li>Create public judge profile: /judges/:id<ul>
+<li>Large headshot</li>
+<li>Name, level, location</li>
+<li>Bio</li>
+<li>Specialty badges</li>
+<li>Statistics (years as judge, events judged)</li>
+<li>Rating display</li>
+<li>Recent events judged</li>
+<li>"Rate This Judge" button (if eligible)</li>
+</ul>
+</li>
+<li>Create public ED directory: /event-directors<ul>
+<li>Same structure as judges directory</li>
+</ul>
+</li>
+<li>Create public ED profile: /event-directors/:id<ul>
+<li>Same structure as judge profile</li>
+</ul>
+</li>
+<li>Add navigation links:<ul>
+<li>Main site navigation to directories</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Public can browse judge and ED directories</li>
+<li>Public can view individual profiles</li>
+<li>Headshots only shown for approved Judges/EDs</li>
+</ul>
+<hr />
+<p>Phase 9: Rating System</p>
+<p>Goal: Allow eligible users to rate Judges and Event Directors</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Create ratings module:<ul>
+<li>ratings.entity.ts</li>
+<li>ratings.service.ts</li>
+<li>ratings.controller.ts</li>
+</ul>
+</li>
+<li>API Endpoints:<ul>
+<li>POST /api/ratings - Submit rating</li>
+<li>GET /api/ratings/eligible - Get entities user can rate</li>
+<li>GET /api/admin/ratings - Admin view all ratings</li>
+<li>DELETE /api/admin/ratings/:id - Admin remove fraudulent rating</li>
+</ul>
+</li>
+<li>Eligibility logic:<ul>
+<li>Check event_registrations for competitor participation</li>
+<li>Check competition_results for completed competitions</li>
+<li>Check event_judge_assignments for judge/ED working same event</li>
+<li>Enforce 30-day rating window</li>
+<li>One rating per person per event</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Create rating submission modal:<ul>
+<li>Triggered from "Rate This Judge/ED" button</li>
+<li>Show judge/ED photo and name</li>
+<li>Event selector (events eligible to rate for)</li>
+<li>5-star selector</li>
+<li>Submit button</li>
+<li>Anonymous notice</li>
+</ul>
+</li>
+<li>Add rating displays:<ul>
+<li>Public profiles: Average rating, star visualization, count</li>
+<li>Admin views: Individual ratings list, ability to remove</li>
+</ul>
+</li>
+<li>Add "Rate" buttons:<ul>
+<li>On public judge/ED profiles (if eligible)</li>
+<li>Post-event prompt (optional enhancement)</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Users can rate judges/EDs they've interacted with</li>
+<li>Ratings displayed on public profiles</li>
+<li>Admins can manage ratings</li>
+</ul>
+<hr />
+<p>Phase 10: Enhanced Features &amp; Polish</p>
+<p>Goal: Level progression, availability management, statistics, bulk operations</p>
+<p>Backend Tasks</p>
+<ol>
+<li>Judge level management:<ul>
+<li>Level change tracking</li>
+<li>PUT /api/admin/judges/:id/level - Change level with reason</li>
+</ul>
+</li>
+<li>Availability management:<ul>
+<li>PUT /api/judges/me/availability - Update availability calendar/preferences</li>
+</ul>
+</li>
+<li>Statistics aggregation:<ul>
+<li>Events judged by format</li>
+<li>Events by region</li>
+<li>Event Directors worked with</li>
+</ul>
+</li>
+</ol>
+<p>Frontend Tasks</p>
+<ol>
+<li>Admin judge level management:<ul>
+<li>Level change modal with reason</li>
+<li>Level history display</li>
+</ul>
+</li>
+<li>Bulk operations:<ul>
+<li>Bulk level change</li>
+<li>Export to CSV</li>
+<li>Bulk status change</li>
+</ul>
+</li>
+<li>Availability calendar:<ul>
+<li>In judge dashboard</li>
+<li>Mark available/unavailable dates</li>
+<li>Set recurring availability</li>
+</ul>
+</li>
+<li>Enhanced statistics:<ul>
+<li>Admin dashboard widgets for judge/ED counts</li>
+<li>Judge performance statistics</li>
+<li>Event coverage reports</li>
+</ul>
+</li>
+<li>Email notification preferences:<ul>
+<li>Judges/EDs can set notification preferences</li>
+</ul>
+</li>
+</ol>
+<p>Deliverable</p>
+<ul>
+<li>Complete level progression tracking</li>
+<li>Availability management</li>
+<li>Comprehensive statistics</li>
+<li>Full bulk operation support</li>
+</ul>
+<hr />
+<p>Summary by Phase</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+<th>Est. Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Database Foundation</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Judge Application (Public)</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Admin Judge Management</td>
+<td>High</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Event Director System</td>
+<td>Medium (mirrors Phase 2-3)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Dashboard Integration</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Seasonal Qualification</td>
+<td>Low-Medium</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Event Integration</td>
+<td>High</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Public Directories</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Rating System</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Enhanced Features</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
     <footer>
-        <p>MECA Competition System - Judge & Event Director Implementation Plan</p>
-        <p style="font-size: 0.9rem; margin-top: 5px;">Last Updated: December 2025</p>
+        <p>MECA Car Audio Documentation · For platform admins and the development team</p>
     </footer>
 </body>
 </html>

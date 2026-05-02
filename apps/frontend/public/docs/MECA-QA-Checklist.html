@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MECA Website QA Testing Checklist</title>
+<style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>MECA Website QA Testing Checklist</h1>
+  <p>Systematic quality assurance testing guide for site administrators</p>
+  <p style="margin-top: 8px; color: #fb923c; font-weight: 600;">Please test each item below and mark it as Pass, Fail, or Skip</p>
+</div>
+
+<div class="info-box">
+  <div class="info-row">
+    <div>
+      <label>Reviewer Name</label>
+      <div class="field"></div>
+    </div>
+    <div>
+      <label>Date Started</label>
+      <div class="field"></div>
+    </div>
+  </div>
+  <div class="info-row">
+    <div>
+      <label>Website URL</label>
+      <div class="field"></div>
+    </div>
+    <div>
+      <label>Date Completed</label>
+      <div class="field"></div>
+    </div>
+  </div>
+</div>
+
+<div class="instructions">
+  <h2>How to Use This Checklist</h2>
+  <ul>
+    <li><strong>Go section by section</strong> - start at Section 1 and work your way through</li>
+    <li><strong>Follow the steps</strong> under each item to test that feature</li>
+    <li><strong>Check the Expected Result</strong> to know what should happen</li>
+    <li><strong>Mark each item</strong> as PASS (works correctly), FAIL (has a problem), or SKIP (not applicable)</li>
+    <li><strong>Add notes</strong> for any failed items describing what went wrong</li>
+    <li><strong>Sections 1-9</strong> cover public pages and user features</li>
+    <li><strong>Sections 10-20</strong> cover admin-only features (you must be logged in as admin)</li>
+    <li><strong>Section 21</strong> tests mobile/phone display</li>
+    <li><strong>Section 22</strong> is your overall sign-off</li>
+  </ul>
+</div>
+
+<!-- SECTION 1 -->
+<div class="section">
+  <div class="section-header">
+    <h2>Section 1: Public Pages &amp; Navigation</h2>
+    <p>Verify all public-facing pages load correctly and navigation works</p>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.1 Home Page</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Open the website in your browser</li>
+        <li>Verify the home page loads with the MECA logo, navigation bar, and hero section</li>
+        <li>Check that upcoming events are displayed</li>
+        <li>Check that sponsor/banner ads appear correctly</li>
+        <li>Click through any links or buttons on the page</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>Home page loads fully with all sections visible. No broken images or errors.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-1"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-1"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-1"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.2 Main Navigation</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Click each item in the top navigation bar</li>
+        <li>Verify each menu item takes you to the correct page</li>
+        <li>On mobile: tap the hamburger menu icon and verify the menu opens</li>
+        <li>Check that the MECA logo links back to the home page</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>All navigation links work. Mobile menu opens and closes properly.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-2"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-2"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-2"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.3 Events Page</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Events page</li>
+        <li>Verify events are listed with dates, locations, and details</li>
+        <li>Click on an event to view its detail page</li>
+        <li>Verify event details show: name, date, location, description, and registration info</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>Events list displays correctly. Event detail pages show complete information.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-3"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-3"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-3"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.4 Results &amp; Leaderboard</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Results page</li>
+        <li>Verify competition results are displayed</li>
+        <li>Navigate to the Leaderboard page - verify rankings with points</li>
+        <li>Navigate to the Standings page</li>
+        <li>Check Team Standings and Team Leaderboard pages</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>Results, leaderboard, and standings pages display data correctly.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-4"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-4"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-4"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.5 Directories (Members, Teams, Retailers, Manufacturers, Judges, Event Directors)</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Members directory and verify member profiles show</li>
+        <li>Navigate to the Teams directory and check team listings</li>
+        <li>Navigate to the Retailers directory and verify retailer listings</li>
+        <li>Navigate to the Manufacturers directory and verify listings</li>
+        <li>Navigate to the Judges directory and verify judge profiles</li>
+        <li>Navigate to the Event Directors directory and verify ED profiles</li>
+        <li>Click on a profile in each directory to verify the detail page loads</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>All directories load with searchable listings. Detail pages display correct info.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-5"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-5"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-5"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.6 Rulebooks</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Rulebooks page</li>
+        <li>Verify rulebooks are listed</li>
+        <li>Click on a rulebook to view or download it</li>
+        <li>Check the Rulebook Archive page</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>Rulebooks are listed and accessible. PDFs open/download correctly.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-6"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-6"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-6"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.7 Contact Page</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Contact page</li>
+        <li>Fill in the contact form with test information</li>
+        <li>Submit the form</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>Contact form submits successfully with a confirmation message.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-7"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-7"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-7"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.8 Information Pages (Privacy, Terms, Support, Guides)</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Privacy Policy page and verify content displays</li>
+        <li>Navigate to the Terms &amp; Conditions page and verify content displays</li>
+        <li>Navigate to the Member Support / Knowledge Base page</li>
+        <li>Navigate to the Competition Guides and Quick Start Guide</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>All informational pages load with readable content.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-8"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-8"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-8"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.9 MECA Shop</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Shop page</li>
+        <li>Verify products are displayed with images and prices</li>
+        <li>Click on a product to view its detail page</li>
+        <li>Add a product to the cart</li>
+        <li>Go to the Cart page and verify the item appears with correct total</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>Shop displays products. Cart adds items and calculates totals correctly.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-9"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-9"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-9"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.10 Special Pages (Hall of Fame, World Records, Archives, Class Calculator)</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to the Hall of Fame page</li>
+        <li>Navigate to the SPL World Records page</li>
+        <li>Navigate to the Championship Archives page and click into a specific year</li>
+        <li>Navigate to the Class Calculator page and try using it</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>All special pages load with content. Class calculator functions.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-10"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-10"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-10"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <div class="checkbox"></div>
+      <div class="item-title">1.11 Guest Support Ticket</div>
+    </div>
+    <div class="steps">
+      <div class="steps-label">Steps:</div>
+      <ol>
+        <li>Navigate to Support &gt; Guest Support (without logging in)</li>
+        <li>Fill in a test support ticket</li>
+        <li>Submit the ticket and check the email verification flow</li>
+      </ol>
+    </div>
+    <div class="expected">
+      <div class="expected-label">Expected Result:</div>
+      <p>Guest can submit a support ticket and receives email verification.</p>
+    </div>
+    <div class="result-row">
+      <div class="result-option pass"><input type="radio" name="1-11"> PASS</div>
+      <div class="result-option fail"><input type="radio" name="1-11"> FAIL</div>
+      <div class="result-option skip"><input type="radio" name="1-11"> SKIP</div>
+    </div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<!-- SECTION 2 -->
+<div class="section">
+  <div class="section-header">
+    <h2>Section 2: Account &amp; Authentication</h2>
+    <p>Test login, registration, and account management</p>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">2.1 Login</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div>
+      <ol><li>Navigate to the Login page</li><li>Enter valid credentials and log in</li><li>Verify you are redirected to the Dashboard</li><li>Verify the navigation bar updates to show your logged-in state</li></ol>
+    </div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Login succeeds. Dashboard loads. Nav shows logged-in user.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="2-1"> PASS</div><div class="result-option fail"><input type="radio" name="2-1"> FAIL</div><div class="result-option skip"><input type="radio" name="2-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">2.2 Profile Management</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div>
+      <ol><li>Navigate to your Profile page</li><li>Verify your information is displayed correctly</li><li>Edit a field (e.g., phone number or address)</li><li>Save changes and verify they persist after refresh</li><li>Check Public Profile settings</li></ol>
+    </div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Profile displays correctly. Changes save and persist.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="2-2"> PASS</div><div class="result-option fail"><input type="radio" name="2-2"> FAIL</div><div class="result-option skip"><input type="radio" name="2-2"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">2.3 Change Password</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div>
+      <ol><li>Navigate to Change Password</li><li>Enter current and new password</li><li>Save and log out</li><li>Log back in with new password</li></ol>
+    </div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Password changes. New password works for login.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="2-3"> PASS</div><div class="result-option fail"><input type="radio" name="2-3"> FAIL</div><div class="result-option skip"><input type="radio" name="2-3"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">2.4 User Dashboard</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div>
+      <ol><li>Navigate to the Dashboard</li><li>Verify it shows your membership status</li><li>Check MyMECA dashboard section</li><li>Verify links to registrations, billing, and membership work</li></ol>
+    </div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Dashboard shows correct info and all links work.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="2-4"> PASS</div><div class="result-option fail"><input type="radio" name="2-4"> FAIL</div><div class="result-option skip"><input type="radio" name="2-4"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<!-- SECTION 3 -->
+<div class="section">
+  <div class="section-header"><h2>Section 3: Membership System</h2><p>Test membership purchasing, renewal, and management</p></div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">3.1 Membership Overview Page</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to the Membership page</li><li>Verify all membership types with names and prices</li><li>Click on a type to see details</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Membership types display correctly with accurate pricing.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="3-1"> PASS</div><div class="result-option fail"><input type="radio" name="3-1"> FAIL</div><div class="result-option skip"><input type="radio" name="3-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">3.2 Membership Purchase (if testing payments)</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Select a membership type and proceed to checkout</li><li>Verify the checkout page shows the correct price</li><li>Complete a test payment</li><li>Verify membership is activated and MECA ID assigned</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Purchase completes. MECA ID assigned. Status shows active.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="3-2"> PASS</div><div class="result-option fail"><input type="radio" name="3-2"> FAIL</div><div class="result-option skip"><input type="radio" name="3-2"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">3.3 Membership Dashboard</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to Dashboard &gt; Membership</li><li>Verify membership status, MECA ID, and expiration</li><li>Check membership card/QR code</li><li>Verify auto-renewal status</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Membership dashboard shows accurate details.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="3-3"> PASS</div><div class="result-option fail"><input type="radio" name="3-3"> FAIL</div><div class="result-option skip"><input type="radio" name="3-3"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">3.4 Team Membership Features (if applicable)</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>If you have a team membership, verify team members are listed</li><li>Check vehicle info can be updated</li><li>Verify team name can be updated</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Team features work for managing members.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="3-4"> PASS</div><div class="result-option fail"><input type="radio" name="3-4"> FAIL</div><div class="result-option skip"><input type="radio" name="3-4"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<!-- SECTION 4 -->
+<div class="section">
+  <div class="section-header"><h2>Section 4: Event Registration</h2><p>Test event registration and check-in</p></div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">4.1 Register for an Event</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Find an upcoming event open for registration</li><li>Click "Register" and select competition class(es)</li><li>Complete registration checkout</li><li>Verify confirmation</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Registration completes with confirmation.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="4-1"> PASS</div><div class="result-option fail"><input type="radio" name="4-1"> FAIL</div><div class="result-option skip"><input type="radio" name="4-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">4.2 My Registrations</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to My Registrations</li><li>Verify registrations are listed</li><li>Check event details are correct</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Registration history shows all events with correct details.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="4-2"> PASS</div><div class="result-option fail"><input type="radio" name="4-2"> FAIL</div><div class="result-option skip"><input type="radio" name="4-2"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">4.3 Event Check-In</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to event check-in page</li><li>Verify QR scanner or manual check-in works</li><li>Confirm checked-in status updates</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Check-in works. Status updates.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="4-3"> PASS</div><div class="result-option fail"><input type="radio" name="4-3"> FAIL</div><div class="result-option skip"><input type="radio" name="4-3"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<!-- SECTION 5-9 (User features) -->
+<div class="section">
+  <div class="section-header"><h2>Section 5: Support Tickets</h2><p>Test the support ticket system</p></div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">5.1 Create a Support Ticket</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to Support Tickets</li><li>Create a new ticket with subject, category, description</li><li>Submit</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Ticket created. Appears in list.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="5-1"> PASS</div><div class="result-option fail"><input type="radio" name="5-1"> FAIL</div><div class="result-option skip"><input type="radio" name="5-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">5.2 View and Comment on a Ticket</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Open existing ticket</li><li>Add a comment</li><li>Verify comment appears</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Ticket details load. Comments display.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="5-2"> PASS</div><div class="result-option fail"><input type="radio" name="5-2"> FAIL</div><div class="result-option skip"><input type="radio" name="5-2"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 6: Billing &amp; Payments</h2><p>Verify billing information and payment history</p></div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">6.1 Billing Page</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to your Billing page</li><li>Verify payment history is displayed</li><li>Check invoices show correct amounts and dates</li><li>Check Stripe billing portal access if available</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Billing page shows accurate payment history and invoices.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="6-1"> PASS</div><div class="result-option fail"><input type="radio" name="6-1"> FAIL</div><div class="result-option skip"><input type="radio" name="6-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 7: Shop &amp; Checkout</h2><p>Test the full shopping experience</p></div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">7.1 Complete a Shop Purchase</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Add items to cart</li><li>Go to Cart - verify items and totals</li><li>Proceed to Checkout</li><li>Complete test payment</li><li>Verify order confirmation page</li><li>Check Order History</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Purchase flow completes. Order appears in history.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="7-1"> PASS</div><div class="result-option fail"><input type="radio" name="7-1"> FAIL</div><div class="result-option skip"><input type="radio" name="7-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 8: Judge &amp; Event Director Applications</h2><p>Test application processes</p></div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">8.1 Judge Application</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to Judges &gt; Apply</li><li>Fill in application form</li><li>Add references if required</li><li>Submit</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Application submits with confirmation.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="8-1"> PASS</div><div class="result-option fail"><input type="radio" name="8-1"> FAIL</div><div class="result-option skip"><input type="radio" name="8-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">8.2 Event Director Application</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to Event Directors &gt; Apply</li><li>Fill in application</li><li>Submit</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Application submits with confirmation.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="8-2"> PASS</div><div class="result-option fail"><input type="radio" name="8-2"> FAIL</div><div class="result-option skip"><input type="radio" name="8-2"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 9: Event Hosting Request</h2><p>Test event hosting request form</p></div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">9.1 Submit a Hosting Request</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to "Host an Event"</li><li>Fill in venue details</li><li>Submit form</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Hosting request submits. Confirmation displayed.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="9-1"> PASS</div><div class="result-option fail"><input type="radio" name="9-1"> FAIL</div><div class="result-option skip"><input type="radio" name="9-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<!-- ADMIN SECTIONS 10-20 -->
+<div style="background: #fff7ed; border: 2px solid #fb923c; border-radius: 12px; padding: 20px; margin: 30px 0;">
+  <h2 style="color: #9a3412; margin-bottom: 8px;">Admin Sections (10-20)</h2>
+  <p style="color: #c2410c; font-size: 14px;">The following sections require you to be logged in as an <strong>admin user</strong>. Navigate to Dashboard &gt; Admin Dashboard to access these features.</p>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 10: Admin - Member Management</h2><p>Test admin tools for managing members</p></div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">10.1 View &amp; Search Members</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin Dashboard &gt; Manage Members</li><li>Verify members list loads</li><li>Search for a member by name or email</li><li>Click a member to view detail page</li><li>Verify detail shows: profile, membership, payments, events</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Members list loads. Search works. Details complete.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="10-1"> PASS</div><div class="result-option fail"><input type="radio" name="10-1"> FAIL</div><div class="result-option skip"><input type="radio" name="10-1"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">10.2 Create a New Member</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Click "Create New Member"</li><li>Fill in required fields</li><li>Assign membership and save</li><li>Verify they appear in members list</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>New member created with correct details.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="10-2"> PASS</div><div class="result-option fail"><input type="radio" name="10-2"> FAIL</div><div class="result-option skip"><input type="radio" name="10-2"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+  <div class="item">
+    <div class="item-header"><div class="checkbox"></div><div class="item-title">10.3 Edit a Member</div></div>
+    <div class="steps"><div class="steps-label">Steps:</div><ol><li>Open a member's detail page</li><li>Edit profile information</li><li>Save and verify changes persist</li></ol></div>
+    <div class="expected"><div class="expected-label">Expected Result:</div><p>Edits save correctly and persist.</p></div>
+    <div class="result-row"><div class="result-option pass"><input type="radio" name="10-3"> PASS</div><div class="result-option fail"><input type="radio" name="10-3"> FAIL</div><div class="result-option skip"><input type="radio" name="10-3"> SKIP</div></div>
+    <div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 11: Admin - Membership Management</h2><p>Test admin membership tools</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">11.1 Membership Types Configuration</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Memberships</li><li>Verify types listed with correct prices</li><li>Edit a type and save</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Types display correctly. Edits save.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="11-1"> PASS</div><div class="result-option fail"><input type="radio" name="11-1"> FAIL</div><div class="result-option skip"><input type="radio" name="11-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">11.2 Assign Membership to a Member</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Open member detail</li><li>Use admin tools to create/assign membership</li><li>Select payment method</li><li>Verify membership created with MECA ID</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Membership assigned with correct type and payment.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="11-2"> PASS</div><div class="result-option fail"><input type="radio" name="11-2"> FAIL</div><div class="result-option skip"><input type="radio" name="11-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">11.3 Cancel/Refund a Membership</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Open membership details</li><li>Use cancel option</li><li>Verify status updates</li><li>Process refund if applicable</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Cancellation works. Refund processes.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="11-3"> PASS</div><div class="result-option fail"><input type="radio" name="11-3"> FAIL</div><div class="result-option skip"><input type="radio" name="11-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">11.4 Membership Cards Management</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Membership Cards</li><li>Verify card tracking loads</li><li>Update a card status</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Card tracking works. Status updates save.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="11-4"> PASS</div><div class="result-option fail"><input type="radio" name="11-4"> FAIL</div><div class="result-option skip"><input type="radio" name="11-4"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 12: Admin - Event Management</h2><p>Test event creation and management</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">12.1 Create an Event</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Manage Events</li><li>Create event with name, date, location</li><li>Save and verify it appears in both admin and public lists</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Event created and visible everywhere.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="12-1"> PASS</div><div class="result-option fail"><input type="radio" name="12-1"> FAIL</div><div class="result-option skip"><input type="radio" name="12-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">12.2 Edit an Event</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Open existing event</li><li>Edit details</li><li>Save and verify changes on public page</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Edits save and reflect publicly.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="12-2"> PASS</div><div class="result-option fail"><input type="radio" name="12-2"> FAIL</div><div class="result-option skip"><input type="radio" name="12-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">12.3 Enter Competition Results</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Enter Results</li><li>Select event and enter results</li><li>Save and check public Results page</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Results saved and display publicly.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="12-3"> PASS</div><div class="result-option fail"><input type="radio" name="12-3"> FAIL</div><div class="result-option skip"><input type="radio" name="12-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">12.4 Event Registrations &amp; Check-In</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Event Registrations</li><li>Verify registrations listed</li><li>Check QR Check-In hub</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Registration list loads. Check-in works.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="12-4"> PASS</div><div class="result-option fail"><input type="radio" name="12-4"> FAIL</div><div class="result-option skip"><input type="radio" name="12-4"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 13: Admin - Judge &amp; ED Management</h2><p>Test judge and event director admin tools</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">13.1 Review Judge Applications</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Judge Applications</li><li>Verify applications listed</li><li>Open one to review</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Applications load. Review actions work.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="13-1"> PASS</div><div class="result-option fail"><input type="radio" name="13-1"> FAIL</div><div class="result-option skip"><input type="radio" name="13-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">13.2 Manage Judges</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Manage Judges</li><li>Verify judges listed</li><li>Click a judge to view profile</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Judges list and profiles display correctly.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="13-2"> PASS</div><div class="result-option fail"><input type="radio" name="13-2"> FAIL</div><div class="result-option skip"><input type="radio" name="13-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">13.3 Review ED Applications</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; ED Applications</li><li>Verify applications listed</li><li>Open to review</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>ED applications load.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="13-3"> PASS</div><div class="result-option fail"><input type="radio" name="13-3"> FAIL</div><div class="result-option skip"><input type="radio" name="13-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">13.4 Manage Event Directors</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Manage Event Directors</li><li>Verify EDs listed</li><li>Click to view profile</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>ED list and profiles work.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="13-4"> PASS</div><div class="result-option fail"><input type="radio" name="13-4"> FAIL</div><div class="result-option skip"><input type="radio" name="13-4"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">13.5 Event Hosting Requests</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Hosting Requests</li><li>Verify requests listed</li><li>Open to review</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Hosting requests load and can be reviewed.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="13-5"> PASS</div><div class="result-option fail"><input type="radio" name="13-5"> FAIL</div><div class="result-option skip"><input type="radio" name="13-5"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 14: Admin - Competition Setup</h2><p>Verify competition configuration pages</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">14.1 Competition Classes</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Classes Management</li><li>Verify classes listed with correct details</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Classes display correctly.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="14-1"> PASS</div><div class="result-option fail"><input type="radio" name="14-1"> FAIL</div><div class="result-option skip"><input type="radio" name="14-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">14.2 Competition Formats</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Format Management</li><li>Verify formats listed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Formats display correctly.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="14-2"> PASS</div><div class="result-option fail"><input type="radio" name="14-2"> FAIL</div><div class="result-option skip"><input type="radio" name="14-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">14.3 Season Management</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Season Management</li><li>Verify seasons listed with active season marked</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Seasons display with active season highlighted.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="14-3"> PASS</div><div class="result-option fail"><input type="radio" name="14-3"> FAIL</div><div class="result-option skip"><input type="radio" name="14-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">14.4 Rulebook Management</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Manage Rulebooks</li><li>Verify rulebooks listed and accessible</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Rulebook management works.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="14-4"> PASS</div><div class="result-option fail"><input type="radio" name="14-4"> FAIL</div><div class="result-option skip"><input type="radio" name="14-4"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">14.5 Points Configuration</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Points Configuration</li><li>Verify point values displayed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Points config loads and can be edited.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="14-5"> PASS</div><div class="result-option fail"><input type="radio" name="14-5"> FAIL</div><div class="result-option skip"><input type="radio" name="14-5"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 15: Admin - Billing &amp; Financial</h2><p>Test billing and revenue tools</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">15.1 Billing Dashboard</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Billing</li><li>Verify revenue summary loads</li><li>Check Orders, Invoices, Revenue sections</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Billing dashboard shows revenue, orders, invoices.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="15-1"> PASS</div><div class="result-option fail"><input type="radio" name="15-1"> FAIL</div><div class="result-option skip"><input type="radio" name="15-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">15.2 Orders</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to Billing &gt; Orders</li><li>Verify orders listed</li><li>Click to view details</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Orders list and details work.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="15-2"> PASS</div><div class="result-option fail"><input type="radio" name="15-2"> FAIL</div><div class="result-option skip"><input type="radio" name="15-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">15.3 Invoices</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to Billing &gt; Invoices</li><li>Verify invoices listed</li><li>Click to view details</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Invoices list and details work.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="15-3"> PASS</div><div class="result-option fail"><input type="radio" name="15-3"> FAIL</div><div class="result-option skip"><input type="radio" name="15-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">15.4 Revenue Reports</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Navigate to Billing &gt; Revenue</li><li>Verify reports/charts load</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Revenue reports display correctly.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="15-4"> PASS</div><div class="result-option fail"><input type="radio" name="15-4"> FAIL</div><div class="result-option skip"><input type="radio" name="15-4"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 16: Admin - Support &amp; Communication</h2><p>Test support ticket management</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">16.1 Manage Support Tickets</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Support Tickets</li><li>Verify all tickets listed</li><li>Open and reply to a ticket</li><li>Change ticket status</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Ticket management works fully.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="16-1"> PASS</div><div class="result-option fail"><input type="radio" name="16-1"> FAIL</div><div class="result-option skip"><input type="radio" name="16-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">16.2 Notifications Center</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Notifications</li><li>Verify notifications listed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Notifications load.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="16-2"> PASS</div><div class="result-option fail"><input type="radio" name="16-2"> FAIL</div><div class="result-option skip"><input type="radio" name="16-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 17: Admin - Content Management</h2><p>Test content management features</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">17.1 Business Listings</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Business Listings</li><li>Verify listings shown</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Business listings load.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="17-1"> PASS</div><div class="result-option fail"><input type="radio" name="17-1"> FAIL</div><div class="result-option skip"><input type="radio" name="17-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">17.2 Hall of Fame</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Hall of Fame</li><li>Verify entries listed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Hall of Fame management works.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="17-2"> PASS</div><div class="result-option fail"><input type="radio" name="17-2"> FAIL</div><div class="result-option skip"><input type="radio" name="17-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">17.3 SPL World Records</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; SPL World Records</li><li>Verify records listed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>World records management works.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="17-3"> PASS</div><div class="result-option fail"><input type="radio" name="17-3"> FAIL</div><div class="result-option skip"><input type="radio" name="17-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">17.4 Achievements / dB Clubs</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Achievements</li><li>Verify badges listed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Achievements page loads.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="17-4"> PASS</div><div class="result-option fail"><input type="radio" name="17-4"> FAIL</div><div class="result-option skip"><input type="radio" name="17-4"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">17.5 Media Library</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Media Library</li><li>Verify files displayed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Media library loads. Files viewable.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="17-5"> PASS</div><div class="result-option fail"><input type="radio" name="17-5"> FAIL</div><div class="result-option skip"><input type="radio" name="17-5"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 18: Admin - Shop Management</h2><p>Test shop product and order management</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">18.1 Manage Products</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Manage Products</li><li>Verify products listed with names, prices, stock</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Product management works.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="18-1"> PASS</div><div class="result-option fail"><input type="radio" name="18-1"> FAIL</div><div class="result-option skip"><input type="radio" name="18-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">18.2 Shop Orders</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Shop Orders</li><li>Verify orders listed</li><li>Click to view details</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Shop orders load with details.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="18-2"> PASS</div><div class="result-option fail"><input type="radio" name="18-2"> FAIL</div><div class="result-option skip"><input type="radio" name="18-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 19: Admin - Advertising &amp; Banners</h2><p>Test banner and advertising management</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">19.1 Advertisers</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Advertisers</li><li>Verify contacts listed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Advertiser list loads.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="19-1"> PASS</div><div class="result-option fail"><input type="radio" name="19-1"> FAIL</div><div class="result-option skip"><input type="radio" name="19-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">19.2 Banner Ads</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Banner Ads</li><li>Verify banners listed</li><li>Check a banner displays on the site</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Banner management works. Banners display on site.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="19-2"> PASS</div><div class="result-option fail"><input type="radio" name="19-2"> FAIL</div><div class="result-option skip"><input type="radio" name="19-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">19.3 Banner Analytics</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Banner Analytics</li><li>Verify engagement data displayed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Analytics shows engagement data.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="19-3"> PASS</div><div class="result-option fail"><input type="radio" name="19-3"> FAIL</div><div class="result-option skip"><input type="radio" name="19-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><h2>Section 20: Admin - System Tools &amp; Monitoring</h2><p>Test monitoring and system tools</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">20.1 Site Settings</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Site Settings</li><li>Verify settings displayed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Settings load and can be modified.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="20-1"> PASS</div><div class="result-option fail"><input type="radio" name="20-1"> FAIL</div><div class="result-option skip"><input type="radio" name="20-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">20.2 Audit Log</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Audit Log</li><li>Verify entries listed with dates</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Audit log displays recent activity.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="20-2"> PASS</div><div class="result-option fail"><input type="radio" name="20-2"> FAIL</div><div class="result-option skip"><input type="radio" name="20-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">20.3 Login Audit</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Login Audit Log</li><li>Verify login/logout events shown</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Login audit shows auth events.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="20-3"> PASS</div><div class="result-option fail"><input type="radio" name="20-3"> FAIL</div><div class="result-option skip"><input type="radio" name="20-3"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">20.4 Site Analytics</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Site Analytics</li><li>Verify traffic data displayed</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Analytics loads with traffic data.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="20-4"> PASS</div><div class="result-option fail"><input type="radio" name="20-4"> FAIL</div><div class="result-option skip"><input type="radio" name="20-4"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">20.5 Finals Voting Management</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; Voting Sessions</li><li>Verify page loads</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Finals voting management loads.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="20-5"> PASS</div><div class="result-option fail"><input type="radio" name="20-5"> FAIL</div><div class="result-option skip"><input type="radio" name="20-5"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">20.6 World Finals</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Go to Admin &gt; World Finals</li><li>Verify page loads</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>World finals page loads.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="20-6"> PASS</div><div class="result-option fail"><input type="radio" name="20-6"> FAIL</div><div class="result-option skip"><input type="radio" name="20-6"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<!-- SECTION 21 -->
+<div class="section">
+  <div class="section-header"><h2>Section 21: Mobile &amp; Responsive Design</h2><p>Test the site on a phone or by resizing your browser window</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">21.1 Mobile Navigation</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Open the site on your phone (or make browser narrow)</li><li>Tap the hamburger menu</li><li>Verify menu opens and links work</li><li>Verify menu closes properly</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Mobile nav works smoothly.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="21-1"> PASS</div><div class="result-option fail"><input type="radio" name="21-1"> FAIL</div><div class="result-option skip"><input type="radio" name="21-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">21.2 Page Layout on Mobile</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Browse Home, Events, Members, Results, Shop on mobile</li><li>Verify content is readable and not cut off</li><li>Verify buttons are easy to tap</li><li>Check tables scroll if needed</li><li>Verify forms work on mobile</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>All pages look good. Content readable. Elements interactive.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="21-2"> PASS</div><div class="result-option fail"><input type="radio" name="21-2"> FAIL</div><div class="result-option skip"><input type="radio" name="21-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div></div></div>
+</div>
+
+<!-- SECTION 22 -->
+<div class="section">
+  <div class="section-header"><h2>Section 22: Final Sign-Off</h2><p>Overall assessment and approval</p></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">22.1 Overall Look &amp; Feel</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Browse the entire site one more time</li><li>Note any visual issues</li><li>Note confusing features</li><li>Write down suggestions</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>Site looks professional. No major visual issues.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="22-1"> PASS</div><div class="result-option fail"><input type="radio" name="22-1"> FAIL</div><div class="result-option skip"><input type="radio" name="22-1"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div><div class="notes-line" style="margin-top: 20px;"></div><div class="notes-line" style="margin-top: 20px;"></div></div></div>
+  <div class="item"><div class="item-header"><div class="checkbox"></div><div class="item-title">22.2 Overall Functionality</div></div><div class="steps"><div class="steps-label">Steps:</div><ol><li>Confirm all sections above have been tested</li><li>Note any bugs found</li><li>Confirm satisfaction with core features</li><li>Mark as APPROVED or list remaining items</li></ol></div><div class="expected"><div class="expected-label">Expected Result:</div><p>All features function as expected. Site ready for launch OR issues documented.</p></div><div class="result-row"><div class="result-option pass"><input type="radio" name="22-2"> PASS</div><div class="result-option fail"><input type="radio" name="22-2"> FAIL</div><div class="result-option skip"><input type="radio" name="22-2"> SKIP</div></div><div class="notes-field"><label>Notes:</label><div class="notes-line"></div><div class="notes-line" style="margin-top: 20px;"></div><div class="notes-line" style="margin-top: 20px;"></div></div></div>
+</div>
+
+<!-- SUMMARY TABLE -->
+<div class="section">
+  <div class="section-header"><h2>Results Summary</h2><p>Fill in the totals for each section</p></div>
+  <div style="padding: 20px;">
+    <table class="summary-table">
+      <tr><th>Section</th><th>Items</th><th>Pass</th><th>Fail</th><th>Skip</th></tr>
+      <tr><td>1. Public Pages &amp; Navigation</td><td>11</td><td></td><td></td><td></td></tr>
+      <tr><td>2. Account &amp; Authentication</td><td>4</td><td></td><td></td><td></td></tr>
+      <tr><td>3. Membership System</td><td>4</td><td></td><td></td><td></td></tr>
+      <tr><td>4. Event Registration</td><td>3</td><td></td><td></td><td></td></tr>
+      <tr><td>5. Support Tickets</td><td>2</td><td></td><td></td><td></td></tr>
+      <tr><td>6. Billing &amp; Payments</td><td>1</td><td></td><td></td><td></td></tr>
+      <tr><td>7. Shop &amp; Checkout</td><td>1</td><td></td><td></td><td></td></tr>
+      <tr><td>8. Judge &amp; ED Applications</td><td>2</td><td></td><td></td><td></td></tr>
+      <tr><td>9. Event Hosting Request</td><td>1</td><td></td><td></td><td></td></tr>
+      <tr><td>10. Admin - Member Management</td><td>3</td><td></td><td></td><td></td></tr>
+      <tr><td>11. Admin - Membership Management</td><td>4</td><td></td><td></td><td></td></tr>
+      <tr><td>12. Admin - Event Management</td><td>4</td><td></td><td></td><td></td></tr>
+      <tr><td>13. Admin - Judge &amp; ED Management</td><td>5</td><td></td><td></td><td></td></tr>
+      <tr><td>14. Admin - Competition Setup</td><td>5</td><td></td><td></td><td></td></tr>
+      <tr><td>15. Admin - Billing &amp; Financial</td><td>4</td><td></td><td></td><td></td></tr>
+      <tr><td>16. Admin - Support &amp; Communication</td><td>2</td><td></td><td></td><td></td></tr>
+      <tr><td>17. Admin - Content Management</td><td>5</td><td></td><td></td><td></td></tr>
+      <tr><td>18. Admin - Shop Management</td><td>2</td><td></td><td></td><td></td></tr>
+      <tr><td>19. Admin - Advertising &amp; Banners</td><td>3</td><td></td><td></td><td></td></tr>
+      <tr><td>20. Admin - System Tools</td><td>6</td><td></td><td></td><td></td></tr>
+      <tr><td>21. Mobile &amp; Responsive</td><td>2</td><td></td><td></td><td></td></tr>
+      <tr><td>22. Final Sign-Off</td><td>2</td><td></td><td></td><td></td></tr>
+      <tr style="font-weight: bold; background: #f1f5f9;"><td>TOTAL</td><td>76</td><td></td><td></td><td></td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- SIGN-OFF -->
+<div class="signoff">
+  <h2>Official Sign-Off</h2>
+  <p>I have reviewed the MECA website using this checklist and confirm the results documented above. I am satisfied that the website meets expectations for the items marked as PASS, and I have documented all issues for items marked as FAIL.</p>
+
+  <div style="margin-top: 20px;">
+    <p style="font-weight: 600; margin-bottom: 4px;">Overall Status (circle one):</p>
+    <p style="font-size: 18px; color: #475569; margin-top: 10px;">
+      &nbsp;&nbsp;&nbsp; <strong style="color: #16a34a;">APPROVED</strong>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      <strong style="color: #ca8a04;">APPROVED WITH CONDITIONS</strong>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      <strong style="color: #dc2626;">NOT APPROVED</strong>
+    </p>
+  </div>
+
+  <div class="signoff-grid">
+    <div class="signoff-field">
+      <label>Signature<br><span class="signoff-line" style="width: 280px;"></span></label>
+    </div>
+    <div class="signoff-field">
+      <label>Date<br><span class="signoff-line" style="width: 280px;"></span></label>
+    </div>
+  </div>
+  <div class="signoff-grid" style="margin-top: 20px;">
+    <div class="signoff-field">
+      <label>Printed Name<br><span class="signoff-line" style="width: 280px;"></span></label>
+    </div>
+    <div class="signoff-field">
+      <label>Title / Role<br><span class="signoff-line" style="width: 280px;"></span></label>
+    </div>
+  </div>
+
+  <div style="margin-top: 30px;">
+    <label style="font-size: 13px; font-weight: 600; color: #475569;">Conditions / Additional Comments:</label>
+    <div class="notes-line" style="margin-top: 8px;"></div>
+    <div class="notes-line" style="margin-top: 20px;"></div>
+    <div class="notes-line" style="margin-top: 20px;"></div>
+    <div class="notes-line" style="margin-top: 20px;"></div>
+  </div>
+</div>
+
+<div class="footer">
+  <p>MECA - Mobile Electronics Competition Association | QA Testing Checklist</p>
+  <p>Generated for quality assurance review</p>
+</div>
+
+</body>
+</html>
