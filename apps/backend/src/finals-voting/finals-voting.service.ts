@@ -207,17 +207,85 @@ export class FinalsVotingService {
     if (!session) {
       throw new NotFoundException('Voting session not found');
     }
-    if (session.status !== VotingSessionStatus.DRAFT) {
-      throw new BadRequestException('Only DRAFT sessions can be deleted');
+
+    // Allowed in two cases:
+    //   - DRAFT (no votes possible yet — clean to remove)
+    //   - CANCELED (admin retired the session — purge it and any votes that
+    //     were collected before cancellation)
+    // Other states (OPEN, CLOSED, FINALIZED) require explicit cancel first
+    // to prevent accidental destruction of live or historical data.
+    const deletableStatuses = new Set<VotingSessionStatus>([
+      VotingSessionStatus.DRAFT,
+      VotingSessionStatus.CANCELED,
+    ]);
+    if (!deletableStatuses.has(session.status)) {
+      throw new BadRequestException(
+        `Sessions in ${session.status} status cannot be deleted. Cancel the session first.`,
+      );
     }
 
-    // Delete questions and categories via cascade
-    await em.nativeDelete(VotingQuestion, {
-      category: { session: { id } },
+    await em.transactional(async (txEm) => {
+      // Responses must go first — schema is ON DELETE RESTRICT
+      await txEm.getConnection().execute(
+        `DELETE FROM voting_responses WHERE session_id = ?`,
+        [id],
+      );
+      await txEm.nativeDelete(VotingQuestion, {
+        category: { session: { id } },
+      });
+      await txEm.nativeDelete(VotingCategory, { session: { id } });
+      await txEm.nativeDelete(VotingSession, { id });
     });
-    await em.nativeDelete(VotingCategory, { session: { id } });
-    await em.removeAndFlush(session);
+
+    // Drop any cached results for the deleted session
+    this.resultsCache.delete(id);
     this.clearStatusCache();
+    this.logger.log(`Deleted voting session ${id} (was ${session.status})`);
+  }
+
+  /**
+   * Toggle the public-visibility suspension on a session. When suspended:
+   *   - homepage card and active-session voting query skip the session
+   *   - existing voters cannot submit new responses
+   *   - admin UI groups the session under "Disabled"
+   * Unsuspending restores the normal date/status-based visibility — no other
+   * fields are touched, so a live session resumes exactly where it left off.
+   */
+  async setSuspended(id: string, suspended: boolean): Promise<VotingSession> {
+    const em = this.em.fork();
+    const session = await em.findOne(VotingSession, { id });
+    if (!session) {
+      throw new NotFoundException('Voting session not found');
+    }
+    session.suspended = suspended;
+    await em.flush();
+    this.clearStatusCache();
+    this.logger.log(`Session ${id} ${suspended ? 'suspended' : 'unsuspended'}`);
+    return this.getSessionById(id);
+  }
+
+  /**
+   * Move a session to CANCELED. Terminal state — admin can later delete the
+   * session entirely. Allowed from any non-FINALIZED state so admins can
+   * abort a session at any point in its lifecycle.
+   */
+  async cancelSession(id: string): Promise<VotingSession> {
+    const em = this.em.fork();
+    const session = await em.findOne(VotingSession, { id });
+    if (!session) {
+      throw new NotFoundException('Voting session not found');
+    }
+    if (session.status === VotingSessionStatus.FINALIZED) {
+      throw new BadRequestException('Cannot cancel a finalized session — its results are public.');
+    }
+    if (session.status === VotingSessionStatus.CANCELED) {
+      throw new BadRequestException('Session is already canceled');
+    }
+    session.status = VotingSessionStatus.CANCELED;
+    await em.flush();
+    this.clearStatusCache();
+    this.logger.log(`Session ${id} canceled`);
+    return this.getSessionById(id);
   }
 
   async openSession(id: string): Promise<VotingSession> {
@@ -754,6 +822,7 @@ export class FinalsVotingService {
       VotingSession,
       {
         status: VotingSessionStatus.OPEN,
+        suspended: false,
         startDate: { $lte: now },
         endDate: { $gte: now },
       },
@@ -846,6 +915,9 @@ export class FinalsVotingService {
     }
     if (session.status !== VotingSessionStatus.OPEN) {
       throw new BadRequestException('Voting session is not currently open');
+    }
+    if (session.suspended) {
+      throw new BadRequestException('Voting is temporarily paused by an administrator.');
     }
 
     // 2. Validate within time window
@@ -1210,9 +1282,11 @@ export class FinalsVotingService {
     let sessions: VotingSession[];
     try {
       const em = this.em.fork();
+      // Skip suspended sessions so the homepage card and any non-admin
+      // surface only see actively-published voting work.
       sessions = await em.find(
         VotingSession,
-        {},
+        { suspended: false },
         { orderBy: { createdAt: 'DESC' }, limit: 10 },
       );
     } catch (err: any) {

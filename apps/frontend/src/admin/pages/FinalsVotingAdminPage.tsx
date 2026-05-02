@@ -4,6 +4,7 @@ import {
   Plus, Pencil, Trash2, X, ArrowLeft, Vote, Upload, Loader2,
   ChevronDown, ChevronUp, Play, Square, CheckCircle, BarChart3, Eye,
   Users, MessageSquare, Copy, Layers, Gavel, MapPin, Building2, Factory, UserCheck,
+  PauseCircle, PlayCircle, Ban, EyeOff, CircleSlash, FileEdit, Clock,
 } from 'lucide-react';
 import { VotingSessionStatus, VotingAnswerType } from '@newmeca/shared';
 import type { VotingSessionResults } from '@newmeca/shared';
@@ -23,6 +24,7 @@ interface SessionData {
   title: string;
   description?: string;
   status: VotingSessionStatus;
+  suspended?: boolean;
   startDate: string;
   endDate: string;
   resultsPublishDate?: string;
@@ -30,6 +32,42 @@ interface SessionData {
   season: { id: string; name: string };
   categories: CategoryData[];
   createdAt: string;
+}
+
+// Buckets shown as accordion tables on the index. A session lives in exactly
+// one bucket, with `suspended` taking precedence over its status — a paused
+// live session shows up under Disabled, not Live.
+type AccordionKey = 'creating' | 'pending' | 'live' | 'disabled' | 'canceled' | 'completed';
+
+interface AccordionConfig {
+  key: AccordionKey;
+  label: string;
+  description: string;
+  color: string;       // border + header tint
+  icon: typeof Vote;
+}
+
+const ACCORDION_ORDER: AccordionConfig[] = [
+  { key: 'creating',  label: 'Creating',  description: 'Drafts being built — no categories or questions yet', color: 'border-slate-600',  icon: FileEdit },
+  { key: 'pending',   label: 'Pending',   description: 'Drafts that are configured and ready to open',         color: 'border-amber-700',  icon: Clock },
+  { key: 'live',      label: 'Live',      description: 'Currently open for member voting',                     color: 'border-green-700',  icon: Play },
+  { key: 'disabled',  label: 'Disabled',  description: 'Suspended — hidden from public regardless of dates',   color: 'border-purple-700', icon: EyeOff },
+  { key: 'canceled',  label: 'Canceled',  description: 'Aborted by an admin — eligible for full deletion',     color: 'border-rose-700',   icon: CircleSlash },
+  { key: 'completed', label: 'Completed', description: 'Voting period ended (closed or finalized)',            color: 'border-blue-700',   icon: CheckCircle },
+];
+
+function categorizeSession(s: SessionData): AccordionKey {
+  // Suspended overrides everything except final terminal states (canceled is
+  // intentionally a separate bucket so admins can see what's been retired).
+  if (s.suspended && s.status !== VotingSessionStatus.CANCELED) return 'disabled';
+  if (s.status === VotingSessionStatus.CANCELED) return 'canceled';
+  if (s.status === VotingSessionStatus.OPEN) return 'live';
+  if (s.status === VotingSessionStatus.CLOSED || s.status === VotingSessionStatus.FINALIZED) return 'completed';
+  // DRAFT — split by whether the admin has started populating it
+  if (s.status === VotingSessionStatus.DRAFT) {
+    return (s.categories?.length ?? 0) === 0 ? 'creating' : 'pending';
+  }
+  return 'creating';
 }
 
 interface CategoryData {
@@ -58,6 +96,7 @@ const statusConfig: Record<VotingSessionStatus, { label: string; color: string; 
   [VotingSessionStatus.OPEN]: { label: 'Open', color: 'bg-green-500/20 text-green-400', icon: Play },
   [VotingSessionStatus.CLOSED]: { label: 'Closed', color: 'bg-yellow-500/20 text-yellow-400', icon: Square },
   [VotingSessionStatus.FINALIZED]: { label: 'Finalized', color: 'bg-blue-500/20 text-blue-400', icon: CheckCircle },
+  [VotingSessionStatus.CANCELED]: { label: 'Canceled', color: 'bg-rose-500/20 text-rose-400', icon: CircleSlash },
 };
 
 const CHART_COLORS = ['#f97316', '#06b6d4', '#8b5cf6', '#22c55e', '#eab308', '#ec4899', '#14b8a6', '#f43f5e'];
@@ -90,6 +129,11 @@ export default function FinalsVotingAdminPage() {
   // View state
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Accordion buckets default to: live + pending open, others collapsed —
+  // the buckets admins act on most often are visible by default.
+  const [expandedAccordions, setExpandedAccordions] = useState<Set<AccordionKey>>(
+    new Set<AccordionKey>(['live', 'pending', 'creating']),
+  );
 
   // Session modal
   const [showSessionModal, setShowSessionModal] = useState(false);
@@ -276,6 +320,57 @@ export default function FinalsVotingAdminPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSuspendToggle = async (session: SessionData) => {
+    const willSuspend = !session.suspended;
+    if (willSuspend && !window.confirm(
+      `Suspend "${session.title}"?\n\nThe session will stop appearing on the public homepage and members will not be able to vote — even if it is currently live. Reversible.`,
+    )) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (willSuspend) await finalsVotingApi.suspendSession(session.id);
+      else             await finalsVotingApi.unsuspendSession(session.id);
+      await loadSessions();
+      if (selectedSession?.id === session.id) {
+        await loadSessionDetail(session.id);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update suspension');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelSession = async (session: SessionData) => {
+    if (!window.confirm(
+      `Cancel "${session.title}"?\n\nThis moves the session to the Canceled bucket. ` +
+      `It will be hidden from the public and can be permanently deleted afterward. ` +
+      `This is reversible only by an admin via the database.`,
+    )) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await finalsVotingApi.cancelSession(session.id);
+      await loadSessions();
+      if (selectedSession?.id === session.id) {
+        await loadSessionDetail(session.id);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel session');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleAccordion = (key: AccordionKey) => {
+    setExpandedAccordions(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   // =========================================================================
@@ -525,10 +620,6 @@ export default function FinalsVotingAdminPage() {
   // Helpers
   // =========================================================================
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   const formatDateTime = (date: string) => {
     return new Date(date).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
@@ -598,79 +689,180 @@ export default function FinalsVotingAdminPage() {
           </div>
         )}
 
-        {/* Session List */}
-        {!selectedSession && (
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-700">
-                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Session</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Season</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Dates</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Categories</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-300">Status</th>
-                    <th className="text-right py-4 px-6 text-sm font-medium text-slate-300">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        No voting sessions yet. Create one to get started.
-                      </td>
-                    </tr>
-                  ) : (
-                    sessions.map((session) => {
-                      const sc = statusConfig[session.status];
-                      return (
-                        <tr key={session.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 cursor-pointer" onClick={() => { setSelectedSession(session); loadSessionDetail(session.id); }}>
-                          <td className="py-4 px-6">
-                            <p className="text-white font-medium">{session.title}</p>
-                            {session.description && <p className="text-sm text-slate-400 mt-1 truncate max-w-xs">{session.description}</p>}
-                          </td>
-                          <td className="py-4 px-6 text-white">{session.season?.name}</td>
-                          <td className="py-4 px-6 text-sm text-white">
-                            {formatDateTime(session.startDate)} - {formatDateTime(session.endDate)}
-                          </td>
-                          <td className="py-4 px-6 text-white">{session.categories?.length || 0}</td>
-                          <td className="py-4 px-6">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${sc.color}`}>{sc.label}</span>
-                          </td>
-                          <td className="py-4 px-6">
-                            <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                              <button onClick={() => { setSelectedSession(session); loadSessionDetail(session.id); }} className="px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium flex items-center gap-1" title="Manage categories & questions">
-                                <Eye className="h-4 w-4" /> Manage
-                              </button>
-                              {session.status === VotingSessionStatus.DRAFT && (
-                                <button onClick={() => openEditSession(session)} className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Edit">
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                              )}
-                              {(session.status !== VotingSessionStatus.DRAFT) && (
-                                <button onClick={() => loadResults(session.id)} className="p-2 text-cyan-400 hover:bg-cyan-500/20 rounded-lg transition-colors" title="Results">
-                                  <BarChart3 className="h-4 w-4" />
-                                </button>
-                              )}
-                              <button onClick={() => openCloneModal(session.id, session.title)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium flex items-center gap-1" title="Clone categories & questions to new session">
-                                <Copy className="h-4 w-4" /> Clone
-                              </button>
-                              {session.status === VotingSessionStatus.DRAFT && (
-                                <button onClick={() => setDeleteConfirm({ type: 'session', id: session.id, name: session.title })} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+        {/* Session List — bucketed accordion view */}
+        {!selectedSession && (() => {
+          // Bucket every session, then render one accordion per bucket. Empty
+          // buckets still render so admins can see categories at a glance.
+          const buckets: Record<AccordionKey, SessionData[]> = {
+            creating: [], pending: [], live: [], disabled: [], canceled: [], completed: [],
+          };
+          for (const s of sessions) {
+            buckets[categorizeSession(s)].push(s);
+          }
+
+          if (sessions.length === 0) {
+            return (
+              <div className="bg-slate-800 rounded-xl border border-slate-700 p-12 text-center text-slate-400">
+                No voting sessions yet. Create one to get started.
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-3">
+              {ACCORDION_ORDER.map(({ key, label, description, color, icon: BucketIcon }) => {
+                const items = buckets[key];
+                const isExpanded = expandedAccordions.has(key);
+                return (
+                  <div key={key} className={`bg-slate-800 rounded-xl border-2 ${color} overflow-hidden`}>
+                    <button
+                      onClick={() => toggleAccordion(key)}
+                      className="w-full flex items-center justify-between gap-4 px-6 py-4 hover:bg-slate-700/40 transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <BucketIcon className="h-5 w-5 text-slate-300 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <h3 className="text-white font-semibold flex items-center gap-2">
+                            {label}
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 font-mono">{items.length}</span>
+                          </h3>
+                          <p className="text-xs text-slate-400 truncate">{description}</p>
+                        </div>
+                      </div>
+                      {isExpanded ? <ChevronUp className="h-5 w-5 text-slate-400 flex-shrink-0" /> : <ChevronDown className="h-5 w-5 text-slate-400 flex-shrink-0" />}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-slate-700/60">
+                        {items.length === 0 ? (
+                          <div className="py-8 px-6 text-center text-slate-500 text-sm">
+                            No sessions in this category.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="bg-slate-900/40">
+                                  <th className="text-left py-3 px-6 text-xs font-medium text-slate-400 uppercase tracking-wider">Session</th>
+                                  <th className="text-left py-3 px-6 text-xs font-medium text-slate-400 uppercase tracking-wider">Season</th>
+                                  <th className="text-left py-3 px-6 text-xs font-medium text-slate-400 uppercase tracking-wider">Dates</th>
+                                  <th className="text-left py-3 px-6 text-xs font-medium text-slate-400 uppercase tracking-wider">Categories</th>
+                                  <th className="text-left py-3 px-6 text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
+                                  <th className="text-right py-3 px-6 text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {items.map((session) => {
+                                  const sc = statusConfig[session.status];
+                                  const canEdit = session.status === VotingSessionStatus.DRAFT;
+                                  // Delete is allowed for sessions the backend will accept:
+                                  // DRAFT or CANCELED. Suspended-only sessions stay where they are.
+                                  const canDelete = session.status === VotingSessionStatus.DRAFT
+                                    || session.status === VotingSessionStatus.CANCELED;
+                                  // Suspend is meaningful for any non-CANCELED session
+                                  const canSuspend = session.status !== VotingSessionStatus.CANCELED;
+                                  // Cancel is meaningful for any pre-finalized non-canceled session
+                                  const canCancel = session.status !== VotingSessionStatus.CANCELED
+                                    && session.status !== VotingSessionStatus.FINALIZED;
+                                  return (
+                                    <tr
+                                      key={session.id}
+                                      className="border-b border-slate-700/50 hover:bg-slate-700/30 cursor-pointer"
+                                      onClick={() => { setSelectedSession(session); loadSessionDetail(session.id); }}
+                                    >
+                                      <td className="py-4 px-6">
+                                        <p className="text-white font-medium flex items-center gap-2">
+                                          {session.title}
+                                          {session.suspended && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-900 text-purple-200 font-semibold uppercase tracking-wide flex items-center gap-1">
+                                              <EyeOff className="h-3 w-3" /> Suspended
+                                            </span>
+                                          )}
+                                        </p>
+                                        {session.description && <p className="text-sm text-slate-400 mt-1 truncate max-w-xs">{session.description}</p>}
+                                      </td>
+                                      <td className="py-4 px-6 text-white">{session.season?.name}</td>
+                                      <td className="py-4 px-6 text-sm text-white">
+                                        {formatDateTime(session.startDate)} - {formatDateTime(session.endDate)}
+                                      </td>
+                                      <td className="py-4 px-6 text-white">{session.categories?.length || 0}</td>
+                                      <td className="py-4 px-6">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${sc.color}`}>{sc.label}</span>
+                                      </td>
+                                      <td className="py-4 px-6">
+                                        <div className="flex items-center justify-end gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
+                                          <button
+                                            onClick={() => { setSelectedSession(session); loadSessionDetail(session.id); }}
+                                            className="px-2.5 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-xs font-medium flex items-center gap-1"
+                                            title="Manage categories & questions"
+                                          >
+                                            <Eye className="h-3.5 w-3.5" /> Manage
+                                          </button>
+                                          {canEdit && (
+                                            <button onClick={() => openEditSession(session)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Edit">
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                          )}
+                                          {(session.status !== VotingSessionStatus.DRAFT && session.status !== VotingSessionStatus.CANCELED) && (
+                                            <button onClick={() => loadResults(session.id)} className="p-1.5 text-cyan-400 hover:bg-cyan-500/20 rounded-lg transition-colors" title="Results">
+                                              <BarChart3 className="h-3.5 w-3.5" />
+                                            </button>
+                                          )}
+                                          {canSuspend && (
+                                            <button
+                                              onClick={() => handleSuspendToggle(session)}
+                                              disabled={saving}
+                                              className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${session.suspended
+                                                ? 'text-emerald-400 hover:bg-emerald-500/20'
+                                                : 'text-purple-400 hover:bg-purple-500/20'}`}
+                                              title={session.suspended ? 'Unsuspend (resume public visibility)' : 'Suspend (hide from public)'}
+                                            >
+                                              {session.suspended ? <PlayCircle className="h-3.5 w-3.5" /> : <PauseCircle className="h-3.5 w-3.5" />}
+                                            </button>
+                                          )}
+                                          <button
+                                            onClick={() => openCloneModal(session.id, session.title)}
+                                            className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-xs font-medium flex items-center gap-1"
+                                            title="Clone categories & questions to new session"
+                                          >
+                                            <Copy className="h-3.5 w-3.5" /> Clone
+                                          </button>
+                                          {canCancel && (
+                                            <button
+                                              onClick={() => handleCancelSession(session)}
+                                              disabled={saving}
+                                              className="p-1.5 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors disabled:opacity-50"
+                                              title="Cancel — moves to Canceled bucket"
+                                            >
+                                              <Ban className="h-3.5 w-3.5" />
+                                            </button>
+                                          )}
+                                          {canDelete && (
+                                            <button
+                                              onClick={() => setDeleteConfirm({ type: 'session', id: session.id, name: session.title })}
+                                              className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                                              title="Delete permanently"
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Session Detail View */}
         {selectedSession && (
@@ -679,11 +871,16 @@ export default function FinalsVotingAdminPage() {
             <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
                     <h2 className="text-xl font-bold text-white">{selectedSession.title}</h2>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusConfig[selectedSession.status].color}`}>
                       {statusConfig[selectedSession.status].label}
                     </span>
+                    {selectedSession.suspended && (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 flex items-center gap-1">
+                        <EyeOff className="h-3 w-3" /> Suspended
+                      </span>
+                    )}
                   </div>
                   {selectedSession.description && <p className="text-slate-400 mb-2">{selectedSession.description}</p>}
                   <div className="text-sm text-slate-500 space-y-1">
@@ -737,6 +934,41 @@ export default function FinalsVotingAdminPage() {
                   <button onClick={() => openCloneModal(selectedSession.id, selectedSession.title)} className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm flex items-center gap-1">
                     <Copy className="h-4 w-4" /> Clone to New Season
                   </button>
+                  {selectedSession.status !== VotingSessionStatus.CANCELED && (
+                    <button
+                      onClick={() => handleSuspendToggle(selectedSession)}
+                      disabled={saving}
+                      className={`px-3 py-2 rounded-lg transition-colors text-sm flex items-center gap-1 disabled:opacity-50 ${selectedSession.suspended
+                        ? 'bg-emerald-700 text-white hover:bg-emerald-600'
+                        : 'bg-purple-700 text-white hover:bg-purple-600'}`}
+                      title={selectedSession.suspended
+                        ? 'Resume public visibility for this session'
+                        : 'Hide this session from the public homepage and members'}
+                    >
+                      {selectedSession.suspended
+                        ? (<><PlayCircle className="h-4 w-4" /> Unsuspend</>)
+                        : (<><PauseCircle className="h-4 w-4" /> Suspend</>)}
+                    </button>
+                  )}
+                  {(selectedSession.status !== VotingSessionStatus.CANCELED && selectedSession.status !== VotingSessionStatus.FINALIZED) && (
+                    <button
+                      onClick={() => handleCancelSession(selectedSession)}
+                      disabled={saving}
+                      className="px-3 py-2 bg-rose-700 text-white rounded-lg hover:bg-rose-600 transition-colors text-sm flex items-center gap-1 disabled:opacity-50"
+                      title="Cancel — moves to Canceled bucket and out of active flow"
+                    >
+                      <Ban className="h-4 w-4" /> Cancel
+                    </button>
+                  )}
+                  {(selectedSession.status === VotingSessionStatus.DRAFT || selectedSession.status === VotingSessionStatus.CANCELED) && (
+                    <button
+                      onClick={() => setDeleteConfirm({ type: 'session', id: selectedSession.id, name: selectedSession.title })}
+                      className="px-3 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition-colors text-sm flex items-center gap-1"
+                      title="Delete this session permanently"
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -66,6 +66,21 @@ export async function finalizeSession(id: string) {
   return response.data;
 }
 
+export async function suspendSession(id: string) {
+  const response = await axios.post(`/api/finals-voting/admin/sessions/${id}/suspend`);
+  return response.data;
+}
+
+export async function unsuspendSession(id: string) {
+  const response = await axios.post(`/api/finals-voting/admin/sessions/${id}/unsuspend`);
+  return response.data;
+}
+
+export async function cancelSession(id: string) {
+  const response = await axios.post(`/api/finals-voting/admin/sessions/${id}/cancel`);
+  return response.data;
+}
+
 export async function getAdminResults(id: string): Promise<VotingSessionResults> {
   const response = await axios.get(`/api/finals-voting/admin/sessions/${id}/results`);
   return response.data;
@@ -188,6 +203,9 @@ export const finalsVotingApi = {
   openSession,
   closeSession,
   finalizeSession,
+  suspendSession,
+  unsuspendSession,
+  cancelSession,
   getAdminResults,
 
   // Admin: Categories
