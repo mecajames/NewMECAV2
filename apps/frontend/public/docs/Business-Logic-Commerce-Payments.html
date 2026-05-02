@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Logic: Commerce &amp; Payments - MECA Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 20px;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.3rem;
+            margin: 30px 0 15px 0;
+            border-left: 4px solid #ea580c;
+            padding-left: 15px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin: 20px 0 10px 0;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .workflow-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+
+        .step-content {
+            flex: 1;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ea580c;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .step-details {
+            color: #475569;
+        }
+
+        .step-details ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .step-details li {
+            margin: 5px 0;
+        }
+
+        .connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% + 20px);
+            background: #cbd5e1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        th {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        tr:hover {
+            background: #fef3c7;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .info-box.warning {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .info-box.success {
+            background: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .info-box.danger {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .info-box h4 {
+            color: #1e40af;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .info-box.warning h4 {
+            color: #92400e;
+        }
+
+        .info-box.success h4 {
+            color: #166534;
+        }
+
+        .info-box.danger h4 {
+            color: #991b1b;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .nav-path {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            color: #ea580c;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-yellow {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-purple {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+            color: #475569;
+        }
+
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ea580c;
+        }
+
+        .flow-diagram {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Additional rules to cover converted-from-markdown pages and the
+           handful of components used outside the achievement guide. */
+        a {
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            margin: 18px 0;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: 1em;
+            border: none;
+        }
+
+        blockquote {
+            background: #eff6ff;
+            border: 1px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            color: #1e3a8a;
+        }
+
+        blockquote p {
+            color: #1e3a8a;
+            margin-bottom: 0;
+        }
+
+        blockquote a {
+            color: #1e40af;
+        }
+
+        /* Lead/intro callout */
+        .lead {
+            background: #fef3c7;
+            border-left: 4px solid #f97316;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin: 20px 0 28px 0;
+            color: #78350f;
+            font-size: 0.95rem;
+        }
+
+        .lead a {
+            color: #ea580c;
+            font-weight: 600;
+        }
+
+        /* "← Documentation Index" back link at top of converted pages */
+        .docs-nav {
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .docs-nav a {
+            color: #64748b;
+            margin-right: 12px;
+        }
+
+        .docs-nav a:hover {
+            color: #ea580c;
+        }
+
+        /* Two-column TOC used by the Admin Dashboard Overview */
+        .toc-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 24px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 720px) {
+            .toc-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toc-cols a {
+            display: block;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+            color: #ea580c;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc-cols a:last-child {
+            border-bottom: none;
+        }
+
+        .toc-cols a:hover {
+            text-decoration: underline;
+        }
+
+        /* Inline status box used by Results-Entry pages */
+        .status-box {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin: 4px;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Highlight box used by Results-Entry pages */
+        .highlight {
+            background: #f1f5f9;
+            padding: 16px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid #f97316;
+        }
+
+
+/* Feature block — used only on Business Logic Reference pages */
+.feature {
+    background: white;
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid #e2e8f0;
+}
+.feature h3 {
+    color: #0f172a;
+    font-size: 1.2rem;
+    margin: 0 0 14px 0;
+    padding: 0;
+    border: none;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 10px;
+}
+.feature .row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 6px 18px;
+    margin-bottom: 10px;
+    align-items: baseline;
+}
+@media (max-width: 720px) {
+    .feature .row { grid-template-columns: 1fr; gap: 2px; }
+}
+.feature .row:last-child { margin-bottom: 0; }
+.feature .label {
+    color: #ea580c;
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.feature .text {
+    color: #475569;
+}
+.feature .text code { font-size: 0.92em; }
+.feature .text strong { color: #0f172a; }
+.feature .text a { color: #ea580c; font-weight: 500; }
+.feature .text a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <nav style="margin-bottom: 24px; font-size: 0.9rem;">
+        <a href="index.html" style="color:#64748b; margin-right: 12px;">← Documentation Index</a>
+        <a href="Business-Logic-Reference.html" style="color:#64748b;">← Business Logic Reference</a>
+    </nav>
+    <h1>Business Logic: Commerce &amp; Payments</h1>
+    <p class="subtitle">How money moves through the system: Stripe, PayPal, manual cash entries, refunds, disputes, the shop, and accounting sync.</p>
+    <div class="feature">
+        <h3>Stripe Payment Processing</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Primary payment provider for memberships, event registrations, and shop purchases.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">Stripe Elements tokenizes the card client-side. Backend creates a PaymentIntent (one-time) or Subscription (recurring). Webhooks fire on payment_succeeded, invoice.payment_failed, customer.subscription.updated, charge.dispute.created. Each webhook updates membership / order state and triggers the right email.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Webhooks are the source of truth for "did the charge actually go through?" — the synchronous create call returns "pending" half the time. Listening to webhooks instead of polling means real-time reconciliation.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">Webhook URL configured in Site Settings + Stripe dashboard. Disputes surfaced via admin alert emails.</div></div>
+    </div>
+    <div class="feature">
+        <h3>PayPal Checkout</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Alternative checkout path for members who prefer PayPal.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">PayPal SDK on the frontend; backend captures the order via PayPal API on approval. Order maps to the same membership/registration/shop record as a Stripe purchase.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">PayPal carries an older audience that doesn't want to type a card number. Supporting it widens the converting funnel.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">PayPal credentials in Site Settings → Integrations.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Coupons / Discount Codes</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Promotional codes that apply at checkout to reduce membership or shop totals.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>coupons</code> with code, type (percent / fixed), value, scope (memberships / shop / both), expiration, usage cap. Checkout validates redemption against scope, expiration, and remaining caps before applying.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Scoping codes (memberships only / shop only) prevents accidental cross-product discounts. Per-coupon usage cap supports "first 50 redemptions" promos without engineering work.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/coupons. <a href="Admin-Coupons-Guide.html">Coupons guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Manual Cash / Check Payments</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Admin records offline payment against a membership or invoice.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">Admin form on member detail captures method (cash / check), amount, date, reference (check number), optional invoice link. Inserts an order with method=manual; if linked to a pending invoice, marks it paid.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Real-world events get cash and checks. The platform must mirror these so QuickBooks reflects total revenue and the member sees their membership as paid.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">Member detail. <a href="Admin-Manual-Cash-Payment-Guide.html">Manual Cash Payment guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Refunds (full, partial, dispute)</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Three refund triggers: admin-initiated full / partial, and Stripe-initiated (dispute lost).</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">Admin full refund: Stripe createRefund full amount, membership cancelled, refund email. Partial: Stripe createRefund partial, membership stays active, note appended. Dispute lost: Stripe webhook fires, we mirror the chargeback as a refund-equivalent and notify admins.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Three triggers, one downstream pipeline (mark refunded → notify member → audit log). The dispute path is automatic because we don't want to forget to recognize a chargeback we already lost.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">Member detail or bulk Refund all. <a href="Admin-User-Membership-Workflows.html">Membership Workflows deep guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Shop Products &amp; Orders</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Storefront with inventory tracking, fulfillment workflow, and admin order management.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>shop_products</code> with name, SKU, price, image, stock count, is_active. <code>shop_orders</code> with status (pending / shipped / delivered / refunded), tracking number, shipping address. Stock decrements on order; goes back on refund.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Real inventory tracking (vs unlimited) prevents overselling popular items. Status field drives the customer-facing order detail page and the admin fulfillment queue.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/shop/products and /admin/shop/orders. <a href="Admin-Shop-Products-Guide.html">Shop Products</a> + <a href="Admin-Shop-Orders-Guide.html">Shop Orders</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>QuickBooks Sync</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Mirror invoices and payments into QuickBooks Online so accounting stays in sync.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text">OAuth connection to QuickBooks. Service queues new invoices/payments and pushes them on a schedule. Failures retry; persistent failures surface as admin alerts.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Owners want one accounting source of truth. Auto-sync prevents the typical "manually export CSV every Monday" toil.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/quickbooks. <a href="Admin-Quickbooks-Sync-Guide.html">QuickBooks Sync guide</a>.</div></div>
+    </div>
+    <div class="feature">
+        <h3>Invoices</h3>
+        <div class="row"><div class="label">Overview</div><div class="text">Formal invoice records used for QuickBooks reconciliation and disputed-charge documentation.</div></div>
+        <div class="row"><div class="label">Technical</div><div class="text"><code>invoices</code> generated automatically for memberships, registrations, shop orders. Manual invoices created from admin for off-platform billing. PDF generated on demand.</div></div>
+        <div class="row"><div class="label">Why</div><div class="text">Receipts (in-app) ≠ invoices (formal documents). Some retailers and corporate sponsors require a numbered invoice for their AP. Auto-generation means we never miss one.</div></div>
+        <div class="row"><div class="label">Manage</div><div class="text">/admin/billing/invoices.</div></div>
+    </div>
+    <footer>
+        <p>MECA Admin Documentation · For platform administrators only.</p>
+    </footer>
+</body>
+</html>
