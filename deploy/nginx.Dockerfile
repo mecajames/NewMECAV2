@@ -71,7 +71,14 @@ FROM nginx:alpine AS runtime
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copy built frontend assets
+# Carry the previous deploy's hashed /assets/ into this image so tabs left
+# open across the deploy can still resolve their stale chunk URLs.
+# deploy.ps1 populates this directory from the prior build before each deploy;
+# .gitkeep keeps the COPY valid on first deploy when no cache exists yet.
+COPY deploy/.legacy-assets/ /usr/share/nginx/html/assets/
+
+# Copy built frontend assets (overlays the legacy assets — same-named files,
+# which won't happen with Vite's content hashes, would prefer the new build)
 COPY --from=builder /app/apps/frontend/dist/ /usr/share/nginx/html/
 
 # Copy custom nginx config
