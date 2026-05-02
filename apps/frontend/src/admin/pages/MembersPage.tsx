@@ -612,6 +612,66 @@ export default function MembersPage() {
     });
   };
 
+  // Login-access bulk actions act on profile IDs (one user can have multiple
+  // memberships; we dedup the selection down to unique profiles before sending).
+  const runLoginControlAction = async (
+    action: 'allow_maintenance' | 'revoke_maintenance' | 'ban' | 'unban',
+  ) => {
+    const selectedMembers = members.filter(
+      m => m.membershipInfo?.id && selectedMembershipIds.has(m.membershipInfo.id),
+    );
+    const profileIds = Array.from(new Set(selectedMembers.map(m => m.id)));
+    if (profileIds.length === 0) return;
+
+    let reason: string | undefined;
+    if (action === 'ban') {
+      const r = window.prompt(
+        `Reason for banning ${profileIds.length} user${profileIds.length > 1 ? 's' : ''}? (min 5 chars, required)`,
+      );
+      if (!r || r.trim().length < 5) return;
+      reason = r.trim();
+    }
+
+    const verb: Record<typeof action, string> = {
+      allow_maintenance: 'allow maintenance login for',
+      revoke_maintenance: 'revoke maintenance login for',
+      ban: 'BAN login for',
+      unban: 'unban',
+    };
+    if (!window.confirm(
+      `Confirm: ${verb[action]} ${profileIds.length} user${profileIds.length > 1 ? 's' : ''}?` +
+      (action === 'ban' ? '\n\nThis will kick any active sessions and prevent future sign-ins.' : ''),
+    )) return;
+
+    setBulkActionLoading(true);
+    setBulkResult(null);
+    try {
+      const { data } = await axios.post('/api/profiles/admin/bulk-login-control', {
+        profileIds,
+        action,
+        reason,
+      });
+      const errors = data.results
+        .filter((r: any) => !r.ok)
+        .map((r: any) => `${r.profileId.slice(0, 8)}…: ${r.error}`);
+      setBulkResult({
+        succeeded: data.succeeded,
+        failed: data.failed,
+        errors: errors.length ? errors : undefined,
+      });
+      setSelectedMembershipIds(new Set());
+      fetchMembers();
+    } catch (err: any) {
+      setBulkResult({
+        succeeded: 0,
+        failed: profileIds.length,
+        errors: [err.response?.data?.message || err.message || 'Unknown error'],
+      });
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
   const runBulkAction = async (action: 'refund' | 'cancel_immediately' | 'cancel_at_renewal') => {
     const ids = Array.from(selectedMembershipIds);
     if (ids.length === 0) return;
@@ -1070,41 +1130,91 @@ export default function MembersPage() {
         </div>
 
         {/* Bulk action toolbar — only visible when rows are selected */}
-        {selectedMembershipIds.size > 0 && (
-          <div className="mb-4 flex flex-wrap items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">
-            <span className="text-amber-200 font-medium">
-              {selectedMembershipIds.size} membership{selectedMembershipIds.size > 1 ? 's' : ''} selected
-            </span>
-            <button
-              onClick={() => runBulkAction('refund')}
-              disabled={bulkActionLoading}
-              className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded disabled:opacity-50"
-              title="Full refund + immediate cancellation for each selected membership"
-            >
-              {bulkActionLoading ? 'Working…' : 'Refund all'}
-            </button>
-            <button
-              onClick={() => runBulkAction('cancel_immediately')}
-              disabled={bulkActionLoading}
-              className="px-3 py-1.5 text-sm bg-orange-600 hover:bg-orange-500 text-white rounded disabled:opacity-50"
-            >
-              {bulkActionLoading ? 'Working…' : 'Cancel now'}
-            </button>
-            <button
-              onClick={() => runBulkAction('cancel_at_renewal')}
-              disabled={bulkActionLoading}
-              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50"
-            >
-              {bulkActionLoading ? 'Working…' : 'Cancel at renewal'}
-            </button>
-            <button
-              onClick={() => setSelectedMembershipIds(new Set())}
-              className="ml-auto px-3 py-1.5 text-sm text-gray-300 hover:text-white"
-            >
-              Clear selection
-            </button>
-          </div>
-        )}
+        {selectedMembershipIds.size > 0 && (() => {
+          // Compute selection state for conditional Ban/Unban visibility
+          const selectedMembers = members.filter(
+            m => m.membershipInfo?.id && selectedMembershipIds.has(m.membershipInfo.id),
+          );
+          const anyBanned = selectedMembers.some(m => (m as any).login_banned);
+          const anyNotBanned = selectedMembers.some(m => !(m as any).login_banned);
+          const allMaintenanceAllowed =
+            selectedMembers.length > 0 &&
+            selectedMembers.every(m => (m as any).maintenance_login_allowed);
+
+          return (
+            <div className="mb-4 flex flex-wrap items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">
+              <span className="text-amber-200 font-medium">
+                {selectedMembershipIds.size} membership{selectedMembershipIds.size > 1 ? 's' : ''} selected
+              </span>
+              <button
+                onClick={() => runBulkAction('refund')}
+                disabled={bulkActionLoading}
+                className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded disabled:opacity-50"
+                title="Full refund + immediate cancellation for each selected membership"
+              >
+                {bulkActionLoading ? 'Working…' : 'Refund all'}
+              </button>
+              <button
+                onClick={() => runBulkAction('cancel_immediately')}
+                disabled={bulkActionLoading}
+                className="px-3 py-1.5 text-sm bg-orange-600 hover:bg-orange-500 text-white rounded disabled:opacity-50"
+              >
+                {bulkActionLoading ? 'Working…' : 'Cancel now'}
+              </button>
+              <button
+                onClick={() => runBulkAction('cancel_at_renewal')}
+                disabled={bulkActionLoading}
+                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50"
+              >
+                {bulkActionLoading ? 'Working…' : 'Cancel at renewal'}
+              </button>
+
+              {/* Login access controls — separated visually */}
+              <span className="h-5 w-px bg-amber-500/30" />
+              <button
+                onClick={() => runLoginControlAction(allMaintenanceAllowed ? 'revoke_maintenance' : 'allow_maintenance')}
+                disabled={bulkActionLoading}
+                className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded disabled:opacity-50"
+                title={allMaintenanceAllowed
+                  ? 'Revoke maintenance-mode login bypass for selected users'
+                  : 'Allow selected users to sign in while site is in maintenance mode'}
+              >
+                {bulkActionLoading
+                  ? 'Working…'
+                  : allMaintenanceAllowed
+                    ? 'Revoke Maintenance Login'
+                    : 'Allow Maintenance Login'}
+              </button>
+              {anyNotBanned && (
+                <button
+                  onClick={() => runLoginControlAction('ban')}
+                  disabled={bulkActionLoading}
+                  className="px-3 py-1.5 text-sm bg-rose-700 hover:bg-rose-600 text-white rounded disabled:opacity-50"
+                  title="Ban login: kicks active sessions and blocks future sign-ins"
+                >
+                  {bulkActionLoading ? 'Working…' : 'Ban Login'}
+                </button>
+              )}
+              {anyBanned && (
+                <button
+                  onClick={() => runLoginControlAction('unban')}
+                  disabled={bulkActionLoading}
+                  className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded disabled:opacity-50"
+                  title="Lift the login ban for selected users"
+                >
+                  {bulkActionLoading ? 'Working…' : 'Unban Login'}
+                </button>
+              )}
+
+              <button
+                onClick={() => setSelectedMembershipIds(new Set())}
+                className="ml-auto px-3 py-1.5 text-sm text-gray-300 hover:text-white"
+              >
+                Clear selection
+              </button>
+            </div>
+          );
+        })()}
         {bulkResult && (
           <div className={`mb-4 px-4 py-3 rounded-lg border ${bulkResult.failed === 0 ? 'bg-green-500/10 border-green-500/30 text-green-200' : 'bg-amber-500/10 border-amber-500/30 text-amber-200'}`}>
             <div className="font-medium">
@@ -1254,6 +1364,24 @@ export default function MembersPage() {
                                   {(member as any).is_secondary_account && (
                                     <span className="px-1.5 py-0.5 text-[10px] bg-purple-900 text-purple-300 rounded">
                                       Secondary
+                                    </span>
+                                  )}
+                                  {(member as any).login_banned && (
+                                    <span
+                                      className="px-1.5 py-0.5 text-[10px] bg-rose-900 text-rose-200 rounded font-semibold uppercase tracking-wide"
+                                      title={(member as any).login_banned_reason
+                                        ? `Login banned — ${(member as any).login_banned_reason}`
+                                        : 'Login banned'}
+                                    >
+                                      Banned
+                                    </span>
+                                  )}
+                                  {(member as any).maintenance_login_allowed && !(member as any).login_banned && (
+                                    <span
+                                      className="px-1.5 py-0.5 text-[10px] bg-purple-900 text-purple-200 rounded font-semibold uppercase tracking-wide"
+                                      title="Allowed to sign in during maintenance mode"
+                                    >
+                                      Maint.
                                     </span>
                                   )}
                                 </div>

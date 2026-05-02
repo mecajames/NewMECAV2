@@ -2,6 +2,7 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Inject,
@@ -13,11 +14,19 @@ import { isAdminUser } from './is-admin.helper';
 import { Profile } from '../profiles/profiles.entity';
 import { SiteSettings } from '../site-settings/site-settings.entity';
 
+/**
+ * Combined access guard that enforces:
+ *   1. Hard login bans (`profiles.login_banned`) — blocks every authenticated
+ *      request regardless of maintenance mode.
+ *   2. Maintenance mode — when site_settings.maintenance_mode_enabled is true,
+ *      only admins and members with `maintenance_login_allowed = true` get
+ *      through.
+ */
 @Injectable()
 export class MaintenanceModeGuard implements CanActivate {
   private cachedEnabled: boolean = false;
   private cacheExpiry: number = 0;
-  private readonly CACHE_TTL_MS = 30_000; // 30 seconds
+  private readonly CACHE_TTL_MS = 30_000;
 
   constructor(
     private readonly reflector: Reflector,
@@ -26,41 +35,40 @@ export class MaintenanceModeGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Check cache first — fast path when maintenance mode is off
-    const now = Date.now();
-    if (now < this.cacheExpiry) {
-      if (!this.cachedEnabled) return true;
-    } else {
-      // Refresh cache
-      await this.refreshCache();
-      if (!this.cachedEnabled) return true;
-    }
-
-    // Maintenance mode is ON — check exemptions
-
-    // 1. Public routes are exempt (covers Stripe webhook, health checks, etc.)
+    // Public routes are exempt from both ban and maintenance checks
+    // (covers Stripe/PayPal webhooks, health checks, public listings, etc.)
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     if (isPublic) return true;
 
-    // 2. Exempt specific route paths needed for admin login and toggle
     const request = context.switchToHttp().getRequest();
     const path: string = request.url || request.path || '';
     if (this.isExemptPath(path)) return true;
 
-    // 3. Check if the requesting user is an admin
     const user = request.user;
-    if (user?.id) {
-      const em = this.em.fork();
-      const profile = await em.findOne(Profile, { id: user.id }, {
-        fields: ['role', 'is_staff', 'meca_id'],
-      });
-      if (isAdminUser(profile)) return true;
+    // No authenticated user — let the auth guard handle rejection.
+    if (!user?.id) return true;
+
+    // Single profile lookup serves both checks below.
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id }, {
+      fields: ['role', 'is_staff', 'meca_id', 'maintenance_login_allowed', 'login_banned'],
+    });
+
+    // 1. Hard ban — always blocks, regardless of maintenance state.
+    if (profile?.login_banned) {
+      throw new ForbiddenException('Your account has been disabled. Contact support if you believe this is an error.');
     }
 
-    // Block the request
+    // 2. Maintenance mode check
+    const maintenanceEnabled = await this.isMaintenanceEnabled();
+    if (!maintenanceEnabled) return true;
+
+    if (isAdminUser(profile)) return true;
+    if (profile?.maintenance_login_allowed) return true;
+
     throw new HttpException(
       {
         statusCode: HttpStatus.SERVICE_UNAVAILABLE,
@@ -80,7 +88,10 @@ export class MaintenanceModeGuard implements CanActivate {
     return exemptPrefixes.some(prefix => path.startsWith(prefix));
   }
 
-  private async refreshCache(): Promise<void> {
+  private async isMaintenanceEnabled(): Promise<boolean> {
+    const now = Date.now();
+    if (now < this.cacheExpiry) return this.cachedEnabled;
+
     try {
       const em = this.em.fork();
       const setting = await em.findOne(SiteSettings, {
@@ -88,9 +99,10 @@ export class MaintenanceModeGuard implements CanActivate {
       });
       this.cachedEnabled = setting?.setting_value === 'true';
     } catch {
-      // On DB error, don't block users — assume maintenance mode is off
+      // On DB error, don't block users — assume maintenance mode is off.
       this.cachedEnabled = false;
     }
-    this.cacheExpiry = Date.now() + this.CACHE_TTL_MS;
+    this.cacheExpiry = now + this.CACHE_TTL_MS;
+    return this.cachedEnabled;
   }
 }

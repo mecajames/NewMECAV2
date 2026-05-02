@@ -284,6 +284,54 @@ export class SupabaseAdminService {
   }
 
   /**
+   * Bans a user in Supabase Auth. Sets ban_duration to ~100 years which both
+   * invalidates the user's active sessions (kicks them on next refresh) and
+   * blocks any future sign-in attempts. Use unbanUser to reverse.
+   */
+  async banUser(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await this.supabaseAdmin.auth.admin.updateUserById(userId, {
+        ban_duration: '876000h',
+      } as any);
+      if (error) {
+        this.logger.error(`Failed to ban user ${userId}: ${error.message}`);
+        return { success: false, error: error.message };
+      }
+      this.logger.log(`Banned Supabase auth user: ${userId}`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Error banning user: ${error}`);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Lifts a ban set by banUser. Sets ban_duration to 'none'.
+   */
+  async unbanUser(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await this.supabaseAdmin.auth.admin.updateUserById(userId, {
+        ban_duration: 'none',
+      } as any);
+      if (error) {
+        this.logger.error(`Failed to unban user ${userId}: ${error.message}`);
+        return { success: false, error: error.message };
+      }
+      this.logger.log(`Unbanned Supabase auth user: ${userId}`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Error unbanning user: ${error}`);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
    * Generates an impersonation link for admin to sign in as another user.
    * This creates a magic link that allows the admin to view the app as the target user.
    */

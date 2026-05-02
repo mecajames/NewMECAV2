@@ -222,6 +222,8 @@ export class ProfilesService {
       force_password_change: false,
       can_apply_judge: false,
       can_apply_event_director: false,
+      maintenance_login_allowed: false,
+      login_banned: false,
       member_since: now,
       created_at: now,
       updated_at: now,
@@ -558,6 +560,8 @@ export class ProfilesService {
         account_type: AccountType.MEMBER,
         can_apply_judge: false,
         can_apply_event_director: false,
+        maintenance_login_allowed: false,
+        login_banned: false,
         member_since: now,
         created_at: now,
         updated_at: now,
@@ -871,6 +875,140 @@ export class ProfilesService {
 
     // Generate the impersonation link
     return this.supabaseAdmin.generateImpersonationLink(targetUserId, redirectTo);
+  }
+
+  // =============================================================================
+  // Login Access Control (admin Members page bulk actions)
+  // =============================================================================
+
+  /**
+   * Apply a login-control action to a batch of profiles.
+   *
+   *   - allow_maintenance / revoke_maintenance: toggle the per-profile
+   *     maintenance-mode bypass flag.
+   *   - ban: set `login_banned`, populate audit fields, and call Supabase to
+   *     invalidate active sessions and block future sign-ins.
+   *   - unban: clear the ban locally and lift the Supabase `ban_duration`.
+   *
+   * Each profile is processed independently — partial failures don't roll
+   * back successful ones. Returns per-profile results so the UI can surface
+   * specific errors. All actions are written to the admin audit log.
+   *
+   * Self-protection: the calling admin can't act on their own profile, and
+   * we refuse to ban hard-coded super admins.
+   */
+  async bulkLoginControl(
+    adminId: string,
+    body: {
+      profileIds: string[];
+      action: 'allow_maintenance' | 'revoke_maintenance' | 'ban' | 'unban';
+      reason?: string;
+    },
+  ): Promise<{
+    succeeded: number;
+    failed: number;
+    results: Array<{ profileId: string; ok: boolean; error?: string }>;
+  }> {
+    const { profileIds, action, reason } = body;
+    if (!Array.isArray(profileIds) || profileIds.length === 0) {
+      throw new BadRequestException('profileIds must be a non-empty array');
+    }
+    const validActions = ['allow_maintenance', 'revoke_maintenance', 'ban', 'unban'] as const;
+    if (!validActions.includes(action)) {
+      throw new BadRequestException(`Invalid action. Must be one of: ${validActions.join(', ')}`);
+    }
+    if (action === 'ban' && (!reason || reason.trim().length < 5)) {
+      throw new BadRequestException('A ban reason of at least 5 characters is required');
+    }
+
+    // Self-protection — block destructive actions against the calling admin
+    if ((action === 'ban' || action === 'revoke_maintenance') && profileIds.includes(adminId)) {
+      throw new BadRequestException(`You cannot ${action.replace('_', ' ')} your own account`);
+    }
+
+    const em = this.em.fork();
+    const profiles = await em.find(Profile, { id: { $in: profileIds } });
+    if (profiles.length === 0) {
+      throw new NotFoundException('No matching profiles found');
+    }
+
+    // Block banning hard-coded super admins
+    const SUPER_ADMIN_EMAILS = new Set(['james@mecacaraudio.com', 'mick@mecausa.com']);
+    if (action === 'ban') {
+      const protectedHit = profiles.find(p => p.email && SUPER_ADMIN_EMAILS.has(p.email.toLowerCase()));
+      if (protectedHit) {
+        throw new BadRequestException(`Cannot ban protected account: ${protectedHit.email}`);
+      }
+    }
+
+    const admin = await em.findOne(Profile, { id: adminId });
+    const results: Array<{ profileId: string; ok: boolean; error?: string }> = [];
+
+    for (const profile of profiles) {
+      const before = {
+        maintenance_login_allowed: profile.maintenance_login_allowed,
+        login_banned: profile.login_banned,
+      };
+
+      try {
+        if (action === 'allow_maintenance') {
+          profile.maintenance_login_allowed = true;
+        } else if (action === 'revoke_maintenance') {
+          profile.maintenance_login_allowed = false;
+        } else if (action === 'ban') {
+          // Set Supabase ban first — if this fails we don't want a phantom
+          // local ban that doesn't kick the active session.
+          const supaResult = await this.supabaseAdmin.banUser(profile.id);
+          if (!supaResult.success) {
+            throw new Error(`Supabase ban failed: ${supaResult.error}`);
+          }
+          profile.login_banned = true;
+          profile.login_banned_at = new Date();
+          profile.login_banned_by = admin || undefined;
+          profile.login_banned_reason = reason?.trim();
+        } else if (action === 'unban') {
+          const supaResult = await this.supabaseAdmin.unbanUser(profile.id);
+          if (!supaResult.success) {
+            throw new Error(`Supabase unban failed: ${supaResult.error}`);
+          }
+          profile.login_banned = false;
+          profile.login_banned_at = undefined;
+          profile.login_banned_by = undefined;
+          profile.login_banned_reason = undefined;
+        }
+
+        await em.flush();
+
+        const after = {
+          maintenance_login_allowed: profile.maintenance_login_allowed,
+          login_banned: profile.login_banned,
+        };
+
+        await this.adminAuditService.logAction({
+          adminUserId: adminId,
+          action: `login_${action}`,
+          resourceType: 'profile',
+          resourceId: profile.id,
+          description: `${action.replace('_', ' ')} for ${profile.email || profile.id}${reason ? ` — ${reason.trim()}` : ''}`,
+          oldValues: before,
+          newValues: { ...after, ...(action === 'ban' ? { reason: reason?.trim() } : {}) },
+        });
+
+        results.push({ profileId: profile.id, ok: true });
+      } catch (err: any) {
+        this.logger.error(`bulkLoginControl ${action} failed for ${profile.id}: ${err.message}`);
+        results.push({ profileId: profile.id, ok: false, error: err.message || 'Unknown error' });
+      }
+    }
+
+    // Members list cache reflects these flags, so admins see updated state immediately.
+    this.clearAdminMembersCache();
+
+    return {
+      succeeded: results.filter(r => r.ok).length,
+      failed: results.filter(r => !r.ok).length,
+      results,
+    };
   }
 
   // =============================================================================
