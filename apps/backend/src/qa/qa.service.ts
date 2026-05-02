@@ -395,13 +395,21 @@ export class QaService {
       populate: ['round'],
     });
 
-    if (assignment.round.status !== QaRoundStatus.DRAFT) {
-      throw new BadRequestException('Can only remove assignments from draft rounds');
-    }
-
-    // Delete responses first (cascades via FK but be explicit)
-    await em.nativeDelete(QaItemResponse, { assignment: { id: assignmentId } });
-    await em.removeAndFlush(assignment);
+    // Removal is allowed in any round status — admins occasionally pick the
+    // wrong reviewer or someone needs to be swapped mid-round. Anything the
+    // reviewer has submitted is cascade-deleted (caller is expected to confirm).
+    await em.transactional(async (txEm) => {
+      // Developer fixes reference responses → wipe them first
+      await txEm.getConnection().execute(
+        `DELETE FROM qa_developer_fixes
+         WHERE response_id IN (
+           SELECT id FROM qa_item_responses WHERE assignment_id = ?
+         )`,
+        [assignmentId],
+      );
+      await txEm.nativeDelete(QaItemResponse, { assignment: { id: assignmentId } });
+      await txEm.nativeDelete(QaRoundAssignment, { id: assignmentId });
+    });
   }
 
   async getMyAssignments(profileId: string) {

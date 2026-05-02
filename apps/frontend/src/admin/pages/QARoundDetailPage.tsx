@@ -71,13 +71,17 @@ export default function QARoundDetailPage() {
     }
   };
 
-  const handleRemoveAssignment = async (assignmentId: string) => {
-    if (!confirm('Remove this reviewer?')) return;
+  const handleRemoveAssignment = async (assignmentId: string, assigneeName: string, submittedCount: number) => {
+    const tail = submittedCount > 0
+      ? `\n\nThis reviewer has already submitted ${submittedCount} response${submittedCount === 1 ? '' : 's'}, which will be permanently lost (along with any developer fix notes attached to those responses).`
+      : '';
+    if (!confirm(`Remove ${assigneeName} from this round?${tail}`)) return;
+    if (submittedCount > 0 && !confirm('Are you absolutely sure? Their work cannot be recovered.')) return;
     try {
       await qaApi.removeAssignment(assignmentId);
       await loadData();
-    } catch (err) {
-      console.error('Failed to remove:', err);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to remove reviewer');
     }
   };
 
@@ -374,19 +378,26 @@ export default function QARoundDetailPage() {
                         {a.status === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-500" />}
                         {a.status === 'in_progress' && <Clock className="h-5 w-5 text-yellow-500" />}
                         {a.status === 'assigned' && <Circle className="h-5 w-5 text-slate-500" />}
-                        {round.status === 'draft' && (
-                          <button onClick={() => handleRemoveAssignment(a.id)} className="text-red-400 hover:text-red-300 ml-2">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
                         {round.status !== 'draft' && (
                           <button
                             onClick={() => navigate(`/admin/qa-checklist/review/${a.id}`)}
                             className="text-slate-400 hover:text-white ml-2"
+                            title="Open review"
                           >
                             <ChevronRight className="h-5 w-5" />
                           </button>
                         )}
+                        <button
+                          onClick={() => handleRemoveAssignment(
+                            a.id,
+                            `${a.assignee.firstName ?? ''} ${a.assignee.lastName ?? ''}`.trim() || a.assignee.email,
+                            a.counts.pass + a.counts.fail + a.counts.skip,
+                          )}
+                          className="text-red-400 hover:text-red-300 ml-2"
+                          title="Remove reviewer (any submitted responses will be deleted)"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 text-xs">

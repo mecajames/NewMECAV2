@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ClipboardCheck, Plus, ChevronRight, CheckCircle2,
-  AlertCircle, Clock, Circle, Users, BarChart3, ArrowRightFromLine
+  AlertCircle, Clock, Circle, Users, BarChart3, ArrowRightFromLine,
+  Pencil, PauseCircle, PlayCircle, Trash2,
 } from 'lucide-react';
 import { qaApi } from '@/api-client/qa.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -17,6 +18,15 @@ export default function QAChecklistPage() {
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // Inline edit modal — driven from the round-list cards so admins don't have
+  // to drill into the round detail just to tweak a title.
+  const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  // Track per-row loading so the right card shows "Working…" while suspending/resuming
+  const [busyRoundId, setBusyRoundId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -34,6 +44,64 @@ export default function QAChecklistPage() {
       console.error('Failed to load QA data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openEditRound = (round: any) => {
+    setEditingRoundId(round.id);
+    setEditTitle(round.title ?? '');
+    setEditDescription(round.description ?? '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRoundId || !editTitle.trim()) return;
+    setSavingEdit(true);
+    try {
+      await qaApi.updateRound(editingRoundId, {
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+      });
+      setEditingRoundId(null);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update round');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleSuspendToggle = async (round: any) => {
+    const willSuspend = !round.suspended;
+    if (willSuspend && !confirm(
+      `Pause "${round.title}"?\n\nReviewers will keep their progress but cannot submit new pass/fail responses, and developers cannot record fixes, until you resume.`,
+    )) return;
+    setBusyRoundId(round.id);
+    try {
+      if (willSuspend) await qaApi.suspendRound(round.id);
+      else             await qaApi.resumeRound(round.id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update suspension');
+    } finally {
+      setBusyRoundId(null);
+    }
+  };
+
+  const handleDeleteRound = async (round: any) => {
+    const responseCount = round.totalResponses ?? 0;
+    const tail = responseCount > 0
+      ? `\n\nThis will permanently delete ${responseCount} reviewer response${responseCount === 1 ? '' : 's'} and any developer fix notes attached to this round.`
+      : '';
+    if (!confirm(`Delete round "${round.title}" (v${round.versionNumber})?${tail}\n\nThis cannot be undone.`)) return;
+    if (responseCount > 0 && !confirm('Are you absolutely sure? Reviewer work will be lost.')) return;
+    setBusyRoundId(round.id);
+    try {
+      await qaApi.deleteRound(round.id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete round');
+    } finally {
+      setBusyRoundId(null);
     }
   };
 
@@ -164,6 +232,7 @@ export default function QAChecklistPage() {
           <div className="space-y-4">
             {rounds.map((round: any) => {
               const progress = getProgressBar(round);
+              const busy = busyRoundId === round.id;
               return (
                 <div
                   key={round.id}
@@ -171,17 +240,17 @@ export default function QAChecklistPage() {
                   onClick={() => navigate(`/admin/qa-checklist/rounds/${round.id}`)}
                 >
                   <div className="p-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start justify-between mb-3 gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <span className="text-orange-500 font-bold text-lg">v{round.versionNumber}</span>
-                        <div>
-                          <h3 className="text-white font-semibold">{round.title}</h3>
+                        <div className="min-w-0">
+                          <h3 className="text-white font-semibold truncate">{round.title}</h3>
                           <p className="text-slate-400 text-xs">
                             Created by {round.createdBy.firstName} {round.createdBy.lastName} on {new Date(round.createdAt).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         {round.suspended && (
                           <span className="px-2.5 py-0.5 bg-purple-600/30 text-purple-200 rounded-full text-xs font-medium">Paused</span>
                         )}
@@ -221,10 +290,84 @@ export default function QAChecklistPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Inline round actions — quick access without entering the detail page */}
+                    <div
+                      className="flex items-center gap-1 mt-3 pt-3 border-t border-slate-700/60"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        onClick={() => openEditRound(round)}
+                        disabled={busy}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                        title="Edit round title and description"
+                      >
+                        <Pencil className="h-3.5 w-3.5" /> Edit
+                      </button>
+                      {round.status !== 'completed' && (
+                        <button
+                          onClick={() => handleSuspendToggle(round)}
+                          disabled={busy}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors disabled:opacity-50 ${round.suspended
+                            ? 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                            : 'bg-purple-700 hover:bg-purple-600 text-white'}`}
+                          title={round.suspended
+                            ? 'Resume — reviewers can submit responses again'
+                            : 'Pause — reviewers keep progress but cannot submit until resumed'}
+                        >
+                          {round.suspended
+                            ? (<><PlayCircle className="h-3.5 w-3.5" /> {busy ? 'Working…' : 'Resume'}</>)
+                            : (<><PauseCircle className="h-3.5 w-3.5" /> {busy ? 'Working…' : 'Suspend'}</>)}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteRound(round)}
+                        disabled={busy}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 ml-auto"
+                        title="Permanently delete this round and all attached responses & fixes"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> {busy ? 'Working…' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Edit Round Modal */}
+        {editingRoundId && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+              <h3 className="text-white font-bold text-lg mb-4">Edit Round</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-slate-300 text-sm font-medium block mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 text-sm font-medium block mb-1">Description (optional)</label>
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    rows={3}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-y"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-6">
+                <button onClick={() => setEditingRoundId(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">Cancel</button>
+                <button onClick={handleSaveEdit} disabled={!editTitle.trim() || savingEdit} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                  {savingEdit ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
