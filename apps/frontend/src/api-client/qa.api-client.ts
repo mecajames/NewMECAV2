@@ -53,6 +53,26 @@ export async function completeRound(id: string) {
   return response.data;
 }
 
+export async function updateRound(id: string, data: { title?: string; description?: string | null }) {
+  const response = await axios.put(`/api/qa/rounds/${id}`, data);
+  return response.data;
+}
+
+export async function suspendRound(id: string) {
+  const response = await axios.post(`/api/qa/rounds/${id}/suspend`);
+  return response.data;
+}
+
+export async function resumeRound(id: string) {
+  const response = await axios.post(`/api/qa/rounds/${id}/resume`);
+  return response.data;
+}
+
+export async function deleteRound(id: string) {
+  const response = await axios.delete(`/api/qa/rounds/${id}`);
+  return response.data;
+}
+
 export async function getFailedItems(roundId: string) {
   const response = await axios.get(`/api/qa/rounds/${roundId}/failed-items`);
   return response.data;
@@ -125,6 +145,10 @@ export const qaApi = {
   getRound,
   activateRound,
   completeRound,
+  updateRound,
+  suspendRound,
+  resumeRound,
+  deleteRound,
   getFailedItems,
   assignReviewers,
   removeAssignment,

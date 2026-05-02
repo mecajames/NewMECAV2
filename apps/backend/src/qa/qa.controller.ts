@@ -98,6 +98,43 @@ export class QaController {
     return this.qaService.completeRound(roundId);
   }
 
+  @Put('rounds/:id')
+  async updateRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+    @Body() body: { title?: string; description?: string | null },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.updateRound(roundId, body);
+  }
+
+  @Post('rounds/:id/suspend')
+  async suspendRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.setSuspended(roundId, true);
+  }
+
+  @Post('rounds/:id/resume')
+  async resumeRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.setSuspended(roundId, false);
+  }
+
+  @Delete('rounds/:id')
+  async deleteRound(
+    @Headers('authorization') authHeader: string,
+    @Param('id') roundId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.qaService.deleteRound(roundId);
+  }
+
   @Get('rounds/:id/failed-items')
   async getFailedItems(
     @Headers('authorization') authHeader: string,

@@ -19,6 +19,12 @@ export class QaRound {
   @Enum({ items: () => QaRoundStatus, default: QaRoundStatus.DRAFT })
   status: QaRoundStatus = QaRoundStatus.DRAFT;
 
+  // Pause flag — independent of status. While true, reviewers can view the
+  // round but cannot submit responses, and developers cannot submit fixes.
+  // Used to freeze a round mid-test while the dev team ships repairs.
+  @Property({ type: 'boolean', default: false })
+  suspended: boolean = false;
+
   @ManyToOne(() => QaRound, { nullable: true, fieldName: 'parent_round_id' })
   parentRound?: QaRound;
 

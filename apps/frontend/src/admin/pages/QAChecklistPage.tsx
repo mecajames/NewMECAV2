@@ -120,7 +120,12 @@ export default function QAChecklistPage() {
                       <Circle className="h-5 w-5 text-slate-500" />
                     )}
                     <div className="text-left">
-                      <p className="text-white font-medium text-sm">{a.round.title} (v{a.round.versionNumber})</p>
+                      <p className="text-white font-medium text-sm flex items-center gap-2">
+                        {a.round.title} (v{a.round.versionNumber})
+                        {a.round.suspended && (
+                          <span className="px-1.5 py-0.5 text-[10px] bg-purple-700/40 text-purple-200 rounded font-semibold uppercase tracking-wide">Paused</span>
+                        )}
+                      </p>
                       <p className="text-slate-400 text-xs">
                         {a.counts.pass + a.counts.fail + a.counts.skip}/{a.counts.total} tested
                         {a.counts.fail > 0 && <span className="text-red-400 ml-2">{a.counts.fail} failed</span>}
@@ -177,6 +182,9 @@ export default function QAChecklistPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {round.suspended && (
+                          <span className="px-2.5 py-0.5 bg-purple-600/30 text-purple-200 rounded-full text-xs font-medium">Paused</span>
+                        )}
                         {getStatusBadge(round.status)}
                         <ChevronRight className="h-5 w-5 text-slate-400" />
                       </div>
@@ -226,7 +234,7 @@ export default function QAChecklistPage() {
             <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
               <h3 className="text-white font-bold text-lg mb-4">Create New QA Round</h3>
               <p className="text-slate-400 text-sm mb-4">
-                This will create a new QA round with all 76 checklist items. You can then assign reviewers to test the site.
+                This creates a new QA round with the current master checklist (every section and item). You can then assign reviewers to walk through the site and sign off.
               </p>
               <div className="space-y-4">
                 <div>

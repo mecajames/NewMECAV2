@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ClipboardCheck, Users, Play, CheckCheck, Plus, Trash2,
   ChevronRight, CheckCircle2, AlertCircle, Clock, Circle, Wrench,
-  ArrowRightFromLine, Image as ImageIcon, ExternalLink, MessageSquare
+  ArrowRightFromLine, Image as ImageIcon, ExternalLink, MessageSquare,
+  Pencil, PauseCircle, PlayCircle, EyeOff,
 } from 'lucide-react';
 import { qaApi } from '@/api-client/qa.api-client';
 
@@ -27,6 +28,12 @@ export default function QARoundDetailPage() {
   const [fixNotes, setFixNotes] = useState('');
   const [fixStatus, setFixStatus] = useState('fixed');
   const [submittingFix, setSubmittingFix] = useState(false);
+
+  // Edit round form state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (roundId) loadData();
@@ -107,6 +114,60 @@ export default function QARoundDetailPage() {
     }
   };
 
+  const openEditModal = () => {
+    setEditTitle(round?.title ?? '');
+    setEditDescription(round?.description ?? '');
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTitle.trim()) return;
+    setSavingEdit(true);
+    try {
+      await qaApi.updateRound(roundId!, {
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+      });
+      setShowEditModal(false);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update round');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleSuspendToggle = async () => {
+    if (!round) return;
+    const willSuspend = !round.suspended;
+    if (willSuspend && !confirm(
+      `Pause "${round.title}"?\n\nReviewers will keep their progress but cannot submit new pass/fail responses, and developers cannot record fixes, until you resume the round.`,
+    )) return;
+    try {
+      if (willSuspend) await qaApi.suspendRound(roundId!);
+      else             await qaApi.resumeRound(roundId!);
+      await loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update suspension');
+    }
+  };
+
+  const handleDeleteRound = async () => {
+    if (!round) return;
+    const consequence = round.stats?.totalResponses > 0
+      ? `\n\nThis will permanently delete ${round.stats.totalResponses} reviewer response${round.stats.totalResponses === 1 ? '' : 's'} and any developer fix notes attached to this round.`
+      : '';
+    if (!confirm(`Delete round "${round.title}" (v${round.versionNumber})?${consequence}\n\nThis cannot be undone.`)) return;
+    // Second confirm for destructive deletes against rounds with data
+    if (round.stats?.totalResponses > 0 && !confirm('Are you absolutely sure? Reviewer work will be lost.')) return;
+    try {
+      await qaApi.deleteRound(roundId!);
+      navigate('/admin/qa-checklist');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete round');
+    }
+  };
+
   const handleSubmitFix = async () => {
     if (!fixingResponseId || !fixNotes.trim()) return;
     setSubmittingFix(true);
@@ -146,12 +207,17 @@ export default function QARoundDetailPage() {
 
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div>
-            <div className="flex items-center gap-3 mb-1">
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
               <span className="text-orange-500 font-bold text-2xl">v{round.versionNumber}</span>
               <h1 className="text-2xl font-bold text-white">{round.title}</h1>
               {round.status === 'draft' && <span className="px-2.5 py-0.5 bg-slate-600 text-slate-200 rounded-full text-xs font-medium">Draft</span>}
               {round.status === 'active' && <span className="px-2.5 py-0.5 bg-blue-600 text-blue-100 rounded-full text-xs font-medium">Active</span>}
               {round.status === 'completed' && <span className="px-2.5 py-0.5 bg-green-600 text-green-100 rounded-full text-xs font-medium">Completed</span>}
+              {round.suspended && (
+                <span className="px-2.5 py-0.5 bg-purple-600/30 text-purple-200 rounded-full text-xs font-medium flex items-center gap-1">
+                  <EyeOff className="h-3 w-3" /> Paused
+                </span>
+              )}
             </div>
             {round.description && <p className="text-slate-400 text-sm">{round.description}</p>}
             <p className="text-slate-500 text-xs mt-1">
@@ -186,8 +252,51 @@ export default function QARoundDetailPage() {
                 <ArrowRightFromLine className="h-4 w-4" /> Create Next Round from Failed Items
               </button>
             )}
+
+            {/* Round CRUD — available in any status */}
+            <button
+              onClick={openEditModal}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors"
+              title="Edit round title and description"
+            >
+              <Pencil className="h-4 w-4" /> Edit
+            </button>
+            {round.status !== 'completed' && (
+              <button
+                onClick={handleSuspendToggle}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${round.suspended
+                  ? 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                  : 'bg-purple-700 hover:bg-purple-600 text-white'}`}
+                title={round.suspended
+                  ? 'Resume — reviewers can submit responses again'
+                  : 'Pause — reviewers keep progress but cannot submit until resumed'}
+              >
+                {round.suspended
+                  ? (<><PlayCircle className="h-4 w-4" /> Resume</>)
+                  : (<><PauseCircle className="h-4 w-4" /> Suspend</>)}
+              </button>
+            )}
+            <button
+              onClick={handleDeleteRound}
+              className="flex items-center gap-2 px-3 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg text-sm transition-colors"
+              title="Permanently delete this round and all attached responses & fixes"
+            >
+              <Trash2 className="h-4 w-4" /> Delete
+            </button>
           </div>
         </div>
+
+        {round.suspended && (
+          <div className="bg-purple-900/30 border border-purple-700 rounded-xl p-4 mb-6 flex items-start gap-3">
+            <PauseCircle className="h-5 w-5 text-purple-300 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-sm">
+              <p className="text-purple-200 font-medium">Round paused</p>
+              <p className="text-purple-300/80 mt-0.5">
+                Reviewers can still see their assignments and prior progress, but cannot submit pass/fail or fix submissions until you click <span className="font-semibold">Resume</span> above.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
@@ -489,6 +598,41 @@ export default function QARoundDetailPage() {
                 <button onClick={() => setShowCreateNextModal(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">Cancel</button>
                 <button onClick={handleCreateNext} disabled={!nextTitle.trim() || creatingNext} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
                   {creatingNext ? 'Creating...' : 'Create Round'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Round Modal */}
+        {showEditModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+              <h3 className="text-white font-bold text-lg mb-4">Edit Round</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-slate-300 text-sm font-medium block mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 text-sm font-medium block mb-1">Description (optional)</label>
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    rows={3}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-y"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-6">
+                <button onClick={() => setShowEditModal(false)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">Cancel</button>
+                <button onClick={handleSaveEdit} disabled={!editTitle.trim() || savingEdit} className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                  {savingEdit ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
             </div>

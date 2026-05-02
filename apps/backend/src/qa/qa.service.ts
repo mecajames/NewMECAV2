@@ -32,6 +32,7 @@ export class QaService {
       description,
       versionNumber,
       status: QaRoundStatus.DRAFT,
+      suspended: false,
       createdBy: em.getReference(Profile, createdById),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -55,6 +56,7 @@ export class QaService {
           itemOrder,
           steps: item.steps,
           expectedResult: item.expectedResult,
+          pageUrl: item.pageUrl,
         });
         em.persist(checklistItem);
         itemOrder++;
@@ -93,6 +95,7 @@ export class QaService {
       title,
       versionNumber: previousRound.versionNumber + 1,
       status: QaRoundStatus.DRAFT,
+      suspended: false,
       parentRound: em.getReference(QaRound, previousRoundId),
       createdBy: em.getReference(Profile, createdById),
       createdAt: new Date(),
@@ -158,6 +161,73 @@ export class QaService {
     return this.getRound(roundId);
   }
 
+  /**
+   * Edit round metadata. Title and description are always editable; we don't
+   * touch status/version/parent. Useful for typo fixes or clarifying scope
+   * after reviewers report confusion.
+   */
+  async updateRound(roundId: string, data: { title?: string; description?: string | null }) {
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+    if (data.title !== undefined) {
+      const trimmed = data.title.trim();
+      if (!trimmed) throw new BadRequestException('Title cannot be empty');
+      round.title = trimmed;
+    }
+    if (data.description !== undefined) {
+      round.description = data.description?.trim() || undefined;
+    }
+    await em.flush();
+    return this.getRound(roundId);
+  }
+
+  /**
+   * Toggle the suspension flag. When suspended:
+   *   - reviewers see the round but submitResponse will reject
+   *   - developers can't submit fixes
+   * Reversible — clearing the flag returns the round to its prior state.
+   */
+  async setSuspended(roundId: string, suspended: boolean) {
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+    round.suspended = suspended;
+    await em.flush();
+    return this.getRound(roundId);
+  }
+
+  /**
+   * Hard-delete a round and everything attached to it: developer fixes,
+   * responses, assignments, and checklist items. Wrapped in a transaction
+   * so a partial delete can't strand orphan rows.
+   *
+   * Allowed in any state. The admin UI confirms before invoking, including
+   * for ACTIVE/COMPLETED rounds where reviewer work is being thrown away.
+   */
+  async deleteRound(roundId: string) {
+    const em = this.em.fork();
+    const round = await em.findOneOrFail(QaRound, roundId);
+
+    await em.transactional(async (txEm) => {
+      // Developer fixes reference responses → delete them first
+      await txEm.getConnection().execute(
+        `DELETE FROM qa_developer_fixes
+         WHERE response_id IN (
+           SELECT r.id FROM qa_item_responses r
+           JOIN qa_round_assignments a ON a.id = r.assignment_id
+           WHERE a.round_id = ?
+         )`,
+        [roundId],
+      );
+      // Responses → assignments → items → round
+      await txEm.nativeDelete(QaItemResponse, { assignment: { round: { id: roundId } } });
+      await txEm.nativeDelete(QaRoundAssignment, { round: { id: roundId } });
+      await txEm.nativeDelete(QaChecklistItem, { round: { id: roundId } });
+      await txEm.nativeDelete(QaRound, { id: roundId });
+    });
+
+    return { id: round.id, deleted: true };
+  }
+
   async getRound(roundId: string) {
     const em = this.em.fork();
     const round = await em.findOneOrFail(QaRound, roundId, {
@@ -213,6 +283,7 @@ export class QaService {
       title: round.title,
       description: round.description,
       status: round.status,
+      suspended: round.suspended,
       parentRoundId: round.parentRound?.id || null,
       createdBy: {
         id: round.createdBy.id,
@@ -253,6 +324,7 @@ export class QaService {
         versionNumber: round.versionNumber,
         title: round.title,
         status: round.status,
+        suspended: round.suspended,
         createdBy: {
           id: round.createdBy.id,
           firstName: round.createdBy.first_name,
@@ -358,6 +430,7 @@ export class QaService {
           versionNumber: a.round.versionNumber,
           title: a.round.title,
           status: a.round.status,
+          suspended: a.round.suspended,
         },
         status: a.status,
         assignedAt: a.assignedAt,
@@ -437,6 +510,7 @@ export class QaService {
         versionNumber: assignment.round.versionNumber,
         title: assignment.round.title,
         status: assignment.round.status,
+        suspended: assignment.round.suspended,
       },
       assignee: {
         id: assignment.assignee.id,
@@ -470,7 +544,15 @@ export class QaService {
       throw new BadRequestException('A comment is required when marking an item as FAIL');
     }
 
-    const assignment = await em.findOneOrFail(QaRoundAssignment, assignmentId);
+    const assignment = await em.findOneOrFail(QaRoundAssignment, assignmentId, {
+      populate: ['round'],
+    });
+    if (assignment.round.suspended) {
+      throw new BadRequestException('This QA round is currently paused by an admin. Try again once it is resumed.');
+    }
+    if (assignment.round.status === QaRoundStatus.COMPLETED) {
+      throw new BadRequestException('This QA round is closed and no longer accepting responses.');
+    }
 
     // Verify reviewer matches
     const response = await em.findOneOrFail(QaItemResponse, {
@@ -582,7 +664,12 @@ export class QaService {
   async submitFix(responseId: string, data: { fixNotes: string; status: QaFixStatus }, developerId: string) {
     const em = this.em.fork();
 
-    await em.findOneOrFail(QaItemResponse, responseId);
+    const response = await em.findOneOrFail(QaItemResponse, responseId, {
+      populate: ['assignment.round'],
+    });
+    if (response.assignment.round.suspended) {
+      throw new BadRequestException('Cannot record fixes on a paused round. Resume the round first.');
+    }
 
     // Check for existing fix
     let fix = await em.findOne(QaDeveloperFix, { response: { id: responseId } });
