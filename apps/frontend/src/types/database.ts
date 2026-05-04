@@ -74,6 +74,10 @@ export interface Profile {
   login_banned_at?: string;
   login_banned_by?: string;
   login_banned_reason?: string;
+  // Set true by Mode-B "pay-to-activate" provisioning. Front-end guard pins
+  // the user to /billing until their outstanding invoice is paid; cleared
+  // automatically server-side on payment.
+  restricted_to_billing?: boolean;
   member_since: string;
   created_at: string;
   updated_at: string;

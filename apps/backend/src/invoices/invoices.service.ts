@@ -402,7 +402,53 @@ export class InvoicesService {
     wrap(invoice).assign(updates);
     await em.flush();
 
+    // If this invoice belonged to a Mode-B "pay-to-activate" provision flow,
+    // an admin created the membership in PENDING state and pinned the user
+    // to /billing via profiles.restricted_to_billing. Now that the invoice is
+    // paid, lift both restrictions in the same transaction so the user
+    // regains full access on their next request.
+    if (data.status === InvoiceStatus.PAID) {
+      await this.clearProvisioningHoldIfApplicable(em, id);
+    }
+
     return invoice;
+  }
+
+  /**
+   * Mode B (admin-provisioned, pay-to-activate) post-payment hook. Looks up
+   * the invoice's user; if they have `restricted_to_billing = true`, clears
+   * the flag and promotes any PENDING memberships to PAID. No-op if the
+   * invoice didn't come from a provisioning flow.
+   */
+  private async clearProvisioningHoldIfApplicable(em: EntityManager, invoiceId: string): Promise<void> {
+    try {
+      const inv = await em.findOne(Invoice, { id: invoiceId }, { populate: ['user'] as any });
+      const user = inv?.user as any as Profile | undefined;
+      if (!user || !user.restricted_to_billing) return;
+
+      const pending = await em.find(Membership, {
+        user: user.id,
+        paymentStatus: PaymentStatus.PENDING,
+      });
+      const invoiceTotal = Number(inv?.total ?? 0);
+      for (const m of pending) {
+        m.paymentStatus = PaymentStatus.PAID;
+        if (invoiceTotal > 0 && (!m.amountPaid || Number(m.amountPaid) === 0)) {
+          m.amountPaid = invoiceTotal;
+        }
+      }
+      user.restricted_to_billing = false;
+      await em.flush();
+
+      this.logger.log(
+        `Cleared restricted_to_billing for user ${user.id} after invoice ${inv?.invoiceNumber} paid; ` +
+        `${pending.length} pending membership(s) activated.`,
+      );
+    } catch (err) {
+      // Don't fail the payment-recording flow if the cleanup hits an issue —
+      // the invoice update has already succeeded; admin can retry manually.
+      this.logger.error(`Provisioning-hold cleanup failed for invoice ${invoiceId}:`, err);
+    }
   }
 
   /**

@@ -13,6 +13,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   forcePasswordChange: boolean;
+  restrictedToBilling: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any; data: any }>;
   signInWithOAuth: (provider: Provider) => Promise<{ error: any }>;
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [forcePasswordChange, setForcePasswordChange] = useState(false);
+  const [restrictedToBilling, setRestrictedToBilling] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -42,6 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (data as any).full_name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
         // Check if user needs to change password
         setForcePasswordChange(data.force_password_change === true);
+        // Mode-B "pay-to-activate" provisioning hold — front-end guard
+        // pins the user to /billing until cleared by the server on payment.
+        setRestrictedToBilling(data.restricted_to_billing === true);
       }
 
       return data;
@@ -296,6 +301,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         forcePasswordChange,
+        restrictedToBilling,
         signIn,
         signUp,
         signInWithOAuth,

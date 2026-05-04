@@ -44,6 +44,12 @@ export enum PaymentStatus {
   REFUNDED = 'refunded',
   FAILED = 'failed',
   CANCELLED = 'cancelled',
+  /**
+   * Used by the admin "Provision Inactive" flow. The membership exists for
+   * historical/audit purposes but the account cannot transact: can_login is
+   * false on the profile, and the membership does not count as active.
+   */
+  INACTIVE = 'inactive',
 }
 
 export enum RegistrationStatus {
