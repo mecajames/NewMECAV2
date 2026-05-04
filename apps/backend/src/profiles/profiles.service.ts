@@ -224,6 +224,7 @@ export class ProfilesService {
       can_apply_event_director: false,
       maintenance_login_allowed: false,
       login_banned: false,
+      analytics_opt_out: false,
       member_since: now,
       created_at: now,
       updated_at: now,
@@ -562,6 +563,7 @@ export class ProfilesService {
         can_apply_event_director: false,
         maintenance_login_allowed: false,
         login_banned: false,
+        analytics_opt_out: false,
         member_since: now,
         created_at: now,
         updated_at: now,
@@ -713,9 +715,26 @@ export class ProfilesService {
 
     // Delete from profiles table
     if (profile) {
-      await em.removeAndFlush(profile);
-      this.logger.log(`Deleted user ${userId} from profiles table`);
+      try {
+        await em.removeAndFlush(profile);
+        this.logger.log(`Deleted user ${userId} from profiles table`);
+      } catch (err: any) {
+        if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
+          throw new BadRequestException(
+            `Cannot delete this user — their profile is referenced by other records (e.g. results, applications, audit entries). ` +
+            `Reassign or remove those references first, or contact the development team.`,
+          );
+        }
+        throw err;
+      }
     }
+
+    // CRITICAL: invalidate the admin members list cache so the deletion is
+    // visible immediately. Without this, the frontend refetch returns the
+    // 5-minute-cached list that still contains the deleted user, making the
+    // delete look like it silently failed.
+    this.clearAdminMembersCache();
+    this.clearPublicProfilesCache();
 
     return {
       success: true,
@@ -754,9 +773,23 @@ export class ProfilesService {
 
     // Delete from profiles table
     if (profile) {
-      await em.removeAndFlush(profile);
-      this.logger.log(`Deleted user ${email} from profiles table`);
+      try {
+        await em.removeAndFlush(profile);
+        this.logger.log(`Deleted user ${email} from profiles table`);
+      } catch (err: any) {
+        if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
+          throw new BadRequestException(
+            `Cannot delete ${email} — their profile is referenced by other records. ` +
+            `Reassign or remove those references first.`,
+          );
+        }
+        throw err;
+      }
     }
+
+    // Invalidate caches so the deletion shows up on the next list fetch.
+    this.clearAdminMembersCache();
+    this.clearPublicProfilesCache();
 
     return {
       success: true,
@@ -816,6 +849,9 @@ export class ProfilesService {
 
     // Get the profile first
     const profile = await em.findOne(Profile, { id: userId });
+    if (!profile) {
+      throw new NotFoundException(`User ${userId} not found in profiles`);
+    }
 
     // Delete all memberships for this user
     const membershipsResult = await em.getConnection().execute(
@@ -836,11 +872,36 @@ export class ProfilesService {
       this.logger.log(`Deleted user ${userId} from Supabase Auth`);
     }
 
-    // Delete from profiles table
-    if (profile) {
+    // Delete from profiles table — surface FK violations as a clean 400
+    // instead of letting them surface as a 500 the frontend can't make sense of.
+    // 17 tables in the schema have ON DELETE NO ACTION/RESTRICT against profiles
+    // (results, voting, training, finals registrations, etc.). If any of those
+    // tables reference this user, the delete will be blocked here and the admin
+    // needs to clean those up first.
+    try {
       await em.removeAndFlush(profile);
       this.logger.log(`Deleted user ${userId} from profiles table`);
+    } catch (err: any) {
+      if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
+        // Surface the table that's blocking the delete if Postgres tells us
+        const detail = err?.detail || err?.message || '';
+        const tableMatch = /from table "([^"]+)"/.exec(detail);
+        const blockingTable = tableMatch?.[1];
+        throw new BadRequestException(
+          `Cannot delete this user — their profile is still referenced by other records${blockingTable ? ` (table: ${blockingTable})` : ''}. ` +
+          `This commonly happens with members who have competition results, voted in finals, applied as a judge/ED, or appear in audit-only tables. ` +
+          `Reassign or remove those references first, or contact the development team to handle the cleanup.`,
+        );
+      }
+      throw err;
     }
+
+    // CRITICAL: invalidate the admin members list cache. The list endpoint
+    // caches results for 5 minutes — without this, the frontend refetch
+    // immediately after delete shows the cached (still-present) user and
+    // makes the delete look like it failed.
+    this.clearAdminMembersCache();
+    this.clearPublicProfilesCache();
 
     return {
       success: true,

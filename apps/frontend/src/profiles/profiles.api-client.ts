@@ -47,6 +47,8 @@ export interface Profile {
   ed_permission_granted_by?: string;
   judge_certification_expires?: string;
   ed_certification_expires?: string;
+  // First-party page-tracking opt-out (member-controlled in account settings).
+  analytics_opt_out?: boolean;
   member_since: string;
   created_at: string;
   updated_at: string;

@@ -488,7 +488,7 @@
             border-left: 4px solid #f97316;
         }
 
-    </style>
+</style>
 </head>
 <body>
     <nav style="margin-bottom: 24px; font-size: 0.9rem;">
@@ -496,87 +496,97 @@
     </nav>
 
     <h1>Apply a Manual Cash / Check Payment</h1>
-    <p class="subtitle">Record offline payments against a member's account</p>
+    <p class="subtitle">Two paths: early renewal via Add Membership wizard, or marking an existing pending membership PAID</p>
 
-    <p><span class="nav-path">/admin/members/:id</span></p>
+    <p><span class="nav-path">/admin/members → member detail → Memberships tab</span></p>
 
     <div class="info-box">
-        <h4>Audience: site administrators</h4>
-        <p>When a member pays cash or by check at an event or by mail, record it manually so the membership shows paid and the entry mirrors to QuickBooks.</p>
+        <h4>Two real flows depending on what already exists</h4>
+        <p>If the member <strong>doesn't have a pending membership yet</strong> (typical event-day scenario — they pay you cash for an upcoming renewal while their current one is still active), use <strong>Path A</strong> — the Add Membership wizard. If a pending membership <strong>already exists</strong> on the account (e.g. created earlier by a renewal flow that was never paid), use <strong>Path B</strong> — the Apply Payment button on that pending row.</p>
     </div>
 
     <div class="toc">
         <h3>Contents</h3>
         <ul>
-        <li><a href="#record-the-payment">1. Record the payment</a></li>
-        <li><a href="#verify-it-propagated">2. Verify it propagated</a></li>
+            <li><a href="#decision">Which path to use</a></li>
+            <li><a href="#path-a">Path A: Add Membership wizard with auto-extend</a></li>
+            <li><a href="#path-b">Path B: Apply Payment button on a pending membership</a></li>
+            <li><a href="#math">The auto-extend math</a></li>
+            <li><a href="#what-happens">What gets created end-to-end</a></li>
+            <li><a href="#audit">Audit trail</a></li>
         </ul>
     </div>
 
+    <h2 id="decision">1. Which path to use</h2>
+    <table>
+        <thead><tr><th>Situation</th><th>Use</th></tr></thead>
+        <tbody>
+            <tr><td>Member paid cash at an event for their upcoming renewal; they currently have an active membership</td><td><strong>Path A</strong> (Add Membership wizard)</td></tr>
+            <tr><td>Member paid cash and currently has no active membership at all</td><td><strong>Path A</strong> (Add Membership wizard)</td></tr>
+            <tr><td>A pending membership already exists on the account (renewal was started but never paid)</td><td><strong>Path B</strong> (Apply Payment button)</td></tr>
+            <tr><td>Pending invoice on the account, member handed you cash to settle it</td><td><strong>Path B</strong> if the invoice is tied to a pending membership; otherwise contact dev — direct invoice cash-paid is not yet a single-button flow</td></tr>
+        </tbody>
+    </table>
 
-<h2 id="record-the-payment">1. Record the payment</h2>
+    <h2 id="path-a">2. Path A: Add Membership wizard (most common)</h2>
     <div class="workflow-container">
-        <div class="step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <div class="step-title">Open the member's detail page.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <div class="step-title">Find the manual payment section (under Billing on the member detail page).</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <div class="step-title">Pick payment method</div>
-                <div class="step-details">Cash or Check. For Check, enter the check number in the reference field.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">4</div>
-            <div class="step-content">
-                <div class="step-title">Enter the amount and the date of receipt.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">5</div>
-            <div class="step-content">
-                <div class="step-title">Optionally attach the payment to a specific membership or pending invoice.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">6</div>
-            <div class="step-content">
-                <div class="step-title">Save</div>
-                <div class="step-details">the payment appears in the member's billing history with method = cash or check.</div>
-            </div>
-        </div>
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Open the member's detail page</div><div class="step-details">From <code>/admin/members</code> click their row.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Open the Memberships tab → Assign Membership</div><div class="step-details">Click the orange "Assign Membership" button at the top right of the Memberships section. The wizard launches.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Pick the membership type and fill required fields</div><div class="step-details">Same flow as any other admin-created membership — type, vehicle info (for competitors), business info (for retailers/manufacturers), team add-on if applicable.</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">On the Payment Method step, pick Cash or Check</div><div class="step-details">A blue info banner reminds you that early renewal is handled automatically. For Check, enter the check number (required). For Cash, optionally enter a receipt number.</div></div></div>
+        <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Save</div><div class="step-details">The system detects whether the member already has an active membership of the same category. If yes, the new term starts the day after the current one expires (no overlap). If no, the new term starts today.</div></div></div>
+        <div class="step"><div class="step-number">6</div><div class="step-content"><div class="step-title">Verify</div><div class="step-details">Two memberships now appear on the Memberships tab — the still-active current one (unchanged) and a new "future-dated" one that will activate when the current expires. The member's billing history shows a new Order + paid Invoice for the cash/check amount.</div></div></div>
     </div>
-<h2 id="verify-it-propagated">2. Verify it propagated</h2>
+
+    <h2 id="path-b">3. Path B: Apply Payment button on a pending membership</h2>
+    <p>If a pending membership already exists on the account (the row shows the yellow "pending" badge), use this path:</p>
     <div class="workflow-container">
-        <div class="step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <div class="step-title">Open Admin → Billing → Orders</div>
-                <div class="step-details">the new entry shows up there with method = manual.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <div class="step-title">If QuickBooks sync is connected, the entry mirrors over within the next sync window.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <div class="step-title">If the payment was attached to a pending membership invoice, the invoice flips to paid.</div>
-            </div>
-        </div>
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Open the member's Memberships tab</div><div class="step-details">Find the pending membership row.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Click the green "Apply Payment" button</div><div class="step-details">Visible only on rows where paymentStatus = pending and the membership hasn't expired.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Fill the modal</div><div class="step-details">Pick Cash or Check. For Check, enter check number (required). For Cash, receipt number is optional. Amount defaults to the membership type price; override if the member paid a different amount. Notes are free-text — typical use is "paid at March 15 event to ED Smith."</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Save</div><div class="step-details">Membership flips to PAID. An Order and Invoice are generated and marked PAID. The member's profile expiration updates.</div></div></div>
     </div>
+
+    <h2 id="math">4. The auto-extend math</h2>
+    <p>For Path A only — Path B leaves the existing pending membership's start/end dates as-is and just marks them paid.</p>
+    <div class="info-box success">
+        <h4>The rule</h4>
+        <p>If member has an existing <strong>ACTIVE PAID</strong> membership of the same category (cancelledAt null, endDate in the future):</p>
+        <ul>
+            <li>New start = day after current end date</li>
+            <li>New end = new start + 365 days</li>
+            <li>Effect: member's expiration moves out by exactly one year, with no overlap.</li>
+        </ul>
+        <p>If member has no active membership (or only an expired one): new start = today, new end = today + 365.</p>
+    </div>
+    <p>Example: today is March 15. Member's current membership expires April 15 (30 days from now). They hand you $50 cash for renewal.</p>
+    <ul>
+        <li>You go through the Add Membership wizard, pick Cash, enter receipt #1234, save.</li>
+        <li>System sees an active membership ending April 15. New term starts April 16, ends April 15 next year.</li>
+        <li>Member keeps full access through April 15, then auto-rolls into the new term on April 16. No gap, no double-billed days.</li>
+        <li>An Order and a paid Invoice are created for $50, transactionId = <code>CASH-1234</code>.</li>
+    </ul>
+
+    <h2 id="what-happens">5. What gets created end-to-end</h2>
+    <table>
+        <thead><tr><th>Layer</th><th>What's written</th></tr></thead>
+        <tbody>
+            <tr><td>Membership row</td><td>paymentStatus = PAID, transactionId = <code>CASH-{receipt}</code> or <code>CHECK-{number}</code>, amountPaid = total, startDate / endDate per the rules above</td></tr>
+            <tr><td>Order</td><td>orderType = MEMBERSHIP, status = COMPLETED, total = membership price (+ team add-on if applicable)</td></tr>
+            <tr><td>Invoice</td><td>status = PAID, paidAt = now, linked to the Order</td></tr>
+            <tr><td>Profile</td><td>membership_status and membership_expiry recomputed via syncProfileMembershipStatus — visible in the member's account dashboard immediately</td></tr>
+            <tr><td>Audit log</td><td>Path A: <code>membership_admin_create</code>. Path B: <code>membership_apply_manual_payment</code>. Both with old/new values.</td></tr>
+            <tr><td>Welcome / receipt email</td><td>Path A sends the standard welcome email to the member. Path B does not currently send a payment-received email — add a manual notification via Send Message if needed.</td></tr>
+        </tbody>
+    </table>
+
+    <h2 id="audit">6. Audit trail</h2>
+    <p>Open <code>/admin/audit-log</code> and filter by action:</p>
+    <ul>
+        <li><code>membership_admin_create</code> — Path A entries.</li>
+        <li><code>membership_apply_manual_payment</code> — Path B entries.</li>
+    </ul>
+    <p>Each entry shows the admin who recorded the payment, the member, and the amount + reference. QuickBooks sync (if connected) mirrors the new Invoice within the next sync window.</p>
 
     <footer>
         <p>MECA Admin Documentation · For platform administrators only — members do not have access to these guides.</p>

@@ -413,13 +413,20 @@ export default function MembersPage() {
     try {
       await axios.delete(`/api/profiles/admin/delete-user/${memberToDelete.id}`);
 
-      // Refresh the members list
-      fetchMembers();
+      // Refresh the members list. The backend clears its members-list cache
+      // as part of the delete, so this fetch returns the post-delete state.
+      await fetchMembers();
       setDeleteModalOpen(false);
       setMemberToDelete(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting user:', error);
-      alert('Failed to delete user. Please try again.');
+      // Show the server-side message (e.g. FK-blocked deletes return a 400
+      // explaining which table is blocking) instead of a generic failure.
+      const message = error?.response?.data?.message
+        || error?.response?.data?.error
+        || error?.message
+        || 'Failed to delete user. Please try again.';
+      alert(message);
     } finally {
       setDeleteLoading(false);
     }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Event Registrations - MECA Admin</title>
+    <title>Member Activity Tracking - MECA Admin</title>
     <style>
         * {
             margin: 0;
@@ -489,152 +489,163 @@
         }
 
 </style>
+    <link rel="stylesheet" href="data:text/css;base64," />
+    <style id="theme"></style>
+    <script>
+      // Inject the unified theme inline so this file is fully self-contained
+      // even if served behind a strict-CSP CDN. (Theme content is duplicated
+      // by the apply_unified_theme.py post-processor; this script is harmless.)
+    </script>
+    <style>
+__THEME_CSS__
+    </style>
 </head>
 <body>
-    <nav style="margin-bottom: 24px; font-size: 0.9rem;">
-        <a href="index.html" style="color:#64748b;">← Documentation Index</a>
-    </nav>
+<nav style="margin-bottom: 24px; font-size: 0.9rem;">
+    <a href="index.html" style="color:#64748b;">← Documentation Index</a>
+</nav>
+<h1>Member Activity Tracking</h1>
+<p class="subtitle">Per-member, per-page navigation history for logged-in members</p>
 
-    <h1>Event Registrations</h1>
-    <p class="subtitle">Review, edit, refund, and cancel competitor registrations</p>
+<p><span class="nav-path">/admin/member-activity · /admin/members → member detail → Activity tab</span></p>
 
-    <p><span class="nav-path">/admin/event-registrations</span></p>
+<div class="info-box">
+  <h4>What this feature is</h4>
+  <p>First-party tracking that records every page a logged-in member visits — which page, how long, what OS/browser/device, what referrer. Anonymous (non-member) traffic continues to flow through Google Analytics 4 only; this system records authenticated members exclusively. Members can opt out from their Profile → Privacy panel.</p>
+</div>
 
-    <div class="info-box">
-        <h4>Audience: site administrators</h4>
-        <p>The Event Registrations page lists every registered competitor across every upcoming event. Use it to spot-check a roster, fix a class assignment, or refund a registration before the event runs.</p>
-    </div>
+<div class="toc">
+    <h3>Contents</h3>
+    <ul>
+        <li><a href="#what-tracked">What's tracked, what isn't</a></li>
+        <li><a href="#per-member">The per-member Activity tab</a></li>
+        <li><a href="#dashboard">The cross-member dashboard</a></li>
+        <li><a href="#opt-out">Opt-out behavior</a></li>
+        <li><a href="#privacy">Privacy policy disclosure</a></li>
+        <li><a href="#technical">Under the hood (technical)</a></li>
+    </ul>
+</div>
 
-    <div class="toc">
-        <h3>Contents</h3>
-        <ul>
-        <li><a href="#find-a-registration">1. Find a registration</a></li>
-        <li><a href="#edit-a-registration">2. Edit a registration</a></li>
-        <li><a href="#refund-or-cancel-a-single-registration">3. Refund or cancel a single registration</a></li>
-        <li><a href="#bulk-actions-across-multiple-registrations">4. Bulk actions across multiple registrations</a></li>
-        </ul>
-    </div>
+<h2 id="what-tracked">1. What's tracked, what isn't</h2>
 
+<table>
+  <thead><tr><th>Tracked</th><th>Not tracked</th></tr></thead>
+  <tbody>
+    <tr><td>Member user ID</td><td>Form input contents</td></tr>
+    <tr><td>Page path (query strings stripped)</td><td>Mouse movement / scroll heatmaps</td></tr>
+    <tr><td>Page title</td><td>Cross-site activity</td></tr>
+    <tr><td>Time on page (when next page loads)</td><td>Precise IP address</td></tr>
+    <tr><td>Session ID</td><td>Personal data beyond what they provided</td></tr>
+    <tr><td>Referrer (in-app and external)</td><td>Anonymous visitors (those go to GA4)</td></tr>
+    <tr><td>Operating system family + version (e.g. Windows 11, iOS 17)</td><td>Members who have opted out</td></tr>
+    <tr><td>Browser family + version (e.g. Chrome 120, Safari 17)</td><td></td></tr>
+    <tr><td>Device type (desktop / mobile / tablet)</td><td></td></tr>
+    <tr><td>Approximate location (country only)</td><td></td></tr>
+  </tbody>
+</table>
 
-<h2 id="find-a-registration">1. Find a registration</h2>
-    <div class="workflow-container">
-        <div class="step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <div class="step-title">Open /admin/event-registrations</div>
-                <div class="step-details">every registration is listed with member name, MECA ID, event, classes, payment status, and check-in state.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <div class="step-title">Filter by event</div>
-                <div class="step-details">pick from the event dropdown to narrow to one event's roster.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <div class="step-title">Search by member</div>
-                <div class="step-details">type a name or MECA ID into the search box.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">4</div>
-            <div class="step-content">
-                <div class="step-title">Click any row to open the registration detail page.</div>
-            </div>
-        </div>
-    </div>
-<h2 id="edit-a-registration">2. Edit a registration</h2>
-    <div class="workflow-container">
-        <div class="step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <div class="step-title">Open the registration detail page.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <div class="step-title">Add or remove classes</div>
-                <div class="step-details">adjust the class list if a member registered for the wrong class. The event's active classes are pulled from the live class list.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <div class="step-title">Update vehicle info</div>
-                <div class="step-details">for SPL/SQL events, edit make, model, year, color and license plate.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">4</div>
-            <div class="step-content">
-                <div class="step-title">Save</div>
-                <div class="step-details">changes are visible on the member's My Registrations page.</div>
-            </div>
-        </div>
-    </div>
-<h2 id="refund-or-cancel-a-single-registration">3. Refund or cancel a single registration</h2>
-    <div class="workflow-container">
-        <div class="step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <div class="step-title">Open the registration detail page.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <div class="step-title">Click Refund</div>
-                <div class="step-details">issues a Stripe/PayPal refund for the full amount and marks the registration cancelled.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <div class="step-title">Click Cancel without refund</div>
-                <div class="step-details">for comp registrations or where refund is not warranted; cancels access to the event without a refund.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">4</div>
-            <div class="step-content">
-                <div class="step-title">Confirm</div>
-                <div class="step-details">both actions are recorded in the admin audit log.</div>
-            </div>
-        </div>
-    </div>
-<h2 id="bulk-actions-across-multiple-registrations">4. Bulk actions across multiple registrations</h2>
-    <div class="workflow-container">
-        <div class="step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <div class="step-title">Tick the checkboxes next to any rows you want to act on.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <div class="step-title">Use the bulk action bar at the top to refund or cancel them in one shot.</div>
-            </div>
-        </div>
-        <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <div class="step-title">Provide a reason of at least 5 characters</div>
-                <div class="step-details">it shows on the audit entries.</div>
-            </div>
-        </div>
-    </div>
-    <div class="info-box warning">
-        <h4>Heads up</h4>
-        <p>Bulk refunds cannot be reversed. Verify the selection before confirming.</p>
-    </div>
+<h2 id="per-member">2. The per-member Activity tab</h2>
 
-    <footer>
-        <p>MECA Admin Documentation · For platform administrators only — members do not have access to these guides.</p>
-    </footer>
+<div class="workflow-container">
+  <div class="step">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <div class="step-title">Open the member's detail page</div>
+      <div class="step-details">From <code>/admin/members</code> click any member row. Their detail page loads with a tab bar at the top.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <div class="step-title">Click the Activity tab</div>
+      <div class="step-details">Sits under the Competition tab group along with Event Registrations, Results, and Communications.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <div class="step-title">What you see</div>
+      <div class="step-details">Three summary tiles (total page views, sessions, window) plus a list of sessions newest-first. Each session card shows the start time, page count, total time in session, OS / browser / device. Click "Show pages" to expand a session and see every page visited with timestamp, time on page, and referrer.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-number">4</div>
+    <div class="step-content">
+      <div class="step-title">Use it for support</div>
+      <div class="step-details">When a member says "I tried to register but it didn't work," open the Activity tab — you'll see the exact path they took, where they got stuck, and what device they were on. That's usually enough to reproduce the issue without lengthy back-and-forth.</div>
+    </div>
+  </div>
+</div>
+
+<div class="info-box warning">
+  <h4>Window: last 200 page views</h4>
+  <p>The tab shows the most recent 200 page views by default. For members who use the platform heavily that's typically a few weeks of history. To go further back, use the cross-member dashboard or run a database query directly.</p>
+</div>
+
+<h2 id="dashboard">3. The cross-member dashboard</h2>
+<p><span class="nav-path">/admin/member-activity</span></p>
+
+<p>Aggregates across the whole member base for a configurable window (24h / 7d / 30d / 90d). Useful when you want to know:</p>
+<ul>
+  <li>Which pages are most-visited by signed-in members (vs anonymous)?</li>
+  <li>Who's the most active member this week?</li>
+  <li>What OS / browser / device split do members use? (Drives where to focus mobile-vs-desktop work.)</li>
+</ul>
+
+<h3>What's on the page</h3>
+<ul>
+  <li><strong>Summary tiles</strong> — total page views, distinct members, distinct sessions, average time per page.</li>
+  <li><strong>Top pages</strong> — top 25 pages with views and unique members.</li>
+  <li><strong>Most active members</strong> — top 25 by view count, click-through to their detail page.</li>
+  <li><strong>OS / Browser / Device breakdowns</strong> — bar charts of relative share.</li>
+</ul>
+
+<h2 id="opt-out">4. Opt-out behavior</h2>
+
+<p>Members can disable tracking from their <strong>Profile → Privacy</strong> panel. The toggle writes <code>profiles.analytics_opt_out = true</code>. Once on:</p>
+
+<ul>
+  <li>The frontend tracker still fires (we don't want to leak the opt-out state to client-side JS), but the backend endpoint silently discards the page view.</li>
+  <li>The member's existing history is preserved unless they request deletion. The Activity tab on the admin side shows an "opted out" notice instead of fetching new data.</li>
+  <li>Opt-out is reversible — flipping the toggle back resumes tracking from that point forward.</li>
+</ul>
+
+<div class="info-box">
+  <h4>Default state</h4>
+  <p>Tracking is <strong>on by default</strong> for new members. The privacy policy discloses this and the toggle is prominent in the profile UI. Members who care about it will see it; members who don't will be tracked under the disclosed terms.</p>
+</div>
+
+<h2 id="privacy">5. Privacy policy disclosure</h2>
+
+<p>The platform's public Privacy Policy was updated when this feature shipped to add a <strong>"Member Activity Tracking (signed-in members only)"</strong> section under <em>1. What Information Do We Collect?</em> The disclosure includes:</p>
+<ul>
+  <li>The complete list of fields captured (matching the Tracked column above).</li>
+  <li>Why we collect it (operate and improve the platform, support, internal usage analysis).</li>
+  <li>Explicit "this is not sold and not used for cross-site advertising."</li>
+  <li>How to opt out (Profile → Privacy panel).</li>
+  <li>That existing records persist until deletion is requested.</li>
+  <li>Note that anonymous (non-member) traffic is handled separately by the third-party GA4 service.</li>
+</ul>
+
+<p>If your jurisdiction or policy requirements change, edit <code>apps/frontend/src/pages/PrivacyPolicyPage.tsx</code> — the disclosure paragraph is searchable for "Member Activity Tracking."</p>
+
+<h2 id="technical">6. Under the hood (technical)</h2>
+
+<table>
+  <thead><tr><th>Layer</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td>React Router</td><td><code>useMemberPageTracking</code> hook detects the location change and (only when authenticated) fires <code>POST /api/analytics/track-page</code>.</td></tr>
+    <tr><td>Session ID</td><td>Generated client-side, stored in <code>sessionStorage</code> under <code>mecaSessionId</code> — survives route changes, resets when the tab/window closes.</td></tr>
+    <tr><td>Backend endpoint</td><td><code>MemberAnalyticsController.trackPage()</code> validates auth, then calls <code>MemberAnalyticsService.trackPageView()</code>.</td></tr>
+    <tr><td>UA parsing</td><td><code>ua-parser-js</code> extracts OS family, OS version, browser family, browser version, device type. Mobile/tablet inferred from device.type or os.name when device.type is missing (typical for desktops).</td></tr>
+    <tr><td>Duration backfill</td><td>Before inserting the new view, the service finds the most recent un-finalized view in the same session and sets its <code>duration_ms = now - viewed_at</code>. Capped at 30 minutes — anything longer is a user walking away.</td></tr>
+    <tr><td>Storage</td><td><code>member_page_views</code> table. Cascade-deletes when the profile is deleted (FK ON DELETE CASCADE).</td></tr>
+    <tr><td>Indexes</td><td>(user_id, viewed_at DESC) for the per-member query, (session_id, viewed_at DESC) for duration backfill, (page_path, viewed_at DESC) for top-pages reports.</td></tr>
+  </tbody>
+</table>
+
+<footer>
+    <p>MECA Admin Documentation · For platform administrators only.</p>
+</footer>
 </body>
 </html>

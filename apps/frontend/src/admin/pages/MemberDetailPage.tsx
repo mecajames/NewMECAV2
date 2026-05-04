@@ -33,6 +33,7 @@ import {
   Filter,
   Globe,
   MapPin,
+  DollarSign,
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -65,6 +66,8 @@ import axios from '@/lib/axios';
 import { getStorageUrl } from '@/lib/storage';
 import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../../utils/passwordUtils';
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
+import MemberActivityTab from '../components/MemberActivityTab';
+import ManualRenewalModal from '../components/ManualRenewalModal';
 
 type TabType =
   | 'overview'
@@ -77,7 +80,8 @@ type TabType =
   | 'events'
   | 'results'
   | 'communications'
-  | 'permissions';
+  | 'permissions'
+  | 'activity';
 
 export default function MemberDetailPage() {
   const { memberId } = useParams<{ memberId: string }>();
@@ -87,6 +91,8 @@ export default function MemberDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showMessageModal, setShowMessageModal] = useState(false);
+  const [showManualRenewal, setShowManualRenewal] = useState(false);
+  const [renewalRefreshKey, setRenewalRefreshKey] = useState(0);
   const [messageTitle, setMessageTitle] = useState('');
   const [messageBody, setMessageBody] = useState('');
   const [sending, setSending] = useState(false);
@@ -554,6 +560,7 @@ export default function MemberDetailPage() {
         { id: 'events', label: 'Event Registrations', shortLabel: 'Registrations' },
         { id: 'results', label: 'Competition Results', shortLabel: 'Results' },
         { id: 'communications', label: 'Communications', shortLabel: 'Comms' },
+        { id: 'activity', label: 'Site Activity', shortLabel: 'Activity' },
       ]
     },
   ];
@@ -1051,6 +1058,16 @@ export default function MemberDetailPage() {
                   Reset Password
                 </button>
               )}
+              {hasPermission('edit_user') && (
+                <button
+                  onClick={() => setShowManualRenewal(true)}
+                  className="px-3 sm:px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors inline-flex items-center gap-2 text-sm"
+                  title="Renew an existing membership with a manual cash or check payment"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Manual Renewal
+                </button>
+              )}
               {hasPermission('send_emails') && (
                 <button
                   onClick={() => setShowMessageModal(true)}
@@ -1063,6 +1080,18 @@ export default function MemberDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Manual Renewal modal — opens from the top header. Bumps a counter
+            on success so the Memberships tab refetches and shows the new row. */}
+        {showManualRenewal && member && (
+          <ManualRenewalModal
+            memberId={member.id}
+            memberName={`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || 'Member'}
+            open={showManualRenewal}
+            onClose={() => setShowManualRenewal(false)}
+            onSuccess={() => setRenewalRefreshKey(k => k + 1)}
+          />
+        )}
 
         {/* Tabs Navigation */}
         <div className="bg-slate-800 rounded-lg shadow-sm mb-6">
@@ -1212,12 +1241,13 @@ export default function MemberDetailPage() {
           {activeTab === 'business' && businessMembershipData && <BusinessInfoTab businessMembershipData={businessMembershipData} onUpdate={fetchMembershipStatusForHeader} />}
           {activeTab === 'media' && <MediaGalleryTab member={member} />}
           {activeTab === 'teams' && <TeamsTab member={member} businessMembershipData={businessMembershipData} />}
-          {activeTab === 'memberships' && <MembershipsTab member={member} />}
+          {activeTab === 'memberships' && <MembershipsTab key={renewalRefreshKey} member={member} />}
           {activeTab === 'orders' && <OrdersInvoicesTab member={member} />}
           {activeTab === 'events' && <EventRegistrationsTab member={member} />}
           {activeTab === 'results' && <CompetitionResultsTab member={member} />}
           {activeTab === 'communications' && <CommunicationsTab member={member} />}
           {activeTab === 'permissions' && <PermissionsTab member={member} onUpdate={setMember} />}
+          {activeTab === 'activity' && <MemberActivityTab member={member} />}
         </div>
 
         {/* Staff Access Modal */}
@@ -4547,6 +4577,14 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [loading, setLoading] = useState(true);
   const [showMembershipWizard, setShowMembershipWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Apply Manual Payment modal — opened from a pending membership row
+  const [applyPaymentMembership, setApplyPaymentMembership] = useState<Membership | null>(null);
+  const [applyPaymentMethod, setApplyPaymentMethod] = useState<'cash' | 'check'>('cash');
+  const [applyPaymentReference, setApplyPaymentReference] = useState('');
+  const [applyPaymentAmount, setApplyPaymentAmount] = useState<string>('');
+  const [applyPaymentNotes, setApplyPaymentNotes] = useState('');
+  const [applyingPayment, setApplyingPayment] = useState(false);
+  const [applyPaymentError, setApplyPaymentError] = useState<string | null>(null);
   // Team name editing state
   const [showTeamNameModal, setShowTeamNameModal] = useState(false);
   const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
@@ -5398,6 +5436,20 @@ function MembershipsTab({ member }: { member: Profile }) {
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-2 sm:ml-4 self-end sm:self-start">
+                    {/* Apply Manual Payment — only meaningful for PENDING memberships.
+                        Members typically pay via Stripe; this is the path for cash/
+                        check handed to an event director, an offline bank deposit
+                        against an outstanding renewal, etc. */}
+                    {membership.paymentStatus === 'pending' && !isExpired(membership.endDate || '') && (
+                      <button
+                        onClick={() => setApplyPaymentMembership(membership)}
+                        className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors inline-flex items-center gap-1.5"
+                        title="Mark this pending membership PAID with cash or check"
+                      >
+                        <DollarSign className="h-4 w-4" />
+                        Apply Payment
+                      </button>
+                    )}
                     {/* Add Secondary button - only for non-secondary memberships with paid status */}
                     {(membership as any).accountType !== 'secondary' && membership.paymentStatus === 'paid' && (
                       <button
@@ -6102,6 +6154,114 @@ function MembershipsTab({ member }: { member: Profile }) {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Apply Manual Payment modal — opened from a pending membership row.
+          On submit, calls /admin/apply-manual-payment which marks the
+          membership PAID, generates Order + Invoice, and audit-logs. */}
+      {applyPaymentMembership && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <h3 className="text-white font-bold text-lg mb-1">Apply Manual Payment</h3>
+            <p className="text-slate-400 text-sm mb-4">
+              Mark <span className="text-white">{applyPaymentMembership.membershipTypeConfig?.name || 'this membership'}</span> as paid by
+              recording cash or a check. An order and invoice will be generated and the membership status will flip to Active.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-slate-300 text-sm font-medium block mb-1">Payment method *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setApplyPaymentMethod('cash')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${applyPaymentMethod === 'cash'
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                  >Cash</button>
+                  <button
+                    onClick={() => setApplyPaymentMethod('check')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${applyPaymentMethod === 'check'
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                  >Check</button>
+                </div>
+              </div>
+              <div>
+                <label className="text-slate-300 text-sm font-medium block mb-1">
+                  {applyPaymentMethod === 'check' ? 'Check number *' : 'Cash receipt number (optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={applyPaymentReference}
+                  onChange={(e) => setApplyPaymentReference(e.target.value)}
+                  placeholder={applyPaymentMethod === 'check' ? '1234' : 'leave blank for auto-generated'}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-slate-300 text-sm font-medium block mb-1">Amount override (optional)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={applyPaymentAmount}
+                  onChange={(e) => setApplyPaymentAmount(e.target.value)}
+                  placeholder={`Defaults to type price ($${Number(applyPaymentMembership.membershipTypeConfig?.price ?? 0).toFixed(2)})`}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-slate-300 text-sm font-medium block mb-1">Notes (optional)</label>
+                <textarea
+                  value={applyPaymentNotes}
+                  onChange={(e) => setApplyPaymentNotes(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Paid at March 15th event to ED Smith"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-y"
+                />
+              </div>
+              {applyPaymentError && (
+                <div className="text-red-400 text-sm">{applyPaymentError}</div>
+              )}
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => {
+                  setApplyPaymentMembership(null);
+                  setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+                  setApplyPaymentError(null);
+                }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors"
+              >Cancel</button>
+              <button
+                onClick={async () => {
+                  if (applyPaymentMethod === 'check' && !applyPaymentReference.trim()) {
+                    setApplyPaymentError('Check number is required for check payments.');
+                    return;
+                  }
+                  setApplyingPayment(true);
+                  setApplyPaymentError(null);
+                  try {
+                    await membershipsApi.adminApplyManualPayment(applyPaymentMembership.id, {
+                      paymentMethod: applyPaymentMethod,
+                      checkNumber: applyPaymentMethod === 'check' ? applyPaymentReference.trim() : undefined,
+                      cashReceiptNumber: applyPaymentMethod === 'cash' ? applyPaymentReference.trim() || undefined : undefined,
+                      amountOverride: applyPaymentAmount ? parseFloat(applyPaymentAmount) : undefined,
+                      notes: applyPaymentNotes.trim() || undefined,
+                    });
+                    setApplyPaymentMembership(null);
+                    setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+                    await fetchMemberships();
+                  } catch (err: any) {
+                    setApplyPaymentError(err.response?.data?.message || err.message || 'Failed to apply payment');
+                  } finally {
+                    setApplyingPayment(false);
+                  }
+                }}
+                disabled={applyingPayment}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >{applyingPayment ? 'Saving…' : 'Apply Payment'}</button>
             </div>
           </div>
         </div>

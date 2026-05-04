@@ -114,6 +114,30 @@ export default function PrivacyPolicyPage() {
               <li><strong>Device Data.</strong> We collect device data such as information about your computer, phone, tablet, or other device you use to access the Services. Depending on the device used, this device data may include information such as your IP address (or proxy server), device and application identification numbers, location, browser type, hardware model, Internet service provider and/or mobile carrier, operating system, and system configuration information.</li>
               <li><strong>Location Data.</strong> We collect location data such as information about your device's location, which can be either precise or imprecise. How much information we collect depends on the type and settings of the device you use to access the Services. For example, we may use GPS and other technologies to collect geolocation data that tells us your current location (based on your IP address). You can opt out of allowing us to collect this information either by refusing access to the information or by disabling your Location setting on your device. However, if you choose to opt out, you may not be able to use certain aspects of the Services.</li>
             </ul>
+
+            <h3 className="text-xl font-semibold text-white mb-3 mt-6">Member Activity Tracking (signed-in members only)</h3>
+            <p className="text-gray-300 mb-3"><em>In Short: While you are signed in to your member account, we record the pages you visit on the platform, how long you spend on each, your device and browser type, and your approximate (country-level) location. This is in addition to the anonymous analytics described above. You can turn this off at any time from your account Privacy settings.</em></p>
+            <p className="text-gray-300 mb-3">
+              When you are signed in to a MECA member account, we collect and retain the following information about your use of the platform:
+            </p>
+            <ul className="list-disc list-inside text-gray-300 space-y-2 ml-4">
+              <li><strong>Member identifier.</strong> Your user ID, used to associate the activity records below with your account.</li>
+              <li><strong>Pages visited.</strong> The path of each page you load while signed in (e.g. <code>/events</code>, <code>/dashboard/membership</code>) along with the page title.</li>
+              <li><strong>Time on page.</strong> How long you spent on each page, calculated from the time between consecutive page loads in the same browser session.</li>
+              <li><strong>Session identifier.</strong> An anonymous browser-session ID that lets us group consecutive page views into a single session.</li>
+              <li><strong>Referrer.</strong> The page (inside or outside MECA) that linked you to the page you loaded.</li>
+              <li><strong>Device, operating system, and browser.</strong> Your device type (desktop / mobile / tablet), operating system family and version (e.g. Windows 11, iOS 17), and browser family and version (e.g. Chrome 120, Safari 17), parsed from your User-Agent header.</li>
+              <li><strong>Approximate location.</strong> Country-level location derived from your IP address. We do not store your precise IP address with these records.</li>
+            </ul>
+            <p className="text-gray-300 mb-3 mt-4">
+              <strong>Why we collect this:</strong> to operate and improve the platform, to provide informed support when you contact us, and to identify which parts of the platform are most useful to members. This data is not sold and is not used for cross-site advertising.
+            </p>
+            <p className="text-gray-300 mb-3">
+              <strong>How to opt out:</strong> sign in to your account, open your <strong>Profile → Privacy</strong> panel, and turn off "Activity tracking for logged-in members." Once disabled, no further per-page activity records are created for your account. Existing records remain until purged or until your account is deleted; you can request deletion at any time using the contact information at the end of this policy.
+            </p>
+            <p className="text-gray-300 mb-3">
+              <strong>Anonymous (non-member) traffic:</strong> the tracking described in this section does not apply to visitors who are not signed in. Anonymous traffic is handled by the third-party analytics service described above and does not include any member identifier.
+            </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
           </div>
 

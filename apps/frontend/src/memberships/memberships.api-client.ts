@@ -737,6 +737,65 @@ export const membershipsApi = {
    * Admin: Cancel a membership immediately.
    * Deactivates the membership immediately and sets status to CANCELLED.
    */
+  /**
+   * Admin: Manual renewal — creates a new membership row picking up the day
+   * after the source's end date, running 365 days, marked PAID via cash/check.
+   * Generates Order + paid Invoice. Used by the Manual Renewal button on
+   * member detail.
+   */
+  adminManualRenewMembership: async (
+    sourceMembershipId: string,
+    data: {
+      paymentMethod: 'cash' | 'check';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    sourceMembership: Membership;
+    orderId: string;
+    invoiceId: string;
+    newStartDate: string;
+    newEndDate: string;
+    message: string;
+  }> => {
+    const response = await axios.post(
+      `/api/memberships/${sourceMembershipId}/admin/manual-renewal`,
+      data,
+    );
+    return response.data;
+  },
+
+  /**
+   * Admin: Apply a manual cash or check payment to a PENDING membership.
+   * Marks the membership PAID, generates Order + Invoice, audit-logs.
+   */
+  adminApplyManualPayment: async (
+    membershipId: string,
+    data: {
+      paymentMethod: 'cash' | 'check';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    orderId: string;
+    invoiceId: string;
+    message: string;
+  }> => {
+    const response = await axios.post(
+      `/api/memberships/${membershipId}/admin/apply-manual-payment`,
+      data,
+    );
+    return response.data;
+  },
+
   adminCancelImmediately: async (
     membershipId: string,
     reason: string,

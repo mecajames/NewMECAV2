@@ -205,6 +205,12 @@ export class Profile {
   @Property({ type: 'text', nullable: true, fieldName: 'login_banned_reason' })
   login_banned_reason?: string;
 
+  // Member-controlled toggle for first-party page-view tracking. When true,
+  // /api/analytics/track-page silently ignores their requests. Default false
+  // — members are tracked unless they opt out via account settings.
+  @Property({ type: 'boolean', default: false, fieldName: 'analytics_opt_out' })
+  analytics_opt_out: boolean = false;
+
   // Original membership date (preserved from V1 migration or set on profile creation)
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'member_since' })
   member_since?: Date;

@@ -819,6 +819,63 @@ export class MembershipsController {
    * Admin: Cancel a membership immediately.
    * Deactivates the membership immediately and sets status to CANCELLED.
    */
+  /**
+   * Admin: Manual renewal — creates a new membership row that picks up
+   * day-after-current-end and runs 365 days, marked PAID with cash/check.
+   * Used by the dedicated Manual Renewal button on the member detail page.
+   */
+  @Post(':id/admin/manual-renewal')
+  @HttpCode(HttpStatus.OK)
+  async manualRenewMembership(
+    @Param('id') sourceMembershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      paymentMethod: 'cash' | 'check';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (!data.paymentMethod || (data.paymentMethod !== 'cash' && data.paymentMethod !== 'check')) {
+      throw new BadRequestException('paymentMethod must be "cash" or "check"');
+    }
+    return this.membershipsService.manualRenewMembership(
+      sourceMembershipId,
+      data,
+      profile?.id || 'unknown',
+    );
+  }
+
+  /**
+   * Admin: Apply a manual cash or check payment to a PENDING membership.
+   * Marks paid, generates Order + Invoice, audits.
+   */
+  @Post(':id/admin/apply-manual-payment')
+  @HttpCode(HttpStatus.OK)
+  async applyManualPayment(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      paymentMethod: 'cash' | 'check';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (!data.paymentMethod || (data.paymentMethod !== 'cash' && data.paymentMethod !== 'check')) {
+      throw new BadRequestException('paymentMethod must be "cash" or "check"');
+    }
+    return this.membershipsService.applyManualPaymentToMembership(
+      membershipId,
+      data,
+      profile?.id || 'unknown',
+    );
+  }
+
   @Post(':id/admin/cancel-immediately')
   @HttpCode(HttpStatus.OK)
   async cancelMembershipImmediately(
