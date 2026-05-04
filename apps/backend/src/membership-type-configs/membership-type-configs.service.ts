@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { MembershipCategory, ManufacturerTier, CreateMembershipTypeConfigDto, UpdateMembershipTypeConfigDto } from '@newmeca/shared';
 import { MembershipTypeConfig } from './membership-type-configs.entity';
@@ -146,7 +146,37 @@ export class MembershipTypeConfigsService {
       throw new NotFoundException(`Membership type config with ID ${id} not found`);
     }
 
-    await em.removeAndFlush(config);
+    // Pre-check: this row is referenced by memberships.membership_type_config_id
+    // (FK with ON DELETE NO ACTION). Hard-deleting while references exist would
+    // bubble up as a Postgres 23503 → HTTP 500. Return a clean 409 with
+    // actionable guidance instead — admins almost always want to *deactivate*
+    // a type they're retiring rather than hard-delete it, since deletion would
+    // break historical membership records anyway.
+    const refCount = await em.getConnection().execute<Array<{ count: string }>>(
+      `SELECT COUNT(*)::text AS count FROM memberships WHERE membership_type_config_id = ?`,
+      [id],
+    );
+    const referenceCount = parseInt(refCount[0]?.count ?? '0', 10);
+    if (referenceCount > 0) {
+      throw new ConflictException(
+        `Cannot delete "${config.name}" — ${referenceCount} membership${referenceCount === 1 ? '' : 's'} reference this type. ` +
+        `Use Deactivate instead to remove it from new purchases without breaking historical records.`,
+      );
+    }
+
+    try {
+      await em.removeAndFlush(config);
+    } catch (err: any) {
+      // Defensive catch — even with the pre-check above, race conditions or
+      // other tables holding references could still hit a FK violation.
+      // Convert PG error codes into human-readable conflict responses.
+      if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
+        throw new ConflictException(
+          `Cannot delete "${config.name}" — it is referenced by other records. Deactivate it instead.`,
+        );
+      }
+      throw err;
+    }
   }
 
   async toggleActive(id: string): Promise<MembershipTypeConfig> {

@@ -176,6 +176,10 @@ export class UserActivityService {
     );
     const total = countResult[0]?.count || 0;
 
+    // The logout side must be deduplicated to one row per session_id, otherwise
+    // a session with multiple logout rows (e.g. a manual logout plus a later
+    // session_expired marker, or duplicate calls to recordLogout) multiplies
+    // its login row in the result and produces duplicate React keys upstream.
     const rows = await conn.execute(
       `SELECT login."session_id", login."user_id", login."email",
               p."full_name", p."first_name", p."last_name",
@@ -189,8 +193,13 @@ export class UserActivityService {
               login."ip_address",
               login."user_agent"
        FROM "public"."login_audit_log" login
-       LEFT JOIN "public"."login_audit_log" logout
-         ON login."session_id" = logout."session_id" AND logout."action" = 'logout'
+       LEFT JOIN (
+         SELECT DISTINCT ON ("session_id")
+           "session_id", "created_at", "logout_reason"
+         FROM "public"."login_audit_log"
+         WHERE "action" = 'logout' AND "session_id" IS NOT NULL
+         ORDER BY "session_id", "created_at" ASC
+       ) logout ON login."session_id" = logout."session_id"
        LEFT JOIN "public"."profiles" p ON login."user_id" = p."id"
        ${where}
        ORDER BY login."created_at" DESC

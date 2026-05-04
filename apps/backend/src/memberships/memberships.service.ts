@@ -287,7 +287,11 @@ export class MembershipsService {
    * - Manufacturer: Max 1 per user
    * - Competitor: Unlimited
    */
-  async canPurchaseMembership(userId: string, membershipTypeConfigId: string): Promise<{
+  async canPurchaseMembership(
+    userId: string,
+    membershipTypeConfigId: string,
+    options: { allowEarlyRenewal?: boolean } = {},
+  ): Promise<{
     allowed: boolean;
     reason?: string;
     existingMembershipId?: string;
@@ -314,6 +318,17 @@ export class MembershipsService {
       }, { populate: ['membershipTypeConfig'] });
 
       if (existingMembership) {
+        // Admins recording early cash/check renewals legitimately need to
+        // create a second row that picks up where the existing one ends.
+        // The caller passes allowEarlyRenewal to opt into this — date math
+        // happens upstream so the new term doesn't actually overlap.
+        if (options.allowEarlyRenewal) {
+          return {
+            allowed: true,
+            reason: `Existing ${config.category} membership found — new term will start when current expires.`,
+            existingMembershipId: existingMembership.id,
+          };
+        }
         return {
           allowed: false,
           reason: `You already have an active ${config.category} membership. You can only have one ${config.category} membership at a time.`,
@@ -776,8 +791,18 @@ export class MembershipsService {
       throw new NotFoundException(`User with ID ${data.userId} not found`);
     }
 
-    // Check if user can purchase this type
-    const canPurchase = await this.canPurchaseMembership(data.userId, data.membershipTypeConfigId);
+    // Check if user can purchase this type. Cash/check/comp paths are admin-
+    // initiated early renewals, which are allowed even when an active
+    // membership exists — the date math below picks up where the active one ends.
+    const allowEarlyRenewalForManual =
+      data.paymentMethod === AdminPaymentMethod.CASH
+      || data.paymentMethod === AdminPaymentMethod.CHECK
+      || data.paymentMethod === AdminPaymentMethod.COMPLIMENTARY;
+    const canPurchase = await this.canPurchaseMembership(
+      data.userId,
+      data.membershipTypeConfigId,
+      { allowEarlyRenewal: allowEarlyRenewalForManual },
+    );
     if (!canPurchase.allowed) {
       throw new BadRequestException(canPurchase.reason);
     }
@@ -805,10 +830,59 @@ export class MembershipsService {
       throw new BadRequestException('Check number is required for check payments');
     }
 
-    // Calculate dates (always 1 year)
-    const startDate = new Date();
-    const endDate = new Date();
+    // ─────────────────────────────────────────────────────────────────────
+    // Date calculation — with auto-extension for early renewals.
+    //
+    // If the member has an existing ACTIVE PAID membership of the same
+    // category (cancelledAt null, endDate in the future), this is a
+    // pre-expiry renewal: the new term starts when the current ends, and
+    // runs 365 days from there. End result is the member's effective
+    // expiration moves out by 365 days, with no overlap and no lost days.
+    //
+    // Without this logic, an admin recording an early cash payment would
+    // create a duplicate active membership starting today, double-counting
+    // ~30 days of access. The wizard has no future-start-date input, so the
+    // backend has to infer the right start date from existing state.
+    // ─────────────────────────────────────────────────────────────────────
+    const now = new Date();
+    let startDate = now;
+    let endDate = new Date(now);
     endDate.setFullYear(endDate.getFullYear() + 1);
+    let extendedFromExistingMembershipId: string | null = null;
+
+    const isManualEarlyRenewal =
+      data.paymentMethod === AdminPaymentMethod.CASH
+      || data.paymentMethod === AdminPaymentMethod.CHECK
+      || data.paymentMethod === AdminPaymentMethod.COMPLIMENTARY;
+
+    if (isManualEarlyRenewal) {
+      const existingActive = await em.findOne(
+        Membership,
+        {
+          user: { id: data.userId },
+          membershipTypeConfig: { category: membershipConfig.category },
+          paymentStatus: PaymentStatus.PAID,
+          cancelledAt: null,
+          endDate: { $gt: now },
+        },
+        { orderBy: { endDate: 'DESC' } },
+      );
+
+      if (existingActive?.endDate) {
+        // Pick up where the active membership leaves off. Start = day after
+        // its expiration; end = start + 365 days. Member's effective
+        // expiration cleanly moves forward by exactly one year.
+        const dayAfterCurrentEnd = new Date(existingActive.endDate.getTime() + 24 * 60 * 60 * 1000);
+        startDate = dayAfterCurrentEnd;
+        endDate = new Date(dayAfterCurrentEnd);
+        endDate.setFullYear(endDate.getFullYear() + 1);
+        extendedFromExistingMembershipId = existingActive.id;
+        this.logger.log(
+          `Early renewal detected for user ${data.userId}: extending from ${existingActive.endDate.toISOString()} ` +
+          `→ new term ${startDate.toISOString()} to ${endDate.toISOString()} (existing membership ${existingActive.id})`
+        );
+      }
+    }
 
     // Determine payment status based on payment method
     let paymentStatus: PaymentStatus;
@@ -1610,6 +1684,383 @@ export class MembershipsService {
    * @param reason The reason for cancellation
    * @param adminId The ID of the admin performing the cancellation
    */
+  /**
+   * Manual renewal — admin-driven, dedicated path that skips the full
+   * Add Membership wizard.
+   *
+   * Takes the id of an existing ACTIVE PAID membership and creates a
+   * brand-new membership row that:
+   *   - copies the source's type, vehicle/business/team data, account
+   *     type (master/secondary), and master-billing relationship
+   *   - starts the day after the source's endDate (no overlap)
+   *   - runs 365 days from there (one full year)
+   *   - is marked PAID with a CASH/CHECK transaction id
+   *   - generates an Order + paid Invoice for billing/QuickBooks records
+   *   - audit-logs as `membership_manual_renewal`
+   *
+   * Use case: member hands cash to an event director for next year's
+   * renewal while the current one is still active. Admin needs a one-shot
+   * action that knows what's being renewed (which vehicle, primary vs
+   * secondary) without re-entering it all in a wizard.
+   */
+  async manualRenewMembership(
+    sourceMembershipId: string,
+    data: {
+      paymentMethod: 'cash' | 'check';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+    adminId: string,
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    sourceMembership: Membership;
+    orderId: string;
+    invoiceId: string;
+    newStartDate: Date;
+    newEndDate: Date;
+    message: string;
+  }> {
+    const em = this.em.fork();
+
+    const source = await em.findOne(Membership, { id: sourceMembershipId }, {
+      populate: ['user', 'membershipTypeConfig', 'masterBillingProfile'],
+    });
+    if (!source) {
+      throw new NotFoundException(`Source membership ${sourceMembershipId} not found`);
+    }
+    if (source.cancelledAt) {
+      throw new BadRequestException('Cannot renew a cancelled membership');
+    }
+    if (source.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException('Source membership must be PAID to be renewed');
+    }
+    if (!source.endDate) {
+      throw new BadRequestException('Source membership has no end date');
+    }
+    if (data.paymentMethod === 'check' && !data.checkNumber) {
+      throw new BadRequestException('Check number is required for check payments');
+    }
+
+    const config = source.membershipTypeConfig;
+    if (!config) {
+      throw new BadRequestException('Source membership has no type config');
+    }
+    const user = source.user;
+    if (!user) {
+      throw new BadRequestException('Source membership has no associated user');
+    }
+
+    // Math: new term picks up the day after current ends, runs 365 days.
+    const newStartDate = new Date(source.endDate.getTime() + 24 * 60 * 60 * 1000);
+    const newEndDate = new Date(newStartDate);
+    newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+
+    const price = data.amountOverride ?? Number(config.price);
+    const teamAddonPrice = source.hasTeamAddon ? Number(config.teamAddonPrice ?? 0) : 0;
+    const totalAmount = price + teamAddonPrice;
+
+    const transactionId = data.paymentMethod === 'check'
+      ? `CHECK-${data.checkNumber}`
+      : (data.cashReceiptNumber ? `CASH-${data.cashReceiptNumber}` : `CASH-${Date.now()}`);
+
+    // Create the renewal membership — copies everything material from the
+    // source so the renewed row has the same vehicle/business/team identity.
+    const renewal = new Membership();
+    renewal.user = em.getReference(Profile, user.id);
+    renewal.membershipTypeConfig = em.getReference(MembershipTypeConfig, config.id);
+    renewal.startDate = newStartDate;
+    renewal.endDate = newEndDate;
+    renewal.amountPaid = totalAmount;
+    renewal.paymentStatus = PaymentStatus.PAID;
+    renewal.transactionId = transactionId;
+    // Copy competitor info
+    renewal.competitorName = source.competitorName;
+    renewal.vehicleMake = source.vehicleMake;
+    renewal.vehicleModel = source.vehicleModel;
+    renewal.vehicleColor = source.vehicleColor;
+    renewal.vehicleLicensePlate = source.vehicleLicensePlate;
+    // Team
+    renewal.hasTeamAddon = source.hasTeamAddon;
+    renewal.teamName = source.teamName;
+    renewal.teamDescription = source.teamDescription;
+    // Business (retailer/manufacturer)
+    renewal.businessName = source.businessName;
+    renewal.businessPhone = source.businessPhone;
+    renewal.businessWebsite = source.businessWebsite;
+    renewal.businessStreet = source.businessStreet;
+    renewal.businessCity = source.businessCity;
+    renewal.businessState = source.businessState;
+    renewal.businessPostalCode = source.businessPostalCode;
+    renewal.businessCountry = source.businessCountry;
+    renewal.businessDescription = source.businessDescription;
+    renewal.businessLogoUrl = source.businessLogoUrl;
+    renewal.businessListingStatus = source.businessListingStatus;
+    // Master/Secondary relationship
+    renewal.accountType = source.accountType;
+    if (source.masterBillingProfile) {
+      renewal.masterBillingProfile = em.getReference(Profile, source.masterBillingProfile.id);
+    }
+    // Carry the MECA ID forward so the renewal lands on the same number
+    if (source.mecaId) {
+      renewal.mecaId = source.mecaId;
+    }
+    em.persist(renewal);
+    await em.flush();
+
+    // Order
+    const orderNumber = `ORD-${new Date().getFullYear()}-RENEW-${Date.now().toString().slice(-6)}`;
+    const order = em.create(Order, {
+      orderNumber,
+      member: user,
+      status: OrderStatus.COMPLETED,
+      orderType: OrderType.MEMBERSHIP,
+      subtotal: totalAmount.toFixed(2),
+      tax: '0.00',
+      discount: '0.00',
+      total: totalAmount.toFixed(2),
+      currency: 'USD',
+      notes: data.notes,
+    });
+    em.create(OrderItem, {
+      order,
+      description: `${config.name} Membership — Manual Renewal`,
+      quantity: 1,
+      unitPrice: price.toFixed(2),
+      total: price.toFixed(2),
+      itemType: OrderItemType.MEMBERSHIP,
+      referenceId: renewal.id,
+    });
+    if (teamAddonPrice > 0) {
+      em.create(OrderItem, {
+        order,
+        description: 'Team Add-on',
+        quantity: 1,
+        unitPrice: teamAddonPrice.toFixed(2),
+        total: teamAddonPrice.toFixed(2),
+        itemType: OrderItemType.TEAM_ADDON,
+        referenceId: renewal.id,
+      });
+    }
+
+    // Invoice
+    const invoiceNumber = `INV-${new Date().getFullYear()}-RENEW-${Date.now().toString().slice(-6)}`;
+    const invoice = em.create(Invoice, {
+      invoiceNumber,
+      user,
+      order,
+      status: InvoiceStatus.PAID,
+      subtotal: totalAmount.toFixed(2),
+      tax: '0.00',
+      discount: '0.00',
+      total: totalAmount.toFixed(2),
+      currency: 'USD',
+      dueDate: new Date(),
+      paidAt: new Date(),
+      notes: data.notes,
+      companyInfo: {
+        name: 'Mobile Electronics Competition Association',
+        email: 'billing@mecacaraudio.com',
+      },
+    } as any);
+    em.create(InvoiceItem, {
+      invoice,
+      description: `${config.name} Membership — Manual Renewal`,
+      quantity: 1,
+      unitPrice: price.toFixed(2),
+      total: price.toFixed(2),
+      itemType: InvoiceItemType.MEMBERSHIP,
+      referenceId: renewal.id,
+    });
+
+    await em.flush();
+
+    // Profile sync — picks up the new latest end date for membership_expiry.
+    await this.membershipSyncService.syncProfileMembershipStatus(user.id);
+
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_manual_renewal',
+      resourceType: 'membership',
+      resourceId: renewal.id,
+      description: `Manual renewal of ${config.name} for ${user.email || user.id} via ${data.paymentMethod.toUpperCase()} — current expiry ${source.endDate.toISOString().slice(0, 10)} → new expiry ${newEndDate.toISOString().slice(0, 10)}`,
+      newValues: {
+        sourceMembershipId,
+        renewalMembershipId: renewal.id,
+        paymentMethod: data.paymentMethod,
+        amount: totalAmount,
+        transactionId,
+        previousEndDate: source.endDate,
+        newEndDate,
+      },
+    });
+
+    return {
+      success: true,
+      membership: renewal,
+      sourceMembership: source,
+      orderId: order.id,
+      invoiceId: invoice.id,
+      newStartDate,
+      newEndDate,
+      message: `Renewed ${config.name} for $${totalAmount.toFixed(2)}. New expiration: ${newEndDate.toISOString().slice(0, 10)}.`,
+    };
+  }
+
+  /**
+   * Apply a manual cash/check payment to a PENDING membership.
+   *
+   * Used when a renewal already exists in PENDING state (e.g. created by the
+   * renewMembership flow but never paid via Stripe) and an admin needs to
+   * mark it paid because the member handed cash or a check to an event
+   * director.
+   *
+   * Effects:
+   *   - paymentStatus → PAID
+   *   - amountPaid → membership type config price (or override if provided)
+   *   - transactionId → CASH-{receipt} or CHECK-{checkNumber}
+   *   - generates Order + Invoice (so the transaction appears in billing)
+   *   - audit log: membership_apply_manual_payment
+   */
+  async applyManualPaymentToMembership(
+    membershipId: string,
+    data: {
+      paymentMethod: 'cash' | 'check';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+    adminId: string,
+  ): Promise<{ success: boolean; membership: Membership; orderId: string; invoiceId: string; message: string }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+    if (membership.cancelledAt) {
+      throw new BadRequestException('Cannot apply payment to a cancelled membership');
+    }
+    if (membership.paymentStatus === PaymentStatus.PAID) {
+      throw new BadRequestException('This membership is already marked PAID');
+    }
+    if (data.paymentMethod === 'check' && !data.checkNumber) {
+      throw new BadRequestException('Check number is required for check payments');
+    }
+
+    const user = membership.user;
+    if (!user) throw new BadRequestException('Membership has no associated user');
+
+    const price = data.amountOverride ?? Number(membership.membershipTypeConfig?.price ?? 0);
+    const teamAddonPrice = membership.hasTeamAddon
+      ? Number(membership.membershipTypeConfig?.teamAddonPrice ?? 0)
+      : 0;
+    const totalAmount = price + teamAddonPrice;
+
+    // Mark the membership PAID
+    membership.paymentStatus = PaymentStatus.PAID;
+    membership.amountPaid = totalAmount;
+    membership.transactionId = data.paymentMethod === 'check'
+      ? `CHECK-${data.checkNumber}`
+      : (data.cashReceiptNumber ? `CASH-${data.cashReceiptNumber}` : `CASH-${Date.now()}`);
+
+    // Generate Order + Invoice — same shape adminCreateMembership produces
+    // for cash/check payments, so billing reports show this transaction.
+    const orderNumber = `ORD-${new Date().getFullYear()}-MANPAY-${Date.now().toString().slice(-6)}`;
+    const order = em.create(Order, {
+      orderNumber,
+      member: user,
+      status: OrderStatus.COMPLETED,
+      orderType: OrderType.MEMBERSHIP,
+      subtotal: totalAmount.toFixed(2),
+      tax: '0.00',
+      discount: '0.00',
+      total: totalAmount.toFixed(2),
+      currency: 'USD',
+      notes: data.notes,
+    });
+    em.create(OrderItem, {
+      order,
+      description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (manual payment)`,
+      quantity: 1,
+      unitPrice: price.toFixed(2),
+      total: price.toFixed(2),
+      itemType: OrderItemType.MEMBERSHIP,
+      referenceId: membership.id,
+    });
+    if (teamAddonPrice > 0) {
+      em.create(OrderItem, {
+        order,
+        description: 'Team Add-on',
+        quantity: 1,
+        unitPrice: teamAddonPrice.toFixed(2),
+        total: teamAddonPrice.toFixed(2),
+        itemType: OrderItemType.TEAM_ADDON,
+        referenceId: membership.id,
+      });
+    }
+
+    const invoiceNumber = `INV-${new Date().getFullYear()}-MANPAY-${Date.now().toString().slice(-6)}`;
+    const invoice = em.create(Invoice, {
+      invoiceNumber,
+      user,
+      order,
+      status: InvoiceStatus.PAID,
+      subtotal: totalAmount.toFixed(2),
+      tax: '0.00',
+      discount: '0.00',
+      total: totalAmount.toFixed(2),
+      currency: 'USD',
+      dueDate: new Date(),
+      paidAt: new Date(),
+      notes: data.notes,
+      companyInfo: {
+        name: 'Mobile Electronics Competition Association',
+        email: 'billing@mecacaraudio.com',
+      },
+    } as any);
+    em.create(InvoiceItem, {
+      invoice,
+      description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (manual payment)`,
+      quantity: 1,
+      unitPrice: price.toFixed(2),
+      total: price.toFixed(2),
+      itemType: InvoiceItemType.MEMBERSHIP,
+      referenceId: membership.id,
+    });
+
+    await em.flush();
+
+    // Profile membership_status / expiry sync — keeps the member's account
+    // in sync with the now-paid membership.
+    if (user) {
+      await this.membershipSyncService.syncProfileMembershipStatus(user.id);
+    }
+
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_apply_manual_payment',
+      resourceType: 'membership',
+      resourceId: membership.id,
+      description: `Applied ${data.paymentMethod.toUpperCase()} payment of $${totalAmount.toFixed(2)} to ${user.email || membership.id}`,
+      oldValues: { paymentStatus: PaymentStatus.PENDING, amountPaid: 0 },
+      newValues: { paymentStatus: PaymentStatus.PAID, amountPaid: totalAmount, transactionId: membership.transactionId },
+    });
+
+    return {
+      success: true,
+      membership,
+      orderId: order.id,
+      invoiceId: invoice.id,
+      message: `Recorded ${data.paymentMethod.toUpperCase()} payment of $${totalAmount.toFixed(2)}.`,
+    };
+  }
+
   async cancelMembershipImmediately(
     membershipId: string,
     reason: string,

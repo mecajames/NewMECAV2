@@ -205,6 +205,26 @@ export class Profile {
   @Property({ type: 'text', nullable: true, fieldName: 'login_banned_reason' })
   login_banned_reason?: string;
 
+  // Member-controlled toggle for first-party page-view tracking. When true,
+  // /api/analytics/track-page silently ignores their requests. Default false
+  // — members are tracked unless they opt out via account settings.
+  @Property({ type: 'boolean', default: false, fieldName: 'analytics_opt_out' })
+  analytics_opt_out: boolean = false;
+
+  // Pay-to-activate provisioning (Mode B). When true, the front-end route
+  // guard pins the user to /billing until their outstanding invoice is paid.
+  // Cleared automatically by the payment-fulfillment pipeline when the
+  // matching invoice transitions to PAID.
+  @Property({ type: 'boolean', default: false, fieldName: 'restricted_to_billing' })
+  restricted_to_billing: boolean = false;
+
+  // Provenance for accounts created via the admin Security Audit page.
+  @Property({ type: 'uuid', nullable: true, fieldName: 'provisioned_by' })
+  provisioned_by?: string;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'provisioned_at' })
+  provisioned_at?: Date;
+
   // Original membership date (preserved from V1 migration or set on profile creation)
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'member_since' })
   member_since?: Date;

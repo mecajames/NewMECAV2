@@ -686,6 +686,15 @@ export default function AdminMembershipWizard({
                 <div className="space-y-6">
                   <h3 className="text-lg font-medium text-white mb-4">Payment Method</h3>
 
+                  <div className="bg-blue-900/20 border border-blue-700/40 rounded-lg p-3 text-sm text-blue-200 flex gap-3">
+                    <DollarSign className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Early renewal handling:</strong> if this member already has an active paid membership of the same category,
+                      a Cash, Check, or Complimentary payment will automatically start the new term the day after the current
+                      membership expires — no overlap, no lost days. The member's expiration moves out by exactly one year.
+                    </div>
+                  </div>
+
                   <div className="space-y-3">
                     {/* Cash */}
                     <button

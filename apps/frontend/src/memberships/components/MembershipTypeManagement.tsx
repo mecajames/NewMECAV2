@@ -95,7 +95,11 @@ export default function MembershipTypeManagement() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this membership type configuration?')) {
+    if (!confirm(
+      'Delete this membership type?\n\n' +
+      'If any members currently have this type, the delete will be blocked — ' +
+      'use Deactivate instead to retire it without breaking historical records.',
+    )) {
       return;
     }
 
@@ -103,7 +107,13 @@ export default function MembershipTypeManagement() {
       await membershipTypeConfigsApi.delete(id);
       fetchConfigs();
     } catch (error: any) {
-      alert('Error deleting membership configuration: ' + error.message);
+      // Surface the server-side message (409 conflict explaining the blocker
+      // or any other useful error) instead of axios's generic "Request failed".
+      const message = error.response?.data?.message
+        || error.response?.data?.error
+        || error.message
+        || 'Unknown error';
+      alert(message);
     }
   };
 

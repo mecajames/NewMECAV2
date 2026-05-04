@@ -12,6 +12,7 @@ import { userActivityApi } from '@/user-activity/user-activity.api-client';
 import { notificationsApi } from '@/notifications/notifications.api-client';
 import { getAllEventDirectors } from '@/event-directors/event-directors.api-client';
 import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
+import SecurityAuditTab from '../components/SecurityAuditTab';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -69,6 +70,7 @@ export default function MembersPage() {
   const [renewalDateFilter, setRenewalDateFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'meca_id' | 'member_since'>('name');
   const [showUserWizard, setShowUserWizard] = useState(false);
+  const [viewMode, setViewMode] = useState<'members' | 'security'>('members');
 
   // MECA ID range filter
   const [mecaIdMin, setMecaIdMin] = useState<string>('');
@@ -413,13 +415,20 @@ export default function MembersPage() {
     try {
       await axios.delete(`/api/profiles/admin/delete-user/${memberToDelete.id}`);
 
-      // Refresh the members list
-      fetchMembers();
+      // Refresh the members list. The backend clears its members-list cache
+      // as part of the delete, so this fetch returns the post-delete state.
+      await fetchMembers();
       setDeleteModalOpen(false);
       setMemberToDelete(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting user:', error);
-      alert('Failed to delete user. Please try again.');
+      // Show the server-side message (e.g. FK-blocked deletes return a 400
+      // explaining which table is blocking) instead of a generic failure.
+      const message = error?.response?.data?.message
+        || error?.response?.data?.error
+        || error?.message
+        || 'Failed to delete user. Please try again.';
+      alert(message);
     } finally {
       setDeleteLoading(false);
     }
@@ -850,6 +859,30 @@ export default function MembersPage() {
           </button>
         </div>
 
+        {/* View tabs */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setViewMode('members')}
+            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              viewMode === 'members' ? 'bg-orange-500 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            Members
+          </button>
+          <button
+            onClick={() => setViewMode('security')}
+            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              viewMode === 'security' ? 'bg-orange-500 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            All Users / Security Audit
+          </button>
+        </div>
+
+        {viewMode === 'security' ? (
+          <SecurityAuditTab />
+        ) : (
+        <>
         {/* Add Member Button */}
         {hasPermission('create_user') && (
           <div className="mb-6 flex justify-end">
@@ -1697,6 +1730,8 @@ export default function MembersPage() {
             onItemsPerPageChange={setMembersPerPage}
           />
         </div>
+        </>
+        )}
       </div>
 
       {/* Admin User Wizard Modal */}

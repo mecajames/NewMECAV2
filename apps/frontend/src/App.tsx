@@ -1,11 +1,12 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard } from '@/auth';
+import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard, BillingRestrictedGuard } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
 import { usePageTracking } from '@/shared/hooks/usePageTracking';
+import { useMemberPageTracking } from '@/shared/hooks/useMemberPageTracking';
 // Static pages
 import HomePage from '@/pages/HomePage';
 import ContactPage from '@/pages/ContactPage';
@@ -122,6 +123,7 @@ const MembershipBillingPage = lazy(() => import('@/dashboard/pages/MembershipBil
 const FinalsVotingPage = lazy(() => import('@/finals-voting/pages/FinalsVotingPage'));
 const VotingResultsPage = lazy(() => import('@/finals-voting/pages/VotingResultsPage'));
 const AnalyticsPage = lazy(() => import('@/admin/pages/AnalyticsPage'));
+const MemberActivityDashboardPage = lazy(() => import('@/admin/pages/MemberActivityDashboardPage'));
 const SearchConsolePage = lazy(() => import('@/admin/pages/SearchConsolePage'));
 const SEOSettingsPage = lazy(() => import('@/admin/pages/SEOSettingsPage'));
 const WorldRecordsPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsPage'));
@@ -157,9 +159,13 @@ const L = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<PageLoader />}>{children}</Suspense>
 );
 
-// Null-rendering component that tracks page views in Google Analytics
+// Null-rendering component that tracks page views.
+//   - usePageTracking — Google Analytics 4 (anonymous + authed alike)
+//   - useMemberPageTracking — first-party per-member tracking; only fires
+//     when a member is signed in and hasn't opted out via account settings
 function PageTracker() {
   usePageTracking();
+  useMemberPageTracking();
   return null;
 }
 
@@ -182,6 +188,7 @@ function App() {
             <Navbar />
             <IdleTimeoutGuard>
             <ForcePasswordChangeGuard>
+            <BillingRestrictedGuard>
             <ExpiredMembershipGuard>
             <div className="flex-1">
               <Routes>
@@ -349,6 +356,7 @@ function App() {
 
               {/* Admin Analytics */}
               <Route path="/admin/analytics" element={<L><AnalyticsPage /></L>} />
+              <Route path="/admin/member-activity" element={<L><MemberActivityDashboardPage /></L>} />
               <Route path="/admin/search-console" element={<L><SearchConsolePage /></L>} />
               <Route path="/admin/seo-settings" element={<L><SEOSettingsPage /></L>} />
 
@@ -392,6 +400,7 @@ function App() {
             </Routes>
           </div>
             </ExpiredMembershipGuard>
+            </BillingRestrictedGuard>
             </ForcePasswordChangeGuard>
             </IdleTimeoutGuard>
           <Footer />
