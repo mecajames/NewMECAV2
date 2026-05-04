@@ -936,10 +936,13 @@ export default function MembersPage() {
               </select>
             </div>
 
-            {/* Staff Role Filter */}
+            {/* Staff / User Role Filter — privileged roles only. Membership-
+                type roles like competitor/retailer/manufacturer are filtered
+                via the "Membership Type" dropdown above (the real source of
+                truth lives in memberships.membership_type_config_id). */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Staff Role
+                Staff/User Role
               </label>
               <div className="relative">
                 <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -949,19 +952,17 @@ export default function MembersPage() {
                   className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none"
                 >
                   <option value="all">All Roles</option>
-                  {availableRoles.length > 0 ? (
-                    availableRoles.map((r) => (
-                      <option key={r.id} value={r.name}>{r.displayName}</option>
-                    ))
-                  ) : (
+                  {(availableRoles.length > 0
+                    ? availableRoles.filter(r => ['admin', 'event_director', 'judge'].includes(r.name))
+                    : []
+                  ).map((r) => (
+                    <option key={r.id} value={r.name}>{r.displayName}</option>
+                  ))}
+                  {availableRoles.length === 0 && (
                     <>
-                      <option value="user">User</option>
-                      <option value="competitor">Competitor</option>
+                      <option value="admin">Admin</option>
                       <option value="event_director">Event Director</option>
                       <option value="judge">Judge</option>
-                      <option value="retailer">Retailer</option>
-                      <option value="manufacturer">Manufacturer</option>
-                      <option value="admin">Admin</option>
                     </>
                   )}
                 </select>
