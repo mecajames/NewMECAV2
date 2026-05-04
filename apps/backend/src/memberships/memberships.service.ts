@@ -1294,14 +1294,20 @@ export class MembershipsService {
   }
 
   /**
-   * Get membership by MECA ID
+   * Get membership by MECA ID. A user's MECA ID is shared across every
+   * annual renewal row, so this returns the most recent (non-cancelled)
+   * membership for that ID — which is what every caller wants ("look up
+   * MECA #12345" → the current row, not a 4-year-old expired one).
    */
   async findByMecaId(mecaId: number): Promise<Membership | null> {
     const em = this.em.fork();
     return em.findOne(
       Membership,
-      { mecaId },
-      { populate: ['user', 'membershipTypeConfig'] }
+      { mecaId, cancelledAt: null },
+      {
+        populate: ['user', 'membershipTypeConfig'],
+        orderBy: { endDate: 'DESC', createdAt: 'DESC' },
+      }
     );
   }
 
