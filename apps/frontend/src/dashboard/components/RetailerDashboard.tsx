@@ -728,16 +728,22 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                       <p className="text-gray-400 text-sm">
                         {[retailerListing.city, retailerListing.state].filter(Boolean).join(', ')}
                       </p>
-                      <div className="flex items-center gap-2 mt-2">
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
                         {retailerListing.isApproved ? (
                           <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-full">
                             <CheckCircle className="h-3 w-3" />
-                            Approved
+                            Live in Directory
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500/10 text-yellow-400 text-xs rounded-full">
                             <Clock className="h-3 w-3" />
-                            Pending Approval
+                            Awaiting Initial Approval
+                          </span>
+                        )}
+                        {retailerListing.pendingChanges && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/15 text-amber-300 text-xs rounded-full border border-amber-700/40">
+                            <Clock className="h-3 w-3" />
+                            Edit Pending Review
                           </span>
                         )}
                         {retailerListing.isSponsor && (
@@ -747,6 +753,19 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                           </span>
                         )}
                       </div>
+                      {retailerListing.pendingChanges && (
+                        <div className="mt-3 px-3 py-2 rounded-lg bg-amber-900/20 border border-amber-700/40 text-amber-200 text-xs leading-relaxed">
+                          Your recent edits are waiting for an admin to review.
+                          The version you submitted is not yet visible to the
+                          public — the live version above is what visitors see
+                          until approval.
+                        </div>
+                      )}
+                      {retailerListing.pendingReviewNotes && !retailerListing.pendingChanges && (
+                        <div className="mt-3 px-3 py-2 rounded-lg bg-rose-900/20 border border-rose-700/40 text-rose-200 text-xs leading-relaxed">
+                          <strong>Last edit was rejected:</strong> {retailerListing.pendingReviewNotes}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-3">
@@ -812,16 +831,22 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                       <p className="text-gray-400 text-sm">
                         {[manufacturerListing.city, manufacturerListing.state].filter(Boolean).join(', ')}
                       </p>
-                      <div className="flex items-center gap-2 mt-2">
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
                         {manufacturerListing.isApproved ? (
                           <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-full">
                             <CheckCircle className="h-3 w-3" />
-                            Approved
+                            Live in Directory
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500/10 text-yellow-400 text-xs rounded-full">
                             <Clock className="h-3 w-3" />
-                            Pending Approval
+                            Awaiting Initial Approval
+                          </span>
+                        )}
+                        {manufacturerListing.pendingChanges && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/15 text-amber-300 text-xs rounded-full border border-amber-700/40">
+                            <Clock className="h-3 w-3" />
+                            Edit Pending Review
                           </span>
                         )}
                         {manufacturerListing.isSponsor && (
@@ -831,6 +856,19 @@ export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps
                           </span>
                         )}
                       </div>
+                      {manufacturerListing.pendingChanges && (
+                        <div className="mt-3 px-3 py-2 rounded-lg bg-amber-900/20 border border-amber-700/40 text-amber-200 text-xs leading-relaxed">
+                          Your recent edits are waiting for an admin to review.
+                          The version you submitted is not yet visible to the
+                          public — the live version above is what visitors see
+                          until approval.
+                        </div>
+                      )}
+                      {manufacturerListing.pendingReviewNotes && !manufacturerListing.pendingChanges && (
+                        <div className="mt-3 px-3 py-2 rounded-lg bg-rose-900/20 border border-rose-700/40 text-rose-200 text-xs leading-relaxed">
+                          <strong>Last edit was rejected:</strong> {manufacturerListing.pendingReviewNotes}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-3">

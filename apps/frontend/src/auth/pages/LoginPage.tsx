@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogIn, Mail, Lock, Clock } from 'lucide-react';
+import { Mail, Lock, Clock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { REDIRECT_STORAGE_KEY } from '../idle-timeout.constants';
@@ -109,11 +109,13 @@ export default function LoginPage() {
       <div className="max-w-md w-full">
         <div className="bg-slate-800 rounded-2xl shadow-2xl p-8">
           <div className="text-center mb-6 sm:mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-orange-600 rounded-full mb-4">
-              <LogIn className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
-            </div>
+            <img
+              src="/meca-logo-transparent.png"
+              alt="MECA"
+              className="mx-auto h-10 sm:h-12 w-auto mb-4"
+            />
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Welcome Back</h2>
-            <p className="text-gray-400 text-sm sm:text-base">Sign in to your MECACARAUDIO account</p>
+            <p className="text-gray-400 text-sm sm:text-base">Sign in to your My MECA Membership Account</p>
           </div>
 
           {timeoutReason && (

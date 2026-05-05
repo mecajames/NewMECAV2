@@ -17,6 +17,7 @@ import {
   Edit,
   ArrowLeft,
   Upload,
+  UserCog,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { CountrySelect, StateProvinceSelect } from '@/shared/fields';
@@ -34,12 +35,19 @@ import {
   adminDeleteManufacturer,
   adminCreateRetailer,
   adminCreateManufacturer,
+  adminGetPendingChanges,
+  adminApprovePendingRetailer,
+  adminRejectPendingRetailer,
+  adminApprovePendingManufacturer,
+  adminRejectPendingManufacturer,
+  adminGetReassignCandidates,
   RetailerListing,
   ManufacturerListing,
 } from '@/business-listings';
+import type { ReassignCandidates, ReassignSuggestion } from '@/business-listings';
 import { profilesApi } from '@/profiles';
 
-type Tab = 'retailers' | 'manufacturers';
+type Tab = 'retailers' | 'manufacturers' | 'pending' | 'reassign';
 
 interface UserOption {
   id: string;
@@ -55,6 +63,14 @@ export default function BusinessListingsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [retailers, setRetailers] = useState<RetailerListing[]>([]);
   const [manufacturers, setManufacturers] = useState<ManufacturerListing[]>([]);
+  // Pending edit moderation queue (rows with pending_changes set).
+  const [pendingRetailerEdits, setPendingRetailerEdits] = useState<RetailerListing[]>([]);
+  const [pendingManufacturerEdits, setPendingManufacturerEdits] = useState<ManufacturerListing[]>([]);
+  const [moderationBusy, setModerationBusy] = useState<string | null>(null);
+  // Reassign cleanup tool: listings still owned by a super-admin, alongside
+  // suggested member matches.
+  const [reassignData, setReassignData] = useState<ReassignCandidates>({ retailers: [], manufacturers: [] });
+  const [reassignBusy, setReassignBusy] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved'>('all');
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
@@ -134,17 +150,81 @@ export default function BusinessListingsAdminPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const [retailersData, manufacturersData] = await Promise.all([
+      const [retailersData, manufacturersData, pendingData, reassignSet] = await Promise.all([
         adminGetAllRetailers(userId, true),
         adminGetAllManufacturers(userId, true),
+        adminGetPendingChanges().catch(() => ({ retailers: [], manufacturers: [] })),
+        adminGetReassignCandidates().catch(() => ({ retailers: [], manufacturers: [] }) as ReassignCandidates),
       ]);
       setRetailers(retailersData);
       setManufacturers(manufacturersData);
+      setPendingRetailerEdits(pendingData.retailers);
+      setPendingManufacturerEdits(pendingData.manufacturers);
+      setReassignData(reassignSet);
     } catch (err: any) {
       console.error('Error fetching listings:', err);
       setError('Failed to load business listings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApprovePending = async (type: 'retailer' | 'manufacturer', id: string) => {
+    setModerationBusy(`approve-${id}`);
+    try {
+      if (type === 'retailer') {
+        await adminApprovePendingRetailer(id);
+      } else {
+        await adminApprovePendingManufacturer(id);
+      }
+      setSuccess('Edit approved and merged into the live listing');
+      await fetchData();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to approve pending edit');
+    } finally {
+      setModerationBusy(null);
+    }
+  };
+
+  const handleReassign = async (
+    type: 'retailer' | 'manufacturer',
+    listingId: string,
+    targetUserId: string,
+  ) => {
+    const userId = profile?.id;
+    if (!userId) return;
+    setReassignBusy(`reassign-${listingId}`);
+    try {
+      if (type === 'retailer') {
+        await adminUpdateRetailer(userId, listingId, { user_id: targetUserId });
+      } else {
+        await adminUpdateManufacturer(userId, listingId, { user_id: targetUserId });
+      }
+      setSuccess('Listing reassigned to the new owner');
+      await fetchData();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Reassign failed');
+    } finally {
+      setReassignBusy(null);
+    }
+  };
+
+  const handleRejectPending = async (type: 'retailer' | 'manufacturer', id: string) => {
+    const notes = window.prompt('Reason for rejection (optional, will be shown to the owner):', '');
+    if (notes === null) return;
+    setModerationBusy(`reject-${id}`);
+    try {
+      if (type === 'retailer') {
+        await adminRejectPendingRetailer(id, notes || undefined);
+      } else {
+        await adminRejectPendingManufacturer(id, notes || undefined);
+      }
+      setSuccess('Pending edit rejected; live listing is unchanged');
+      await fetchData();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to reject pending edit');
+    } finally {
+      setModerationBusy(null);
     }
   };
 
@@ -922,6 +1002,38 @@ export default function BusinessListingsAdminPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base rounded-lg font-medium transition-colors ${
+                activeTab === 'pending'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-slate-800 text-gray-400 hover:text-white'
+              }`}
+            >
+              <Clock className="h-5 w-5" />
+              Pending Edits
+              {(pendingRetailerEdits.length + pendingManufacturerEdits.length) > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-amber-400 text-black text-xs rounded-full">
+                  {pendingRetailerEdits.length + pendingManufacturerEdits.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('reassign')}
+              className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base rounded-lg font-medium transition-colors ${
+                activeTab === 'reassign'
+                  ? 'bg-rose-600 text-white'
+                  : 'bg-slate-800 text-gray-400 hover:text-white'
+              }`}
+            >
+              <UserCog className="h-5 w-5" />
+              Needs Owner
+              {(reassignData.retailers.length + reassignData.manufacturers.length) > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-rose-400 text-black text-xs rounded-full">
+                  {reassignData.retailers.length + reassignData.manufacturers.length}
+                </span>
+              )}
+            </button>
           </div>
           <button
             onClick={() => openCreateModal(activeTab)}
@@ -932,6 +1044,22 @@ export default function BusinessListingsAdminPage() {
           </button>
         </div>
 
+        {activeTab === 'pending' ? (
+          <PendingEditsQueue
+            retailers={pendingRetailerEdits}
+            manufacturers={pendingManufacturerEdits}
+            busy={moderationBusy}
+            onApprove={handleApprovePending}
+            onReject={handleRejectPending}
+          />
+        ) : activeTab === 'reassign' ? (
+          <ReassignQueue
+            data={reassignData}
+            busy={reassignBusy}
+            onReassign={handleReassign}
+          />
+        ) : (
+        <>
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1 max-w-md">
@@ -1003,6 +1131,8 @@ export default function BusinessListingsAdminPage() {
           </table>
          </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Create Modal */}
@@ -2021,6 +2151,268 @@ export default function BusinessListingsAdminPage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Diff helper: compares the live row's value with the value in pendingChanges
+// for a given field, and returns `null` if they match (so we don't render
+// noise rows for fields that didn't actually change).
+function fieldDiff(live: any, pending: any, key: string): { from: any; to: any } | null {
+  const a = live?.[key];
+  const b = pending?.[key];
+  // JSON-compare so arrays/objects (galleryImages, productCategories, etc.)
+  // don't always look "different" due to reference inequality.
+  if (JSON.stringify(a ?? null) === JSON.stringify(b ?? null)) return null;
+  return { from: a, to: b };
+}
+
+const FIELDS_TO_DIFF: Array<{ key: string; label: string }> = [
+  { key: 'businessName', label: 'Business Name' },
+  { key: 'description', label: 'Description' },
+  { key: 'offerText', label: 'Member Offer' },
+  { key: 'businessEmail', label: 'Email' },
+  { key: 'businessPhone', label: 'Phone' },
+  { key: 'website', label: 'Website' },
+  { key: 'storeType', label: 'Store Type' },
+  { key: 'streetAddress', label: 'Street' },
+  { key: 'city', label: 'City' },
+  { key: 'state', label: 'State' },
+  { key: 'postalCode', label: 'Postal Code' },
+  { key: 'country', label: 'Country' },
+  { key: 'productCategories', label: 'Product Categories' },
+  { key: 'profileImageUrl', label: 'Profile Image' },
+  { key: 'galleryImages', label: 'Gallery Images' },
+];
+
+function PendingEditsQueue({
+  retailers,
+  manufacturers,
+  busy,
+  onApprove,
+  onReject,
+}: {
+  retailers: RetailerListing[];
+  manufacturers: ManufacturerListing[];
+  busy: string | null;
+  onApprove: (type: 'retailer' | 'manufacturer', id: string) => void;
+  onReject: (type: 'retailer' | 'manufacturer', id: string) => void;
+}) {
+  const total = retailers.length + manufacturers.length;
+  if (total === 0) {
+    return (
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-12 text-center">
+        <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
+        <p className="text-white font-semibold text-lg">No pending edits</p>
+        <p className="text-gray-400 text-sm mt-1">
+          When retailers or manufacturers edit their existing listings, those edits will appear here for review.
+        </p>
+      </div>
+    );
+  }
+
+  const renderItem = (
+    listing: RetailerListing | ManufacturerListing,
+    type: 'retailer' | 'manufacturer',
+  ) => {
+    const pending = listing.pendingChanges || {};
+    const diffs = FIELDS_TO_DIFF
+      .map(f => ({ ...f, diff: fieldDiff(listing, pending, f.key) }))
+      .filter(d => d.diff !== null);
+
+    const submittedAt = listing.pendingSubmittedAt
+      ? new Date(listing.pendingSubmittedAt).toLocaleString()
+      : 'Unknown';
+
+    return (
+      <div key={listing.id} className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                type === 'retailer' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/50' : 'bg-purple-900/40 text-purple-300 border border-purple-700/50'
+              }`}>
+                {type === 'retailer' ? 'Retailer' : 'Manufacturer'}
+              </span>
+              <h3 className="text-white font-semibold text-lg">{listing.businessName}</h3>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Owner: {listing.user?.email ?? '—'} · Submitted {submittedAt}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onApprove(type, listing.id)}
+              disabled={busy === `approve-${listing.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm rounded-lg"
+            >
+              <CheckCircle className="h-4 w-4" /> Approve
+            </button>
+            <button
+              onClick={() => onReject(type, listing.id)}
+              disabled={busy === `reject-${listing.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm rounded-lg"
+            >
+              <XCircle className="h-4 w-4" /> Reject
+            </button>
+          </div>
+        </div>
+
+        {diffs.length === 0 ? (
+          <p className="text-gray-400 text-sm italic">
+            No field changes detected (the pending payload may have only contained unchanged values).
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-400 uppercase border-b border-slate-700">
+                <th className="px-2 py-2 w-1/4">Field</th>
+                <th className="px-2 py-2 w-1/3">Current (Live)</th>
+                <th className="px-2 py-2 w-1/3">Proposed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {diffs.map(({ key, label, diff }) => (
+                <tr key={key} className="border-b border-slate-700/50">
+                  <td className="px-2 py-2 text-gray-300 font-medium">{label}</td>
+                  <td className="px-2 py-2 text-gray-400 break-words">
+                    <span className="text-rose-300/80">
+                      {renderDiffValue(diff!.from)}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-emerald-300 break-words">
+                    {renderDiffValue(diff!.to)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-400">
+        {total} pending edit{total === 1 ? '' : 's'}. Approve to merge changes onto the live listing; reject to discard them with an optional reason. The live version remains visible in the public directory until you approve.
+      </p>
+      {retailers.map(r => renderItem(r, 'retailer'))}
+      {manufacturers.map(m => renderItem(m, 'manufacturer'))}
+    </div>
+  );
+}
+
+function renderDiffValue(v: any): string {
+  if (v === null || v === undefined || v === '') return '—';
+  if (Array.isArray(v)) return v.length === 0 ? '(empty)' : v.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(', ');
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+function ReassignQueue({
+  data,
+  busy,
+  onReassign,
+}: {
+  data: ReassignCandidates;
+  busy: string | null;
+  onReassign: (type: 'retailer' | 'manufacturer', listingId: string, targetUserId: string) => void;
+}) {
+  const total = data.retailers.length + data.manufacturers.length;
+  if (total === 0) {
+    return (
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-12 text-center">
+        <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
+        <p className="text-white font-semibold text-lg">All listings have proper owners</p>
+        <p className="text-gray-400 text-sm mt-1">
+          No directory listings are currently still owned by a super-admin profile.
+        </p>
+      </div>
+    );
+  }
+
+  const renderRow = (
+    type: 'retailer' | 'manufacturer',
+    listing: RetailerListing | ManufacturerListing,
+    suggestions: ReassignSuggestion[],
+  ) => (
+    <div key={listing.id} className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+              type === 'retailer' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/50' : 'bg-purple-900/40 text-purple-300 border border-purple-700/50'
+            }`}>
+              {type === 'retailer' ? 'Retailer' : 'Manufacturer'}
+            </span>
+            <h3 className="text-white font-semibold text-lg">{listing.businessName}</h3>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            Currently owned by: {listing.user?.email ?? '—'}
+          </p>
+        </div>
+      </div>
+
+      {suggestions.length === 0 ? (
+        <p className="text-amber-300 text-sm italic">
+          No matching member profile found. This business may not have signed up yet — leave it under the admin account
+          until they do, or reassign manually using the Edit button on the main {type === 'retailer' ? 'Retailers' : 'Manufacturers'} tab.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-400 uppercase tracking-wider">Suggested matches:</p>
+          {suggestions.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center justify-between gap-3 p-3 bg-slate-700/40 rounded-lg border border-slate-700"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-white truncate">
+                  {`${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.email}
+                  <span className="text-gray-400 text-xs ml-2">
+                    ({s.email}{s.meca_id ? ` · MECA ${s.meca_id}` : ''})
+                  </span>
+                </div>
+                {s._matchReason && (
+                  <div className="text-[11px] text-emerald-300 mt-0.5">
+                    Matched: {s._matchReason}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => onReassign(type, listing.id, s.id)}
+                disabled={busy === `reassign-${listing.id}`}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm rounded-lg"
+              >
+                <CheckCircle className="h-4 w-4" /> Use this match
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-rose-900/20 border border-rose-700/40 rounded-xl p-4 text-rose-200 text-sm">
+        <strong>{total}</strong> directory listing{total === 1 ? '' : 's'} {total === 1 ? 'is' : 'are'} currently owned by a super-admin account.
+        These were typically bulk-seeded and need to be reassigned to the actual business owner so it shows up on their dashboard.
+        Click "Use this match" below for each suggested member, or use the Edit button on the main tabs to assign manually.
+      </div>
+      {data.retailers.length > 0 && (
+        <>
+          <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mt-2">Retailer Listings</h4>
+          {data.retailers.map(({ listing, suggestions }) => renderRow('retailer', listing, suggestions))}
+        </>
+      )}
+      {data.manufacturers.length > 0 && (
+        <>
+          <h4 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mt-2">Manufacturer Listings</h4>
+          {data.manufacturers.map(({ listing, suggestions }) => renderRow('manufacturer', listing, suggestions))}
+        </>
       )}
     </div>
   );

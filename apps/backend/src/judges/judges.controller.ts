@@ -8,6 +8,8 @@ import {
   Param,
   Query,
   Headers,
+  HttpCode,
+  HttpStatus,
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -424,6 +426,16 @@ export class JudgesController {
     }
 
     return updatedJudge;
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteJudge(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.requireAdmin(authHeader);
+    await this.judgesService.deleteJudge(id);
   }
 
   // =============================================================================

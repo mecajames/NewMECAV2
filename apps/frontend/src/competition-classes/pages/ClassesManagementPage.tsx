@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X } from 'lucide-react';
+import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X, Download, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CompetitionFormat } from '@/types/database';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -29,6 +29,8 @@ export default function ClassesManagementPage() {
   const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -276,6 +278,77 @@ export default function ClassesManagementPage() {
     }
   };
 
+  const handleExport = async () => {
+    if (!selectedSeasonId) return;
+    setExportBusy(true);
+    try {
+      const data = await competitionClassesApi.exportSeason(selectedSeasonId);
+      // Download as a JSON file the admin can carry between environments.
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const seasonName = (data.season?.name || `season-${data.season?.year}`).replace(/\s+/g, '_');
+      a.href = url;
+      a.download = `competition-classes-${seasonName}-${data.exportedAt.slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Export failed');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const handleImport = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      let payload: any;
+      try {
+        payload = JSON.parse(await file.text());
+      } catch {
+        alert('Selected file is not valid JSON.');
+        return;
+      }
+      if (!payload?.season?.year || !Array.isArray(payload?.classes)) {
+        alert('Import file is missing required fields (season.year, classes).');
+        return;
+      }
+      const formatsCount = Array.isArray(payload.formats) ? payload.formats.length : 0;
+      const replace = window.confirm(
+        `Import ${formatsCount} format(s) and ${payload.classes.length} class(es) for season ${payload.season.year}?\n\n` +
+        `OK = REPLACE mode (also deactivate any local class not in this import).\n` +
+        `Cancel = MERGE mode (only upsert what's in the import; leave others alone).`,
+      );
+      const mode: 'merge' | 'replace' = replace ? 'replace' : 'merge';
+      setImportBusy(true);
+      try {
+        const result = await competitionClassesApi.importSeason({
+          season: payload.season,
+          formats: payload.formats,
+          classes: payload.classes,
+          mode,
+        });
+        alert(
+          `Import complete (${mode}):\n` +
+          `  Formats: ${result.formatsCreated} created, ${result.formatsUpdated} updated\n` +
+          `  Classes: ${result.created} created, ${result.updated} updated, ${result.deactivated} deactivated, ${result.skipped} skipped`
+        );
+        if (selectedSeasonId === result.seasonId) await fetchClasses();
+      } catch (err: any) {
+        alert(err?.response?.data?.message || 'Import failed');
+      } finally {
+        setImportBusy(false);
+      }
+    };
+    input.click();
+  };
+
   const resetForm = () => {
     const currentSeason = seasons.find(s => s.isCurrent);
     setFormData({
@@ -421,13 +494,31 @@ export default function ClassesManagementPage() {
 
         {selectedSeasonId && (
           <>
-            <div className="mb-6 flex gap-4">
+            <div className="mb-6 flex flex-wrap gap-3">
               <button
                 onClick={() => setShowForm(!showForm)}
                 className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
               >
                 <Plus className="h-5 w-5" />
                 Create New Class
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={exportBusy}
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                title="Download all classes for this season as a JSON file you can carry between environments"
+              >
+                <Download className="h-5 w-5" />
+                {exportBusy ? 'Exporting…' : 'Export'}
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={importBusy}
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-cyan-700 hover:bg-cyan-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                title="Upload a JSON exported from another environment to sync classes"
+              >
+                <Upload className="h-5 w-5" />
+                {importBusy ? 'Importing…' : 'Import'}
               </button>
               {selectedClassIds.size > 0 && (
                 <button

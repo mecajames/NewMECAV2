@@ -15,6 +15,7 @@ import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibi
 import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink, ShoppingBag } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
+import { getMyRetailerListing, getMyManufacturerListing } from '@/api-client/business-listings.api-client';
 import type { Judge } from '@newmeca/shared';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -108,6 +109,10 @@ export default function MyMecaDashboardPage() {
 
   // Recent invoices
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
+
+  // Business directory listing (retailer / manufacturer) — drives the
+  // "My Business Listing" Quick Link card and its status badge.
+  const [myListing, setMyListing] = useState<{ isApproved: boolean; hasPending: boolean } | null>(null);
 
   // Judge and Event Director state
   const [judgeProfile, setJudgeProfile] = useState<Judge | null>(null);
@@ -243,6 +248,30 @@ export default function MyMecaDashboardPage() {
         }
       } else {
         setSubscriptionStatus(null);
+      }
+
+      // Pull the user's directory listing (if their membership category is
+      // retail or manufacturer) so the Quick Links card can show its status.
+      const category = membership?.membershipTypeConfig?.category;
+      if (category === 'retail' || category === 'manufacturer') {
+        try {
+          const listing = category === 'retail'
+            ? await getMyRetailerListing(profile.id)
+            : await getMyManufacturerListing(profile.id);
+          if (listing) {
+            setMyListing({
+              isApproved: !!listing.isApproved,
+              hasPending: !!listing.pendingChanges,
+            });
+          } else {
+            setMyListing(null);
+          }
+        } catch (listingErr) {
+          console.error('Error fetching directory listing:', listingErr);
+          setMyListing(null);
+        }
+      } else {
+        setMyListing(null);
       }
     } catch (error) {
       console.error('Error fetching active membership:', error);
@@ -1417,6 +1446,45 @@ export default function MyMecaDashboardPage() {
           </div>
         </button>
 
+        {/* My Business Listing — only retailer / manufacturer members see this */}
+        {(activeMembership?.membershipTypeConfig?.category === 'retail' ||
+          activeMembership?.membershipTypeConfig?.category === 'manufacturer') && (
+          <button
+            onClick={() => navigate('/dashboard/business-listing')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
+                activeMembership?.membershipTypeConfig?.category === 'manufacturer'
+                  ? 'bg-purple-500/10 group-hover:bg-purple-500/20'
+                  : 'bg-emerald-500/10 group-hover:bg-emerald-500/20'
+              }`}>
+                <Store className={`h-6 w-6 ${
+                  activeMembership?.membershipTypeConfig?.category === 'manufacturer'
+                    ? 'text-purple-500'
+                    : 'text-emerald-500'
+                }`} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-white font-semibold text-lg">
+                  My Business Listing
+                </h3>
+                <p className="text-gray-400 text-sm flex items-center gap-1.5 mt-0.5">
+                  {!myListing ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-700 text-slate-300 border border-slate-600">Not submitted</span>
+                  ) : myListing.hasPending ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-900/40 text-amber-300 border border-amber-700/50">Edit pending review</span>
+                  ) : myListing.isApproved ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-900/40 text-emerald-300 border border-emerald-700/50">Live in directory</span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-900/40 text-amber-300 border border-amber-700/50">Awaiting approval</span>
+                  )}
+                </p>
+              </div>
+            </div>
+          </button>
+        )}
+
         <button
           onClick={() => navigate('/tickets')}
           className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
@@ -1894,36 +1962,7 @@ export default function MyMecaDashboardPage() {
             </div>
           </button>
 
-          {/* Business Listing Card - Only show for retail or manufacturer members */}
-          {(activeMembership?.membershipTypeConfig?.category === 'retail' ||
-            activeMembership?.membershipTypeConfig?.category === 'manufacturer') && (
-            <button
-              onClick={() => navigate('/dashboard/business-listing')}
-              className="bg-slate-700 rounded-xl p-6 hover:bg-slate-600 transition-colors text-left group"
-            >
-              <div className="flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-                  activeMembership?.membershipTypeConfig?.category === 'manufacturer'
-                    ? 'bg-purple-500/10 group-hover:bg-purple-500/20'
-                    : 'bg-green-500/10 group-hover:bg-green-500/20'
-                }`}>
-                  <Store className={`h-7 w-7 ${
-                    activeMembership?.membershipTypeConfig?.category === 'manufacturer'
-                      ? 'text-purple-500'
-                      : 'text-green-500'
-                  }`} />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold text-lg">
-                    {activeMembership?.membershipTypeConfig?.category === 'manufacturer'
-                      ? 'Manufacturer Listing'
-                      : 'Retailer Listing'}
-                  </h3>
-                  <p className="text-gray-400 text-sm mt-1">Manage your business directory listing</p>
-                </div>
-              </div>
-            </button>
-          )}
+          {/* (Business Listing card moved to the top Quick Links grid for visibility.) */}
         </div>
       </div>
     </div>

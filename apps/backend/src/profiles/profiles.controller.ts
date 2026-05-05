@@ -19,7 +19,7 @@ import { MemberStatsService } from './member-stats.service';
 import { Profile } from './profiles.entity';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
-import { isAdminUser } from '../auth/is-admin.helper';
+import { isAdminUser, isProtectedAccount } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
 
@@ -178,12 +178,6 @@ export class ProfilesController {
     return this.profilesService.create(data);
   }
 
-  // Only these emails can modify MECA IDs
-  private static readonly SUPER_ADMIN_EMAILS = [
-    'james@mecacaraudio.com',
-    'mick@mecausa.com',
-  ];
-
   @Put(':id')
   async updateProfile(
     @Param('id') id: string,
@@ -227,20 +221,19 @@ export class ProfilesController {
       }
     }
 
-    // If meca_id is being changed, verify the caller is a super admin
+    // MECA ID changes are restricted to protected super-admin accounts
+    // (PROTECTED_MECA_IDS in is-admin.helper.ts — single source of truth).
     if ('meca_id' in data) {
-      let allowed = false;
-      if (authHeader?.startsWith('Bearer ')) {
-        const token = authHeader.substring(7);
-        const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
-        if (error) {
-          throw new ForbiddenException('Failed to verify authorization for MECA ID change');
-        }
-        if (user?.email && ProfilesController.SUPER_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-          allowed = true;
-        }
+      if (!authHeader?.startsWith('Bearer ')) {
+        throw new ForbiddenException('Only super admins can modify MECA IDs');
       }
-      if (!allowed) {
+      const token = authHeader.substring(7);
+      const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+      if (error || !user) {
+        throw new ForbiddenException('Failed to verify authorization for MECA ID change');
+      }
+      const callerProfile = await this.em.fork().findOne(Profile, { id: user.id });
+      if (!isProtectedAccount(callerProfile)) {
         throw new ForbiddenException('Only super admins can modify MECA IDs');
       }
     }

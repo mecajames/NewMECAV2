@@ -21,6 +21,9 @@ function transformListing<T>(data: any): T {
     sponsorOrder: data.sponsorOrder ?? data.sponsor_order,
     isActive: data.isActive ?? data.is_active,
     isApproved: data.isApproved ?? data.is_approved,
+    pendingChanges: data.pendingChanges ?? data.pending_changes,
+    pendingSubmittedAt: data.pendingSubmittedAt || data.pending_submitted_at,
+    pendingReviewNotes: data.pendingReviewNotes || data.pending_review_notes,
     startDate: data.startDate || data.start_date,
     endDate: data.endDate || data.end_date,
     createdAt: data.createdAt || data.created_at,
@@ -57,6 +60,9 @@ export interface RetailerListing {
   sponsorOrder?: number;
   isActive: boolean;
   isApproved: boolean;
+  pendingChanges?: Record<string, any> | null;
+  pendingSubmittedAt?: string | null;
+  pendingReviewNotes?: string | null;
   startDate?: string;
   endDate?: string;
   createdAt: string;
@@ -90,6 +96,9 @@ export interface ManufacturerListing {
   sponsorOrder?: number;
   isActive: boolean;
   isApproved: boolean;
+  pendingChanges?: Record<string, any> | null;
+  pendingSubmittedAt?: string | null;
+  pendingReviewNotes?: string | null;
   startDate?: string;
   endDate?: string;
   createdAt: string;
@@ -340,4 +349,68 @@ export async function adminDeleteManufacturer(userId: string, id: string): Promi
   await axios.delete(`/api/business-listings/admin/manufacturers/${id}`, {
     headers: { 'x-user-id': userId },
   });
+}
+
+// ============================================
+// ADMIN MODERATION (pending edits queue)
+// ============================================
+
+export async function adminGetPendingChanges(): Promise<{
+  retailers: RetailerListing[];
+  manufacturers: ManufacturerListing[];
+}> {
+  const response = await axios.get(`/api/business-listings/admin/pending`);
+  return {
+    retailers: (response.data.retailers || []).map((r: any) => transformListing<RetailerListing>(r)),
+    manufacturers: (response.data.manufacturers || []).map((m: any) => transformListing<ManufacturerListing>(m)),
+  };
+}
+
+export async function adminApprovePendingRetailer(id: string): Promise<RetailerListing> {
+  const response = await axios.post(`/api/business-listings/admin/retailers/${id}/approve-pending`);
+  return transformListing<RetailerListing>(response.data);
+}
+
+export async function adminRejectPendingRetailer(id: string, notes?: string): Promise<RetailerListing> {
+  const response = await axios.post(`/api/business-listings/admin/retailers/${id}/reject-pending`, { notes });
+  return transformListing<RetailerListing>(response.data);
+}
+
+export async function adminApprovePendingManufacturer(id: string): Promise<ManufacturerListing> {
+  const response = await axios.post(`/api/business-listings/admin/manufacturers/${id}/approve-pending`);
+  return transformListing<ManufacturerListing>(response.data);
+}
+
+export async function adminRejectPendingManufacturer(id: string, notes?: string): Promise<ManufacturerListing> {
+  const response = await axios.post(`/api/business-listings/admin/manufacturers/${id}/reject-pending`, { notes });
+  return transformListing<ManufacturerListing>(response.data);
+}
+
+export interface ReassignSuggestion {
+  id: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  meca_id?: number;
+  membership_business_name?: string | null;
+  _matchReason?: string;
+}
+
+export interface ReassignCandidates {
+  retailers: Array<{ listing: RetailerListing; suggestions: ReassignSuggestion[] }>;
+  manufacturers: Array<{ listing: ManufacturerListing; suggestions: ReassignSuggestion[] }>;
+}
+
+export async function adminGetReassignCandidates(): Promise<ReassignCandidates> {
+  const response = await axios.get(`/api/business-listings/admin/reassign-candidates`);
+  return {
+    retailers: (response.data.retailers || []).map((r: any) => ({
+      listing: transformListing<RetailerListing>(r.listing),
+      suggestions: r.suggestions || [],
+    })),
+    manufacturers: (response.data.manufacturers || []).map((m: any) => ({
+      listing: transformListing<ManufacturerListing>(m.listing),
+      suggestions: m.suggestions || [],
+    })),
+  };
 }

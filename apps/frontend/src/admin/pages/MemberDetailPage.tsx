@@ -1082,14 +1082,18 @@ export default function MemberDetailPage() {
         </div>
 
         {/* Manual Renewal modal — opens from the top header. Bumps a counter
-            on success so the Memberships tab refetches and shows the new row. */}
+            on success so the Memberships tab refetches AND reloads the
+            top-level member state so the "Expired Member" banner updates. */}
         {showManualRenewal && member && (
           <ManualRenewalModal
             memberId={member.id}
             memberName={`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || 'Member'}
             open={showManualRenewal}
             onClose={() => setShowManualRenewal(false)}
-            onSuccess={() => setRenewalRefreshKey(k => k + 1)}
+            onSuccess={() => {
+              setRenewalRefreshKey(k => k + 1);
+              fetchMember();
+            }}
           />
         )}
 
@@ -1237,7 +1241,7 @@ export default function MemberDetailPage() {
         {/* Tab Content */}
         <div className="bg-slate-800 rounded-lg shadow-sm p-6">
           {activeTab === 'overview' && <OverviewTab member={member} derivedMembershipStatus={derivedMembershipStatus} />}
-          {activeTab === 'personal' && <PersonalInfoTab member={member} onUpdate={fetchMember} />}
+          {activeTab === 'personal' && <PersonalInfoTab member={member} onUpdate={fetchMember} availableRoles={availableRoles} />}
           {activeTab === 'business' && businessMembershipData && <BusinessInfoTab businessMembershipData={businessMembershipData} onUpdate={fetchMembershipStatusForHeader} />}
           {activeTab === 'media' && <MediaGalleryTab member={member} />}
           {activeTab === 'teams' && <TeamsTab member={member} businessMembershipData={businessMembershipData} />}
@@ -2608,7 +2612,7 @@ function BusinessInfoTab({
   );
 }
 
-function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () => void }) {
+function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile; onUpdate: () => void; availableRoles: Role[] }) {
   const { profile: currentUserProfile } = useAuth();
   const { hasPermission } = usePermissions();
   const canEdit = hasPermission('edit_user');
@@ -2645,8 +2649,7 @@ function PersonalInfoTab({ member, onUpdate }: { member: Profile; onUpdate: () =
 
     setSaving(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      await profilesApi.update(member.id, formData, session?.access_token || undefined);
+      await profilesApi.update(member.id, formData);
 
       setIsEditing(false);
       onUpdate();
@@ -4554,16 +4557,16 @@ function TeamsTab({ member, businessMembershipData }: {
   );
 }
 
-// Super Admin users who can override MECA IDs
-// Only James Ryan and Mick Mahkool can use this feature
-const SUPER_ADMIN_EMAILS = [
-  'james@mecacaraudio.com',
-  'mmakhool6@gmail.com',
-];
+// Single source of truth for super-admin gating across the app. Mirrors
+// PROTECTED_MECA_IDS in apps/backend/src/auth/is-admin.helper.ts — keep
+// these two lists in sync. Identifies James Ryan (202401) and Mick Makhool
+// (700947). Email changes can't accidentally elevate or demote a super
+// admin because the gate is keyed to MECA ID, not email.
+const PROTECTED_MECA_IDS = ['202401', '700947'];
 
 function isSuperAdmin(profile: Profile | null): boolean {
-  if (!profile?.email) return false;
-  return SUPER_ADMIN_EMAILS.includes(profile.email.toLowerCase());
+  if (!profile?.meca_id) return false;
+  return PROTECTED_MECA_IDS.includes(String(profile.meca_id));
 }
 
 function MembershipsTab({ member }: { member: Profile }) {
@@ -6252,7 +6255,10 @@ function MembershipsTab({ member }: { member: Profile }) {
                     });
                     setApplyPaymentMembership(null);
                     setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
-                    await fetchMemberships();
+                    // Refresh both the membership list AND the top-level
+                    // member state so the "Expired Member" banner clears as
+                    // soon as the now-paid membership flips to active.
+                    await Promise.all([fetchMemberships(), fetchMember()]);
                   } catch (err: any) {
                     setApplyPaymentError(err.response?.data?.message || err.message || 'Failed to apply payment');
                   } finally {

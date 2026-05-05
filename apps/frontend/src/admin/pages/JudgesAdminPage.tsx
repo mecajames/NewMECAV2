@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, UserCheck, UserX, ChevronRight, Star, ArrowLeft, Plus, X } from 'lucide-react';
-import { getAllJudges, createJudgeDirectly, AdminDirectCreateJudgeDto } from '@/judges/judges.api-client';
+import { Search, UserCheck, UserX, ChevronRight, Star, ArrowLeft, Plus, X, Trash2, Power, PowerOff } from 'lucide-react';
+import {
+  getAllJudges,
+  createJudgeDirectly,
+  updateJudge,
+  deleteJudge,
+  AdminDirectCreateJudgeDto,
+} from '@/judges/judges.api-client';
 import { JudgeLevel } from '@newmeca/shared';
 import { profilesApi } from '@/profiles';
 
@@ -101,6 +107,47 @@ export default function JudgesAdminPage() {
       setCreateError(err.message || 'Failed to create judge');
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Per-row action busy key — `${judge.id}:${action}` while in flight.
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+
+  const handleToggleActive = async (judge: any) => {
+    const next = !judge.is_active;
+    const verb = next ? 'Activate' : 'Deactivate';
+    const ok = window.confirm(
+      `${verb} ${judge.user?.first_name || ''} ${judge.user?.last_name || ''}? ` +
+      (next
+        ? 'They will appear as Active and be eligible for judging assignments.'
+        : 'They will be hidden from active filters and removed from new assignments.'),
+    );
+    if (!ok) return;
+    setRowBusy(`${judge.id}:toggle`);
+    try {
+      await updateJudge(judge.id, { is_active: next });
+      await fetchJudges();
+    } catch (err: any) {
+      alert(err?.message || `${verb} failed`);
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  const handleDelete = async (judge: any) => {
+    const ok = window.confirm(
+      `Permanently delete Judge ${judge.user?.first_name || ''} ${judge.user?.last_name || ''}?\n\n` +
+      `If they have any assignments, level history, or qualifications, the server will reject the delete and you should deactivate instead.`,
+    );
+    if (!ok) return;
+    setRowBusy(`${judge.id}:delete`);
+    try {
+      await deleteJudge(judge.id);
+      await fetchJudges();
+    } catch (err: any) {
+      alert(err?.message || 'Delete failed');
+    } finally {
+      setRowBusy(null);
     }
   };
 
@@ -324,12 +371,34 @@ export default function JudgesAdminPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <Link
-                        to={`/admin/judges/${judge.id}`}
-                        className="text-orange-500 hover:text-orange-400 flex items-center gap-1"
-                      >
-                        View <ChevronRight className="h-4 w-4" />
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to={`/admin/judges/${judge.id}`}
+                          className="text-orange-500 hover:text-orange-400 flex items-center gap-1"
+                        >
+                          View <ChevronRight className="h-4 w-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleToggleActive(judge)}
+                          disabled={rowBusy === `${judge.id}:toggle`}
+                          title={judge.is_active ? 'Deactivate' : 'Activate'}
+                          className={`p-1.5 rounded transition-colors disabled:opacity-50 ${
+                            judge.is_active
+                              ? 'bg-red-700 hover:bg-red-600 text-white'
+                              : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                          }`}
+                        >
+                          {judge.is_active ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(judge)}
+                          disabled={rowBusy === `${judge.id}:delete`}
+                          title="Delete permanently"
+                          className="p-1.5 bg-slate-700 hover:bg-red-700 text-gray-300 hover:text-white rounded transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

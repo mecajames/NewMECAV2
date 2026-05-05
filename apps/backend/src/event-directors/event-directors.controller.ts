@@ -8,6 +8,8 @@ import {
   Param,
   Query,
   Headers,
+  HttpCode,
+  HttpStatus,
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -366,6 +368,16 @@ export class EventDirectorsController {
     await this.requireAdmin(authHeader);
     const ed = await this.eventDirectorsService.updateEventDirector(id, updates);
     return serializeEventDirector(ed);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteEventDirector(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.requireAdmin(authHeader);
+    await this.eventDirectorsService.deleteEventDirector(id);
   }
 
   // =============================================================================

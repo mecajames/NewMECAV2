@@ -1665,9 +1665,12 @@ export class TeamsService {
   async findAllPublicTeams(): Promise<any[]> {
     const em = this.em.fork();
 
-    // Get legacy teams from teams table
+    // Get legacy teams from teams table (populate membership so we can
+    // dedupe the synthetic membership-teams against rows that already
+    // exist in `teams` and link to the same membership).
     const legacyTeams = await em.find(Team, { isActive: true, isPublic: true }, {
       orderBy: { name: 'ASC' },
+      populate: ['membership'],
     });
 
     // Get membership-based teams
@@ -1727,8 +1730,19 @@ export class TeamsService {
       };
     });
 
+    // Dedupe: if a legacy team is already linked to a membership, skip the
+    // synthetic membership-team for that same membership. (Without this,
+    // every retail/manufacturer membership shows up twice in the directory:
+    // once from the teams table and once from findAllMembershipTeams.)
+    const membershipIdsCoveredByLegacy = new Set(
+      legacyTeams.map(t => (t as any).membership?.id).filter(Boolean),
+    );
+    const dedupedMembershipTeams = membershipTeams.filter(
+      mt => !membershipIdsCoveredByLegacy.has(mt.id),
+    );
+
     // Transform membership teams to match the format
-    const membershipTeamsFormatted = membershipTeams.map(team => ({
+    const membershipTeamsFormatted = dedupedMembershipTeams.map(team => ({
       id: team.id,
       name: team.name,
       teamType: team.teamType,

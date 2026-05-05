@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -420,6 +420,32 @@ export class EventDirectorsService {
     ed.updatedAt = new Date();
     await this.em.flush();
     return ed;
+  }
+
+  /**
+   * Permanent delete for an EventDirector row. Surfaces a clear conflict
+   * error if FK-referenced records (assignments, ratings, etc.) prevent
+   * removal — admins should deactivate in that case rather than delete.
+   */
+  async deleteEventDirector(id: string): Promise<void> {
+    const ed = await this.getEventDirector(id);
+    try {
+      await this.em.removeAndFlush(ed);
+    } catch (err: any) {
+      const code = err?.code ?? err?.cause?.code;
+      const msg = err?.message ?? '';
+      if (code === '23503' || /foreign key/i.test(msg)) {
+        // Translate the raw PG FK violation into something the admin UI
+        // can present cleanly. The recommendation matches the
+        // membership_type_configs delete pattern elsewhere in the app.
+        throw new ConflictException(
+          `Cannot delete this Event Director — they are referenced by other records ` +
+          `(assignments, ratings, history, etc.). Deactivate them instead to keep ` +
+          `historical data intact.`,
+        );
+      }
+      throw err;
+    }
   }
 
   // =============================================================================

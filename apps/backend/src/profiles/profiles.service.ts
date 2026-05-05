@@ -4,7 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
 import { Role } from '../permissions/permission.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
-import { isAdminUser } from '../auth/is-admin.helper';
+import { isAdminUser, isProtectedAccount } from '../auth/is-admin.helper';
 import { EmailService } from '../email/email.service';
 import { generateSecurePassword, validatePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 import { AccountType } from '@newmeca/shared';
@@ -995,10 +995,10 @@ export class ProfilesService {
       throw new NotFoundException('No matching profiles found');
     }
 
-    // Block banning hard-coded super admins
-    const SUPER_ADMIN_EMAILS = new Set(['james@mecacaraudio.com', 'mick@mecausa.com']);
+    // Block banning protected super-admin accounts (PROTECTED_MECA_IDS in
+    // is-admin.helper.ts is the single source of truth across the app).
     if (action === 'ban') {
-      const protectedHit = profiles.find(p => p.email && SUPER_ADMIN_EMAILS.has(p.email.toLowerCase()));
+      const protectedHit = profiles.find(p => isProtectedAccount(p));
       if (protectedHit) {
         throw new BadRequestException(`Cannot ban protected account: ${protectedHit.email}`);
       }

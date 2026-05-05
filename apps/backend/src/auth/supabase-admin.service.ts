@@ -2,6 +2,32 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { generateSecurePassword, validatePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 
+/**
+ * Supabase's `auth.admin.generateLink` sometimes returns an action_link
+ * pointing at `${API_URL}/verify?...` (no `/auth/v1` prefix). The actual
+ * GoTrue verify endpoint lives at `/auth/v1/verify`, so without the prefix
+ * the redirect 404s with `{"message":"no Route matched with those values"}`.
+ *
+ * Normalize the link by inserting `/auth/v1` before any of the bare auth
+ * paths (verify, recover, invite, signup) when it's missing. Idempotent —
+ * if the path already starts with `/auth/v1`, the link is returned untouched.
+ */
+function normalizeAuthActionLink(link: string | undefined | null): string | undefined {
+  if (!link) return undefined;
+  try {
+    const url = new URL(link);
+    const bareAuthPaths = ['/verify', '/recover', '/invite', '/signup'];
+    if (bareAuthPaths.some(p => url.pathname === p) && !url.pathname.startsWith('/auth/v1')) {
+      url.pathname = `/auth/v1${url.pathname}`;
+      return url.toString();
+    }
+    return link;
+  } catch {
+    // Not a parseable URL — return as-is rather than throwing.
+    return link;
+  }
+}
+
 export interface CreateUserWithPasswordDto {
   email: string;
   password: string;
@@ -379,7 +405,7 @@ export class SupabaseAdminService {
       this.logger.log(`Generated impersonation link for user: ${email}`);
       return {
         success: true,
-        link: data.properties?.action_link,
+        link: normalizeAuthActionLink(data.properties?.action_link),
       };
     } catch (error) {
       this.logger.error(`Error generating impersonation link: ${error}`);
