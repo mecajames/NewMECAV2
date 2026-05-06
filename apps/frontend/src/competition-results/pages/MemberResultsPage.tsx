@@ -9,11 +9,24 @@ import { profilesApi, Profile } from '@/profiles';
 import { SeasonSelector } from '@/seasons';
 import { getStorageUrl } from '@/lib/storage';
 
-interface GroupedResults {
-  [format: string]: {
-    [className: string]: CompetitionResult[];
-  };
+interface ClassGroup {
+  className: string;
+  classDisplayOrder: number;
+  results: CompetitionResult[];
 }
+
+interface SectionGroup {
+  section: string;
+  sectionDisplayOrder: number;
+  classes: ClassGroup[];
+}
+
+interface FormatGroup {
+  format: string;
+  sections: SectionGroup[];
+}
+
+const UNASSIGNED_SECTION = '__unassigned__';
 
 export default function MemberResultsPage() {
   const { mecaId } = useParams<{ mecaId: string }>();
@@ -125,25 +138,61 @@ export default function MemberResultsPage() {
     return 'bg-slate-700 text-gray-300';
   };
 
-  // Group results by format and class
-  const groupedResults: GroupedResults = useMemo(() => {
-    const grouped: GroupedResults = {};
+  // Group results by format → section → class. Mirrors ResultsPage so
+  // members see their history laid out the same way as event results.
+  const groupedResults: FormatGroup[] = useMemo(() => {
+    type Bucket = Map<string, ClassGroup>;
+    type SectionBucket = Map<string, {
+      section: string;
+      sectionDisplayOrder: number;
+      classes: Bucket;
+    }>;
+    const formats = new Map<string, SectionBucket>();
 
     results.forEach(result => {
       const classData = classes.find(c => c.id === (result.classId || result.class_id));
       const format = classData?.format || 'Unknown';
       const className = result.competitionClass || result.competition_class || 'Unknown';
+      const section = classData?.section ?? UNASSIGNED_SECTION;
+      const classDisplayOrder = classData?.display_order ?? 0;
 
-      if (!grouped[format]) {
-        grouped[format] = {};
+      let sectionBucket = formats.get(format);
+      if (!sectionBucket) {
+        sectionBucket = new Map();
+        formats.set(format, sectionBucket);
       }
-      if (!grouped[format][className]) {
-        grouped[format][className] = [];
+
+      let secEntry = sectionBucket.get(section);
+      if (!secEntry) {
+        secEntry = { section, sectionDisplayOrder: classDisplayOrder, classes: new Map() };
+        sectionBucket.set(section, secEntry);
+      } else if (classDisplayOrder < secEntry.sectionDisplayOrder) {
+        secEntry.sectionDisplayOrder = classDisplayOrder;
       }
-      grouped[format][className].push(result);
+
+      let classEntry = secEntry.classes.get(className);
+      if (!classEntry) {
+        classEntry = { className, classDisplayOrder, results: [] };
+        secEntry.classes.set(className, classEntry);
+      }
+      classEntry.results.push(result);
     });
 
-    return grouped;
+    return Array.from(formats.entries()).map(([format, sectionBucket]) => ({
+      format,
+      sections: Array.from(sectionBucket.values())
+        .map(s => ({
+          section: s.section,
+          sectionDisplayOrder: s.sectionDisplayOrder,
+          classes: Array.from(s.classes.values())
+            .sort((a, b) => a.classDisplayOrder - b.classDisplayOrder || a.className.localeCompare(b.className)),
+        }))
+        .sort((a, b) => {
+          if (a.section === UNASSIGNED_SECTION) return 1;
+          if (b.section === UNASSIGNED_SECTION) return -1;
+          return a.sectionDisplayOrder - b.sectionDisplayOrder || a.section.localeCompare(b.section);
+        }),
+    }));
   }, [results, classes]);
 
   // Calculate statistics
@@ -326,19 +375,32 @@ export default function MemberResultsPage() {
           </div>
         ) : results.length > 0 ? (
           <div className="space-y-8">
-            {Object.entries(groupedResults).map(([format, classesByName]) => (
+            {groupedResults.map(({ format, sections }) => {
+              const formatTotal = sections.reduce(
+                (sum, s) => sum + s.classes.reduce((cs, c) => cs + c.results.length, 0),
+                0,
+              );
+              return (
               <div key={format} className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
                 <div className="bg-slate-700 px-6 py-4">
                   <h2 className="text-2xl font-bold text-white">
                     {format} Results
                     <span className="ml-3 text-sm bg-orange-500 text-white px-2.5 py-1 rounded-full">
-                      {Object.values(classesByName).reduce((sum, arr) => sum + arr.length, 0)}
+                      {formatTotal}
                     </span>
                   </h2>
                 </div>
 
-                <div className="p-6 space-y-6">
-                  {Object.entries(classesByName).map(([className, classResults]) => (
+                <div className="p-6 space-y-8">
+                  {sections.map(({ section, classes: sectionClasses }) => (
+                    <div key={section}>
+                      {section !== UNASSIGNED_SECTION && (
+                        <div className="mb-4 pb-2 border-b border-slate-700">
+                          <h3 className="text-xl font-semibold text-white">{section}</h3>
+                        </div>
+                      )}
+                      <div className="space-y-6">
+                  {sectionClasses.map(({ className, results: classResults }) => (
                     <div key={className}>
                       <h3 className="text-lg font-semibold text-orange-400 mb-3 px-3">
                         {className}
@@ -417,9 +479,13 @@ export default function MemberResultsPage() {
                       </div>
                     </div>
                   ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-20 bg-slate-800 rounded-xl">

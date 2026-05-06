@@ -31,4 +31,11 @@ export {
   adminUpdateManufacturer,
   adminApproveManufacturer,
   adminDeleteManufacturer,
+  adminGetPendingChanges,
+  adminApprovePendingRetailer,
+  adminRejectPendingRetailer,
+  adminApprovePendingManufacturer,
+  adminRejectPendingManufacturer,
+  adminGetReassignCandidates,
 } from '../api-client/business-listings.api-client';
+export type { ReassignCandidates, ReassignSuggestion } from '../api-client/business-listings.api-client';

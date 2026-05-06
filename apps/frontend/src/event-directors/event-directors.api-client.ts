@@ -439,6 +439,23 @@ export async function updateEventDirector(
   return response.json();
 }
 
+/**
+ * Permanently delete an Event Director profile. Backend rejects with 409
+ * if there are FK references (assignments, ratings, history) — caller
+ * should surface that message and recommend deactivate instead.
+ */
+export async function deleteEventDirector(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok && response.status !== 204) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to delete event director');
+  }
+}
+
 // =============================================================================
 // Event Assignment Endpoints
 // =============================================================================

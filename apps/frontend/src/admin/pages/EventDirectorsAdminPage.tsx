@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, UserCheck, UserX, ChevronRight, Star, Briefcase, ArrowLeft, Plus, X } from 'lucide-react';
-import { getAllEventDirectors, createEventDirectorDirectly, AdminDirectCreateEventDirectorDto } from '@/event-directors/event-directors.api-client';
+import { Search, UserCheck, UserX, ChevronRight, Star, Briefcase, ArrowLeft, Plus, X, Trash2, Power, PowerOff } from 'lucide-react';
+import {
+  getAllEventDirectors,
+  createEventDirectorDirectly,
+  updateEventDirector,
+  deleteEventDirector,
+  AdminDirectCreateEventDirectorDto,
+} from '@/event-directors/event-directors.api-client';
 import { profilesApi } from '@/profiles';
 
 export default function EventDirectorsAdminPage() {
@@ -32,6 +38,47 @@ export default function EventDirectorsAdminPage() {
   useEffect(() => {
     fetchEventDirectors();
   }, [filters.isActive]);
+
+  // Per-row action busy state — keyed by `${ed.id}:${action}`.
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+
+  const handleToggleActive = async (ed: any) => {
+    const next = !ed.is_active;
+    const verb = next ? 'Activate' : 'Deactivate';
+    const ok = window.confirm(
+      `${verb} ${ed.user?.first_name || ''} ${ed.user?.last_name || ''}? ` +
+      (next
+        ? 'They will appear as Active and be eligible for assignments.'
+        : 'They will be hidden from active filters and removed from new assignments.'),
+    );
+    if (!ok) return;
+    setRowBusy(`${ed.id}:toggle`);
+    try {
+      await updateEventDirector(ed.id, { is_active: next });
+      await fetchEventDirectors();
+    } catch (err: any) {
+      alert(err?.message || `${verb} failed`);
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  const handleDelete = async (ed: any) => {
+    const ok = window.confirm(
+      `Permanently delete Event Director ${ed.user?.first_name || ''} ${ed.user?.last_name || ''}?\n\n` +
+      `If they have any assignments, ratings, or history, the server will reject the delete and you should deactivate instead.`,
+    );
+    if (!ok) return;
+    setRowBusy(`${ed.id}:delete`);
+    try {
+      await deleteEventDirector(ed.id);
+      await fetchEventDirectors();
+    } catch (err: any) {
+      alert(err?.message || 'Delete failed');
+    } finally {
+      setRowBusy(null);
+    }
+  };
 
   // Member search for create modal
   const searchMembers = async (query: string) => {
@@ -265,12 +312,34 @@ export default function EventDirectorsAdminPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <Link
-                        to={`/admin/event-directors/${ed.id}`}
-                        className="text-orange-500 hover:text-orange-400 flex items-center gap-1"
-                      >
-                        View <ChevronRight className="h-4 w-4" />
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to={`/admin/event-directors/${ed.id}`}
+                          className="text-orange-500 hover:text-orange-400 flex items-center gap-1"
+                        >
+                          View <ChevronRight className="h-4 w-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleToggleActive(ed)}
+                          disabled={rowBusy === `${ed.id}:toggle`}
+                          title={ed.is_active ? 'Deactivate' : 'Activate'}
+                          className={`p-1.5 rounded transition-colors disabled:opacity-50 ${
+                            ed.is_active
+                              ? 'bg-red-700 hover:bg-red-600 text-white'
+                              : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                          }`}
+                        >
+                          {ed.is_active ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(ed)}
+                          disabled={rowBusy === `${ed.id}:delete`}
+                          title="Delete permanently"
+                          className="p-1.5 bg-slate-700 hover:bg-red-700 text-gray-300 hover:text-white rounded transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

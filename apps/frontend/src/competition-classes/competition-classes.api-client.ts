@@ -5,6 +5,7 @@ export interface CompetitionClass {
   name: string;
   abbreviation: string;
   format: string;
+  section?: string | null;
   season_id: string;
   is_active: boolean;
   unlimited_wattage: boolean;
@@ -61,6 +62,7 @@ export const competitionClassesApi = {
     name: string;
     abbreviation: string;
     format: string;
+    section?: string | null;
     season_id: string;
     is_active?: boolean;
     unlimited_wattage?: boolean;
@@ -79,6 +81,7 @@ export const competitionClassesApi = {
       name?: string;
       abbreviation?: string;
       format?: string;
+      section?: string | null;
       season_id?: string;
       is_active?: boolean;
       unlimited_wattage?: boolean;
@@ -109,6 +112,75 @@ export const competitionClassesApi = {
       toSeasonId,
       format,
     });
+    return response.data;
+  },
+
+  /**
+   * Admin export — returns a portable JSON document for the given season.
+   * Keyed by season YEAR (not UUID) so it imports cleanly across stage/prod.
+   */
+  exportSeason: async (seasonId: string): Promise<{
+    exportedAt: string;
+    season: { year: number; name: string };
+    formats: Array<{
+      name: string;
+      abbreviation?: string;
+      description?: string;
+      isActive: boolean;
+      displayOrder: number;
+    }>;
+    classes: Array<{
+      name: string;
+      abbreviation: string;
+      format: string;
+      isActive: boolean;
+      displayOrder: number;
+      unlimitedWattage: boolean;
+    }>;
+  }> => {
+    const response = await axios.get('/api/competition-classes/admin/export', {
+      params: { seasonId },
+    });
+    return response.data;
+  },
+
+  /**
+   * Admin import — accepts the JSON produced by exportSeason. Formats are
+   * upserted by name first, then classes by (format + abbreviation).
+   * Default mode is 'merge'. 'replace' also deactivates any local class
+   * not in the import.
+   */
+  importSeason: async (
+    payload: {
+      season: { year: number; name?: string };
+      formats?: Array<{
+        name: string;
+        abbreviation?: string;
+        description?: string;
+        isActive?: boolean;
+        displayOrder?: number;
+      }>;
+      classes: Array<{
+        name: string;
+        abbreviation: string;
+        format: string;
+        isActive?: boolean;
+        displayOrder?: number;
+        unlimitedWattage?: boolean;
+      }>;
+      mode?: 'merge' | 'replace';
+    },
+  ): Promise<{
+    seasonId: string;
+    seasonYear: number;
+    formatsCreated: number;
+    formatsUpdated: number;
+    created: number;
+    updated: number;
+    deactivated: number;
+    skipped: number;
+  }> => {
+    const response = await axios.post('/api/competition-classes/admin/import', payload);
     return response.data;
   },
 };

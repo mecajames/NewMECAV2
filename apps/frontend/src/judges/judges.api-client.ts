@@ -371,6 +371,23 @@ export async function updateJudge(
   return response.json();
 }
 
+/**
+ * Permanently delete a Judge profile. Backend rejects with 409 if there
+ * are FK references (assignments, level history, qualifications) — caller
+ * should surface that message and recommend deactivate instead.
+ */
+export async function deleteJudge(id: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok && response.status !== 204) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to delete judge');
+  }
+}
+
 // =============================================================================
 // Event Assignment Endpoints
 // =============================================================================

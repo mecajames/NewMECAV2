@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { JudgeApplication } from './judge-application.entity';
@@ -635,6 +635,30 @@ export class JudgesService {
 
     await em.flush();
     return judge;
+  }
+
+  /**
+   * Permanent delete for a Judge row. Falls back to a clear conflict error
+   * when FK references (assignments, level history, qualifications, etc.)
+   * prevent removal — admins should deactivate in that case.
+   */
+  async deleteJudge(judgeId: string): Promise<void> {
+    const em = this.em.fork();
+    const judge = await em.findOneOrFail(Judge, judgeId);
+    try {
+      await em.removeAndFlush(judge);
+    } catch (err: any) {
+      const code = err?.code ?? err?.cause?.code;
+      const msg = err?.message ?? '';
+      if (code === '23503' || /foreign key/i.test(msg)) {
+        throw new ConflictException(
+          `Cannot delete this Judge — they are referenced by other records ` +
+          `(assignments, level history, qualifications, etc.). Deactivate them instead ` +
+          `to keep historical data intact.`,
+        );
+      }
+      throw err;
+    }
   }
 
   async recordLevelChange(

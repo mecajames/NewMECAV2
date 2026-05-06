@@ -449,4 +449,62 @@ export class BusinessListingsController {
     const userId = await this.requireAdmin(authHeader);
     return this.businessListingsService.deleteManufacturer(id, userId, true);
   }
+
+  // ============================================
+  // ADMIN MODERATION (pending edits queue)
+  // ============================================
+
+  @Get('admin/reassign-candidates')
+  async adminGetReassignCandidates(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.businessListingsService.findReassignCandidates();
+  }
+
+  @Get('admin/pending')
+  async adminGetPendingChanges(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ retailers: RetailerListing[]; manufacturers: ManufacturerListing[] }> {
+    await this.requireAdmin(authHeader);
+    return this.businessListingsService.findPendingChanges();
+  }
+
+  @Post('admin/retailers/:id/approve-pending')
+  async adminApprovePendingRetailer(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<RetailerListing> {
+    await this.requireAdmin(authHeader);
+    return this.businessListingsService.approvePendingRetailer(id);
+  }
+
+  @Post('admin/retailers/:id/reject-pending')
+  async adminRejectPendingRetailer(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { notes?: string },
+  ): Promise<RetailerListing> {
+    await this.requireAdmin(authHeader);
+    return this.businessListingsService.rejectPendingRetailer(id, body.notes);
+  }
+
+  @Post('admin/manufacturers/:id/approve-pending')
+  async adminApprovePendingManufacturer(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<ManufacturerListing> {
+    await this.requireAdmin(authHeader);
+    return this.businessListingsService.approvePendingManufacturer(id);
+  }
+
+  @Post('admin/manufacturers/:id/reject-pending')
+  async adminRejectPendingManufacturer(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { notes?: string },
+  ): Promise<ManufacturerListing> {
+    await this.requireAdmin(authHeader);
+    return this.businessListingsService.rejectPendingManufacturer(id, body.notes);
+  }
 }

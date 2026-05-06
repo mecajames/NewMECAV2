@@ -95,6 +95,19 @@ export class RetailerListing {
   @Property({ type: 'boolean', default: false, fieldName: 'is_approved' })
   isApproved: boolean = false;
 
+  // Pending edits awaiting admin review. When the owner edits an already-
+  // approved listing, the new values are stashed here while the live row
+  // continues to serve the public directory unchanged. Admin moderation
+  // either merges these onto the row (approve) or clears them (reject).
+  @Property({ type: 'json', nullable: true, fieldName: 'pending_changes' })
+  pendingChanges?: Record<string, any>;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'pending_submitted_at' })
+  pendingSubmittedAt?: Date;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'pending_review_notes' })
+  pendingReviewNotes?: string;
+
   // Listing validity dates (aligns with membership dates)
   @Property({ type: 'date', nullable: true, fieldName: 'start_date' })
   startDate?: Date;
