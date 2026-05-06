@@ -174,43 +174,95 @@ export class InvoicesService {
     const { page = 1, limit = 20, status, userId, startDate, endDate, search, overdue } = query;
     const offset = (page - 1) * limit;
 
-    // Build filter
-    const filter: any = {};
+    // Same approach as OrdersService.findAll: build the search filter as
+    // raw SQL so the admin can match across invoice number, customer,
+    // MECA ID, items, total, due date, and Stripe IDs in one query, then
+    // hydrate the full entities through MikroORM's populate path.
+    const conn = em.getConnection();
+    const conditions: string[] = [];
+    const params: any[] = [];
 
-    if (status) {
-      filter.status = status;
-    }
-
-    if (userId) {
-      filter.user = userId;
-    }
-
-    if (startDate) {
-      filter.createdAt = { $gte: startDate };
-    }
-
-    if (endDate) {
-      filter.createdAt = { ...filter.createdAt, $lte: endDate };
+    if (status) { conditions.push(`i.status = ?`); params.push(status); }
+    if (userId) { conditions.push(`i.user_id = ?`); params.push(userId); }
+    if (startDate) { conditions.push(`i.created_at >= ?`); params.push(startDate); }
+    if (endDate) { conditions.push(`i.created_at <= ?`); params.push(endDate); }
+    if (overdue) {
+      conditions.push(`i.status = ?`);
+      params.push(InvoiceStatus.SENT);
+      conditions.push(`i.due_date < ?`);
+      params.push(new Date().toISOString());
     }
 
     if (search) {
-      filter.invoiceNumber = { $like: `%${search}%` };
+      const term = `%${search}%`;
+      // Same caveat as OrdersService: payments has no stripe_subscription_id;
+      // that lives on memberships and is surfaced via the EXISTS subquery.
+      conditions.push(`(
+        i.invoice_number ILIKE ?
+        OR i.status::text ILIKE ?
+        OR i.total::text ILIKE ?
+        OR i.due_date::text ILIKE ?
+        OR p.first_name ILIKE ?
+        OR p.last_name ILIKE ?
+        OR p.full_name ILIKE ?
+        OR p.email ILIKE ?
+        OR p.meca_id::text ILIKE ?
+        OR o.order_type::text ILIKE ?
+        OR pay.transaction_id ILIKE ?
+        OR pay.stripe_payment_intent_id ILIKE ?
+        OR pay.stripe_customer_id ILIKE ?
+        OR pay.paypal_order_id ILIKE ?
+        OR EXISTS (
+          SELECT 1 FROM memberships m
+          WHERE m.user_id = i.user_id AND m.stripe_subscription_id ILIKE ?
+        )
+        OR EXISTS (
+          SELECT 1 FROM invoice_items ii
+          WHERE ii.invoice_id = i.id AND ii.description ILIKE ?
+        )
+      )`);
+      for (let n = 0; n < 16; n++) params.push(term);
     }
 
-    if (overdue) {
-      filter.status = InvoiceStatus.SENT;
-      filter.dueDate = { $lt: new Date() };
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const baseFrom = `FROM invoices i
+      LEFT JOIN profiles p ON p.id = i.user_id
+      LEFT JOIN orders o ON o.id = i.order_id
+      LEFT JOIN payments pay ON pay.id = o.payment_id`;
+
+    const countRows: Array<{ count: string }> = await conn.execute(
+      `SELECT COUNT(DISTINCT i.id) AS count ${baseFrom} ${where}`,
+      params,
+    );
+    const total = parseInt(countRows[0]?.count ?? '0', 10);
+
+    const idRows: Array<{ id: string }> = await conn.execute(
+      `SELECT DISTINCT i.id, i.created_at ${baseFrom} ${where}
+       ORDER BY i.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+    const ids = idRows.map(r => r.id);
+
+    if (ids.length === 0) {
+      return {
+        data: [],
+        pagination: { page, limit, totalItems: total, totalPages: Math.ceil(total / limit) },
+      };
     }
 
-    const [invoices, total] = await em.findAndCount(Invoice, filter, {
+    const invoices = await em.find(Invoice, { id: { $in: ids } }, {
       populate: ['user', 'items'],
-      limit,
-      offset,
-      orderBy: { createdAt: 'DESC' },
     });
+    const byId = new Map<string, Invoice>(invoices.map(inv => [inv.id, inv as unknown as Invoice]));
+    const ordered: Invoice[] = [];
+    for (const id of ids) {
+      const inv = byId.get(id);
+      if (inv) ordered.push(inv);
+    }
 
     return {
-      data: invoices,
+      data: ordered,
       pagination: {
         page,
         limit,
@@ -755,7 +807,7 @@ export class InvoicesService {
   /**
    * Get invoice counts by status
    */
-  async getStatusCounts(): Promise<Record<InvoiceStatus, number>> {
+  async getStatusCounts(opts?: { startDate?: string; endDate?: string }): Promise<Record<InvoiceStatus, number>> {
     const em = this.em.fork();
 
     const counts: Record<InvoiceStatus, number> = {
@@ -767,8 +819,15 @@ export class InvoicesService {
       [InvoiceStatus.REFUNDED]: 0,
     };
 
+    const dateFilter: any = {};
+    if (opts?.startDate) dateFilter.$gte = opts.startDate;
+    if (opts?.endDate) dateFilter.$lte = opts.endDate;
+    const hasDate = Object.keys(dateFilter).length > 0;
+
     for (const status of Object.values(InvoiceStatus)) {
-      counts[status] = await em.count(Invoice, { status });
+      const where: any = { status };
+      if (hasDate) where.createdAt = dateFilter;
+      counts[status] = await em.count(Invoice, where);
     }
 
     return counts;

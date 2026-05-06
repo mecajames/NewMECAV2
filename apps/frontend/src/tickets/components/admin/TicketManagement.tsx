@@ -28,6 +28,7 @@ import {
   TicketDepartment,
   TicketListQuery,
 } from '../../tickets.api-client';
+import { reportError } from './error-helper';
 
 // Status configurations
 const statusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
@@ -73,7 +74,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       const data = await ticketsApi.getStats();
       setStats(data);
     } catch (err) {
-      console.error('Failed to fetch stats:', err);
+      reportError(err, 'load ticket stats');
     } finally {
       setStatsLoading(false);
     }
@@ -114,7 +115,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       setTotal(activeTab === 'unassigned' ? filteredData.length : result.total);
       setTotalPages(activeTab === 'unassigned' ? 1 : result.total_pages);
     } catch (err) {
-      console.error('Failed to fetch tickets:', err);
+      reportError(err, 'load tickets');
     } finally {
       setLoading(false);
     }
@@ -147,7 +148,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       fetchTickets();
       fetchStats();
     } catch (err) {
-      console.error('Failed to assign ticket:', err);
+      reportError(err, 'assign ticket');
     }
   };
 

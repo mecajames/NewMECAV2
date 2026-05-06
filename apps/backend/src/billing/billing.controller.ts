@@ -453,27 +453,38 @@ export class BillingController {
   @Get('stats/dashboard')
   async getDashboardStats(
     @Headers('authorization') authHeader: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     await this.requireAdmin(authHeader);
-    // Run all queries in parallel
+
+    // Run all queries in parallel — pass date filters into each so the
+    // dashboard's Period selector actually changes the numbers. Without
+    // these the page rendered the same totals regardless of the period.
     const [
       orderStatusCounts,
+      orderTypeBreakdown,
       invoiceStatusCounts,
       unpaidTotal,
       recentOrders,
       recentInvoices,
     ] = await Promise.all([
-      this.ordersService.getStatusCounts(),
-      this.invoicesService.getStatusCounts(),
+      this.ordersService.getStatusCounts({ startDate, endDate }),
+      this.ordersService.getTypeBreakdown({ startDate, endDate }),
+      this.invoicesService.getStatusCounts({ startDate, endDate }),
       this.invoicesService.getUnpaidTotal(),
       this.ordersService.getRecentOrders(5),
       this.invoicesService.getRecentInvoices(5),
     ]);
 
-    // Calculate revenue from completed orders
+    // Revenue = sum(total) of completed orders in period. The DTO types
+    // startDate/endDate as Date — coerce here so the query string params
+    // can be passed straight through.
     const completedOrders = await this.ordersService.findAll({
       page: 1,
       status: OrderStatus.COMPLETED,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
       limit: 1000,
     });
     const totalRevenue = completedOrders.data.reduce(
@@ -485,6 +496,7 @@ export class BillingController {
       orders: {
         counts: orderStatusCounts,
         total: Object.values(orderStatusCounts).reduce((a, b) => a + b, 0),
+        byType: orderTypeBreakdown,
       },
       invoices: {
         counts: invoiceStatusCounts,
@@ -498,6 +510,10 @@ export class BillingController {
       recent: {
         orders: recentOrders,
         invoices: recentInvoices,
+      },
+      period: {
+        startDate: startDate ?? null,
+        endDate: endDate ?? null,
       },
     };
   }

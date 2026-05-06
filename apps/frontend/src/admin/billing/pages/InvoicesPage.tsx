@@ -228,7 +228,7 @@ export default function InvoicesPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       {/* Header */}
       <div className="border-b border-slate-700 bg-slate-800">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-white">Invoices</h1>
@@ -256,7 +256,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full px-4 py-8 sm:px-6 lg:px-8">
         {/* Search and Export */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <form onSubmit={handleSearch} className="flex gap-2">
@@ -264,10 +264,10 @@ export default function InvoicesPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by invoice number..."
+                placeholder="Search invoice #, customer, MECA ID, item, amount, due date, Stripe ID…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="rounded-md border border-slate-600 bg-slate-700 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="w-full sm:w-[480px] rounded-md border border-slate-600 bg-slate-700 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
             <button

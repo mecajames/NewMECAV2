@@ -18,6 +18,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import * as ticketAdminApi from '../../ticket-admin.api-client';
+import { reportError } from './error-helper';
 import { TicketStaffResponse, TicketDepartmentResponse } from '@newmeca/shared';
 
 // Permission levels (1=Staff, 2=Supervisor, 3=Admin)
@@ -78,7 +79,7 @@ export function TicketStaffManagement() {
       setStaff(staffData);
       setDepartments(deptData);
     } catch (err) {
-      console.error('Failed to fetch staff:', err);
+      reportError(err, 'load staff list');
     } finally {
       setLoading(false);
     }
@@ -106,7 +107,7 @@ export function TicketStaffManagement() {
         setUserSearchResults(filteredResults);
       }
     } catch (err) {
-      console.error('Failed to search users:', err);
+      reportError(err, 'search users');
     } finally {
       setUserSearchLoading(false);
     }
@@ -171,7 +172,7 @@ export function TicketStaffManagement() {
       resetForm();
       fetchStaff();
     } catch (err) {
-      console.error('Failed to create staff:', err);
+      reportError(err, 'create staff');
     }
   };
 
@@ -189,7 +190,7 @@ export function TicketStaffManagement() {
       resetForm();
       fetchStaff();
     } catch (err) {
-      console.error('Failed to update staff:', err);
+      reportError(err, 'update staff');
     }
   };
 
@@ -199,7 +200,7 @@ export function TicketStaffManagement() {
       await ticketAdminApi.deleteStaff(id);
       fetchStaff();
     } catch (err) {
-      console.error('Failed to delete staff:', err);
+      reportError(err, 'delete staff');
     }
   };
 

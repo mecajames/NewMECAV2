@@ -24,6 +24,15 @@ export interface OrderItem {
 export interface Order {
   id: string;
   orderNumber: string;
+  // The order's owner profile. Backend exposes this as `member` (the entity
+  // property name); we keep `user` as an alias for older code paths.
+  member?: {
+    id: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    meca_id?: string;
+  };
   user?: {
     id: string;
     email: string;
@@ -33,6 +42,8 @@ export interface Order {
   };
   status: OrderStatus;
   orderType: OrderType;
+  /** True when this membership order is a renewal (the buyer already had a prior completed membership). Computed server-side. */
+  is_renewal?: boolean;
   subtotal: string;
   tax: string;
   discount: string;
@@ -149,6 +160,8 @@ export interface BillingDashboardStats {
   orders: {
     counts: Record<OrderStatus, number>;
     total: number;
+    /** Per-orderType breakdown — optional because older backends don't return it. */
+    byType?: Record<string, { count: number; revenue: string }>;
   };
   invoices: {
     counts: Record<InvoiceStatus, number>;
@@ -165,6 +178,10 @@ export interface BillingDashboardStats {
   recent: {
     orders: Order[];
     invoices: Invoice[];
+  };
+  period?: {
+    startDate: string | null;
+    endDate: string | null;
   };
 }
 
@@ -401,10 +418,16 @@ export const billingApi = {
   // ==========================================
 
   /**
-   * Get billing dashboard statistics
+   * Get billing dashboard statistics. Optional startDate/endDate (ISO date
+   * strings, YYYY-MM-DD or full ISO) restrict counts and revenue to the
+   * given window.
    */
-  getDashboardStats: async (): Promise<BillingDashboardStats> => {
-    const response = await axios.get('/api/billing/stats/dashboard');
+  getDashboardStats: async (params?: { startDate?: string; endDate?: string }): Promise<BillingDashboardStats> => {
+    const qs = new URLSearchParams();
+    if (params?.startDate) qs.set('startDate', params.startDate);
+    if (params?.endDate) qs.set('endDate', params.endDate);
+    const url = qs.toString() ? `/api/billing/stats/dashboard?${qs.toString()}` : '/api/billing/stats/dashboard';
+    const response = await axios.get(url);
     return response.data;
   },
 

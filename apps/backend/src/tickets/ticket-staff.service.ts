@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { TicketStaff } from './entities/ticket-staff.entity';
 import { TicketStaffDepartment } from './entities/ticket-staff-department.entity';
@@ -8,11 +8,20 @@ import { CreateTicketStaffDto, UpdateTicketStaffDto } from '@newmeca/shared';
 
 @Injectable()
 export class TicketStaffService {
+  private readonly logger = new Logger(TicketStaffService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
 
+  /**
+   * Lists staff with their department assignments. Defensively skips rows
+   * with orphaned profile FKs (profile was hard-deleted) and department
+   * assignments with missing department FKs — those used to crash this
+   * endpoint with a 500 in any environment that had even one bad row.
+   * Bad rows are logged with their ids so an admin can clean them up.
+   */
   async findAll(includeInactive: boolean = false): Promise<any[]> {
     const em = this.em.fork();
     const where: any = {};
@@ -25,13 +34,46 @@ export class TicketStaffService {
       orderBy: { createdAt: 'DESC' },
     });
 
-    // Fetch department assignments for each staff member
-    const result = await Promise.all(staff.map(async (s) => {
-      const assignments = await em.find(TicketStaffDepartment, { staff: s.id }, {
-        populate: ['department'],
-      });
+    const result: any[] = [];
+    for (const s of staff) {
+      // Orphaned profile FK — skip the row instead of crashing the whole list.
+      if (!s.profile || !(s.profile as any).id) {
+        this.logger.warn(
+          `Skipping ticket_staff ${s.id}: profile reference is missing or unloaded`,
+        );
+        continue;
+      }
 
-      return {
+      let assignments: TicketStaffDepartment[] = [];
+      try {
+        assignments = await em.find(TicketStaffDepartment, { staff: s.id }, {
+          populate: ['department'],
+        });
+      } catch (err) {
+        this.logger.error(
+          `Failed to load department assignments for staff ${s.id}: ${(err as Error).message}`,
+        );
+        assignments = [];
+      }
+
+      const departments = assignments
+        .filter(a => {
+          if (!a.department || !(a.department as any).id) {
+            this.logger.warn(
+              `Skipping ticket_staff_departments ${a.id}: department reference is missing`,
+            );
+            return false;
+          }
+          return true;
+        })
+        .map(a => ({
+          id: a.department.id,
+          name: a.department.name,
+          slug: a.department.slug,
+          is_department_head: a.isDepartmentHead,
+        }));
+
+      result.push({
         id: s.id,
         profile_id: s.profile.id,
         permission_level: s.permissionLevel,
@@ -47,14 +89,9 @@ export class TicketStaffService {
           last_name: s.profile.last_name,
           role: s.profile.role,
         },
-        departments: assignments.map((a) => ({
-          id: a.department.id,
-          name: a.department.name,
-          slug: a.department.slug,
-          is_department_head: a.isDepartmentHead,
-        })),
-      };
-    }));
+        departments,
+      });
+    }
 
     return result;
   }
@@ -65,6 +102,13 @@ export class TicketStaffService {
 
     if (!staff) {
       throw new NotFoundException(`Staff member with ID ${id} not found`);
+    }
+
+    if (!staff.profile || !(staff.profile as any).id) {
+      // Same defensive pattern as findAll — orphaned profile FK should
+      // surface as a clean 404 instead of crashing with a TypeError.
+      this.logger.warn(`ticket_staff ${staff.id} has missing profile reference`);
+      throw new NotFoundException(`Staff member with ID ${id} has an orphaned profile and cannot be loaded`);
     }
 
     const assignments = await em.find(TicketStaffDepartment, { staff: id }, {
@@ -87,12 +131,14 @@ export class TicketStaffService {
         last_name: staff.profile.last_name,
         role: staff.profile.role,
       },
-      departments: assignments.map((a) => ({
-        id: a.department.id,
-        name: a.department.name,
-        slug: a.department.slug,
-        is_department_head: a.isDepartmentHead,
-      })),
+      departments: assignments
+        .filter(a => a.department && (a.department as any).id)
+        .map(a => ({
+          id: a.department.id,
+          name: a.department.name,
+          slug: a.department.slug,
+          is_department_head: a.isDepartmentHead,
+        })),
     };
   }
 

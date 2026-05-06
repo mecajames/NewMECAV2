@@ -146,6 +146,7 @@ const AdminInvoicesPage = lazy(() => import('@/admin/billing/pages/InvoicesPage'
 const RevenueReportsPage = lazy(() => import('@/admin/billing/pages/RevenueReportsPage'));
 const OrderDetailPage = lazy(() => import('@/admin/billing/pages/OrderDetailPage'));
 const InvoiceDetailPage = lazy(() => import('@/admin/billing/pages/InvoiceDetailPage'));
+const CreateInvoicePage = lazy(() => import('@/admin/billing/pages/CreateInvoicePage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -326,6 +327,7 @@ function App() {
               <Route path="/admin/billing/orders" element={<L><AdminOrdersPage /></L>} />
               <Route path="/admin/billing/orders/:id" element={<L><OrderDetailPage /></L>} />
               <Route path="/admin/billing/invoices" element={<L><AdminInvoicesPage /></L>} />
+              <Route path="/admin/billing/invoices/new" element={<L><CreateInvoicePage /></L>} />
               <Route path="/admin/billing/invoices/:id" element={<L><InvoiceDetailPage /></L>} />
               <Route path="/admin/billing/revenue" element={<L><RevenueReportsPage /></L>} />
 

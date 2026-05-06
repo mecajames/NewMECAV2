@@ -538,10 +538,28 @@ export default function ClassesManagementPage() {
             </div>
 
             {showForm && (
-              <div className="bg-slate-800 rounded-xl p-6 mb-8">
-                <h2 className="text-2xl font-bold text-white mb-6">
-                  {editingClass ? 'Edit Class' : 'Create New Class'}
-                </h2>
+              <div
+                className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto"
+                onClick={(e) => {
+                  // Click on backdrop (not on the modal content) closes the form.
+                  if (e.target === e.currentTarget) resetForm();
+                }}
+              >
+                <div className="bg-slate-800 rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-white">
+                      {editingClass ? 'Edit Class' : 'Create New Class'}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-700"
+                      title="Close"
+                      aria-label="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -652,13 +670,7 @@ export default function ClassesManagementPage() {
                     </label>
                   </div>
 
-                  <div className="flex gap-4">
-                    <button
-                      type="submit"
-                      className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
-                    >
-                      {editingClass ? 'Update Class' : 'Create Class'}
-                    </button>
+                  <div className="flex gap-4 justify-end pt-2 border-t border-slate-700">
                     <button
                       type="button"
                       onClick={resetForm}
@@ -666,8 +678,15 @@ export default function ClassesManagementPage() {
                     >
                       Cancel
                     </button>
+                    <button
+                      type="submit"
+                      className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      {editingClass ? 'Update Class' : 'Create Class'}
+                    </button>
                   </div>
                 </form>
+                </div>
               </div>
             )}
 

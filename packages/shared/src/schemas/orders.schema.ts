@@ -14,6 +14,7 @@ import {
 
 export const BillingAddressSchema = z.object({
   name: z.string().optional(),
+  company: z.string().optional(),
   email: z.string().email().optional(),
   phone: z.string().optional(),
   address1: z.string().optional(),
@@ -133,11 +134,20 @@ export const RefundOrderSchema = z.object({
 export type RefundOrderDto = z.infer<typeof RefundOrderSchema>;
 
 // Order list query
+//
+// orderType accepts the actual enum values plus two virtual filters used by
+// the admin Orders page dropdown: `new_membership` and `membership_renewal`.
+// The service translates those into `order_type='membership'` plus a
+// presence-of-prior-membership EXISTS condition.
 export const OrderListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   status: OrderStatusSchema.optional(),
-  orderType: OrderTypeSchema.optional(),
+  orderType: z.union([
+    OrderTypeSchema,
+    z.literal('new_membership'),
+    z.literal('membership_renewal'),
+  ]).optional(),
   userId: z.string().uuid().optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),

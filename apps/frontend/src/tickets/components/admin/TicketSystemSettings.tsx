@@ -12,6 +12,7 @@ import {
   Mail,
 } from 'lucide-react';
 import * as ticketAdminApi from '../../ticket-admin.api-client';
+import { reportError } from './error-helper';
 import { TicketSettingsMap, TicketDepartmentResponse } from '@newmeca/shared';
 
 export function TicketSystemSettings() {
@@ -44,7 +45,7 @@ export function TicketSystemSettings() {
       setDepartments(deptData);
       setUnsavedChanges(false);
     } catch (err) {
-      console.error('Failed to fetch settings:', err);
+      reportError(err, 'load settings');
     } finally {
       setLoading(false);
     }
@@ -88,7 +89,7 @@ export function TicketSystemSettings() {
 
       await fetchSettings();
     } catch (err) {
-      console.error('Failed to save settings:', err);
+      reportError(err, 'save settings');
     } finally {
       setSaving(false);
     }

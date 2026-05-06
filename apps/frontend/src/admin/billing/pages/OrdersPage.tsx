@@ -206,7 +206,7 @@ export default function OrdersPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       {/* Header */}
       <div className="border-b border-slate-700 bg-slate-800">
-        <div className="mx-auto max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-white">Orders</h1>
@@ -233,10 +233,10 @@ export default function OrdersPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by order number..."
+                placeholder="Search order #, customer, MECA ID, item, amount, type, Stripe ID…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="rounded-md border border-slate-600 bg-slate-700 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="w-full sm:w-[480px] rounded-md border border-slate-600 bg-slate-700 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
             <button
@@ -288,11 +288,15 @@ export default function OrdersPage() {
                 className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
               >
                 <option value="">All Types</option>
-                {Object.values(OrderType).map((type) => (
-                  <option key={type} value={type}>
-                    {type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                  </option>
-                ))}
+                {/* Split membership into the two values the rest of the
+                    app uses for display. Backend understands both as
+                    virtual filters on top of orderType=membership. */}
+                <option value="new_membership">New Membership</option>
+                <option value="membership_renewal">Membership Renewal</option>
+                <option value={OrderType.EVENT_REGISTRATION}>Event Registration</option>
+                <option value={OrderType.MANUAL}>Manual Order</option>
+                <option value={OrderType.MECA_SHOP}>Shop Purchase</option>
+                <option value={OrderType.MERCHANDISE}>Merchandise</option>
               </select>
             </div>
 

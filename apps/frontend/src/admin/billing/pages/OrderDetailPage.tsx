@@ -341,19 +341,23 @@ export default function OrderDetailPage() {
                 <h2 className="text-lg font-semibold text-white">Customer</h2>
               </div>
               {(() => {
-                const userName = order.user
-                  ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim()
+                // Read whichever field the backend provides — `member` is the
+                // entity property name; `user` is kept as a backwards-compat
+                // alias.
+                const owner = (order as any).member || order.user;
+                const userName = owner
+                  ? `${owner.first_name || ''} ${owner.last_name || ''}`.trim()
                   : null;
                 const billingName = order.billingAddress?.name;
                 const customerName = userName || billingName || 'No Name';
-                const hasProfile = order.user?.id;
-                const isGuestOrder = !order.user;
+                const hasProfile = !!owner?.id;
+                const isGuestOrder = !owner;
 
-                return order.user ? (
+                return owner ? (
                   <div className="space-y-2">
                     {hasProfile ? (
                       <button
-                        onClick={() => navigate(`/admin/members/${order.user!.id}`)}
+                        onClick={() => navigate(`/admin/members/${owner.id}`)}
                         className="text-orange-400 hover:text-orange-300 hover:underline font-medium text-left"
                       >
                         {customerName}
@@ -361,15 +365,15 @@ export default function OrderDetailPage() {
                     ) : (
                       <p className="text-white font-medium">{customerName}</p>
                     )}
-                    <p className="text-gray-400 text-sm">{order.user.email}</p>
-                    {order.user.meca_id && (
+                    <p className="text-gray-400 text-sm">{owner.email}</p>
+                    {owner.meca_id && (
                       <p className="text-orange-400 text-sm font-medium">
-                        MECA ID: #{order.user.meca_id}
+                        MECA ID: #{owner.meca_id}
                       </p>
                     )}
                     {hasProfile && (
                       <button
-                        onClick={() => navigate(`/admin/members/${order.user!.id}`)}
+                        onClick={() => navigate(`/admin/members/${owner.id}`)}
                         className="mt-2 w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 text-sm text-white rounded-lg transition-colors"
                       >
                         View Full Profile
@@ -379,7 +383,15 @@ export default function OrderDetailPage() {
                 ) : isGuestOrder ? (
                   <div className="space-y-2">
                     {billingName && <p className="text-white font-medium">{billingName}</p>}
-                    <p className="text-gray-500 text-sm">Guest Order (No account)</p>
+                    <p className="text-amber-400 text-sm font-medium">
+                      Guest Purchase — no member account
+                    </p>
+                    {(order as any).guestEmail && (
+                      <p className="text-gray-400 text-sm">{(order as any).guestEmail}</p>
+                    )}
+                    <p className="text-gray-500 text-xs">
+                      Captured from billing details only. The buyer either checked out without an account, or the account was deleted afterward.
+                    </p>
                   </div>
                 ) : (
                   <p className="text-gray-400">No customer information</p>
