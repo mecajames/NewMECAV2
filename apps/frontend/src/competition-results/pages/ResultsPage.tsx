@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers, MapPin, ChevronDown, CheckCircle, X } from 'lucide-react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
@@ -46,6 +46,24 @@ export default function ResultsPage() {
   const [isAggregatedView, setIsAggregatedView] = useState(false);
   const [eventResultCounts, setEventResultCounts] = useState<Record<string, number>>({});
   const { banners: resultsBanners } = useBanners(BannerPosition.RESULTS_TOP);
+
+  // Type-to-search dropdown state for the event picker. Mirrors the admin
+  // ResultsEntryNew pattern so the public results page behaves the same way.
+  const [eventSearchTerm, setEventSearchTerm] = useState('');
+  const [eventDropdownOpen, setEventDropdownOpen] = useState(false);
+  const eventDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close the dropdown when the user clicks outside it.
+  useEffect(() => {
+    if (!eventDropdownOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (eventDropdownRef.current && !eventDropdownRef.current.contains(e.target as Node)) {
+        setEventDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [eventDropdownOpen]);
 
   // Memoized list of recent events (past 10 days to capture weekend events)
   const recentEvents = useMemo(() => {
@@ -450,58 +468,108 @@ export default function ResultsPage() {
               autoSelectCurrent={true}
             />
 
-            {/* Event Selector */}
-            <div>
+            {/* Event Selector \u2014 type-to-search dropdown that matches the admin
+                Results Entry pattern. */}
+            <div ref={eventDropdownRef} className="relative">
               <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
                 Select Event
               </label>
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <select
-                  value={selectedEventId}
-                  onChange={(e) => setSelectedEventId(e.target.value)}
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search events..."
+                  value={eventSearchTerm}
+                  onChange={(e) => {
+                    setEventSearchTerm(e.target.value);
+                    setEventDropdownOpen(true);
+                  }}
+                  onFocus={() => setEventDropdownOpen(true)}
                   disabled={loading}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                >
-                  <option value="">-- Select an Event --</option>
-                  {displayEvents.map((event) => {
-                    // Check if this is a combined multi-day State/World Finals event
-                    const isMultiDayFinals = event.multi_day_group_id &&
-                      (event.event_type === 'state_finals' || event.event_type === 'world_finals');
-                    const groupEvents = isMultiDayFinals
-                      ? events.filter(e => e.multi_day_group_id === event.multi_day_group_id)
-                      : [];
-
-                    // Check if event has results - for multi-day, check all days
-                    const hasResults = isMultiDayFinals && groupEvents.length > 0
-                      ? groupEvents.some(e => (eventResultCounts[e.id] || 0) > 0)
-                      : (eventResultCounts[event.id] || 0) > 0;
-
-                    // Style: green for has results, yellow for pending
-                    const optionStyle = hasResults
-                      ? { backgroundColor: '#166534', color: '#fff' } // green-800
-                      : { backgroundColor: '#854d0e', color: '#fff' }; // yellow-800
-
-                    return (
-                      <option
-                        key={event.id}
-                        value={event.id}
-                        style={optionStyle}
-                      >
-                        {hasResults ? '\u2713 ' : '\u25cb '}{event.title}
-                        {isMultiDayFinals && groupEvents.length > 1
-                          ? ` (${groupEvents.length}-Day)`
-                          : ` - ${new Date(event.event_date).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}`
-                        }
-                      </option>
-                    );
-                  })}
-                </select>
+                  className="w-full pl-10 pr-10 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                />
+                <ChevronDown
+                  onClick={() => !loading && setEventDropdownOpen((o) => !o)}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 cursor-pointer transition-transform ${eventDropdownOpen ? 'rotate-180' : ''}`}
+                />
               </div>
+
+              {/* Selected event chip \u2014 shown only when collapsed and a pick exists. */}
+              {selectedEventId && !eventDropdownOpen && (() => {
+                const sel = displayEvents.find(e => e.id === selectedEventId)
+                  || events.find(e => e.id === selectedEventId);
+                if (!sel) return null;
+                return (
+                  <div className="mt-2 px-3 py-1.5 bg-slate-800 border border-orange-500/50 rounded-lg text-sm text-orange-300 flex items-center justify-between">
+                    <span className="truncate">
+                      {sel.title} \u2014 {new Date(sel.event_date).toLocaleDateString()}
+                    </span>
+                    <button
+                      onClick={() => { setSelectedEventId(''); setEventSearchTerm(''); }}
+                      className="ml-2 text-gray-400 hover:text-white"
+                      title="Clear selection"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Filtered dropdown \u2014 same matching rules as the previous select
+                  (filtered by season + recent), now type-to-search by title. */}
+              {eventDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 max-h-72 overflow-y-auto bg-slate-800 border border-slate-600 rounded-lg shadow-lg">
+                  {(() => {
+                    const term = eventSearchTerm.trim().toLowerCase();
+                    const matches = term
+                      ? displayEvents.filter(e => (e.title || '').toLowerCase().includes(term))
+                      : displayEvents;
+                    if (matches.length === 0) {
+                      return <div className="px-4 py-3 text-gray-400 text-sm">No events found</div>;
+                    }
+                    return matches.map((event) => {
+                      const isMultiDayFinals = event.multi_day_group_id &&
+                        (event.event_type === 'state_finals' || event.event_type === 'world_finals');
+                      const groupEvents = isMultiDayFinals
+                        ? events.filter(e => e.multi_day_group_id === event.multi_day_group_id)
+                        : [];
+                      const hasResults = isMultiDayFinals && groupEvents.length > 0
+                        ? groupEvents.some(e => (eventResultCounts[e.id] || 0) > 0)
+                        : (eventResultCounts[event.id] || 0) > 0;
+
+                      return (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedEventId(event.id);
+                            setEventDropdownOpen(false);
+                            setEventSearchTerm('');
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-2 ${
+                            selectedEventId === event.id ? 'bg-slate-700 text-orange-400' : 'text-white'
+                          }`}
+                        >
+                          {hasResults ? (
+                            <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+                          ) : (
+                            <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-600/80 flex-shrink-0" title="Results pending" />
+                          )}
+                          <span className="truncate font-medium">
+                            {event.title}
+                            {isMultiDayFinals && groupEvents.length > 1 ? ` (${groupEvents.length}-Day)` : ''}
+                          </span>
+                          <span className="ml-auto text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">
+                            {new Date(event.event_date).toLocaleDateString('en-US', {
+                              month: 'short', day: 'numeric', year: 'numeric',
+                            })}
+                          </span>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
 
               {/* Legend for dropdown colors */}
               <div className="mt-2 flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
