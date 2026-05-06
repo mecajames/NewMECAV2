@@ -63,6 +63,7 @@ export class CompetitionClassesService {
       name: input.name,
       abbreviation: input.abbreviation,
       format: input.format,
+      section: input.section ?? null,
       season,
       isActive: input.is_active ?? input.isActive ?? true,
       displayOrder: input.display_order ?? input.displayOrder ?? 0,
@@ -86,6 +87,7 @@ export class CompetitionClassesService {
     if (input.name !== undefined) updateData.name = input.name;
     if (input.abbreviation !== undefined) updateData.abbreviation = input.abbreviation;
     if (input.format !== undefined) updateData.format = input.format;
+    if (input.section !== undefined) updateData.section = input.section;
     if (input.is_active !== undefined) updateData.isActive = input.is_active;
     if (input.isActive !== undefined) updateData.isActive = input.isActive;
     if (input.display_order !== undefined) updateData.displayOrder = input.display_order;
@@ -171,6 +173,7 @@ export class CompetitionClassesService {
         name: sourceClass.name,
         abbreviation: sourceClass.abbreviation,
         format: sourceClass.format,
+        section: sourceClass.section ?? null,
         season: Reference.createFromPK(Season, toSeasonId),
         isActive: sourceClass.isActive,
         displayOrder: sourceClass.displayOrder,
@@ -211,6 +214,7 @@ export class CompetitionClassesService {
       name: string;
       abbreviation: string;
       format: string;
+      section: string | null;
       isActive: boolean;
       displayOrder: number;
       unlimitedWattage: boolean;
@@ -250,6 +254,7 @@ export class CompetitionClassesService {
         name: c.name,
         abbreviation: c.abbreviation,
         format: c.format,
+        section: c.section ?? null,
         isActive: c.isActive,
         displayOrder: c.displayOrder,
         unlimitedWattage: c.unlimitedWattage,
@@ -283,6 +288,7 @@ export class CompetitionClassesService {
         name: string;
         abbreviation: string;
         format: string;
+        section?: string | null;
         isActive?: boolean;
         displayOrder?: number;
         unlimitedWattage?: boolean;
@@ -374,6 +380,7 @@ export class CompetitionClassesService {
       if (found) {
         em.assign(found, {
           name: incoming.name,
+          section: incoming.section !== undefined ? incoming.section : found.section,
           displayOrder: incoming.displayOrder ?? found.displayOrder,
           isActive: incoming.isActive ?? found.isActive,
           unlimitedWattage: incoming.unlimitedWattage ?? found.unlimitedWattage,
@@ -385,6 +392,7 @@ export class CompetitionClassesService {
           name: incoming.name,
           abbreviation: incoming.abbreviation,
           format: incoming.format,
+          section: incoming.section ?? null,
           season,
           isActive: incoming.isActive ?? true,
           displayOrder: incoming.displayOrder ?? 0,

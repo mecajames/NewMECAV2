@@ -36,6 +36,7 @@ export default function ClassesManagementPage() {
     name: '',
     abbreviation: '',
     format: 'SPL' as CompetitionFormat,
+    section: '',
     season_id: '',
     is_active: true,
     unlimited_wattage: false,
@@ -165,6 +166,7 @@ export default function ClassesManagementPage() {
           name: formData.name,
           abbreviation: formData.abbreviation,
           format: formData.format,
+          section: formData.section || null,
           is_active: formData.is_active,
           unlimited_wattage: formData.unlimited_wattage,
           display_order: formData.display_order,
@@ -175,6 +177,7 @@ export default function ClassesManagementPage() {
           name: formData.name,
           abbreviation: formData.abbreviation,
           format: formData.format,
+          section: formData.section || null,
           season_id: formData.season_id,
           is_active: formData.is_active,
           unlimited_wattage: formData.unlimited_wattage,
@@ -196,6 +199,7 @@ export default function ClassesManagementPage() {
       name: classItem.name,
       abbreviation: classItem.abbreviation,
       format: classItem.format as CompetitionFormat,
+      section: classItem.section ?? '',
       season_id: classItem.season_id,
       is_active: classItem.is_active,
       unlimited_wattage: classItem.unlimited_wattage ?? false,
@@ -355,6 +359,7 @@ export default function ClassesManagementPage() {
       name: '',
       abbreviation: '',
       format: selectedFormat as CompetitionFormat || 'SPL',
+      section: '',
       season_id: selectedSeasonId || currentSeason?.id || '',
       is_active: true,
       unlimited_wattage: false,
@@ -586,6 +591,33 @@ export default function ClassesManagementPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Section
+                      </label>
+                      <input
+                        type="text"
+                        list="section-suggestions"
+                        value={formData.section}
+                        onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                        placeholder="e.g., Park n Pound"
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                      {/* Suggestions reuse sections already in use across loaded classes
+                          plus the V1 canonical names so first-time entry is easy. */}
+                      <datalist id="section-suggestions">
+                        {Array.from(new Set([
+                          ...classes.map(c => c.section).filter((s): s is string => !!s),
+                          'Street', 'Trunk', 'Modified Street', 'Modified',
+                          'Radical X', 'Park n Pound', 'Dueling Demos',
+                          'Motorcycle SPL', 'Sound Quality', 'Install', 'RTA',
+                          'SQ2', 'Motorcycle SQ', 'MECA Kids', 'Ride The Light',
+                          'Show & Shine', 'Specialty Awards',
+                          'SPL Phat Awards', 'SQL Phat Awards', 'Phat Awards',
+                        ])).sort().map(s => <option key={s} value={s} />)}
+                      </datalist>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
                         Display Order
                       </label>
                       <input
@@ -657,6 +689,7 @@ export default function ClassesManagementPage() {
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Name</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Abbreviation</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Format</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Section</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Status</th>
                       <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">Actions</th>
                     </tr>
@@ -680,6 +713,9 @@ export default function ClassesManagementPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-gray-300 text-sm">{classItem.format}</td>
+                        <td className="px-6 py-4 text-gray-400 text-sm">
+                          {classItem.section || <span className="text-gray-600 italic">—</span>}
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2 flex-wrap">
                             {classItem.is_active ? (

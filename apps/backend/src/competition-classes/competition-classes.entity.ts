@@ -16,6 +16,9 @@ export class CompetitionClass {
   @Property({ type: 'text' })
   format!: string;
 
+  @Property({ type: 'text', nullable: true })
+  section?: string;
+
   @ManyToOne(() => Season, { fieldName: 'season_id', serializedName: 'season_id' })
   season!: Season;
 

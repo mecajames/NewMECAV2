@@ -5,6 +5,7 @@ export interface CompetitionClass {
   name: string;
   abbreviation: string;
   format: string;
+  section?: string | null;
   season_id: string;
   is_active: boolean;
   unlimited_wattage: boolean;
@@ -61,6 +62,7 @@ export const competitionClassesApi = {
     name: string;
     abbreviation: string;
     format: string;
+    section?: string | null;
     season_id: string;
     is_active?: boolean;
     unlimited_wattage?: boolean;
@@ -79,6 +81,7 @@ export const competitionClassesApi = {
       name?: string;
       abbreviation?: string;
       format?: string;
+      section?: string | null;
       season_id?: string;
       is_active?: boolean;
       unlimited_wattage?: boolean;

@@ -10,11 +10,26 @@ import { useAuth } from '@/auth/contexts/AuthContext';
 import { BannerDisplay, useBanners } from '@/banners';
 import { BannerPosition } from '@newmeca/shared';
 
-interface GroupedResults {
-  [format: string]: {
-    [className: string]: CompetitionResult[];
-  };
+interface ClassGroup {
+  className: string;
+  classDisplayOrder: number;
+  results: CompetitionResult[];
 }
+
+interface SectionGroup {
+  section: string;
+  sectionDisplayOrder: number;
+  classes: ClassGroup[];
+}
+
+interface FormatGroup {
+  format: string;
+  sections: SectionGroup[];
+}
+
+// Sentinel used when a class has no section assigned. Rendered without a
+// sub-header so legacy data still appears, just at the bottom of its format.
+const UNASSIGNED_SECTION = '__unassigned__';
 
 type SortColumn = 'placement' | 'competitor' | 'state' | 'mecaId' | 'wattage' | 'frequency' | 'score' | 'points';
 type SortDirection = 'asc' | 'desc';
@@ -385,13 +400,32 @@ export default function ResultsPage() {
     return Array.from(classSet).sort();
   }, [results, classes, selectedFormat]);
 
-  // Memoized grouped results by format and class with search/filter applied
-  const groupedResults: GroupedResults = useMemo(() => {
-    const grouped: GroupedResults = {};
+  // Memoized grouped results: format → section → class.
+  //
+  // Sections are sorted by the minimum display_order of their classes (so the
+  // V1 panel order is preserved without needing a separate section_order
+  // column). Classes within a section are sorted by their own display_order.
+  // Classes without a section land in an "__unassigned__" bucket at the
+  // bottom of the format and render without a sub-header.
+  const groupedResults: FormatGroup[] = useMemo(() => {
+    type Bucket = Map<string, {
+      className: string;
+      classDisplayOrder: number;
+      results: CompetitionResult[];
+    }>;
+    type SectionBucket = Map<string, {
+      section: string;
+      sectionDisplayOrder: number;
+      classes: Bucket;
+    }>;
+    const formats = new Map<string, SectionBucket>();
+
     results.forEach(result => {
       const classData = classes.find(c => c.id === (result.classId || result.class_id));
       const format = classData?.format || 'Unknown';
       const className = result.competitionClass || result.competition_class || 'Unknown';
+      const section = classData?.section ?? UNASSIGNED_SECTION;
+      const classDisplayOrder = classData?.display_order ?? 0;
 
       if (selectedFormat !== 'all' && format !== selectedFormat) {
         return;
@@ -412,15 +446,52 @@ export default function ResultsPage() {
         }
       }
 
-      if (!grouped[format]) {
-        grouped[format] = {};
+      let sectionBucket = formats.get(format);
+      if (!sectionBucket) {
+        sectionBucket = new Map();
+        formats.set(format, sectionBucket);
       }
-      if (!grouped[format][className]) {
-        grouped[format][className] = [];
+
+      let secEntry = sectionBucket.get(section);
+      if (!secEntry) {
+        secEntry = {
+          section,
+          sectionDisplayOrder: classDisplayOrder,
+          classes: new Map(),
+        };
+        sectionBucket.set(section, secEntry);
+      } else if (classDisplayOrder < secEntry.sectionDisplayOrder) {
+        // Section's display order = the lowest display_order of any class
+        // in it. Keeps panels in V1 order when display_order is populated.
+        secEntry.sectionDisplayOrder = classDisplayOrder;
       }
-      grouped[format][className].push(result);
+
+      let classEntry = secEntry.classes.get(className);
+      if (!classEntry) {
+        classEntry = { className, classDisplayOrder, results: [] };
+        secEntry.classes.set(className, classEntry);
+      }
+      classEntry.results.push(result);
     });
-    return grouped;
+
+    // Materialize and sort: sections by display_order, then classes by display_order,
+    // then by name as a tiebreaker so the result is deterministic.
+    return Array.from(formats.entries()).map(([format, sectionBucket]) => {
+      const sections: SectionGroup[] = Array.from(sectionBucket.values())
+        .map(s => ({
+          section: s.section,
+          sectionDisplayOrder: s.sectionDisplayOrder,
+          classes: Array.from(s.classes.values())
+            .sort((a, b) => a.classDisplayOrder - b.classDisplayOrder || a.className.localeCompare(b.className)),
+        }))
+        .sort((a, b) => {
+          // Push the unassigned bucket to the bottom regardless of order.
+          if (a.section === UNASSIGNED_SECTION) return 1;
+          if (b.section === UNASSIGNED_SECTION) return -1;
+          return a.sectionDisplayOrder - b.sectionDisplayOrder || a.section.localeCompare(b.section);
+        });
+      return { format, sections };
+    });
   }, [results, classes, selectedFormat, selectedClass, searchTerm]);
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
@@ -790,21 +861,36 @@ export default function ResultsPage() {
                   </div>
                 </div>
 
-                {/* Results grouped by format and class */}
+                {/* Results grouped by format → section → class */}
                 <div className="space-y-6 sm:space-y-8">
-                  {Object.entries(groupedResults).map(([format, classesByName]) => (
+                  {groupedResults.map(({ format, sections }) => {
+                    const formatTotal = sections.reduce(
+                      (sum, s) => sum + s.classes.reduce((cs, c) => cs + c.results.length, 0),
+                      0,
+                    );
+                    return (
                     <div key={format} className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
                       <div className="bg-slate-700 px-4 sm:px-6 py-3 sm:py-4">
                         <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
                           {format} Results
                           <span className="text-xs sm:text-sm bg-orange-500 text-white px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full">
-                            {Object.values(classesByName).reduce((sum, arr) => sum + arr.length, 0)}
+                            {formatTotal}
                           </span>
                         </h2>
                       </div>
 
-                      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
-                        {Object.entries(classesByName).map(([className, classResults]) => (
+                      <div className="p-3 sm:p-6 space-y-6 sm:space-y-8">
+                        {sections.map(({ section, classes: sectionClasses }) => (
+                          <div key={section}>
+                            {section !== UNASSIGNED_SECTION && (
+                              <div className="mb-3 sm:mb-4 pb-2 border-b border-slate-700">
+                                <h3 className="text-lg sm:text-xl font-semibold text-white">
+                                  {section}
+                                </h3>
+                              </div>
+                            )}
+                            <div className="space-y-4 sm:space-y-6">
+                        {sectionClasses.map(({ className, results: classResults }) => (
                           <div key={className}>
                             <h3 className="text-base sm:text-lg font-semibold text-orange-400 mb-2 sm:mb-3 px-1 sm:px-3">
                               {className}
@@ -1008,9 +1094,13 @@ export default function ResultsPage() {
                             </div>
                           </div>
                         ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ) : (
