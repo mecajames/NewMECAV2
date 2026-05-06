@@ -12,6 +12,7 @@ import {
   Star,
 } from 'lucide-react';
 import * as ticketAdminApi from '../../ticket-admin.api-client';
+import { reportError } from './error-helper';
 import { TicketDepartmentResponse } from '@newmeca/shared';
 
 export function TicketDepartmentManagement() {
@@ -38,7 +39,7 @@ export function TicketDepartmentManagement() {
       const data = await ticketAdminApi.listDepartments(showInactive);
       setDepartments(data);
     } catch (err) {
-      console.error('Failed to fetch departments:', err);
+      reportError(err, 'load departments');
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ export function TicketDepartmentManagement() {
       resetForm();
       fetchDepartments();
     } catch (err) {
-      console.error('Failed to create department:', err);
+      reportError(err, 'create department');
     }
   };
 
@@ -85,7 +86,7 @@ export function TicketDepartmentManagement() {
       resetForm();
       fetchDepartments();
     } catch (err) {
-      console.error('Failed to update department:', err);
+      reportError(err, 'update department');
     }
   };
 
@@ -95,7 +96,7 @@ export function TicketDepartmentManagement() {
       await ticketAdminApi.deleteDepartment(id);
       fetchDepartments();
     } catch (err) {
-      console.error('Failed to delete department:', err);
+      reportError(err, 'delete department');
     }
   };
 

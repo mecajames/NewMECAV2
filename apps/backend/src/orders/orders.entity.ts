@@ -22,7 +22,10 @@ export class Order {
   @Property({ type: 'varchar', length: 50, unique: true, fieldName: 'order_number' })
   orderNumber!: string;
 
-  // User who placed the order (maps to member_id in database)
+  // User who placed the order (maps to member_id in database).
+  // Note: this is exposed in JSON as `member` (matches the property name).
+  // The frontend reads both `order.member` and falls back to `order.user`
+  // for backwards compatibility with older code paths.
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'member_id' })
   member?: Profile;
 
@@ -100,4 +103,17 @@ export class Order {
 
   @Property({ type: 'timestamptz', onUpdate: () => new Date(), fieldName: 'updated_at', defaultRaw: 'now()' })
   updatedAt?: Date;
+
+  /**
+   * Computed at query time — true when this is a *membership* order whose
+   * owner already had a prior completed membership order. Lets the UI
+   * distinguish "New Membership" from "Membership Renewal" without relying
+   * on order-number string parsing (which doesn't work for legacy PMPRO-*
+   * orders imported from the old WordPress system).
+   *
+   * `persist: false` keeps it out of INSERT/UPDATE — the value is filled
+   * in by OrdersService.findAll / findById after the rows are loaded.
+   */
+  @Property({ persist: false })
+  is_renewal?: boolean;
 }

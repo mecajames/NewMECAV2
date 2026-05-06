@@ -131,14 +131,16 @@ export function OrderTable({
               {!compact && (
                 <td className="whitespace-nowrap px-4 py-3">
                   {(() => {
-                    // Get customer name: prefer user name, fallback to billing address name
-                    const userName = order.user
-                      ? `${order.user.first_name || ''} ${order.user.last_name || ''}`.trim()
+                    // Backend exposes this relation as `member`; older paths
+                    // used `user`. Read whichever is present so we never
+                    // mis-flag a real linked customer as a guest.
+                    const owner = order.member || order.user;
+                    const userName = owner
+                      ? `${owner.first_name || ''} ${owner.last_name || ''}`.trim()
                       : null;
                     const billingName = order.billingAddress?.name;
-                    const customerName = userName || billingName || (order.user?.email ? order.user.email : 'Guest');
-                    const hasProfile = order.user?.id;
-                    const isGuestOrder = !order.user;
+                    const customerName = userName || billingName || (owner?.email ? owner.email : 'Guest');
+                    const hasProfile = !!owner?.id;
 
                     return (
                       <>
@@ -146,7 +148,7 @@ export function OrderTable({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/admin/members/${order.user!.id}`);
+                              navigate(`/admin/members/${owner!.id}`);
                             }}
                             className="text-sm text-orange-400 hover:text-orange-300 hover:underline font-medium text-left"
                           >
@@ -157,16 +159,18 @@ export function OrderTable({
                             {customerName}
                           </div>
                         )}
-                        {order.user && (
+                        {owner && (
                           <div className="text-xs text-gray-500">
-                            {order.user.email}
-                            {order.user.meca_id && (
-                              <span className="ml-2 text-orange-400">#{order.user.meca_id}</span>
+                            {owner.email}
+                            {owner.meca_id && (
+                              <span className="ml-2 text-orange-400">#{owner.meca_id}</span>
                             )}
                           </div>
                         )}
-                        {isGuestOrder && (
-                          <div className="text-xs text-gray-500">Guest Order</div>
+                        {!hasProfile && (
+                          <div className="text-xs text-amber-400">
+                            Guest Purchase (no account)
+                          </div>
                         )}
                       </>
                     );
@@ -195,9 +199,38 @@ export function OrderTable({
                 </td>
               )}
               <td className="whitespace-nowrap px-4 py-3">
-                <span className="text-sm text-gray-400">
-                  {orderTypeLabels[order.orderType] || order.orderType}
-                </span>
+                {(() => {
+                  // Descriptive type label — distinguishes a brand-new
+                  // membership purchase from a renewal, names shop and event
+                  // orders explicitly. The is_renewal flag comes from the
+                  // backend, which determines it from the buyer's order
+                  // history (prior completed membership orders) — works
+                  // regardless of order-number format (PMPRO-* or ORD-*).
+                  const otype = String(order.orderType || '').toLowerCase();
+                  const isRenewal = order.is_renewal === true
+                    || (order as any)?.metadata?.isRenewal === true
+                    || /renew/i.test(order.orderNumber || '');
+                  let label: string;
+                  let className = 'text-sm text-gray-300 font-medium';
+                  if (otype === 'membership') {
+                    label = isRenewal ? 'Membership Renewal' : 'New Membership';
+                    className = isRenewal
+                      ? 'text-sm text-cyan-300 font-medium'
+                      : 'text-sm text-emerald-300 font-medium';
+                  } else if (otype === 'event_registration') {
+                    label = 'Event Registration';
+                    className = 'text-sm text-blue-300 font-medium';
+                  } else if (otype === 'shop' || otype === 'meca_shop' || otype === 'merchandise') {
+                    label = 'Shop Purchase';
+                    className = 'text-sm text-purple-300 font-medium';
+                  } else if (otype === 'manual') {
+                    label = 'Manual Order';
+                    className = 'text-sm text-amber-300 font-medium';
+                  } else {
+                    label = orderTypeLabels[order.orderType] || String(order.orderType || '—');
+                  }
+                  return <span className={className}>{label}</span>;
+                })()}
               </td>
               <td className="whitespace-nowrap px-4 py-3">
                 {order.metadata?.subscription_id ? (

@@ -141,42 +141,126 @@ export class OrdersService {
     const { page = 1, limit = 20, status, orderType, userId, startDate, endDate, search } = query;
     const offset = (page - 1) * limit;
 
-    // Build filter
-    const filter: any = {};
+    // The search box on the admin orders page is intentionally broad — admins
+    // expect typing any substring (order number, customer name, email, MECA
+    // ID, item description, dollar amount, Stripe ID, etc.) to surface the
+    // matching row. MikroORM's nested `$or` over relations + decimal/integer
+    // casts is awkward, so we run the filter as raw SQL to find matching IDs,
+    // then hydrate full entities through MikroORM's normal populate path so
+    // the response shape is identical to before.
+    const conn = em.getConnection();
+    const conditions: string[] = [];
+    const params: any[] = [];
 
-    if (status) {
-      filter.status = status;
-    }
-
+    if (status) { conditions.push(`o.status = ?`); params.push(status); }
     if (orderType) {
-      filter.orderType = orderType;
+      // The Orders admin filter exposes "New Membership" and "Membership
+      // Renewal" as virtual order types. They both map to actual
+      // orderType=membership rows, distinguished by whether the buyer had a
+      // prior completed membership (same logic that drives is_renewal).
+      if (orderType === 'new_membership' as any) {
+        conditions.push(`o.order_type = 'membership'`);
+        conditions.push(`NOT EXISTS (
+          SELECT 1 FROM orders prior
+          WHERE prior.member_id = o.member_id
+            AND prior.order_type = 'membership'
+            AND prior.status = 'completed'
+            AND prior.created_at < o.created_at
+        )`);
+      } else if (orderType === 'membership_renewal' as any) {
+        conditions.push(`o.order_type = 'membership'`);
+        conditions.push(`EXISTS (
+          SELECT 1 FROM orders prior
+          WHERE prior.member_id = o.member_id
+            AND prior.order_type = 'membership'
+            AND prior.status = 'completed'
+            AND prior.created_at < o.created_at
+        )`);
+      } else {
+        conditions.push(`o.order_type = ?`);
+        params.push(orderType);
+      }
     }
-
-    if (userId) {
-      filter.member = userId;
-    }
-
-    if (startDate) {
-      filter.createdAt = { $gte: startDate };
-    }
-
-    if (endDate) {
-      filter.createdAt = { ...filter.createdAt, $lte: endDate };
-    }
+    if (userId) { conditions.push(`o.member_id = ?`); params.push(userId); }
+    if (startDate) { conditions.push(`o.created_at >= ?`); params.push(startDate); }
+    if (endDate) { conditions.push(`o.created_at <= ?`); params.push(endDate); }
 
     if (search) {
-      filter.orderNumber = { $like: `%${search}%` };
+      const term = `%${search}%`;
+      // Keep the substitution count on params.push in sync with the number
+      // of `?` placeholders in the clause below if you add or remove fields.
+      // Note: payments has no stripe_subscription_id column — that lives on
+      // memberships. We surface stripe_payment_intent_id / customer_id /
+      // transaction_id / paypal IDs and join to memberships for subs.
+      conditions.push(`(
+        o.order_number ILIKE ?
+        OR o.order_type::text ILIKE ?
+        OR o.total::text ILIKE ?
+        OR p.first_name ILIKE ?
+        OR p.last_name ILIKE ?
+        OR p.full_name ILIKE ?
+        OR p.email ILIKE ?
+        OR p.meca_id::text ILIKE ?
+        OR pay.transaction_id ILIKE ?
+        OR pay.stripe_payment_intent_id ILIKE ?
+        OR pay.stripe_customer_id ILIKE ?
+        OR pay.paypal_order_id ILIKE ?
+        OR EXISTS (
+          SELECT 1 FROM memberships m
+          WHERE m.user_id = o.member_id AND m.stripe_subscription_id ILIKE ?
+        )
+        OR EXISTS (
+          SELECT 1 FROM order_items oi
+          WHERE oi.order_id = o.id AND oi.description ILIKE ?
+        )
+      )`);
+      for (let i = 0; i < 14; i++) params.push(term);
     }
 
-    const [orders, total] = await em.findAndCount(Order, filter, {
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const baseFrom = `FROM orders o
+      LEFT JOIN profiles p ON p.id = o.member_id
+      LEFT JOIN payments pay ON pay.id = o.payment_id`;
+
+    const countRows: Array<{ count: string }> = await conn.execute(
+      `SELECT COUNT(DISTINCT o.id) AS count ${baseFrom} ${where}`,
+      params,
+    );
+    const total = parseInt(countRows[0]?.count ?? '0', 10);
+
+    const idRows: Array<{ id: string }> = await conn.execute(
+      `SELECT DISTINCT o.id, o.created_at ${baseFrom} ${where}
+       ORDER BY o.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+    const ids = idRows.map(r => r.id);
+
+    if (ids.length === 0) {
+      return {
+        data: [],
+        pagination: { page, limit, totalItems: total, totalPages: Math.ceil(total / limit) },
+      };
+    }
+
+    // Hydrate with full populate; preserve original sort order from the SQL.
+    const orders = await em.find(Order, { id: { $in: ids } }, {
       populate: ['member', 'items'],
-      limit,
-      offset,
-      orderBy: { createdAt: 'DESC' },
     });
+    const byId = new Map<string, Order>(orders.map(o => [o.id, o as unknown as Order]));
+    const ordered: Order[] = [];
+    for (const id of ids) {
+      const o = byId.get(id);
+      if (o) ordered.push(o);
+    }
+
+    // Mark which membership orders are renewals (the owner had a prior
+    // completed membership order). Done as one batched lookup so the page
+    // doesn't pay an N+1 cost.
+    await this.attachRenewalFlags(em, ordered);
 
     return {
-      data: orders,
+      data: ordered,
       pagination: {
         page,
         limit,
@@ -556,7 +640,7 @@ export class OrdersService {
   /**
    * Get order counts by status
    */
-  async getStatusCounts(): Promise<Record<OrderStatus, number>> {
+  async getStatusCounts(opts?: { startDate?: string; endDate?: string }): Promise<Record<OrderStatus, number>> {
     const em = this.em.fork();
 
     const counts: Record<OrderStatus, number> = {
@@ -567,11 +651,64 @@ export class OrdersService {
       [OrderStatus.REFUNDED]: 0,
     };
 
+    const dateFilter: any = {};
+    if (opts?.startDate) dateFilter.$gte = opts.startDate;
+    if (opts?.endDate) dateFilter.$lte = opts.endDate;
+    const hasDate = Object.keys(dateFilter).length > 0;
+
     for (const status of Object.values(OrderStatus)) {
-      counts[status] = await em.count(Order, { status });
+      const where: any = { status };
+      if (hasDate) where.createdAt = dateFilter;
+      counts[status] = await em.count(Order, where);
     }
 
     return counts;
+  }
+
+  /**
+   * Get count + total revenue grouped by orderType, optionally restricted
+   * to a date window. Membership orders are split into `new_membership` vs
+   * `membership_renewal` based on whether the buyer already had a prior
+   * completed membership order — same rule as the per-row is_renewal flag.
+   */
+  async getTypeBreakdown(opts?: { startDate?: string; endDate?: string }): Promise<Record<string, { count: number; revenue: string }>> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (opts?.startDate) { conditions.push(`o.created_at >= ?`); params.push(opts.startDate); }
+    if (opts?.endDate) { conditions.push(`o.created_at <= ?`); params.push(opts.endDate); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    type Row = { effective_type: string; count: string; revenue: string };
+    const rows: Row[] = await conn.execute(
+      `SELECT
+         CASE
+           WHEN o.order_type = 'membership' AND EXISTS (
+             SELECT 1 FROM orders prior
+             WHERE prior.member_id = o.member_id
+               AND prior.order_type = 'membership'
+               AND prior.status = 'completed'
+               AND prior.created_at < o.created_at
+           ) THEN 'membership_renewal'
+           WHEN o.order_type = 'membership' THEN 'new_membership'
+           ELSE o.order_type::text
+         END AS effective_type,
+         COUNT(*)::text AS count,
+         COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END), 0)::text AS revenue
+       FROM orders o
+       ${where}
+       GROUP BY effective_type`,
+      params,
+    );
+    const result: Record<string, { count: number; revenue: string }> = {};
+    for (const r of rows) {
+      result[r.effective_type] = {
+        count: parseInt(r.count, 10),
+        revenue: parseFloat(r.revenue).toFixed(2),
+      };
+    }
+    return result;
   }
 
   /**
@@ -580,7 +717,7 @@ export class OrdersService {
   async getRecentOrders(limit: number = 5): Promise<Order[]> {
     const em = this.em.fork();
 
-    return em.find(
+    const recent = await em.find(
       Order,
       {},
       {
@@ -589,6 +726,56 @@ export class OrdersService {
         orderBy: { createdAt: 'DESC' },
       },
     );
+    await this.attachRenewalFlags(em, recent);
+    return recent;
+  }
+
+  /**
+   * For each membership order in the given list, set `is_renewal = true` if
+   * its owner had a prior completed membership order. Runs a single batched
+   * SQL — finds the earliest completed membership timestamp per user across
+   * the whole orders table, then compares each order's createdAt to that.
+   *
+   * Detection works regardless of order-number format: covers both modern
+   * "ORD-YYYY-RENEW-*" naming and legacy "PMPRO-*" rows imported from the
+   * old WordPress system, which carry no naming hint.
+   */
+  private async attachRenewalFlags(em: EntityManager, orders: Order[]): Promise<void> {
+    const membershipOrders = orders.filter(o => o.orderType === OrderType.MEMBERSHIP && o.member?.id);
+    if (membershipOrders.length === 0) return;
+
+    const userIds = Array.from(new Set(membershipOrders.map(o => o.member!.id)));
+    const placeholders = userIds.map(() => '?').join(',');
+    const conn = em.getConnection();
+
+    type Row = { member_id: string; earliest: string };
+    const rows: Row[] = await conn.execute(
+      `SELECT member_id, MIN(created_at) AS earliest
+       FROM orders
+       WHERE order_type = 'membership'
+         AND status = 'completed'
+         AND member_id IN (${placeholders})
+       GROUP BY member_id`,
+      userIds,
+    );
+    const earliestByUser = new Map<string, number>();
+    for (const r of rows) {
+      earliestByUser.set(r.member_id, new Date(r.earliest).getTime());
+    }
+
+    for (const order of membershipOrders) {
+      const earliest = earliestByUser.get(order.member!.id);
+      if (earliest == null) {
+        // No completed membership in history — treat as a new (pending) one.
+        order.is_renewal = false;
+        continue;
+      }
+      // Renewal when this order is strictly after the earliest completed one
+      // for the same user. The earliest completed order itself is therefore
+      // "new", everything after is "renewal".
+      const ts = order.createdAt ? new Date(order.createdAt).getTime() : 0;
+      order.is_renewal = ts > earliest;
+    }
   }
 
   /**

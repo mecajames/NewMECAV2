@@ -17,6 +17,7 @@ import {
   Play,
 } from 'lucide-react';
 import * as ticketAdminApi from '../../ticket-admin.api-client';
+import { reportError } from './error-helper';
 import { TicketRoutingRuleResponse, TicketDepartmentResponse, TicketStaffResponse } from '@newmeca/shared';
 
 const priorityOptions = [
@@ -89,7 +90,7 @@ export function TicketRoutingRules() {
       setDepartments(deptData);
       setStaff(staffData);
     } catch (err) {
-      console.error('Failed to fetch data:', err);
+      reportError(err, 'load routing data');
     } finally {
       setLoading(false);
     }
@@ -122,7 +123,7 @@ export function TicketRoutingRules() {
       resetForm();
       fetchData();
     } catch (err) {
-      console.error('Failed to create rule:', err);
+      reportError(err, 'create routing rule');
     }
   };
 
@@ -149,7 +150,7 @@ export function TicketRoutingRules() {
       resetForm();
       fetchData();
     } catch (err) {
-      console.error('Failed to update rule:', err);
+      reportError(err, 'update routing rule');
     }
   };
 
@@ -159,7 +160,7 @@ export function TicketRoutingRules() {
       await ticketAdminApi.deleteRoutingRule(id);
       fetchData();
     } catch (err) {
-      console.error('Failed to delete rule:', err);
+      reportError(err, 'delete routing rule');
     }
   };
 
@@ -168,7 +169,7 @@ export function TicketRoutingRules() {
       const result = await ticketAdminApi.testRouting(testData);
       setTestResult(result);
     } catch (err) {
-      console.error('Failed to test routing:', err);
+      reportError(err, 'test routing');
     }
   };
 
