@@ -4,9 +4,10 @@ import { InvoicesController } from './invoices.controller';
 import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { EmailModule } from '../email/email.module';
 import { StripeModule } from '../stripe/stripe.module';
+import { UserActivityModule } from '../user-activity/user-activity.module';
 
 @Module({
-  imports: [EmailModule, forwardRef(() => StripeModule)],
+  imports: [EmailModule, forwardRef(() => StripeModule), UserActivityModule],
   controllers: [InvoicesController],
   providers: [InvoicesService, InvoicePdfService],
   exports: [InvoicesService, InvoicePdfService],

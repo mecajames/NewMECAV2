@@ -124,8 +124,23 @@ export const CreateInvoiceSchema = z.object({
   billingAddress: BillingAddressSchema.optional(),
   sendEmail: z.boolean().default(false),
   currency: z.string().default('USD'),
+  // Optional money adjustments. Subtotal is computed from items;
+  // total = subtotal + tax - discount.
+  tax: z.string().optional(),
+  discount: z.string().optional(),
+  couponCode: z.string().optional(),
 });
 export type CreateInvoiceDto = z.infer<typeof CreateInvoiceSchema>;
+
+// Apply a manual payment (cash / check / wire / comp) to any invoice
+export const ApplyManualPaymentSchema = z.object({
+  method: z.enum(['cash', 'check', 'wire', 'money_order', 'comp', 'other']),
+  reference: z.string().optional(),
+  amount: z.string().optional(),
+  paidAt: z.coerce.date().optional(),
+  notes: z.string().optional(),
+});
+export type ApplyManualPaymentDto = z.infer<typeof ApplyManualPaymentSchema>;
 
 // Update invoice
 export const UpdateInvoiceSchema = z.object({

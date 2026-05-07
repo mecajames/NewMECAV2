@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, User, MapPin, Building, Download, Send, CheckCircle, XCircle, RefreshCw, Package, Info, Undo2 } from 'lucide-react';
+import { ArrowLeft, FileText, User, MapPin, Building, Download, Send, CheckCircle, XCircle, RefreshCw, Package, Info, Undo2, Banknote, Receipt } from 'lucide-react';
 import { billingApi, Invoice, invoicesApi } from '../../../api-client/billing.api-client';
 import { InvoiceStatusBadge } from '../components/BillingStatusBadge';
 import { InvoiceStatus } from '../billing.types';
+import ApplyManualPaymentModal from '../components/ApplyManualPaymentModal';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -11,6 +12,7 @@ export default function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showManualPaymentModal, setShowManualPaymentModal] = useState(false);
 
   const isNew = id === 'new';
 
@@ -88,6 +90,21 @@ export default function InvoiceDetailPage() {
         console.error('Error cancelling invoice:', err);
         alert('Failed to cancel invoice');
       }
+    }
+  };
+
+  const handleApplyCreditMemo = async () => {
+    if (!invoice) return;
+    const balance = (parseFloat(invoice.total) - parseFloat(invoice.amountPaid || '0')).toFixed(2);
+    const amount = prompt(`Credit memo amount (remaining balance: $${balance}):`, balance);
+    if (amount === null) return;
+    const reason = prompt('Reason for the credit memo:');
+    if (!reason) return;
+    try {
+      await invoicesApi.applyCreditMemo(invoice.id, amount, reason);
+      fetchInvoice();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to apply credit memo');
     }
   };
 
@@ -176,6 +193,12 @@ export default function InvoiceDetailPage() {
   const canSend = invoice.status === InvoiceStatus.DRAFT;
   const canResend = invoice.status === InvoiceStatus.SENT || invoice.status === InvoiceStatus.OVERDUE;
   const canMarkPaid = invoice.status === InvoiceStatus.SENT || invoice.status === InvoiceStatus.OVERDUE;
+  // Apply manual payment is broader — allow on DRAFT too, so admins can
+  // record cash/check at the point of sale without first sending the email.
+  const canApplyManualPayment =
+    invoice.status === InvoiceStatus.DRAFT
+    || invoice.status === InvoiceStatus.SENT
+    || invoice.status === InvoiceStatus.OVERDUE;
   const canCancel = invoice.status !== InvoiceStatus.PAID && invoice.status !== InvoiceStatus.CANCELLED;
   const canRefund = invoice.status === InvoiceStatus.PAID;
 
@@ -229,6 +252,25 @@ export default function InvoiceDetailPage() {
                 >
                   <RefreshCw className="h-4 w-4" />
                   Resend
+                </button>
+              )}
+              {canApplyManualPayment && (
+                <button
+                  onClick={() => setShowManualPaymentModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 font-medium rounded-lg border border-emerald-500/20 transition-colors"
+                >
+                  <Banknote className="h-4 w-4" />
+                  Apply Payment
+                </button>
+              )}
+              {canApplyManualPayment && (
+                <button
+                  onClick={handleApplyCreditMemo}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-medium rounded-lg border border-amber-500/20 transition-colors"
+                  title="Write off remaining balance with a credit memo"
+                >
+                  <Receipt className="h-4 w-4" />
+                  Credit Memo
                 </button>
               )}
               {canMarkPaid && (
@@ -361,6 +403,22 @@ export default function InvoiceDetailPage() {
                       <span className="text-white">Total</span>
                       <span className="text-white">{formatCurrency(invoice.total, invoice.currency)}</span>
                     </div>
+                    {parseFloat(invoice.amountPaid || '0') > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Amount Paid</span>
+                        <span className="text-emerald-400">{formatCurrency(invoice.amountPaid || '0', invoice.currency)}</span>
+                      </div>
+                    )}
+                    {(() => {
+                      const balance = parseFloat(invoice.total) - parseFloat(invoice.amountPaid || '0');
+                      if (balance <= 0.005) return null;
+                      return (
+                        <div className="flex justify-between text-sm font-semibold">
+                          <span className="text-gray-300">Balance Owed</span>
+                          <span className="text-orange-400">{formatCurrency(balance.toFixed(2), invoice.currency)}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -471,6 +529,18 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       </div>
+
+      {showManualPaymentModal && invoice && (
+        <ApplyManualPaymentModal
+          invoice={invoice}
+          onClose={() => setShowManualPaymentModal(false)}
+          onApplied={(updated) => {
+            setShowManualPaymentModal(false);
+            setInvoice(updated);
+            fetchInvoice();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -10,8 +10,13 @@ import {
   InvoiceStatus,
   InvoiceItemType,
   OrderStatus,
+  OrderType,
+  OrderItemType,
   PaymentStatus,
+  PaymentMethod,
+  PaymentType,
   CreateInvoiceDto,
+  ApplyManualPaymentDto,
   UpdateInvoiceStatusDto,
   InvoiceListQuery,
   CompanyInfo,
@@ -21,6 +26,7 @@ import { Invoice } from './invoices.entity';
 import { InvoiceItem } from './invoice-items.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Order } from '../orders/orders.entity';
+import { OrderItem } from '../orders/order-items.entity';
 import { Payment } from '../payments/payments.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { Team } from '../teams/team.entity';
@@ -76,6 +82,55 @@ export class InvoicesService {
       const nextNum = count + 1;
       return `INV-${year}-${String(nextNum).padStart(5, '0')}`;
     }
+  }
+
+  /**
+   * Generate a unique order number for invoice→order coupling.
+   * Mirrors the format used by OrdersService.
+   */
+  private async generateOrderNumber(em: EntityManager): Promise<string> {
+    const year = new Date().getFullYear();
+    try {
+      const connection = em.getConnection();
+      const result = await connection.execute('SELECT generate_order_number() as order_number');
+      return result[0].order_number;
+    } catch {
+      const count = await em.count(Order, {
+        orderNumber: { $like: `ORD-${year}-%` },
+      });
+      const nextNum = count + 1;
+      return `ORD-${year}-${String(nextNum).padStart(5, '0')}`;
+    }
+  }
+
+  /**
+   * Map an InvoiceItemType to its OrderItemType equivalent. Every invoice
+   * item type has a corresponding order item type (the inverse — order →
+   * invoice — has gaps, since OrderItemType.TEAM_ADDON / SHOP_PRODUCT do
+   * not exist on the invoice side).
+   */
+  private mapItemTypeForOrder(invoiceType: InvoiceItemType): OrderItemType {
+    switch (invoiceType) {
+      case InvoiceItemType.MEMBERSHIP: return OrderItemType.MEMBERSHIP;
+      case InvoiceItemType.EVENT_CLASS: return OrderItemType.EVENT_CLASS;
+      case InvoiceItemType.PROCESSING_FEE: return OrderItemType.PROCESSING_FEE;
+      case InvoiceItemType.DISCOUNT: return OrderItemType.DISCOUNT;
+      case InvoiceItemType.TAX: return OrderItemType.TAX;
+      case InvoiceItemType.OTHER: return OrderItemType.OTHER;
+      default: return OrderItemType.OTHER;
+    }
+  }
+
+  /**
+   * Pick an OrderType for an invoice based on its line items. Membership
+   * line items take precedence so revenue reports/breakdowns can attribute
+   * to the right bucket; event_class lines map to event_registration; the
+   * rest fall back to MANUAL.
+   */
+  private inferOrderTypeFromItems(items: { itemType: InvoiceItemType }[]): OrderType {
+    if (items.some(i => i.itemType === InvoiceItemType.MEMBERSHIP)) return OrderType.MEMBERSHIP;
+    if (items.some(i => i.itemType === InvoiceItemType.EVENT_CLASS)) return OrderType.EVENT_REGISTRATION;
+    return OrderType.MANUAL;
   }
 
   /**
@@ -273,7 +328,21 @@ export class InvoicesService {
   }
 
   /**
-   * Create a new invoice manually (admin)
+   * Create a new invoice manually (admin) AND generate a paired Order so
+   * the books stay symmetric. Without the paired Order, manual invoices
+   * are invisible to revenue reports / dashboard stats / CSV exports —
+   * those all read from the orders table as the source of truth.
+   *
+   * The flow:
+   *   1. Generate invoice + order numbers
+   *   2. Compute subtotal from items, total = subtotal + tax - discount
+   *   3. Create the Order (status=PENDING, mirrored line items)
+   *   4. Create the Invoice (status=DRAFT)
+   *   5. Cross-link: Invoice.order = Order, Order.invoiceId = Invoice.id
+   *   6. Persist both in one flush
+   *
+   * When the invoice is later paid, sentMarkPaid() flips the order to
+   * COMPLETED. When cancelled/refunded, the order follows.
    */
   async create(data: CreateInvoiceDto): Promise<Invoice> {
     const em = this.em.fork();
@@ -288,32 +357,71 @@ export class InvoicesService {
       user = foundUser;
     }
 
-    // Generate invoice number
+    // Generate invoice + order numbers up-front so we can cross-reference
     const invoiceNumber = await this.generateInvoiceNumber(em);
+    const orderNumber = await this.generateOrderNumber(em);
 
-    // Calculate totals
-    const { subtotal, total } = this.calculateTotals(data.items);
+    // Money math: subtotal from items, total = subtotal + tax - discount.
+    const { subtotal } = this.calculateTotals(data.items);
+    const tax = (data.tax ?? '0.00');
+    const discount = (data.discount ?? '0.00');
+    const total = (parseFloat(subtotal) + parseFloat(tax) - parseFloat(discount)).toFixed(2);
 
-    // Calculate due date (today if not specified - invoices are due immediately unless otherwise specified)
     const dueDate = data.dueDate ? new Date(data.dueDate) : new Date();
+    const currency = data.currency || 'USD';
+    const orderType = this.inferOrderTypeFromItems(data.items);
 
-    // Create invoice
+    // Build the Order (PENDING — the invoice is DRAFT; nothing is paid yet)
+    const order = em.create(Order, {
+      orderNumber,
+      member: user,
+      status: OrderStatus.PENDING,
+      orderType,
+      subtotal,
+      tax,
+      discount,
+      couponCode: data.couponCode,
+      total,
+      currency,
+      notes: data.notes,
+      billingAddress: data.billingAddress,
+    } as Partial<Order> as Order);
+
+    // Mirror invoice items as order items so they show up in order detail too
+    for (const itemData of data.items) {
+      const itemTotal = (parseFloat(itemData.unitPrice) * itemData.quantity).toFixed(2);
+      const oi = em.create(OrderItem, {
+        order,
+        description: itemData.description,
+        quantity: itemData.quantity,
+        unitPrice: itemData.unitPrice,
+        total: itemTotal,
+        itemType: this.mapItemTypeForOrder(itemData.itemType),
+        referenceId: itemData.referenceId,
+        metadata: itemData.metadata,
+      });
+      order.items.add(oi);
+    }
+
+    // Build the Invoice and link to the order
     const invoice = em.create(Invoice, {
       invoiceNumber,
       user,
+      order,
       status: InvoiceStatus.DRAFT,
       subtotal,
-      tax: '0.00',
-      discount: '0.00',
+      tax,
+      discount,
+      couponCode: data.couponCode,
       total,
-      currency: data.currency || 'USD',
+      currency,
       dueDate,
       notes: data.notes,
       billingAddress: data.billingAddress,
       companyInfo: DEFAULT_COMPANY_INFO,
     });
 
-    // Create invoice items
+    // Mirror line items into invoice_items
     for (const itemData of data.items) {
       const itemTotal = (parseFloat(itemData.unitPrice) * itemData.quantity).toFixed(2);
       const item = em.create(InvoiceItem, {
@@ -329,7 +437,15 @@ export class InvoicesService {
       invoice.items.add(item);
     }
 
-    await em.persistAndFlush(invoice);
+    await em.persistAndFlush([order, invoice]);
+
+    // Back-fill the order.invoice_id pointer now that the invoice has its UUID
+    order.invoiceId = invoice.id;
+    await em.flush();
+
+    this.logger.log(
+      `Manual invoice ${invoiceNumber} created with paired order ${orderNumber} (total ${currency} ${total})`,
+    );
 
     return invoice;
   }
@@ -426,11 +542,19 @@ export class InvoicesService {
   }
 
   /**
-   * Update invoice status
+   * Update invoice status. Also keeps the linked Order in sync so manual
+   * invoices created via create() (which produce a paired pending order)
+   * don't end up with mismatched states across the two tables.
+   *
+   * Status mapping:
+   *   InvoiceStatus.PAID      → OrderStatus.COMPLETED
+   *   InvoiceStatus.CANCELLED → OrderStatus.CANCELLED
+   *   InvoiceStatus.REFUNDED  → OrderStatus.REFUNDED
+   *   (DRAFT / SENT / OVERDUE leave the order at PENDING)
    */
   async updateStatus(id: string, data: UpdateInvoiceStatusDto): Promise<Invoice> {
     const em = this.em.fork();
-    const invoice = await em.findOne(Invoice, { id }, { populate: ['items'] });
+    const invoice = await em.findOne(Invoice, { id }, { populate: ['items', 'order'] });
 
     if (!invoice) {
       throw new NotFoundException(`Invoice with ID ${id} not found`);
@@ -452,6 +576,20 @@ export class InvoicesService {
     }
 
     wrap(invoice).assign(updates);
+
+    // Mirror status onto the linked order so revenue stats stay accurate.
+    if (invoice.order) {
+      const linkedOrder = invoice.order as unknown as Order;
+      const previousStatus = linkedOrder.status;
+      let nextStatus: OrderStatus | null = null;
+      if (data.status === InvoiceStatus.PAID) nextStatus = OrderStatus.COMPLETED;
+      else if (data.status === InvoiceStatus.CANCELLED) nextStatus = OrderStatus.CANCELLED;
+      else if (data.status === InvoiceStatus.REFUNDED) nextStatus = OrderStatus.REFUNDED;
+      if (nextStatus && nextStatus !== previousStatus) {
+        linkedOrder.status = nextStatus;
+      }
+    }
+
     await em.flush();
 
     // If this invoice belonged to a Mode-B "pay-to-activate" provision flow,
@@ -464,6 +602,141 @@ export class InvoicesService {
     }
 
     return invoice;
+  }
+
+  /**
+   * Apply a manual payment (cash / check / wire / money_order / comp / other)
+   * to an invoice. Records a Payment row, marks the invoice PAID, marks the
+   * paired Order COMPLETED, and runs the same provisioning-hold cleanup as
+   * an automated payment would.
+   *
+   * Use cases: walk-in renewals paid by cash at an event, mailed-in checks,
+   * wire transfers, comp memberships handed out by directors.
+   */
+  async applyManualPayment(invoiceId: string, data: ApplyManualPaymentDto): Promise<Invoice> {
+    const em = this.em.fork();
+    return em.transactional(async (tx) => {
+      const invoice = await tx.findOne(
+        Invoice,
+        { id: invoiceId },
+        { populate: ['items', 'order', 'user'] },
+      );
+      if (!invoice) {
+        throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+      }
+      if (invoice.status === InvoiceStatus.PAID) {
+        throw new BadRequestException('Invoice is already paid');
+      }
+      if (invoice.status === InvoiceStatus.CANCELLED) {
+        throw new BadRequestException('Cannot apply payment to a cancelled invoice');
+      }
+      if (invoice.status === InvoiceStatus.REFUNDED) {
+        throw new BadRequestException('Cannot apply payment to a refunded invoice');
+      }
+
+      const owner = invoice.user as Profile | undefined;
+      // Payment table requires a user — guest invoices can't record a Payment
+      // row today. We still mark the invoice paid so reporting reflects it.
+      const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
+      const amount = data.amount ?? invoice.total;
+
+      // Build the descriptive transaction reference: prefer explicit reference
+      // (check #, wire confirmation), fall back to the method name.
+      const transactionId = data.reference
+        ? `${data.method.toUpperCase()}: ${data.reference}`
+        : `${data.method.toUpperCase()} (invoice ${invoice.invoiceNumber})`;
+
+      // Map our manual method onto the PaymentMethod enum used by the
+      // payments table. Unknown variants fall back to OTHER so we never
+      // hit a constraint violation.
+      const methodMap: Record<string, PaymentMethod> = {
+        cash: PaymentMethod.CASH,
+        check: PaymentMethod.CHECK,
+        wire: PaymentMethod.WIRE,
+        money_order: PaymentMethod.MONEY_ORDER,
+        comp: PaymentMethod.COMPLIMENTARY,
+        other: PaymentMethod.OTHER,
+      };
+      const paymentMethod = methodMap[data.method] ?? PaymentMethod.OTHER;
+
+      // Best-effort PaymentType inference: if any line item is a membership
+      // we attribute as MEMBERSHIP; if any is an event class we attribute
+      // as EVENT_REGISTRATION; otherwise OTHER. Keeps revenue-by-type
+      // breakdowns aligned with what was actually paid for.
+      const items = invoice.items.getItems();
+      const hasMembership = items.some(i => String(i.itemType) === 'membership');
+      const hasEvent = items.some(i => String(i.itemType) === 'event_class');
+      const inferredPaymentType = hasMembership
+        ? PaymentType.MEMBERSHIP
+        : hasEvent
+          ? PaymentType.EVENT_REGISTRATION
+          : PaymentType.OTHER;
+
+      let payment: Payment | undefined;
+      if (owner) {
+        payment = tx.create(Payment, {
+          user: owner,
+          paymentType: inferredPaymentType,
+          paymentMethod,
+          paymentStatus: PaymentStatus.PAID,
+          amount: parseFloat(amount),
+          currency: invoice.currency,
+          transactionId,
+          paidAt,
+          description: data.notes
+            ? `Manual payment for ${invoice.invoiceNumber}: ${data.notes}`
+            : `Manual payment for ${invoice.invoiceNumber}`,
+          paymentMetadata: {
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            method: data.method,
+            reference: data.reference,
+          },
+        } as Partial<Payment> as Payment);
+        tx.persist(payment);
+      }
+
+      // Money math for partial payments: bump amount_paid by the recorded
+      // amount; only flip to PAID once the running total covers the invoice.
+      const currentPaid = parseFloat(invoice.amountPaid || '0');
+      const recorded = parseFloat(amount);
+      const totalAmount = parseFloat(invoice.total);
+      const newPaid = Math.min(totalAmount, currentPaid + recorded);
+      const fullyPaid = newPaid >= totalAmount - 0.005;
+
+      const updateNotes = data.notes
+        ? `${invoice.notes ? invoice.notes + '\n' : ''}${data.notes}`
+        : invoice.notes;
+
+      wrap(invoice).assign({
+        status: fullyPaid ? InvoiceStatus.PAID : invoice.status,
+        amountPaid: newPaid.toFixed(2),
+        paidAt: fullyPaid ? paidAt : invoice.paidAt,
+        notes: updateNotes,
+      });
+
+      // Only flip the linked order to COMPLETED on full payment. Partial
+      // payment leaves it PENDING so revenue reports don't credit revenue
+      // until the books actually close.
+      if (invoice.order && fullyPaid) {
+        const linkedOrder = invoice.order as unknown as Order;
+        linkedOrder.status = OrderStatus.COMPLETED;
+        if (payment) linkedOrder.payment = payment;
+      }
+
+      await tx.flush();
+
+      // Clear billing-restriction hold if this was a Mode-B provisioning invoice
+      await this.clearProvisioningHoldIfApplicable(tx, invoice.id);
+
+      this.logger.log(
+        `Manual payment recorded on invoice ${invoice.invoiceNumber}: ${data.method}` +
+        (data.reference ? ` (${data.reference})` : '') +
+        ` for ${invoice.currency} ${amount}`,
+      );
+
+      return invoice;
+    });
   }
 
   /**
@@ -518,11 +791,13 @@ export class InvoicesService {
   }
 
   /**
-   * Cancel an invoice
+   * Cancel an invoice. Also flips the paired Order to CANCELLED so the
+   * orders table doesn't keep a stale PENDING row pointing at a cancelled
+   * invoice.
    */
   async cancel(id: string, reason?: string): Promise<Invoice> {
     const em = this.em.fork();
-    const invoice = await em.findOne(Invoice, { id }, { populate: ['items'] });
+    const invoice = await em.findOne(Invoice, { id }, { populate: ['items', 'order'] });
 
     if (!invoice) {
       throw new NotFoundException(`Invoice with ID ${id} not found`);
@@ -539,17 +814,24 @@ export class InvoicesService {
       notes: reason || invoice.notes,
     });
 
+    if (invoice.order) {
+      const linkedOrder = invoice.order as unknown as Order;
+      if (linkedOrder.status !== OrderStatus.CANCELLED && linkedOrder.status !== OrderStatus.REFUNDED) {
+        linkedOrder.status = OrderStatus.CANCELLED;
+      }
+    }
+
     await em.flush();
 
     return invoice;
   }
 
   /**
-   * Mark invoice as refunded
+   * Mark invoice as refunded. Also flips the paired Order to REFUNDED.
    */
   async markRefunded(id: string, reason: string): Promise<Invoice> {
     const em = this.em.fork();
-    const invoice = await em.findOne(Invoice, { id }, { populate: ['items'] });
+    const invoice = await em.findOne(Invoice, { id }, { populate: ['items', 'order'] });
 
     if (!invoice) {
       throw new NotFoundException(`Invoice with ID ${id} not found`);
@@ -559,6 +841,10 @@ export class InvoicesService {
       status: InvoiceStatus.REFUNDED,
       notes: reason,
     });
+
+    if (invoice.order) {
+      (invoice.order as unknown as Order).status = OrderStatus.REFUNDED;
+    }
 
     await em.flush();
 
@@ -717,6 +1003,209 @@ export class InvoicesService {
   }
 
   /**
+   * Apply a credit memo against an invoice — writes off `amount` of the
+   * remaining balance without a Payment row (no money actually received).
+   * Use cases: courtesy credit, dispute settlement, write-off of bad debt.
+   *
+   * Credit memos move money out of accounts receivable and into a
+   * write-off bucket conceptually — they're still tracked via amount_paid
+   * and an audit-log entry rather than a real Payment.
+   */
+  async applyCreditMemo(invoiceId: string, amount: string, reason: string): Promise<Invoice> {
+    const em = this.em.fork();
+    return em.transactional(async (tx) => {
+      const invoice = await tx.findOne(Invoice, { id: invoiceId }, { populate: ['order'] });
+      if (!invoice) throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+
+      if (invoice.status === InvoiceStatus.CANCELLED) {
+        throw new BadRequestException('Cannot apply credit memo to a cancelled invoice');
+      }
+      if (invoice.status === InvoiceStatus.REFUNDED) {
+        throw new BadRequestException('Cannot apply credit memo to a refunded invoice');
+      }
+
+      const credit = parseFloat(amount);
+      if (!isFinite(credit) || credit <= 0) {
+        throw new BadRequestException('Credit memo amount must be positive');
+      }
+      const currentPaid = parseFloat(invoice.amountPaid || '0');
+      const totalAmount = parseFloat(invoice.total);
+      const remaining = Math.max(0, totalAmount - currentPaid);
+      if (credit > remaining + 0.005) {
+        throw new BadRequestException(
+          `Credit memo (${credit.toFixed(2)}) exceeds remaining balance (${remaining.toFixed(2)})`,
+        );
+      }
+
+      const newPaid = Math.min(totalAmount, currentPaid + credit);
+      const fullyPaid = newPaid >= totalAmount - 0.005;
+      const noteLine = `Credit memo $${credit.toFixed(2)} applied: ${reason}`;
+
+      wrap(invoice).assign({
+        amountPaid: newPaid.toFixed(2),
+        status: fullyPaid ? InvoiceStatus.PAID : invoice.status,
+        paidAt: fullyPaid ? new Date() : invoice.paidAt,
+        notes: invoice.notes ? `${invoice.notes}\n${noteLine}` : noteLine,
+      });
+
+      if (invoice.order && fullyPaid) {
+        (invoice.order as unknown as Order).status = OrderStatus.COMPLETED;
+      }
+
+      await tx.flush();
+      this.logger.log(
+        `Credit memo $${credit.toFixed(2)} applied to invoice ${invoice.invoiceNumber}: ${reason}`,
+      );
+      return invoice;
+    });
+  }
+
+  /**
+   * Send reminder emails for unpaid invoices.
+   *
+   * Cadence:
+   *   - SENT/OVERDUE due-soon: 3 days before due date
+   *   - OVERDUE: 1, 7, 14, 30 days past due date
+   *
+   * De-duplication: skip an invoice if `last_reminder_sent_at` is within
+   * the last 23 hours (so a daily 8am cron is safe even if it ran late
+   * the previous day).
+   *
+   * Returns the count of reminders sent.
+   */
+  async sendInvoiceReminders(): Promise<{ sent: number; skipped: number }> {
+    const em = this.em.fork();
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 23 * 60 * 60 * 1000);
+
+    // Pull all SENT or OVERDUE invoices with a due date. Populate items so
+    // the due-soon email branch can include the line-item table.
+    const candidates = await em.find(Invoice, {
+      status: { $in: [InvoiceStatus.SENT, InvoiceStatus.OVERDUE] },
+      dueDate: { $ne: null as any },
+    }, { populate: ['user', 'items'] });
+
+    let sent = 0;
+    let skipped = 0;
+
+    for (const invoice of candidates) {
+      // Skip if reminded in the last 23 hours
+      if (invoice.lastReminderSentAt && invoice.lastReminderSentAt > yesterday) {
+        skipped++;
+        continue;
+      }
+      const recipientEmail = invoice.user?.email || invoice.guestEmail;
+      if (!recipientEmail) {
+        skipped++;
+        continue;
+      }
+
+      const due = invoice.dueDate ? new Date(invoice.dueDate) : null;
+      if (!due) { skipped++; continue; }
+
+      // Whole-day delta: positive means due in N days, negative means N days overdue
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const startOfDue = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+      const dayDelta = Math.round((startOfDue - startOfToday) / msPerDay);
+
+      // Decide whether today is a reminder trigger day.
+      // dueDate +3 days BEFORE due (dayDelta=3); on day-of we don't remind, the overdue cron
+      // will handle it. Past-due triggers: 1, 7, 14, 30 days overdue (dayDelta=-1,-7,-14,-30).
+      const reminderDays = [3, -1, -7, -14, -30];
+      if (!reminderDays.includes(dayDelta)) { skipped++; continue; }
+
+      const isOverdue = dayDelta < 0;
+      const daysOverdue = Math.abs(dayDelta);
+      const paymentUrl = this.generatePaymentUrl(invoice.id);
+
+      try {
+        if (isOverdue) {
+          await this.emailService.sendInvoiceOverdueEmail({
+            to: recipientEmail,
+            firstName: invoice.user?.first_name || undefined,
+            invoiceNumber: invoice.invoiceNumber,
+            amountDue: parseFloat(invoice.total),
+            daysOverdue,
+            dueDate: due,
+            paymentUrl,
+          });
+        } else {
+          // Due-soon reminder reuses the standard invoice email — same
+          // structure as the original send, just adds context in notes.
+          const items = invoice.items.getItems().map(it => ({
+            description: it.description,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            total: it.total,
+          }));
+          await this.emailService.sendInvoiceEmail({
+            to: recipientEmail,
+            firstName: invoice.user?.first_name || undefined,
+            invoiceNumber: invoice.invoiceNumber,
+            invoiceTotal: invoice.total,
+            dueDate: due,
+            paymentUrl,
+            items,
+          });
+        }
+        invoice.lastReminderSentAt = new Date();
+        sent++;
+      } catch (err) {
+        this.logger.error(`Failed to send reminder for invoice ${invoice.invoiceNumber}: ${err}`);
+      }
+    }
+
+    if (sent > 0) await em.flush();
+    this.logger.log(`Invoice reminders sent: ${sent}, skipped: ${skipped}`);
+    return { sent, skipped };
+  }
+
+  /**
+   * Bulk-update operations called from the admin invoice list. Each result
+   * row carries the per-invoice outcome so the UI can flag partial failures
+   * without bringing the whole batch down.
+   */
+  async bulkMarkPaid(ids: string[]): Promise<{ id: string; ok: boolean; error?: string }[]> {
+    const out: { id: string; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.markAsPaid(id);
+        out.push({ id, ok: true });
+      } catch (err: any) {
+        out.push({ id, ok: false, error: err?.message || 'failed' });
+      }
+    }
+    return out;
+  }
+
+  async bulkCancel(ids: string[], reason?: string): Promise<{ id: string; ok: boolean; error?: string }[]> {
+    const out: { id: string; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.cancel(id, reason);
+        out.push({ id, ok: true });
+      } catch (err: any) {
+        out.push({ id, ok: false, error: err?.message || 'failed' });
+      }
+    }
+    return out;
+  }
+
+  async bulkResend(ids: string[]): Promise<{ id: string; ok: boolean; error?: string }[]> {
+    const out: { id: string; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        const result = await this.resendInvoice(id);
+        out.push({ id, ok: result.success, error: result.error });
+      } catch (err: any) {
+        out.push({ id, ok: false, error: err?.message || 'failed' });
+      }
+    }
+    return out;
+  }
+
+  /**
    * Mark overdue invoices (batch operation)
    */
   async markOverdueInvoices(): Promise<number> {
@@ -737,7 +1226,6 @@ export class InvoicesService {
     await em.flush();
 
     // Send overdue notification to each affected user (one-shot per invoice — only fires on transition).
-    const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
     for (const invoice of overdueInvoices) {
       const recipientEmail = invoice.user?.email || invoice.guestEmail || undefined;
       if (!recipientEmail) {
@@ -747,6 +1235,7 @@ export class InvoicesService {
 
       const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : now;
       const daysOverdue = Math.max(1, Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+      const paymentUrl = this.generatePaymentUrl(invoice.id);
 
       try {
         await this.emailService.sendInvoiceOverdueEmail({
@@ -756,7 +1245,7 @@ export class InvoicesService {
           amountDue: parseFloat(invoice.total),
           daysOverdue,
           dueDate,
-          paymentUrl: `${baseUrl}/billing/invoice/${invoice.id}`,
+          paymentUrl,
         });
       } catch (err) {
         this.logger.error(`Failed to send overdue email for invoice ${invoice.invoiceNumber}: ${err}`);
@@ -768,7 +1257,7 @@ export class InvoicesService {
           title: `Invoice ${invoice.invoiceNumber} is past due`,
           message: `Your invoice for $${parseFloat(invoice.total).toFixed(2)} is ${daysOverdue} day(s) overdue. Pay now to avoid cancellation.`,
           type: 'alert',
-          link: `/billing/invoice/${invoice.id}`,
+          link: `/pay/invoice/${invoice.id}`,
         });
       }
     }
@@ -986,7 +1475,7 @@ export class InvoicesService {
         title: `Invoice ${invoice.invoiceNumber} ready`,
         message: `An invoice for $${parseFloat(invoice.total).toFixed(2)} is ready for payment.`,
         type: 'info',
-        link: `/billing/invoice/${invoice.id}`,
+        link: `/pay/invoice/${invoice.id}`,
       });
     }
 
@@ -1069,7 +1558,7 @@ export class InvoicesService {
         title: `Invoice ${invoice.invoiceNumber} reminder`,
         message: `Reminder: invoice for $${parseFloat(invoice.total).toFixed(2)} is awaiting payment.`,
         type: 'info',
-        link: `/billing/invoice/${invoice.id}`,
+        link: `/pay/invoice/${invoice.id}`,
       });
     }
 

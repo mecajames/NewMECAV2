@@ -23,6 +23,10 @@ import { useTaxRate } from '@/hooks/useTaxRate';
 import { CouponInput } from '@/shared/components/CouponInput';
 import { shopApi, ShippingRate } from '../shop.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import CountrySelect from '@/shared/fields/CountrySelect';
+import StateProvinceSelect from '@/shared/fields/StateProvinceSelect';
+import PhoneInput from '@/shared/fields/PhoneInput';
+import { getPostalCodeLabel } from '@/utils/countries';
 import { getStorageUrl } from '@/lib/storage';
 import { trackBeginCheckout, trackAddShippingInfo, trackPurchase } from '@/lib/gtag';
 import { PaymentMethodSelector, SelectedPaymentMethod } from '@/shared/components/PaymentMethodSelector';
@@ -171,20 +175,21 @@ function AddressForm({
       </h3>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Country first */}
+        {/* Country first — ISO 3166-1 alpha-2 codes drive the state list and
+            postal-code label below. */}
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">
-            Country *
-          </label>
-          <select
+          <CountrySelect
             value={address.country}
-            onChange={(e) => handleChange('country', e.target.value)}
+            onChange={(code) => {
+              handleChange('country', code);
+              // Reset state when country changes — ISO 3166-2 codes don't
+              // transfer across countries.
+              handleChange('state', '');
+            }}
+            label="Country"
             required
-            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          >
-            <option value="US">United States</option>
-            <option value="CA">Canada</option>
-          </select>
+            showIcon={false}
+          />
         </div>
 
         <div className="sm:col-span-2">
@@ -242,21 +247,18 @@ function AddressForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">
-            State/Province *
-          </label>
-          <input
-            type="text"
+          <StateProvinceSelect
             value={address.state}
-            onChange={(e) => handleChange('state', e.target.value)}
+            onChange={(code) => handleChange('state', code)}
+            country={address.country}
             required
-            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            showIcon={false}
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">
-            ZIP/Postal Code *
+            {getPostalCodeLabel(address.country)} *
           </label>
           <input
             type="text"
@@ -267,16 +269,13 @@ function AddressForm({
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">
-            Phone Number
-          </label>
-          <input
-            type="tel"
+        <div className="sm:col-span-2">
+          <PhoneInput
             value={address.phone || ''}
-            onChange={(e) => handleChange('phone', e.target.value)}
-            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            placeholder="(555) 123-4567"
+            onChange={(phone) => handleChange('phone', phone)}
+            countryCode={address.country}
+            label="Phone Number"
+            showIcon={false}
           />
         </div>
       </div>

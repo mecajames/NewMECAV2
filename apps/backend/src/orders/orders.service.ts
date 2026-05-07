@@ -796,6 +796,23 @@ export class OrdersService {
   }
 
   /**
+   * Bulk-cancel orders. Returns per-order outcomes so the UI can flag
+   * partial failures (e.g. an order in COMPLETED state can't be cancelled).
+   */
+  async bulkCancel(ids: string[], reason: string): Promise<{ id: string; ok: boolean; error?: string }[]> {
+    const out: { id: string; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.cancel(id, { reason });
+        out.push({ id, ok: true });
+      } catch (err: any) {
+        out.push({ id, ok: false, error: err?.message || 'failed' });
+      }
+    }
+    return out;
+  }
+
+  /**
    * Get orders completed since a date (for reconciliation)
    */
   async findCompletedSince(date: Date): Promise<Order[]> {

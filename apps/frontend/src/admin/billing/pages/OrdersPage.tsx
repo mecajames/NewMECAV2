@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Search, Download } from 'lucide-react';
-import { billingApi, Order, OrderListParams } from '../../../api-client/billing.api-client';
+import { ArrowLeft, Search, Download, XCircle } from 'lucide-react';
+import { billingApi, ordersApi, Order, OrderListParams } from '../../../api-client/billing.api-client';
 import { OrderTable } from '../components/OrderTable';
 import { OrderStatus, OrderType } from '../billing.types';
 import { seasonsApi, Season } from '@/seasons';
@@ -118,25 +118,59 @@ export default function OrdersPage() {
     fetchOrders({ page: 1 });
   };
 
+  // Bulk-selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
+
+  const toggleSelect = (id: string, sel: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (sel) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
   const handlePageChange = (newPage: number) => {
+    setSelectedIds(new Set());
     fetchOrders({ page: newPage });
   };
 
   const handleItemsPerPageChange = (newLimit: number) => {
+    setSelectedIds(new Set());
     setPagination(prev => ({ ...prev, limit: newLimit }));
     fetchOrders({ page: 1, limit: newLimit });
   };
 
   const handleCancelOrder = async (order: Order) => {
-    if (!confirm(`Are you sure you want to cancel order ${order.orderNumber}?`)) {
-      return;
-    }
+    const reason = prompt(`Reason for cancelling order ${order.orderNumber}:`);
+    if (reason === null) return;
     try {
-      await billingApi.getOrder(order.id); // TODO: Call cancel endpoint
+      await ordersApi.cancel(order.id, reason);
       fetchOrders();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error cancelling order:', err);
-      alert('Failed to cancel order');
+      alert(err?.response?.data?.message || 'Failed to cancel order');
+    }
+  };
+
+  const handleBulkCancel = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const reason = prompt(`Reason for cancelling ${ids.length} order(s):`);
+    if (reason === null) return;
+    setBulkRunning(true);
+    try {
+      const results = await ordersApi.bulkCancel(ids, reason);
+      const ok = results.filter(r => r.ok).length;
+      const failed = results.length - ok;
+      const errors = results.filter(r => !r.ok && r.error).slice(0, 3).map(r => r.error).join('; ');
+      alert(failed > 0
+        ? `${ok} succeeded, ${failed} failed${errors ? ` — ${errors}` : ''}`
+        : `${ok} succeeded`);
+      setSelectedIds(new Set());
+      fetchOrders();
+    } finally {
+      setBulkRunning(false);
     }
   };
 
@@ -380,11 +414,37 @@ export default function OrdersPage() {
           </div>
         )}
 
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+            <span className="text-sm text-orange-300 font-medium">
+              {selectedIds.size} selected
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={handleBulkCancel}
+              disabled={bulkRunning}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium rounded-md border border-red-500/30 disabled:opacity-50"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Cancel Orders
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         {/* Orders Table */}
         <OrderTable
           orders={orders}
           loading={loading}
           onCancelOrder={handleCancelOrder}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
 
         {/* Pagination */}

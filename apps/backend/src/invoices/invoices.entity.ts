@@ -48,6 +48,14 @@ export class Invoice {
   @Property({ type: 'decimal', precision: 10, scale: 2 })
   total!: string;
 
+  // Running tally of payments received against this invoice. Allows
+  // partial payments — when amount_paid < total the invoice stays SENT
+  // (or OVERDUE) with a positive balance owed; when amount_paid >= total
+  // it transitions to PAID. Defaults to 0; backfilled to total for
+  // historical PAID rows by the migration.
+  @Property({ type: 'decimal', precision: 10, scale: 2, fieldName: 'amount_paid', default: '0' })
+  amountPaid?: string;
+
   @Property({ type: 'varchar', length: 3, default: 'USD' })
   currency: string = 'USD';
 
@@ -59,6 +67,12 @@ export class Invoice {
 
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'sent_at' })
   sentAt?: Date;
+
+  // Last time a reminder email was sent for this invoice. The reminder cron
+  // uses this to avoid re-sending within 24 hours and to track which
+  // reminder step has been delivered.
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'last_reminder_sent_at' })
+  lastReminderSentAt?: Date;
 
   @Property({ type: 'text', nullable: true, fieldName: 'pdf_url' })
   pdfUrl?: string;

@@ -29,6 +29,7 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
 import { Public } from '../auth/public.decorator';
+import { AdminAuditService } from '../user-activity/admin-audit.service';
 
 @Controller('api/orders')
 export class OrdersController {
@@ -36,6 +37,7 @@ export class OrdersController {
     private readonly ordersService: OrdersService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
+    private readonly adminAuditService: AdminAuditService,
   ) {}
 
   // Helper to require admin authentication
@@ -137,9 +139,18 @@ export class OrdersController {
     @Param('id') id: string,
     @Body() data: UpdateOrderStatusDto,
   ) {
-    await this.requireAdmin(authHeader);
+    const { user } = await this.requireAdmin(authHeader);
     const validatedData = UpdateOrderStatusSchema.parse(data);
-    return this.ordersService.updateStatus(id, validatedData);
+    const updated = await this.ordersService.updateStatus(id, validatedData);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'order_update_status',
+      resourceType: 'order',
+      resourceId: id,
+      description: `Updated order ${updated.orderNumber} status → ${validatedData.status}`,
+      newValues: { status: validatedData.status, notes: validatedData.notes },
+    });
+    return updated;
   }
 
   /**
@@ -152,8 +163,39 @@ export class OrdersController {
     @Param('id') id: string,
     @Body() data: CancelOrderDto,
   ) {
-    await this.requireAdmin(authHeader);
+    const { user } = await this.requireAdmin(authHeader);
     const validatedData = CancelOrderSchema.parse(data);
-    return this.ordersService.cancel(id, validatedData);
+    const cancelled = await this.ordersService.cancel(id, validatedData);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'order_cancel',
+      resourceType: 'order',
+      resourceId: id,
+      description: `Cancelled order ${cancelled.orderNumber}: ${validatedData.reason}`,
+    });
+    return cancelled;
+  }
+
+  /**
+   * Bulk-cancel multiple orders.
+   */
+  @Post('bulk/cancel')
+  @HttpCode(HttpStatus.OK)
+  async bulkCancel(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { ids: string[]; reason?: string },
+  ) {
+    const { user } = await this.requireAdmin(authHeader);
+    const reason = body?.reason || 'Bulk cancellation by admin';
+    const result = await this.ordersService.bulkCancel(body?.ids ?? [], reason);
+    const ok = result.filter(r => r.ok).length;
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'order_bulk_cancel',
+      resourceType: 'order',
+      description: `Bulk cancelled ${ok}/${result.length} orders: ${reason}`,
+      newValues: { ids: body?.ids ?? [], reason },
+    });
+    return result;
   }
 }

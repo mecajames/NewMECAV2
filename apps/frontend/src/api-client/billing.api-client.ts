@@ -92,6 +92,8 @@ export interface Invoice {
   tax: string;
   discount: string;
   total: string;
+  /** Running tally of payments + credit memos against this invoice. Balance = total - amountPaid. */
+  amountPaid?: string;
   currency: string;
   dueDate: string;
   sentAt?: string;
@@ -234,6 +236,25 @@ export interface CreateInvoiceDto {
   billingAddress?: BillingAddress;
   notes?: string;
   currency?: string;
+  tax?: string;
+  discount?: string;
+  couponCode?: string;
+}
+
+export type ManualPaymentMethod =
+  | 'cash'
+  | 'check'
+  | 'wire'
+  | 'money_order'
+  | 'comp'
+  | 'other';
+
+export interface ApplyManualPaymentDto {
+  method: ManualPaymentMethod;
+  reference?: string;
+  amount?: string;
+  paidAt?: string;
+  notes?: string;
 }
 
 // ==========================================
@@ -658,6 +679,14 @@ export const ordersApi = {
     const response = await axios.get('/api/orders/stats/recent', { params: { limit } });
     return response.data;
   },
+
+  /**
+   * Bulk-cancel orders.
+   */
+  bulkCancel: async (ids: string[], reason?: string): Promise<Array<{ id: string; ok: boolean; error?: string }>> => {
+    const response = await axios.post('/api/orders/bulk/cancel', { ids, reason });
+    return response.data;
+  },
 };
 
 // Type for public invoice payment response
@@ -768,6 +797,27 @@ export const invoicesApi = {
   },
 
   /**
+   * Apply a manual payment (cash, check, wire, money order, complimentary,
+   * other) to an invoice. Records a Payment row, marks the invoice PAID
+   * (or partially-paid if amount < total), and flips the paired Order to
+   * COMPLETED on full payment.
+   */
+  applyManualPayment: async (id: string, data: ApplyManualPaymentDto): Promise<Invoice> => {
+    const response = await axios.post(`/api/invoices/${id}/apply-manual-payment`, data);
+    return response.data;
+  },
+
+  /**
+   * Apply a credit memo / write-off against an invoice. No money is
+   * recorded — the credit reduces outstanding balance directly. Use for
+   * courtesy credits, dispute settlements, bad-debt write-offs.
+   */
+  applyCreditMemo: async (id: string, amount: string, reason: string): Promise<Invoice> => {
+    const response = await axios.post(`/api/invoices/${id}/apply-credit-memo`, { amount, reason });
+    return response.data;
+  },
+
+  /**
    * Cancel an invoice
    */
   cancel: async (id: string, reason?: string): Promise<Invoice> => {
@@ -828,6 +878,31 @@ export const invoicesApi = {
    */
   markOverdueInvoices: async (): Promise<{ markedOverdue: number }> => {
     const response = await axios.post('/api/invoices/batch/mark-overdue');
+    return response.data;
+  },
+
+  /**
+   * Trigger reminder emails (also runs automatically via cron daily).
+   */
+  sendReminders: async (): Promise<{ sent: number; skipped: number }> => {
+    const response = await axios.post('/api/invoices/batch/send-reminders');
+    return response.data;
+  },
+
+  /**
+   * Bulk operations across multiple invoices. Each result row carries the
+   * per-invoice outcome so the UI can highlight partial failures.
+   */
+  bulkMarkPaid: async (ids: string[]): Promise<Array<{ id: string; ok: boolean; error?: string }>> => {
+    const response = await axios.post('/api/invoices/bulk/mark-paid', { ids });
+    return response.data;
+  },
+  bulkCancel: async (ids: string[], reason?: string): Promise<Array<{ id: string; ok: boolean; error?: string }>> => {
+    const response = await axios.post('/api/invoices/bulk/cancel', { ids, reason });
+    return response.data;
+  },
+  bulkResend: async (ids: string[]): Promise<Array<{ id: string; ok: boolean; error?: string }>> => {
+    const response = await axios.post('/api/invoices/bulk/resend', { ids });
     return response.data;
   },
 };

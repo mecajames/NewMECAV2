@@ -4,6 +4,7 @@ import { ScheduledTasksController } from './scheduled-tasks.controller';
 import { EmailModule } from '../email/email.module';
 import { AuthModule } from '../auth/auth.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { RecurringInvoicesModule } from '../recurring-invoices/recurring-invoices.module';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { SiteSettingsModule } from '../site-settings/site-settings.module';
 import { UserActivityModule } from '../user-activity/user-activity.module';
@@ -15,6 +16,7 @@ import { AdminNotificationsModule } from '../admin-notifications/admin-notificat
     EmailModule,
     AuthModule,
     InvoicesModule,
+    RecurringInvoicesModule,
     MembershipsModule,
     SiteSettingsModule,
     UserActivityModule,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Search, Download, Plus } from 'lucide-react';
+import { ArrowLeft, Search, Download, Plus, CheckCircle, XCircle, Send, Bell } from 'lucide-react';
 import { billingApi, invoicesApi, Invoice, InvoiceListParams } from '../../../api-client/billing.api-client';
 import { InvoiceTable } from '../components/InvoiceTable';
 import { InvoiceStatus } from '../billing.types';
@@ -25,6 +25,19 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | ''>('');
   const [yearFilter, setYearFilter] = useState<string>('');
   const [monthFilter, setMonthFilter] = useState<string>('');
+
+  // Bulk-selection state. Cleared whenever the visible page changes so the
+  // admin doesn't accidentally act on rows they can't see.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState<null | string>(null);
+
+  const toggleSelect = (id: string, sel: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (sel) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
 
   // Generate years for filter (last 5 years)
   const currentYear = new Date().getFullYear();
@@ -101,10 +114,12 @@ export default function InvoicesPage() {
   };
 
   const handlePageChange = (newPage: number) => {
+    setSelectedIds(new Set());
     fetchInvoices({ page: newPage });
   };
 
   const handleItemsPerPageChange = (newLimit: number) => {
+    setSelectedIds(new Set());
     setPagination(prev => ({ ...prev, limit: newLimit }));
     fetchInvoices({ page: 1, limit: newLimit });
   };
@@ -157,6 +172,70 @@ export default function InvoicesPage() {
     } catch (err) {
       console.error('Error cancelling invoice:', err);
       alert('Failed to cancel invoice');
+    }
+  };
+
+  const summarize = (results: Array<{ id: string; ok: boolean; error?: string }>) => {
+    const ok = results.filter(r => r.ok).length;
+    const failed = results.length - ok;
+    const errors = results.filter(r => !r.ok && r.error).slice(0, 3).map(r => r.error).join('; ');
+    return failed > 0
+      ? `${ok} succeeded, ${failed} failed${errors ? ` — ${errors}` : ''}`
+      : `${ok} succeeded`;
+  };
+
+  const handleBulkMarkPaid = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`Mark ${ids.length} invoice(s) as paid?`)) return;
+    setBulkRunning('mark-paid');
+    try {
+      const result = await invoicesApi.bulkMarkPaid(ids);
+      alert(summarize(result));
+      setSelectedIds(new Set());
+      fetchInvoices();
+    } finally {
+      setBulkRunning(null);
+    }
+  };
+
+  const handleBulkCancel = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const reason = prompt(`Reason for cancelling ${ids.length} invoice(s):`);
+    if (reason === null) return;
+    setBulkRunning('cancel');
+    try {
+      const result = await invoicesApi.bulkCancel(ids, reason);
+      alert(summarize(result));
+      setSelectedIds(new Set());
+      fetchInvoices();
+    } finally {
+      setBulkRunning(null);
+    }
+  };
+
+  const handleBulkResend = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`Resend ${ids.length} invoice email(s)?`)) return;
+    setBulkRunning('resend');
+    try {
+      const result = await invoicesApi.bulkResend(ids);
+      alert(summarize(result));
+    } finally {
+      setBulkRunning(null);
+    }
+  };
+
+  const handleBulkSendReminders = async () => {
+    if (!confirm('Trigger the reminder job now? This will send reminder emails to invoices that are due-soon or past-due (de-duplicated).')) return;
+    setBulkRunning('reminders');
+    try {
+      const r = await invoicesApi.sendReminders();
+      alert(`Reminder job complete — sent ${r.sent}, skipped ${r.skipped}.`);
+    } finally {
+      setBulkRunning(null);
     }
   };
 
@@ -369,6 +448,58 @@ export default function InvoicesPage() {
           </div>
         )}
 
+        {/* Bulk action bar — only visible when rows are selected */}
+        {selectedIds.size > 0 && (
+          <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+            <span className="text-sm text-orange-300 font-medium">
+              {selectedIds.size} selected
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={handleBulkMarkPaid}
+              disabled={bulkRunning !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/15 hover:bg-green-500/25 text-green-400 text-xs font-medium rounded-md border border-green-500/30 disabled:opacity-50"
+            >
+              <CheckCircle className="h-3.5 w-3.5" />
+              Mark Paid
+            </button>
+            <button
+              onClick={handleBulkResend}
+              disabled={bulkRunning !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-md disabled:opacity-50"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Resend
+            </button>
+            <button
+              onClick={handleBulkCancel}
+              disabled={bulkRunning !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium rounded-md border border-red-500/30 disabled:opacity-50"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Cancel
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {/* Trigger reminder job (no selection required) */}
+        <div className="mb-3 flex justify-end">
+          <button
+            onClick={handleBulkSendReminders}
+            disabled={bulkRunning !== null}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 text-xs font-medium rounded-md disabled:opacity-50"
+          >
+            <Bell className="h-3.5 w-3.5" />
+            Run Reminder Job
+          </button>
+        </div>
+
         {/* Invoices Table */}
         <InvoiceTable
           invoices={invoices}
@@ -377,6 +508,8 @@ export default function InvoicesPage() {
           onResendInvoice={handleResendInvoice}
           onMarkPaid={handleMarkPaid}
           onCancelInvoice={handleCancelInvoice}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
 
         {/* Pagination */}
