@@ -248,20 +248,30 @@ export default function OrdersPage() {
                 Manage and track all orders
               </p>
             </div>
-            <button
-              onClick={() => navigate('/admin/billing')}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-              Back to Billing
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleExport}
+                disabled={loading || orders.length === 0}
+                className="flex items-center gap-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </button>
+              <button
+                onClick={() => navigate('/admin/billing')}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                Back to Billing
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Search and Export */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Search */}
+        <div className="mb-6">
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -280,15 +290,6 @@ export default function OrdersPage() {
               Search
             </button>
           </form>
-
-          <button
-            onClick={handleExport}
-            disabled={loading || orders.length === 0}
-            className="flex items-center gap-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
         </div>
 
         {/* Filter Panel */}

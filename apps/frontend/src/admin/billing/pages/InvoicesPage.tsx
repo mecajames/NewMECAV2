@@ -324,6 +324,23 @@ export default function InvoicesPage() {
                 Create Invoice
               </button>
               <button
+                onClick={handleExport}
+                disabled={loading || invoices.length === 0}
+                className="flex items-center gap-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </button>
+              <button
+                onClick={handleBulkSendReminders}
+                disabled={bulkRunning !== null}
+                className="flex items-center gap-2 rounded-md border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-slate-600 disabled:opacity-50"
+                title="Send due-soon and overdue reminder emails now"
+              >
+                <Bell className="h-4 w-4" />
+                Run Reminders
+              </button>
+              <button
                 onClick={() => navigate('/admin/billing')}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
               >
@@ -336,8 +353,8 @@ export default function InvoicesPage() {
       </div>
 
       <div className="mx-auto w-full px-4 py-8 sm:px-6 lg:px-8">
-        {/* Search and Export */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Search */}
+        <div className="mb-6">
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -356,15 +373,6 @@ export default function InvoicesPage() {
               Search
             </button>
           </form>
-
-          <button
-            onClick={handleExport}
-            disabled={loading || invoices.length === 0}
-            className="flex items-center gap-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
         </div>
 
         {/* Filter Panel */}
@@ -487,18 +495,6 @@ export default function InvoicesPage() {
             </button>
           </div>
         )}
-
-        {/* Trigger reminder job (no selection required) */}
-        <div className="mb-3 flex justify-end">
-          <button
-            onClick={handleBulkSendReminders}
-            disabled={bulkRunning !== null}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 text-xs font-medium rounded-md disabled:opacity-50"
-          >
-            <Bell className="h-3.5 w-3.5" />
-            Run Reminder Job
-          </button>
-        </div>
 
         {/* Invoices Table */}
         <InvoiceTable
