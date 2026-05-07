@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Search, Save, ChevronDown, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Search, Save, ChevronDown, X, Tag, CheckCircle, AlertCircle } from 'lucide-react';
 import { billingApi, CreateInvoiceDto } from '@/api-client/billing.api-client';
 import { profilesApi } from '@/profiles';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs/membership-type-configs.api-client';
 import { shopApi } from '@/shop/shop.api-client';
+import { couponsApi } from '@/coupons/coupons.api-client';
+import CountrySelect from '@/shared/fields/CountrySelect';
+import StateProvinceSelect from '@/shared/fields/StateProvinceSelect';
+import PhoneInput from '@/shared/fields/PhoneInput';
+import { getPostalCodeLabel } from '@/utils/countries';
 import type { ShopProduct } from '@newmeca/shared';
 
 interface ItemRow {
@@ -42,7 +47,8 @@ export default function CreateInvoicePage() {
   const [custCity, setCustCity] = useState('');
   const [custState, setCustState] = useState('');
   const [custPostalCode, setCustPostalCode] = useState('');
-  const [custCountry, setCustCountry] = useState('USA');
+  // ISO 3166-1 alpha-2 — defaults to US. Drives state list + postal code label.
+  const [custCountry, setCustCountry] = useState('US');
 
   // ── Line items ────────────────────────────────────────────────────────
   const [items, setItems] = useState<ItemRow[]>([
@@ -67,6 +73,12 @@ export default function CreateInvoicePage() {
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Money adjustments (tax, discount, coupon) ─────────────────────────
+  const [taxStr, setTaxStr] = useState('0.00');
+  const [discountStr, setDiscountStr] = useState('0.00');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponState, setCouponState] = useState<{ status: 'idle' | 'validating' | 'ok' | 'error'; message?: string }>({ status: 'idle' });
 
   // Load membership types + shop products once.
   useEffect(() => {
@@ -148,7 +160,19 @@ export default function CreateInvoicePage() {
     setCustCity(m.city || m.billing_city || '');
     setCustState(m.state || m.billing_state || '');
     setCustPostalCode(m.postal_code || m.billing_zip || '');
-    setCustCountry(m.country || m.billing_country || 'USA');
+    // Profile may store either an ISO alpha-2 code ("US") or an older string
+    // ("USA" / "United States"). Map the common variants to the alpha-2 code
+    // so the country select + state list render correctly.
+    const rawCountry = m.country || m.billing_country || 'US';
+    const normalized = (() => {
+      const c = String(rawCountry).trim().toUpperCase();
+      if (c === 'USA' || c === 'UNITED STATES' || c === 'UNITED STATES OF AMERICA') return 'US';
+      if (c === 'CAN' || c === 'CANADA') return 'CA';
+      if (c === 'MEX' || c === 'MEXICO') return 'MX';
+      if (c === 'GBR' || c === 'UNITED KINGDOM' || c === 'GREAT BRITAIN' || c === 'UK') return 'GB';
+      return c.length === 2 ? c : 'US';
+    })();
+    setCustCountry(normalized);
   };
 
   const clearMember = () => {
@@ -168,7 +192,7 @@ export default function CreateInvoicePage() {
     setCustCity('');
     setCustState('');
     setCustPostalCode('');
-    setCustCountry('USA');
+    setCustCountry('US');
   };
 
   const setItem = (idx: number, patch: Partial<ItemRow>) => {
@@ -205,6 +229,50 @@ export default function CreateInvoicePage() {
   };
 
   const subtotal = items.reduce((sum, it) => sum + (it.quantity * parseFloat(it.unitPrice || '0')), 0);
+  const taxNum = Math.max(0, parseFloat(taxStr || '0') || 0);
+  const discountNum = Math.max(0, parseFloat(discountStr || '0') || 0);
+  const totalNum = Math.max(0, subtotal + taxNum - discountNum);
+
+  // Validate the typed coupon against the existing coupons API. Determines
+  // the right scope from line items: if any membership line is present we
+  // try the membership scope first; otherwise scope=all (works for shop
+  // and ad-hoc invoices). Discount is autofilled on success.
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) return;
+    setCouponState({ status: 'validating' });
+    const hasMembership = items.some(it => it.itemType === 'membership');
+    const scope: 'membership' | 'shop' | 'all' = hasMembership ? 'membership' : 'all';
+    try {
+      const result = await couponsApi.validate({
+        code,
+        scope,
+        subtotal,
+        userId: selectedMember?.id,
+        email: custEmail || undefined,
+      });
+      if (result.valid && result.discountAmount != null) {
+        setDiscountStr(result.discountAmount.toFixed(2));
+        setCouponState({
+          status: 'ok',
+          message: `Applied ${result.discountType === 'percentage' ? `${result.discountValue}%` : `$${result.discountAmount.toFixed(2)}`} discount`,
+        });
+      } else {
+        setCouponState({ status: 'error', message: result.message || 'Coupon is not valid' });
+      }
+    } catch (err: any) {
+      setCouponState({
+        status: 'error',
+        message: err?.response?.data?.message || 'Failed to validate coupon',
+      });
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode('');
+    setDiscountStr('0.00');
+    setCouponState({ status: 'idle' });
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -254,6 +322,9 @@ export default function CreateInvoicePage() {
         })),
         billingAddress,
         notes: notes.trim() || undefined,
+        tax: taxNum > 0 ? taxNum.toFixed(2) : undefined,
+        discount: discountNum > 0 ? discountNum.toFixed(2) : undefined,
+        couponCode: couponState.status === 'ok' ? couponCode.trim() : undefined,
       };
       const created = await billingApi.createInvoice(dto);
       navigate(`/admin/billing/invoices/${created.id}`);
@@ -359,13 +430,40 @@ export default function CreateInvoicePage() {
               <Field label="Name" value={custName} onChange={setCustName} placeholder="Full name" />
               <Field label="Company" value={custCompany} onChange={setCustCompany} placeholder="Company / business name (optional)" />
               <Field label="Email" value={custEmail} onChange={setCustEmail} placeholder="email@example.com" type="email" />
-              <Field label="Phone" value={custPhone} onChange={setCustPhone} placeholder="(555) 123-4567" />
+              <div>
+                <PhoneInput
+                  value={custPhone}
+                  onChange={setCustPhone}
+                  countryCode={custCountry}
+                  onCountryCodeChange={setCustCountry}
+                  label="Phone"
+                  showIcon={false}
+                />
+              </div>
               <Field label="Address line 1" value={custAddress1} onChange={setCustAddress1} placeholder="Street address" wide />
               <Field label="Address line 2" value={custAddress2} onChange={setCustAddress2} placeholder="Apt, suite, unit (optional)" wide />
               <Field label="City" value={custCity} onChange={setCustCity} />
-              <Field label="State / Province" value={custState} onChange={setCustState} />
-              <Field label="Postal Code" value={custPostalCode} onChange={setCustPostalCode} />
-              <Field label="Country" value={custCountry} onChange={setCustCountry} />
+              <div>
+                <StateProvinceSelect
+                  value={custState}
+                  onChange={setCustState}
+                  country={custCountry}
+                  showIcon={false}
+                />
+              </div>
+              <Field label={getPostalCodeLabel(custCountry)} value={custPostalCode} onChange={setCustPostalCode} />
+              <div>
+                <CountrySelect
+                  value={custCountry}
+                  onChange={(code) => {
+                    setCustCountry(code);
+                    // When the country changes, the state codes reset because
+                    // ISO 3166-2 codes don't transfer across countries.
+                    setCustState('');
+                  }}
+                  showIcon={false}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -511,9 +609,106 @@ export default function CreateInvoicePage() {
           </div>
 
           <div className="flex justify-end mt-4 pt-3 border-t border-slate-700">
-            <div className="text-right">
-              <div className="text-xs text-gray-400">Subtotal</div>
-              <div className="text-2xl font-bold text-white">${subtotal.toFixed(2)}</div>
+            <div className="w-full max-w-sm space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Subtotal</span>
+                <span className="text-gray-200">${subtotal.toFixed(2)}</span>
+              </div>
+              {taxNum > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Tax</span>
+                  <span className="text-gray-200">${taxNum.toFixed(2)}</span>
+                </div>
+              )}
+              {discountNum > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Discount</span>
+                  <span className="text-emerald-400">-${discountNum.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-slate-700 pt-2 mt-2">
+                <span className="text-white font-semibold">Total</span>
+                <span className="text-2xl font-bold text-white">${totalNum.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Tax / Discount / Coupon block ──────────────────────────── */}
+        <div className="bg-slate-800 rounded-xl border border-slate-700 p-5 mb-6">
+          <h2 className="text-lg font-semibold text-white mb-3">Adjustments</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Tax</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={taxStr}
+                onChange={(e) => setTaxStr(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">Flat amount added to subtotal.</p>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Discount</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={discountStr}
+                onChange={(e) => setDiscountStr(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+                disabled={couponState.status === 'ok'}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                {couponState.status === 'ok' ? 'Set by coupon — clear coupon to override.' : 'Flat amount subtracted from subtotal.'}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">
+                <Tag className="inline h-3.5 w-3.5 mr-1 text-orange-400" />
+                Coupon Code
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => {
+                    setCouponCode(e.target.value.toUpperCase());
+                    if (couponState.status !== 'idle') setCouponState({ status: 'idle' });
+                  }}
+                  placeholder="e.g. SAVE20"
+                  disabled={couponState.status === 'ok'}
+                  className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm font-mono uppercase disabled:opacity-60"
+                />
+                {couponState.status === 'ok' ? (
+                  <button
+                    onClick={handleRemoveCoupon}
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 text-xs rounded-lg"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleApplyCoupon}
+                    disabled={!couponCode.trim() || couponState.status === 'validating'}
+                    className="px-3 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-xs rounded-lg"
+                  >
+                    {couponState.status === 'validating' ? 'Checking…' : 'Apply'}
+                  </button>
+                )}
+              </div>
+              {couponState.status === 'ok' && (
+                <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" /> {couponState.message}
+                </p>
+              )}
+              {couponState.status === 'error' && (
+                <p className="text-[11px] text-rose-400 mt-1 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {couponState.message}
+                </p>
+              )}
             </div>
           </div>
         </div>

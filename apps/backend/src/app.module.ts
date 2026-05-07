@@ -38,6 +38,7 @@ import { EmailModule } from './email/email.module';
 import { BusinessListingsModule } from './business-listings/business-listings.module';
 import { OrdersModule } from './orders/orders.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { RecurringInvoicesModule } from './recurring-invoices/recurring-invoices.module';
 import { BillingModule } from './billing/billing.module';
 import { JudgesModule } from './judges/judges.module';
 import { EventDirectorsModule } from './event-directors/event-directors.module';
@@ -120,6 +121,7 @@ import { SecurityModule } from './security/security.module';
     BusinessListingsModule,
     OrdersModule,
     InvoicesModule,
+    RecurringInvoicesModule,
     BillingModule,
     JudgesModule,
     EventDirectorsModule,

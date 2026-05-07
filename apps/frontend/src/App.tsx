@@ -144,6 +144,7 @@ const BillingDashboardPage = lazy(() => import('@/admin/billing/pages/BillingDas
 const AdminOrdersPage = lazy(() => import('@/admin/billing/pages/OrdersPage'));
 const AdminInvoicesPage = lazy(() => import('@/admin/billing/pages/InvoicesPage'));
 const RevenueReportsPage = lazy(() => import('@/admin/billing/pages/RevenueReportsPage'));
+const RecurringInvoicesPage = lazy(() => import('@/admin/billing/pages/RecurringInvoicesPage'));
 const OrderDetailPage = lazy(() => import('@/admin/billing/pages/OrderDetailPage'));
 const InvoiceDetailPage = lazy(() => import('@/admin/billing/pages/InvoiceDetailPage'));
 const CreateInvoicePage = lazy(() => import('@/admin/billing/pages/CreateInvoicePage'));
@@ -330,6 +331,7 @@ function App() {
               <Route path="/admin/billing/invoices/new" element={<L><CreateInvoicePage /></L>} />
               <Route path="/admin/billing/invoices/:id" element={<L><InvoiceDetailPage /></L>} />
               <Route path="/admin/billing/revenue" element={<L><RevenueReportsPage /></L>} />
+              <Route path="/admin/billing/recurring" element={<L><RecurringInvoicesPage /></L>} />
 
               {/* Shop Routes */}
               <Route path="/shop" element={<ShopPage />} />

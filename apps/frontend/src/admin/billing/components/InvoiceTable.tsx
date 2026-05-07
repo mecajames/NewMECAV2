@@ -14,6 +14,10 @@ interface InvoiceTableProps {
   onMarkPaid?: (invoice: Invoice) => void;
   onCancelInvoice?: (invoice: Invoice) => void;
   compact?: boolean;
+  // Optional bulk-selection support: when both props are provided the table
+  // renders a leading checkbox column and notifies the parent on toggle.
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string, selected: boolean) => void;
 }
 
 export function InvoiceTable({
@@ -25,7 +29,12 @@ export function InvoiceTable({
   onMarkPaid,
   onCancelInvoice,
   compact = false,
+  selectedIds,
+  onToggleSelect,
 }: InvoiceTableProps) {
+  const selectionEnabled = !!selectedIds && !!onToggleSelect;
+  const allSelected = selectionEnabled && invoices.length > 0 && invoices.every(i => selectedIds!.has(i.id));
+  const someSelected = selectionEnabled && invoices.some(i => selectedIds!.has(i.id));
   const navigate = useNavigate();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
@@ -81,6 +90,7 @@ export function InvoiceTable({
     <div className="overflow-visible rounded-lg border border-slate-700">
       <table className="w-full table-fixed divide-y divide-slate-700">
         <colgroup>
+          {selectionEnabled && <col className="w-[3%]" />}
           <col className="w-[14%]" />
           {!compact && <col className="w-[20%]" />}
           {!compact && <col className="w-[22%]" />}
@@ -92,6 +102,20 @@ export function InvoiceTable({
         </colgroup>
         <thead className="bg-slate-700/50">
           <tr>
+            {selectionEnabled && (
+              <th className="px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = !allSelected && someSelected; }}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    invoices.forEach(i => onToggleSelect!(i.id, next));
+                  }}
+                  className="h-4 w-4 rounded border-slate-500 bg-slate-800 text-orange-500 focus:ring-orange-500"
+                />
+              </th>
+            )}
             <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Invoice
             </th>
@@ -128,9 +152,19 @@ export function InvoiceTable({
           {invoices.map((invoice) => (
             <tr
               key={invoice.id}
-              className="hover:bg-slate-700/30 cursor-pointer transition-colors"
+              className={`hover:bg-slate-700/30 cursor-pointer transition-colors ${selectionEnabled && selectedIds!.has(invoice.id) ? 'bg-orange-500/5' : ''}`}
               onClick={() => handleViewInvoice(invoice)}
             >
+              {selectionEnabled && (
+                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds!.has(invoice.id)}
+                    onChange={(e) => onToggleSelect!(invoice.id, e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-500 bg-slate-800 text-orange-500 focus:ring-orange-500"
+                  />
+                </td>
+              )}
               <td className="px-3 py-3">
                 <div className="truncate text-sm font-medium text-white" title={invoice.invoiceNumber}>
                   {invoice.invoiceNumber}

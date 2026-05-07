@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { EntityManager, wrap } from '@mikro-orm/core';
 import { EmailService } from '../email/email.service';
 import { InvoicesService } from '../invoices/invoices.service';
+import { RecurringInvoicesService } from '../recurring-invoices/recurring-invoices.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { SiteSettingsService } from '../site-settings/site-settings.service';
 import { UserActivityService } from '../user-activity/user-activity.service';
@@ -25,6 +26,7 @@ export class ScheduledTasksService {
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
     private readonly invoicesService: InvoicesService,
+    private readonly recurringInvoicesService: RecurringInvoicesService,
     private readonly membershipsService: MembershipsService,
     private readonly siteSettingsService: SiteSettingsService,
     private readonly userActivityService: UserActivityService,
@@ -563,6 +565,44 @@ export class ScheduledTasksService {
       this.logger.log(`Mark overdue invoices job completed. Marked ${count} invoices as overdue.`);
     } catch (error) {
       this.logger.error('Error running mark overdue invoices job:', error);
+    }
+  }
+
+  // =============================================================================
+  // RECURRING INVOICE GENERATION
+  // Runs daily at 7:00 AM. Materializes invoices from active templates whose
+  // next_run_date is today or earlier. Each successful run advances the
+  // template's next_run_date by its frequency (monthly/quarterly/annual).
+  // =============================================================================
+  @Cron(CronExpression.EVERY_DAY_AT_7AM)
+  async handleRecurringInvoiceGeneration() {
+    this.logger.log('Running recurring invoice generation job...');
+    try {
+      const result = await this.recurringInvoicesService.processDueTemplates();
+      this.logger.log(
+        `Recurring invoice job completed: generated=${result.generated}, failed=${result.failed}`,
+      );
+    } catch (error) {
+      this.logger.error('Error running recurring invoice generation job:', error);
+    }
+  }
+
+  // =============================================================================
+  // INVOICE PAYMENT REMINDERS
+  // Runs daily at 9:30 AM. Sends "due in 3 days" reminders and overdue
+  // reminders at day 1, 7, 14, 30 since due date. De-duplicated via the
+  // invoices.last_reminder_sent_at column so re-running is safe.
+  // =============================================================================
+  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  async handleInvoicePaymentReminders() {
+    this.logger.log('Running invoice payment-reminder job...');
+    try {
+      const result = await this.invoicesService.sendInvoiceReminders();
+      this.logger.log(
+        `Invoice reminder job completed: sent=${result.sent}, skipped=${result.skipped}`,
+      );
+    } catch (error) {
+      this.logger.error('Error running invoice reminder job:', error);
     }
   }
 

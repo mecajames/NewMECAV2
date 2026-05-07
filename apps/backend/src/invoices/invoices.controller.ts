@@ -21,6 +21,8 @@ import {
   CreateInvoiceSchema,
   UpdateInvoiceStatusDto,
   UpdateInvoiceStatusSchema,
+  ApplyManualPaymentDto,
+  ApplyManualPaymentSchema,
   InvoiceListQuery,
   InvoiceListQuerySchema,
   UserRole,
@@ -31,6 +33,7 @@ import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
+import { AdminAuditService } from '../user-activity/admin-audit.service';
 
 @Controller('api/invoices')
 export class InvoicesController {
@@ -39,6 +42,7 @@ export class InvoicesController {
     private readonly pdfService: InvoicePdfService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
+    private readonly adminAuditService: AdminAuditService,
   ) {}
 
   // Helper to require admin authentication
@@ -190,9 +194,18 @@ export class InvoicesController {
     @Headers('authorization') authHeader: string,
     @Body() data: CreateInvoiceDto,
   ) {
-    await this.requireAdmin(authHeader);
+    const { user } = await this.requireAdmin(authHeader);
     const validatedData = CreateInvoiceSchema.parse(data);
-    return this.invoicesService.create(validatedData);
+    const created = await this.invoicesService.create(validatedData);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'invoice_create',
+      resourceType: 'invoice',
+      resourceId: created.id,
+      description: `Created invoice ${created.invoiceNumber} (${created.currency} ${created.total})`,
+      newValues: { items: validatedData.items.length, total: created.total },
+    });
+    return created;
   }
 
   /**
@@ -217,9 +230,18 @@ export class InvoicesController {
     @Param('id') id: string,
     @Body() data: UpdateInvoiceStatusDto,
   ) {
-    await this.requireAdmin(authHeader);
+    const { user } = await this.requireAdmin(authHeader);
     const validatedData = UpdateInvoiceStatusSchema.parse(data);
-    return this.invoicesService.updateStatus(id, validatedData);
+    const updated = await this.invoicesService.updateStatus(id, validatedData);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'invoice_update_status',
+      resourceType: 'invoice',
+      resourceId: id,
+      description: `Updated invoice ${updated.invoiceNumber} status → ${validatedData.status}`,
+      newValues: { status: validatedData.status, notes: validatedData.notes },
+    });
+    return updated;
   }
 
   /**
@@ -257,8 +279,74 @@ export class InvoicesController {
     @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ) {
-    await this.requireAdmin(authHeader);
-    return this.invoicesService.markAsPaid(id);
+    const { user } = await this.requireAdmin(authHeader);
+    const updated = await this.invoicesService.markAsPaid(id);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'invoice_mark_paid',
+      resourceType: 'invoice',
+      resourceId: id,
+      description: `Marked invoice ${updated.invoiceNumber} as paid`,
+    });
+    return updated;
+  }
+
+  /**
+   * Apply a manual payment (cash, check, wire, money order, complimentary,
+   * or other) to an invoice (admin). Records a Payment row, marks the
+   * invoice PAID, and flips the paired Order to COMPLETED.
+   */
+  @Post(':id/apply-manual-payment')
+  @HttpCode(HttpStatus.OK)
+  async applyManualPayment(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() data: ApplyManualPaymentDto,
+  ) {
+    const { user } = await this.requireAdmin(authHeader);
+    const validatedData = ApplyManualPaymentSchema.parse(data);
+    const updated = await this.invoicesService.applyManualPayment(id, validatedData);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'invoice_apply_manual_payment',
+      resourceType: 'invoice',
+      resourceId: id,
+      description: `Manual ${validatedData.method.toUpperCase()} payment recorded on ${updated.invoiceNumber}` +
+        (validatedData.reference ? ` (${validatedData.reference})` : ''),
+      newValues: {
+        method: validatedData.method,
+        reference: validatedData.reference,
+        amount: validatedData.amount,
+      },
+    });
+    return updated;
+  }
+
+  /**
+   * Apply a credit memo (write-off) against an invoice (admin). No money
+   * is recorded — the credit reduces the outstanding balance directly.
+   */
+  @Post(':id/apply-credit-memo')
+  @HttpCode(HttpStatus.OK)
+  async applyCreditMemo(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { amount: string; reason: string },
+  ) {
+    const { user } = await this.requireAdmin(authHeader);
+    if (!body?.amount || !body?.reason) {
+      throw new ForbiddenException('amount and reason are required');
+    }
+    const updated = await this.invoicesService.applyCreditMemo(id, body.amount, body.reason);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'invoice_credit_memo',
+      resourceType: 'invoice',
+      resourceId: id,
+      description: `Credit memo $${body.amount} applied to ${updated.invoiceNumber}: ${body.reason}`,
+      newValues: { amount: body.amount, reason: body.reason },
+    });
+    return updated;
   }
 
   /**
@@ -271,8 +359,16 @@ export class InvoicesController {
     @Param('id') id: string,
     @Body() body: { reason?: string },
   ) {
-    await this.requireAdmin(authHeader);
-    return this.invoicesService.cancel(id, body.reason);
+    const { user } = await this.requireAdmin(authHeader);
+    const cancelled = await this.invoicesService.cancel(id, body.reason);
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'invoice_cancel',
+      resourceType: 'invoice',
+      resourceId: id,
+      description: `Cancelled invoice ${cancelled.invoiceNumber}` + (body.reason ? `: ${body.reason}` : ''),
+    });
+    return cancelled;
   }
 
   /**
@@ -287,8 +383,21 @@ export class InvoicesController {
     @Param('id') id: string,
     @Body() body: { reason?: string },
   ) {
-    await this.requireAdmin(authHeader);
-    return this.invoicesService.refundAndCleanup(id, body.reason || 'Refunded by admin');
+    const { user } = await this.requireAdmin(authHeader);
+    const result = await this.invoicesService.refundAndCleanup(id, body.reason || 'Refunded by admin');
+    this.adminAuditService.logAction({
+      adminUserId: user.id,
+      action: 'invoice_refund',
+      resourceType: 'invoice',
+      resourceId: id,
+      description: `Refunded invoice ${result.invoice.invoiceNumber}: ${body.reason || 'no reason given'}` +
+        (result.deletedMembershipIds.length ? ` — deleted ${result.deletedMembershipIds.length} membership(s)` : ''),
+      newValues: {
+        stripeRefundId: result.stripeRefundId,
+        deletedMembershipIds: result.deletedMembershipIds,
+      },
+    });
+    return result;
   }
 
   /**
@@ -302,5 +411,50 @@ export class InvoicesController {
     await this.requireAdmin(authHeader);
     const count = await this.invoicesService.markOverdueInvoices();
     return { markedOverdue: count };
+  }
+
+  /**
+   * Send invoice reminders (admin trigger; cron does this daily).
+   */
+  @Post('batch/send-reminders')
+  @HttpCode(HttpStatus.OK)
+  async sendReminders(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.invoicesService.sendInvoiceReminders();
+  }
+
+  /**
+   * Bulk admin actions: mark paid / cancel / resend across multiple invoices.
+   */
+  @Post('bulk/mark-paid')
+  @HttpCode(HttpStatus.OK)
+  async bulkMarkPaid(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { ids: string[] },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.invoicesService.bulkMarkPaid(body?.ids ?? []);
+  }
+
+  @Post('bulk/cancel')
+  @HttpCode(HttpStatus.OK)
+  async bulkCancel(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { ids: string[]; reason?: string },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.invoicesService.bulkCancel(body?.ids ?? [], body?.reason);
+  }
+
+  @Post('bulk/resend')
+  @HttpCode(HttpStatus.OK)
+  async bulkResend(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { ids: string[] },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.invoicesService.bulkResend(body?.ids ?? []);
   }
 }

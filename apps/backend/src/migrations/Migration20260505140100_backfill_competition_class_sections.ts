@@ -153,6 +153,22 @@ export class Migration20260505140100_backfill_competition_class_sections extends
           cc.format IS DISTINCT FROM m.format
           OR cc.section IS DISTINCT FROM m.section
           OR cc.display_order IS DISTINCT FROM m.display_order
+        )
+        -- Skip rows whose target (name, format, season_id) collides with an
+        -- existing row. Some legacy datasets have duplicate classes with the
+        -- same name but different formats per season (e.g. "Extreme" exists
+        -- both as SPL and SQL); flipping the SQL row to SPL would violate
+        -- competition_classes_name_format_season_unique. Leaving those legacy
+        -- rows alone is safe — they're typically orphaned (no results /
+        -- registrations) and the canonical row in the target format is
+        -- already correctly classified.
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "public"."competition_classes" existing
+          WHERE existing.season_id = cc.season_id
+            AND existing.name = cc.name
+            AND existing.format = m.format
+            AND existing.id <> cc.id
         );
     `);
 

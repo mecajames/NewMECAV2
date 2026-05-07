@@ -172,59 +172,60 @@ export default function OrderDetailPage() {
           Back to Orders
         </button>
 
-        {/* Header */}
+        {/* Header — title block on top, action buttons aligned right on a
+            single row below. Pulls the status badge out of the title row so
+            the long order number can wrap without dragging the badge with it. */}
         <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl sm:text-3xl font-bold text-white">{order.orderNumber}</h1>
-                <OrderStatusBadge status={order.status} />
-              </div>
-              <p className="text-gray-400 mt-1 text-sm">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white break-all">{order.orderNumber}</h1>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <OrderStatusBadge status={order.status} />
+              <span className="text-gray-400 text-sm">
                 {orderTypeLabels[order.orderType]} &middot; {formatDate(order.createdAt)}
-              </p>
+              </span>
             </div>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {order.status === OrderStatus.PENDING && (
-                <button
-                  onClick={handleCancelOrder}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg border border-red-500/20 transition-colors"
-                >
-                  <XCircle className="h-4 w-4" />
-                  Cancel Order
-                </button>
-              )}
-              {canCancelOrRefund && (
-                <>
-                  <button
-                    onClick={handleOpenCancelModal}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-medium rounded-lg border border-amber-500/20 transition-colors"
-                    title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
-                  >
-                    <Ban className="h-4 w-4" />
-                    Cancel Membership
-                  </button>
-                  <button
-                    onClick={handleOpenRefundModal}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg border border-red-500/20 transition-colors"
-                    title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
-                  >
-                    <DollarSign className="h-4 w-4" />
-                    Refund
-                  </button>
-                </>
-              )}
+          {/* Action buttons — uniform sizing, right-aligned, wrap as a group
+              when the viewport is narrow so they never break mid-row. */}
+          <div className="flex items-center justify-end gap-2 flex-wrap mt-4">
+            {order.status === OrderStatus.PENDING && (
               <button
-                onClick={handleViewInvoice}
-                disabled={viewingInvoice}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                onClick={handleCancelOrder}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-md border border-red-500/30 transition-colors"
               >
-                <FileText className="h-4 w-4" />
-                {viewingInvoice ? 'Loading...' : 'View Invoice'}
+                <XCircle className="h-4 w-4" />
+                Cancel Order
               </button>
-            </div>
+            )}
+            {canCancelOrRefund && (
+              <>
+                <button
+                  onClick={handleOpenCancelModal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-medium rounded-md border border-amber-500/30 transition-colors"
+                  title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
+                >
+                  <Ban className="h-4 w-4" />
+                  Cancel Membership
+                </button>
+                <button
+                  onClick={handleOpenRefundModal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-md border border-red-500/30 transition-colors"
+                  title={!membershipItem?.referenceId ? 'Legacy order - manage membership from Members section' : undefined}
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Refund
+                </button>
+              </>
+            )}
+            <button
+              onClick={handleViewInvoice}
+              disabled={viewingInvoice}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
+            >
+              <FileText className="h-4 w-4" />
+              {viewingInvoice ? 'Loading…' : 'View Invoice'}
+            </button>
           </div>
         </div>
 

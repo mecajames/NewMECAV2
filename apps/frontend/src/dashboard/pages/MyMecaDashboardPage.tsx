@@ -289,7 +289,9 @@ export default function MyMecaDashboardPage() {
 
   const fetchRecentInvoices = async () => {
     try {
-      const res = await billingApi.getMyInvoices({ limit: 3 });
+      // Pull more than 3 so the unpaid-summary card can show an accurate
+      // total/count even when the user has older paid invoices mixed in.
+      const res = await billingApi.getMyInvoices({ limit: 25 });
       setRecentInvoices(res.data || []);
     } catch {
       // Silently ignore - invoices are optional on dashboard
@@ -1399,6 +1401,56 @@ export default function MyMecaDashboardPage() {
         </div>
       )}
 
+      {/* Outstanding Invoices alert — only renders when the user has unpaid
+          invoices. Surfaces the count + total and a one-click pay button. */}
+      {(() => {
+        const unpaid = recentInvoices.filter(inv =>
+          inv.status === 'sent' || inv.status === 'overdue' || inv.status === 'draft'
+        );
+        if (unpaid.length === 0) return null;
+        const total = unpaid.reduce((sum, inv) => sum + parseFloat(inv.total || '0'), 0);
+        const overdue = unpaid.filter(inv => inv.status === 'overdue').length;
+        const tone = overdue > 0
+          ? 'from-red-500/15 to-orange-500/15 border-red-500/40'
+          : 'from-orange-500/10 to-amber-500/10 border-orange-500/30';
+        return (
+          <div className={`bg-gradient-to-r ${tone} border rounded-xl p-5 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
+            <div>
+              <h3 className="text-white font-semibold text-lg">
+                {overdue > 0 ? `${overdue} overdue invoice${overdue > 1 ? 's' : ''}` : `${unpaid.length} invoice${unpaid.length > 1 ? 's' : ''} awaiting payment`}
+              </h3>
+              <p className="text-gray-300 text-sm mt-0.5">
+                Outstanding balance: <span className="font-semibold text-white">${total.toFixed(2)}</span>
+                {' · '}
+                <button
+                  onClick={() => navigate('/billing')}
+                  className="text-orange-300 hover:text-orange-200 underline-offset-2 hover:underline"
+                >
+                  view all
+                </button>
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {unpaid.length === 1 ? (
+                <button
+                  onClick={() => navigate(`/pay/invoice/${unpaid[0].id}`)}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg whitespace-nowrap"
+                >
+                  Pay {unpaid[0].invoiceNumber}
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/billing')}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg whitespace-nowrap"
+                >
+                  Pay Invoices
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <button
@@ -1496,6 +1548,38 @@ export default function MyMecaDashboardPage() {
             <div>
               <h3 className="text-white font-semibold text-lg">Support Tickets</h3>
               <p className="text-gray-400 text-sm">Get help or track requests</p>
+            </div>
+          </div>
+        </button>
+
+        {/* Billing & Invoices quick link — drives traffic to /billing where
+            the user can pay outstanding invoices, see payment history, and
+            download receipts. Surfaces an unpaid count when applicable. */}
+        <button
+          onClick={() => navigate('/billing')}
+          className="bg-slate-800 rounded-xl p-6 shadow-lg hover:bg-slate-700 transition-colors text-left group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+              <CreditCard className="h-6 w-6 text-orange-500" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-white font-semibold text-lg">Billing & Invoices</h3>
+              {(() => {
+                const unpaid = recentInvoices.filter(inv =>
+                  inv.status === 'sent' || inv.status === 'overdue' || inv.status === 'draft'
+                );
+                if (unpaid.length > 0) {
+                  return (
+                    <p className="text-orange-400 text-sm font-medium mt-0.5">
+                      {unpaid.length} unpaid invoice{unpaid.length > 1 ? 's' : ''}
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-gray-400 text-sm">Receipts and payment history</p>
+                );
+              })()}
             </div>
           </div>
         </button>

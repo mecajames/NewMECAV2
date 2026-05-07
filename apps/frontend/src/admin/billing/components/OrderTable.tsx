@@ -11,6 +11,10 @@ interface OrderTableProps {
   onViewOrder?: (order: Order) => void;
   onCancelOrder?: (order: Order) => void;
   compact?: boolean;
+  // Optional bulk-selection support: when both props are provided the table
+  // renders a leading checkbox column.
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string, selected: boolean) => void;
 }
 
 const orderTypeLabels: Record<OrderType, string> = {
@@ -27,9 +31,14 @@ export function OrderTable({
   onViewOrder,
   onCancelOrder,
   compact = false,
+  selectedIds,
+  onToggleSelect,
 }: OrderTableProps) {
   const navigate = useNavigate();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const selectionEnabled = !!selectedIds && !!onToggleSelect;
+  const allSelected = selectionEnabled && orders.length > 0 && orders.every(o => selectedIds!.has(o.id));
+  const someSelected = selectionEnabled && orders.some(o => selectedIds!.has(o.id));
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -76,6 +85,20 @@ export function OrderTable({
       <table className="min-w-full divide-y divide-slate-700">
         <thead className="bg-slate-700/50">
           <tr>
+            {selectionEnabled && (
+              <th className="px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = !allSelected && someSelected; }}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    orders.forEach(o => onToggleSelect!(o.id, next));
+                  }}
+                  className="h-4 w-4 rounded border-slate-500 bg-slate-800 text-orange-500 focus:ring-orange-500"
+                />
+              </th>
+            )}
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Order
             </th>
@@ -115,9 +138,19 @@ export function OrderTable({
           {orders.map((order) => (
             <tr
               key={order.id}
-              className="hover:bg-slate-700/30 cursor-pointer transition-colors"
+              className={`hover:bg-slate-700/30 cursor-pointer transition-colors ${selectionEnabled && selectedIds!.has(order.id) ? 'bg-orange-500/5' : ''}`}
               onClick={() => handleViewOrder(order)}
             >
+              {selectionEnabled && (
+                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds!.has(order.id)}
+                    onChange={(e) => onToggleSelect!(order.id, e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-500 bg-slate-800 text-orange-500 focus:ring-orange-500"
+                  />
+                </td>
+              )}
               <td className="whitespace-nowrap px-4 py-3">
                 <div className="text-sm font-medium text-white">
                   {order.orderNumber}

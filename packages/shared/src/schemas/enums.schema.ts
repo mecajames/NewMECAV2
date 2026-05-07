@@ -119,6 +119,14 @@ export enum PaymentMethod {
   CREDIT_CARD = 'credit_card',
   MANUAL = 'manual',
   WORDPRESS_PMPRO = 'wordpress_pmpro',
+  // Manual / offline methods used by admins recording cash, check, wire,
+  // money order, comp, or other payments against invoices.
+  CASH = 'cash',
+  CHECK = 'check',
+  WIRE = 'wire',
+  MONEY_ORDER = 'money_order',
+  COMPLIMENTARY = 'complimentary',
+  OTHER = 'other',
 }
 
 export enum PaymentType {
