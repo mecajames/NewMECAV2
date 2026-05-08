@@ -139,6 +139,28 @@ export type RefundOrderDto = z.infer<typeof RefundOrderSchema>;
 // the admin Orders page dropdown: `new_membership` and `membership_renewal`.
 // The service translates those into `order_type='membership'` plus a
 // presence-of-prior-membership EXISTS condition.
+/**
+ * Item-category filter for the admin orders page. Mixes membership category
+ * (competitor/retailer/etc., matched against item description) with raw item
+ * types (event_class, shop_product, fees) to give a single dropdown of
+ * "what was bought." The mapping → SQL lives in OrdersService.findAll.
+ */
+export const OrderItemCategorySchema = z.enum([
+  'competitor',
+  'retailer',
+  'manufacturer',
+  'judge',
+  'family_secondary',
+  'team_addon',
+  'event_registration',
+  'shop_product',
+  'processing_fee',
+  'discount',
+  'tax',
+  'other',
+]);
+export type OrderItemCategory = z.infer<typeof OrderItemCategorySchema>;
+
 export const OrderListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
@@ -152,6 +174,11 @@ export const OrderListQuerySchema = z.object({
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   search: z.string().optional(),
+  // Items column filters: an item-category dropdown and a free-text search
+  // on item description. Both restrict orders to those containing at least
+  // one matching order_items row.
+  itemCategory: OrderItemCategorySchema.optional(),
+  itemSearch: z.string().optional(),
 });
 export type OrderListQuery = z.infer<typeof OrderListQuerySchema>;
 

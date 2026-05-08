@@ -148,6 +148,7 @@ const RecurringInvoicesPage = lazy(() => import('@/admin/billing/pages/Recurring
 const OrderDetailPage = lazy(() => import('@/admin/billing/pages/OrderDetailPage'));
 const InvoiceDetailPage = lazy(() => import('@/admin/billing/pages/InvoiceDetailPage'));
 const CreateInvoicePage = lazy(() => import('@/admin/billing/pages/CreateInvoicePage'));
+const FailedPaymentsPage = lazy(() => import('@/admin/billing/pages/FailedPaymentsPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -332,6 +333,7 @@ function App() {
               <Route path="/admin/billing/invoices/:id" element={<L><InvoiceDetailPage /></L>} />
               <Route path="/admin/billing/revenue" element={<L><RevenueReportsPage /></L>} />
               <Route path="/admin/billing/recurring" element={<L><RecurringInvoicesPage /></L>} />
+              <Route path="/admin/billing/failed-payments" element={<L><FailedPaymentsPage /></L>} />
 
               {/* Shop Routes */}
               <Route path="/shop" element={<ShopPage />} />

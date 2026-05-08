@@ -122,6 +122,34 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export type FailedPaymentSource =
+  | 'membership'
+  | 'event_registration'
+  | 'order'
+  | 'invoice'
+  | 'payment';
+
+export interface FailedPaymentRow {
+  id: string;
+  source: FailedPaymentSource;
+  reference: string;
+  user: {
+    id?: string;
+    email?: string;
+    name?: string;
+    meca_id?: string | null;
+  };
+  amount: string;
+  currency: string;
+  failureReason: string | null;
+  attemptCount: number | null;
+  dunningStep: number | null;
+  hostedInvoiceUrl: string | null;
+  stripePaymentIntentId: string | null;
+  lastFailedAt: string;
+  detailUrl?: string;
+}
+
 export interface MyTransaction {
   id: string;
   source: 'event_registration' | 'membership' | 'shop_order';
@@ -136,6 +164,20 @@ export interface MyTransaction {
   detailUrl?: string;
 }
 
+export type OrderItemCategory =
+  | 'competitor'
+  | 'retailer'
+  | 'manufacturer'
+  | 'judge'
+  | 'family_secondary'
+  | 'team_addon'
+  | 'event_registration'
+  | 'shop_product'
+  | 'processing_fee'
+  | 'discount'
+  | 'tax'
+  | 'other';
+
 export interface OrderListParams {
   page?: number;
   limit?: number;
@@ -145,6 +187,8 @@ export interface OrderListParams {
   startDate?: string;
   endDate?: string;
   search?: string;
+  itemCategory?: OrderItemCategory;
+  itemSearch?: string;
 }
 
 export interface InvoiceListParams {
@@ -461,6 +505,23 @@ export const billingApi = {
     mrrFormatted: string;
   }> => {
     const response = await axios.get('/api/billing/stats/subscriptions');
+    return response.data;
+  },
+
+  /**
+   * Unified failed-payments view. `windowDays` defaults to 30 server-side
+   * (matches the dashboard "Failed 30d" KPI); pass a larger value to
+   * investigate further back.
+   */
+  getFailedPayments: async (windowDays?: number): Promise<{
+    windowDays: number;
+    since: string;
+    total: number;
+    data: FailedPaymentRow[];
+  }> => {
+    const response = await axios.get('/api/billing/failed-payments', {
+      params: windowDays ? { windowDays } : undefined,
+    });
     return response.data;
   },
 

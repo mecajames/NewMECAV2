@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Search, Download, XCircle } from 'lucide-react';
-import { billingApi, ordersApi, Order, OrderListParams } from '../../../api-client/billing.api-client';
+import { billingApi, ordersApi, Order, OrderListParams, OrderItemCategory } from '../../../api-client/billing.api-client';
 import { OrderTable } from '../components/OrderTable';
 import { OrderStatus, OrderType } from '../billing.types';
 import { seasonsApi, Season } from '@/seasons';
@@ -29,6 +29,8 @@ export default function OrdersPage() {
   const [monthFilter, setMonthFilter] = useState<string>('');
   const [seasonFilter, setSeasonFilter] = useState<string>('');
   const [seasons, setSeasons] = useState<Season[]>([]);
+  const [itemCategoryFilter, setItemCategoryFilter] = useState<OrderItemCategory | ''>('');
+  const [itemSearch, setItemSearch] = useState<string>('');
 
   // Generate years for filter (last 5 years)
   const currentYear = new Date().getFullYear();
@@ -94,6 +96,8 @@ export default function OrdersPage() {
         search: search || undefined,
         status: statusFilter || undefined,
         orderType: typeFilter || undefined,
+        itemCategory: itemCategoryFilter || undefined,
+        itemSearch: itemSearch.trim() || undefined,
         startDate,
         endDate,
         ...params,
@@ -111,7 +115,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders({ page: 1 });
-  }, [statusFilter, typeFilter, yearFilter, monthFilter, seasonFilter]);
+  }, [statusFilter, typeFilter, yearFilter, monthFilter, seasonFilter, itemCategoryFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,8 +334,7 @@ export default function OrdersPage() {
                 <option value="membership_renewal">Membership Renewal</option>
                 <option value={OrderType.EVENT_REGISTRATION}>Event Registration</option>
                 <option value={OrderType.MANUAL}>Manual Order</option>
-                <option value={OrderType.MECA_SHOP}>Shop Purchase</option>
-                <option value={OrderType.MERCHANDISE}>Merchandise</option>
+                <option value={OrderType.SHOP}>Shop Purchase</option>
               </select>
             </div>
 
@@ -389,6 +392,52 @@ export default function OrdersPage() {
               </select>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Items (Category)
+              </label>
+              <select
+                value={itemCategoryFilter}
+                onChange={(e) => setItemCategoryFilter(e.target.value as OrderItemCategory | '')}
+                className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 pl-3 pr-10 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              >
+                <option value="">All Items</option>
+                <option value="competitor">Competitor</option>
+                <option value="retailer">Retailer</option>
+                <option value="manufacturer">Manufacturer</option>
+                <option value="judge">Judge</option>
+                <option value="family_secondary">Family / Secondary</option>
+                <option value="team_addon">Team Add-on</option>
+                <option value="event_registration">Event Registration</option>
+                <option value="shop_product">Shop Product</option>
+                <option value="processing_fee">Processing Fee</option>
+                <option value="discount">Discount</option>
+                <option value="tax">Tax</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300">
+                Items (Description)
+              </label>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  fetchOrders({ page: 1 });
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="e.g. World Finals, SQ1L…"
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                  onBlur={() => fetchOrders({ page: 1 })}
+                  className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-700 py-2 px-3 text-sm text-white placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                />
+              </form>
+            </div>
+
             <div className="flex items-end">
               <button
                 onClick={() => {
@@ -397,6 +446,8 @@ export default function OrdersPage() {
                   setYearFilter('');
                   setMonthFilter('');
                   setSeasonFilter('');
+                  setItemCategoryFilter('');
+                  setItemSearch('');
                   setSearch('');
                   fetchOrders({ page: 1 });
                 }}

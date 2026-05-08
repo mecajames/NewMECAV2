@@ -1301,6 +1301,7 @@ export class InvoicesService {
       [InvoiceStatus.OVERDUE]: 0,
       [InvoiceStatus.CANCELLED]: 0,
       [InvoiceStatus.REFUNDED]: 0,
+      [InvoiceStatus.FAILED]: 0,
     };
 
     const dateFilter: any = {};

@@ -156,7 +156,15 @@ export class AdminNotificationsService {
 
   async notifyInvoicePaymentFailed(
     membership: any,
-    info: { attemptCount: number; amountDueCents: number; hostedInvoiceUrl: string | null },
+    info: {
+      attemptCount: number;
+      amountDueCents: number;
+      hostedInvoiceUrl: string | null;
+      // Local Invoice id, when one was created off this renewal. Without it
+      // the link falls back to the failed-payments triage view (renewals
+      // typically don't have a local Invoice row).
+      invoiceId?: string | null;
+    },
   ): Promise<void> {
     try {
       const memberName = membership.competitorName ||
@@ -165,10 +173,15 @@ export class AdminNotificationsService {
       const mecaId = membership.mecaId || 'N/A';
       const amount = (info.amountDueCents / 100).toFixed(2);
 
+      const link = info.invoiceId
+        ? `/admin/billing/invoices/${info.invoiceId}`
+        : '/admin/billing/failed-payments';
+      const dashboardLabel = info.invoiceId ? 'View Failed Invoice' : 'View Failed Payments';
+
       await this.notifyAllAdmins(
         'Renewal Payment Failed',
         `${memberName} (MECA ID: ${mecaId}) renewal payment failed (attempt ${info.attemptCount}, $${amount})`,
-        '/admin/members',
+        link,
       );
 
       await this.sendAlertToAllAdmins({
@@ -182,8 +195,8 @@ export class AdminNotificationsService {
           { label: 'Subscription ID', value: membership.stripeSubscriptionId || 'N/A' },
           ...(info.hostedInvoiceUrl ? [{ label: 'Stripe Invoice', value: info.hostedInvoiceUrl }] : []),
         ],
-        dashboardPath: '/admin/members',
-        dashboardLabel: 'View Members',
+        dashboardPath: link,
+        dashboardLabel,
       });
     } catch (error) {
       this.logger.error(`Failed to send invoice payment failed admin notification: ${error}`);
@@ -373,16 +386,33 @@ export class AdminNotificationsService {
     customerName?: string | null;
     failureCode?: string | null;
     failureMessage?: string | null;
+    // Local order/invoice ids when the failed payment was tied to one. Used to
+    // deep-link the bell notification + email button to the specific row so
+    // admins land on the failed entity in one click instead of the generic list.
+    orderId?: string | null;
+    invoiceId?: string | null;
   }): Promise<void> {
     try {
       const amount = typeof args.amountCents === 'number' ? `$${(args.amountCents / 100).toFixed(2)}` : 'Unknown';
       const provider = args.paymentMethod === 'stripe' ? 'Stripe' : 'PayPal';
       const typeLabel = args.paymentType || 'Payment';
 
+      // Prefer the most specific link: invoice → order → fallback list page.
+      const link = args.invoiceId
+        ? `/admin/billing/invoices/${args.invoiceId}`
+        : args.orderId
+          ? `/admin/billing/orders/${args.orderId}`
+          : '/admin/billing/failed-payments';
+      const dashboardLabel = args.invoiceId
+        ? 'View Failed Invoice'
+        : args.orderId
+          ? 'View Failed Order'
+          : 'View Failed Payments';
+
       await this.notifyAllAdmins(
         'Payment Failed',
         `${provider} ${typeLabel} payment of ${amount} failed${args.customerEmail ? ` for ${args.customerEmail}` : ''}.`,
-        '/admin/billing/orders',
+        link,
       );
 
       const fields = [
@@ -401,8 +431,8 @@ export class AdminNotificationsService {
         title: `${provider} Payment Failed: ${amount}`,
         subtitle: typeLabel,
         fields,
-        dashboardPath: '/admin/billing/orders',
-        dashboardLabel: 'View Orders',
+        dashboardPath: link,
+        dashboardLabel,
       });
     } catch (error) {
       this.logger.error(`Failed to send one-time-payment-failed admin notification: ${error}`);

@@ -20,6 +20,7 @@ export enum OrderStatus {
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
+  FAILED = 'failed',
 }
 
 export enum OrderType {
@@ -47,6 +48,7 @@ export enum InvoiceStatus {
   OVERDUE = 'overdue',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
+  FAILED = 'failed',
 }
 
 export enum InvoiceItemType {
