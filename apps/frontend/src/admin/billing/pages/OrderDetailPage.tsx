@@ -10,8 +10,7 @@ const orderTypeLabels: Record<OrderType, string> = {
   [OrderType.MEMBERSHIP]: 'Membership',
   [OrderType.EVENT_REGISTRATION]: 'Event Registration',
   [OrderType.MANUAL]: 'Manual',
-  [OrderType.MECA_SHOP]: 'MECA Shop',
-  [OrderType.MERCHANDISE]: 'Merchandise',
+  [OrderType.SHOP]: 'Shop Purchase',
 };
 
 export default function OrderDetailPage() {

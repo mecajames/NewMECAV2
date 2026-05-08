@@ -11,6 +11,7 @@ const orderStatusConfig: Record<OrderStatus, { label: string; color: string; bg:
   [OrderStatus.COMPLETED]: { label: 'Completed', color: 'text-green-400', bg: 'bg-green-500/15', border: 'border-green-500/30' },
   [OrderStatus.CANCELLED]: { label: 'Cancelled', color: 'text-red-400', bg: 'bg-red-500/15', border: 'border-red-500/30' },
   [OrderStatus.REFUNDED]: { label: 'Refunded', color: 'text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/30' },
+  [OrderStatus.FAILED]: { label: 'Failed', color: 'text-red-400', bg: 'bg-red-500/15', border: 'border-red-500/30' },
 };
 
 const invoiceStatusConfig: Record<InvoiceStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -20,6 +21,7 @@ const invoiceStatusConfig: Record<InvoiceStatus, { label: string; color: string;
   [InvoiceStatus.OVERDUE]: { label: 'Overdue', color: 'text-orange-400', bg: 'bg-orange-500/15', border: 'border-orange-500/30' },
   [InvoiceStatus.CANCELLED]: { label: 'Cancelled', color: 'text-red-400', bg: 'bg-red-500/15', border: 'border-red-500/30' },
   [InvoiceStatus.REFUNDED]: { label: 'Refunded', color: 'text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/30' },
+  [InvoiceStatus.FAILED]: { label: 'Failed', color: 'text-red-400', bg: 'bg-red-500/15', border: 'border-red-500/30' },
 };
 
 export function BillingStatusBadge({ status, size = 'md' }: StatusBadgeProps) {

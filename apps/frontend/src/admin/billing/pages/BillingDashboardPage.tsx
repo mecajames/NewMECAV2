@@ -293,12 +293,17 @@ export default function BillingDashboardPage() {
                   {subStats.churnLast30Days}
                 </p>
               </div>
-              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
-                <p className="text-gray-400 text-xs uppercase tracking-wide">Failed 30d</p>
+              <button
+                onClick={() => navigate('/admin/billing/failed-payments')}
+                className="bg-slate-800 hover:bg-slate-700 rounded-xl p-5 shadow-lg text-left transition-colors group"
+                title="View failed payments"
+              >
+                <p className="text-gray-400 text-xs uppercase tracking-wide group-hover:text-gray-300">Failed 30d</p>
                 <p className={`font-semibold text-2xl mt-1 ${subStats.failedPaymentsLast30Days > 0 ? 'text-red-400' : 'text-white'}`}>
                   {subStats.failedPaymentsLast30Days}
                 </p>
-              </div>
+                <p className="text-orange-400 text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View list →</p>
+              </button>
             </div>
           </div>
         )}

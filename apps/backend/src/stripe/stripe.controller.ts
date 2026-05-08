@@ -31,7 +31,10 @@ import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
 import { Payment } from '../payments/payments.entity';
-import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, UserRole, ShopAddress, StripePaymentType } from '@newmeca/shared';
+import { Order } from '../orders/orders.entity';
+import { Invoice } from '../invoices/invoices.entity';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, InvoiceStatus, PaymentType, UserRole, ShopAddress, StripePaymentType } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
@@ -1079,6 +1082,16 @@ export class StripeController {
       return;
     }
 
+    // Record the failure: write a Payment row + flip the source-of-truth entity
+    // (Invoice, Order, EventRegistration) so the admin Failed Payments view has
+    // something to query. Without this, one-time failures left no auditable
+    // trail beyond the transient admin email. Returns the local order/invoice
+    // ids it touched so the admin notification can deep-link to them.
+    const touched = await this.recordOneTimeFailure(paymentIntent).catch((err) => {
+      console.error(`Failed to record payment failure for ${paymentIntent.id}:`, err);
+      return { orderId: null as string | null, invoiceId: null as string | null };
+    });
+
     this.adminNotificationsService.notifyOneTimePaymentFailed({
       transactionId: paymentIntent.id,
       amountCents: paymentIntent.amount,
@@ -1088,9 +1101,126 @@ export class StripeController {
       customerName: metadata?.competitorName || metadata?.firstName || null,
       failureCode: paymentIntent.last_payment_error?.code || null,
       failureMessage: paymentIntent.last_payment_error?.message || null,
+      orderId: touched.orderId,
+      invoiceId: touched.invoiceId,
     }).catch((err) => {
       console.error(`Failed to notify admins of payment failure: ${err}`);
     });
+  }
+
+  /**
+   * Persist a failed Stripe one-time payment so admins can see it in the
+   * Failed Payments view. Writes a Payment row keyed by paymentIntentId
+   * (idempotent via stripe_payment_intent_id) and flips any directly-
+   * associated invoice / billing-order / event-registration to FAILED.
+   *
+   * Skips if a Payment row already exists for this intent — Stripe sends
+   * payment_intent.payment_failed once per attempt, but the webhook may be
+   * retried, and we want a single row per intent.
+   */
+  private async recordOneTimeFailure(paymentIntent: Stripe.PaymentIntent): Promise<{
+    orderId: string | null;
+    invoiceId: string | null;
+  }> {
+    const em = this.em.fork();
+    let touchedOrderId: string | null = null;
+    let touchedInvoiceId: string | null = null;
+    const metadata = paymentIntent.metadata || {};
+    const failureMessage = paymentIntent.last_payment_error?.message
+      || paymentIntent.last_payment_error?.code
+      || 'Payment failed';
+
+    // Resolve the user, if any. The metadata.userId is set whenever a logged-in
+    // member starts the checkout; guest checkouts only have an email.
+    let user: Profile | null = null;
+    if (metadata.userId) {
+      user = await em.findOne(Profile, { id: metadata.userId });
+    }
+    if (!user && metadata.email) {
+      user = await em.findOne(Profile, { email: String(metadata.email).toLowerCase() });
+    }
+
+    // Idempotency: if a payment row already exists for this intent, just
+    // refresh failure_reason / status (Stripe can replay the webhook).
+    const existing = await em.findOne(Payment, { stripePaymentIntentId: paymentIntent.id });
+    if (existing) {
+      existing.paymentStatus = PaymentStatus.FAILED;
+      existing.failureReason = failureMessage;
+    } else if (user) {
+      // Payment.user is non-null in the schema, so we only persist a row when
+      // we can resolve a profile. Guest failures fall back to invoice/order
+      // status updates below.
+      const payment = new Payment();
+      payment.user = user;
+      payment.amount = paymentIntent.amount / 100;
+      payment.currency = (paymentIntent.currency || 'usd').toUpperCase();
+      payment.stripePaymentIntentId = paymentIntent.id;
+      payment.paymentMethod = PaymentMethod.STRIPE;
+      payment.paymentStatus = PaymentStatus.FAILED;
+      payment.failureReason = failureMessage;
+      payment.description = metadata.paymentType
+        ? `Failed ${metadata.paymentType.replace(/_/g, ' ')}`
+        : 'Failed Stripe payment';
+      // Map StripePaymentType → PaymentType for the Payment row. We keep this
+      // narrow: anything not membership/registration falls back to OTHER.
+      const stripeType = metadata.paymentType as string | undefined;
+      payment.paymentType =
+        stripeType === StripePaymentType.MEMBERSHIP ? PaymentType.MEMBERSHIP
+        : stripeType === StripePaymentType.EVENT_REGISTRATION ? PaymentType.EVENT_REGISTRATION
+        : PaymentType.OTHER;
+      payment.paymentMetadata = {
+        stripeMetadata: metadata,
+        failureCode: paymentIntent.last_payment_error?.code || null,
+        amountCents: paymentIntent.amount,
+      };
+      em.persist(payment);
+    }
+
+    // Flip the local Invoice when a member tried (and failed) to pay one.
+    if (metadata.invoiceId) {
+      const invoice = await em.findOne(Invoice, { id: metadata.invoiceId });
+      if (invoice && invoice.status !== InvoiceStatus.PAID && invoice.status !== InvoiceStatus.CANCELLED) {
+        invoice.status = InvoiceStatus.FAILED;
+        invoice.metadata = {
+          ...(invoice.metadata as Record<string, unknown> | undefined),
+          lastFailureReason: failureMessage,
+          lastFailedAt: new Date().toISOString(),
+          lastFailedPaymentIntentId: paymentIntent.id,
+        };
+        touchedInvoiceId = invoice.id;
+      }
+    }
+
+    // Flip the billing Order if metadata carries an orderId AND we can find a
+    // matching Order row (SHOP intents use metadata.orderId for the ShopOrder,
+    // not the billing Order — we only update what we actually find).
+    if (metadata.orderId) {
+      const order = await em.findOne(Order, { id: metadata.orderId });
+      if (order && order.status !== OrderStatus.COMPLETED && order.status !== OrderStatus.CANCELLED) {
+        order.status = OrderStatus.FAILED;
+        order.metadata = {
+          ...(order.metadata as Record<string, unknown> | undefined),
+          lastFailureReason: failureMessage,
+          lastFailedAt: new Date().toISOString(),
+          lastFailedPaymentIntentId: paymentIntent.id,
+        };
+        touchedOrderId = order.id;
+      }
+    }
+
+    // Event registrations are created in PENDING state before the payment
+    // intent (see createEventRegistrationPaymentIntent) — flip them so they
+    // don't sit pending forever.
+    if (metadata.registrationId) {
+      const reg = await em.findOne(EventRegistration, { id: metadata.registrationId });
+      if (reg && reg.paymentStatus !== PaymentStatus.PAID && reg.paymentStatus !== PaymentStatus.REFUNDED) {
+        reg.paymentStatus = PaymentStatus.FAILED;
+      }
+    }
+
+    await em.flush();
+
+    return { orderId: touchedOrderId, invoiceId: touchedInvoiceId };
   }
 
   private async handlePaymentIntentProcessing(paymentIntent: Stripe.PaymentIntent): Promise<void> {
@@ -1535,9 +1665,42 @@ export class StripeController {
     }
 
     membership.paymentStatus = PaymentStatus.FAILED;
+    await em.populate(membership, ['user', 'membershipTypeConfig']);
+
+    // Record the failed renewal as a Payment row keyed by Stripe invoice id
+    // (subscription renewals don't have a unique payment_intent we can key on
+    // across retries, but each invoice attempt has a distinct id).
+    if (membership.user && invoice.id) {
+      const existingPayment = await em.findOne(Payment, {
+        externalPaymentId: invoice.id,
+        paymentStatus: PaymentStatus.FAILED,
+      });
+      if (!existingPayment) {
+        const payment = new Payment();
+        payment.user = membership.user;
+        payment.membership = membership;
+        payment.amount = (invoice.amount_due ?? 0) / 100;
+        payment.currency = (invoice.currency || 'usd').toUpperCase();
+        payment.externalPaymentId = invoice.id;
+        payment.paymentMethod = PaymentMethod.STRIPE;
+        payment.paymentStatus = PaymentStatus.FAILED;
+        payment.paymentType = PaymentType.MEMBERSHIP;
+        payment.failureReason = invoice.last_finalization_error?.message
+          || `Subscription renewal failed (attempt ${invoice.attempt_count ?? 1})`;
+        payment.description = `Failed membership renewal (attempt ${invoice.attempt_count ?? 1})`;
+        payment.paymentMetadata = {
+          stripeInvoiceId: invoice.id,
+          stripeSubscriptionId: subscriptionId,
+          attemptCount: invoice.attempt_count ?? 1,
+          hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+          amountDueCents: invoice.amount_due ?? 0,
+        };
+        em.persist(payment);
+      }
+    }
+
     await em.flush();
 
-    await em.populate(membership, ['user', 'membershipTypeConfig']);
     this.adminNotificationsService.notifyInvoicePaymentFailed(membership, {
       attemptCount: invoice.attempt_count ?? 1,
       amountDueCents: invoice.amount_due ?? 0,

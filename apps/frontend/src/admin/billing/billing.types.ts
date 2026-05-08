@@ -8,14 +8,19 @@ export enum OrderStatus {
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
+  FAILED = 'failed',
 }
 
+// Mirrors @newmeca/shared OrderType. Backend writes shop orders as 'shop'
+// (see ShopService.createBillingOrderAndInvoice) — the previous MECA_SHOP /
+// MERCHANDISE values were drift, weren't backed by real rows, and made the
+// admin Orders filter dropdown send values that the backend Zod schema
+// rejected.
 export enum OrderType {
   MEMBERSHIP = 'membership',
   EVENT_REGISTRATION = 'event_registration',
   MANUAL = 'manual',
-  MECA_SHOP = 'meca_shop',
-  MERCHANDISE = 'merchandise',
+  SHOP = 'shop',
 }
 
 export enum OrderItemType {
@@ -34,6 +39,7 @@ export enum InvoiceStatus {
   OVERDUE = 'overdue',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
+  FAILED = 'failed',
 }
 
 export enum InvoiceItemType {

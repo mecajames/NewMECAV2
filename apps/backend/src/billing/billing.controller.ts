@@ -38,6 +38,7 @@ import { Membership } from '../memberships/memberships.entity';
 import { ShopOrder } from '../shop/entities/shop-order.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
+import { Payment } from '../payments/payments.entity';
 import { InvoiceItemType } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
@@ -550,6 +551,249 @@ export class BillingController {
       failedPaymentsLast30Days: Number(row.failed),
       mrrCents,
       mrrFormatted: `$${(mrrCents / 100).toFixed(2)}`,
+    };
+  }
+
+  /**
+   * Unified failed-payments view. Aggregates rows from every place a Stripe
+   * (or PayPal) failure leaves a trace: failed memberships (subscription
+   * renewals), failed event registrations (one-time pending checkouts that
+   * couldn't capture), failed billing orders / invoices (member tried to pay
+   * an existing invoice and the card declined), and failed Payment rows
+   * (catch-all for one-time guest checkouts and anything not anchored to a
+   * source-of-truth row).
+   *
+   * Each row carries a `source` so the UI can render contextual links — the
+   * failed-payments page is a triage queue, not a normalized table.
+   */
+  @Get('failed-payments')
+  async getFailedPayments(
+    @Headers('authorization') authHeader: string,
+    @Query('windowDays') windowDaysParam?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const em = this.em.fork();
+
+    // Default to 30-day window so this matches the dashboard "Failed 30d" KPI.
+    // Allow override (e.g. ?windowDays=90) for deeper investigation.
+    const windowDays = Math.max(1, Math.min(365, Number(windowDaysParam) || 30));
+    const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+    const [
+      failedMemberships,
+      failedRegistrations,
+      failedOrders,
+      failedInvoices,
+      failedPayments,
+    ] = await Promise.all([
+      em.find(
+        Membership,
+        { paymentStatus: PaymentStatus.FAILED, updatedAt: { $gte: since } },
+        { populate: ['user', 'membershipTypeConfig'], orderBy: { updatedAt: 'DESC' } },
+      ),
+      em.find(
+        EventRegistration,
+        { paymentStatus: PaymentStatus.FAILED, updatedAt: { $gte: since } },
+        { populate: ['user', 'event'], orderBy: { updatedAt: 'DESC' } },
+      ),
+      em.find(
+        Order,
+        { status: OrderStatus.FAILED, updatedAt: { $gte: since } },
+        { populate: ['member'], orderBy: { updatedAt: 'DESC' } },
+      ),
+      em.find(
+        Invoice,
+        { status: InvoiceStatus.FAILED, updatedAt: { $gte: since } },
+        { populate: ['user'], orderBy: { updatedAt: 'DESC' } },
+      ),
+      em.find(
+        Payment,
+        { paymentStatus: PaymentStatus.FAILED, updatedAt: { $gte: since } },
+        { populate: ['user', 'membership'], orderBy: { updatedAt: 'DESC' } },
+      ),
+    ]);
+
+    // Track payment intent ids we've already surfaced via the source-of-truth
+    // row so the catch-all Payment list doesn't double-count subscription
+    // renewals (which appear under the membership row) or one-time member
+    // failures (already covered by the invoice/order/registration row).
+    const surfacedIntentIds = new Set<string>();
+
+    type FailedRow = {
+      id: string;
+      source: 'membership' | 'event_registration' | 'order' | 'invoice' | 'payment';
+      reference: string;
+      user: {
+        id?: string;
+        email?: string;
+        name?: string;
+        meca_id?: string | null;
+      };
+      amount: string;
+      currency: string;
+      failureReason: string | null;
+      attemptCount: number | null;
+      dunningStep: number | null;
+      hostedInvoiceUrl: string | null;
+      stripePaymentIntentId: string | null;
+      lastFailedAt: string;
+      detailUrl?: string;
+    };
+
+    const rows: FailedRow[] = [];
+
+    for (const m of failedMemberships) {
+      const userName = [m.user?.first_name, m.user?.last_name].filter(Boolean).join(' ').trim();
+      // Pull the most recent FAILED Payment row for this membership so the
+      // membership row inherits hostedInvoiceUrl + attempt count + reason.
+      const linkedFailedPayment = failedPayments.find(
+        (p) => (p.membership as any)?.id === m.id,
+      );
+      if (linkedFailedPayment?.stripePaymentIntentId) {
+        surfacedIntentIds.add(linkedFailedPayment.stripePaymentIntentId);
+      }
+      const meta = (linkedFailedPayment?.paymentMetadata as Record<string, any>) || {};
+      rows.push({
+        id: `membership:${m.id}`,
+        source: 'membership',
+        reference: m.mecaId ? `MECA #${m.mecaId}` : m.id.slice(0, 8),
+        user: {
+          id: m.user?.id,
+          email: m.user?.email,
+          name: userName || m.competitorName || undefined,
+          meca_id: m.user?.meca_id ?? null,
+        },
+        amount: Number(m.amountPaid ?? 0).toFixed(2),
+        currency: 'USD',
+        failureReason: linkedFailedPayment?.failureReason || 'Subscription renewal failed',
+        attemptCount: meta.attemptCount ?? null,
+        dunningStep: m.lastDunningStep ?? null,
+        hostedInvoiceUrl: meta.hostedInvoiceUrl ?? null,
+        stripePaymentIntentId: linkedFailedPayment?.stripePaymentIntentId ?? null,
+        lastFailedAt: (m.updatedAt ?? m.createdAt).toISOString(),
+        detailUrl: m.user?.id ? `/admin/members/${m.user.id}` : undefined,
+      });
+    }
+
+    for (const r of failedRegistrations) {
+      const userName = [r.user?.first_name, r.user?.last_name].filter(Boolean).join(' ').trim();
+      if (r.stripePaymentIntentId) surfacedIntentIds.add(r.stripePaymentIntentId);
+      const linkedFailedPayment = r.stripePaymentIntentId
+        ? failedPayments.find((p) => p.stripePaymentIntentId === r.stripePaymentIntentId)
+        : undefined;
+      rows.push({
+        id: `event_registration:${r.id}`,
+        source: 'event_registration',
+        reference: r.event?.title ? `${r.event.title}` : r.id.slice(0, 8),
+        user: {
+          id: r.user?.id,
+          email: r.user?.email,
+          name: userName || undefined,
+          meca_id: r.user?.meca_id ?? null,
+        },
+        amount: Number(r.amountPaid ?? 0).toFixed(2),
+        currency: 'USD',
+        failureReason: linkedFailedPayment?.failureReason || 'Event registration payment failed',
+        attemptCount: null,
+        dunningStep: null,
+        hostedInvoiceUrl: null,
+        stripePaymentIntentId: r.stripePaymentIntentId ?? null,
+        lastFailedAt: (r.updatedAt ?? r.createdAt ?? new Date()).toISOString(),
+        detailUrl: r.event?.id ? `/events/${r.event.id}` : undefined,
+      });
+    }
+
+    for (const o of failedOrders) {
+      const userName = [o.member?.first_name, o.member?.last_name].filter(Boolean).join(' ').trim();
+      const meta = (o.metadata as Record<string, any>) || {};
+      if (meta.lastFailedPaymentIntentId) surfacedIntentIds.add(meta.lastFailedPaymentIntentId);
+      rows.push({
+        id: `order:${o.id}`,
+        source: 'order',
+        reference: o.orderNumber,
+        user: {
+          id: o.member?.id,
+          email: o.member?.email || o.guestEmail,
+          name: userName || o.guestName || undefined,
+          meca_id: o.member?.meca_id ?? null,
+        },
+        amount: o.total,
+        currency: o.currency,
+        failureReason: meta.lastFailureReason || 'Order payment failed',
+        attemptCount: null,
+        dunningStep: null,
+        hostedInvoiceUrl: null,
+        stripePaymentIntentId: meta.lastFailedPaymentIntentId ?? null,
+        lastFailedAt: (o.updatedAt ?? o.createdAt ?? new Date()).toISOString(),
+        detailUrl: `/admin/billing/orders`,
+      });
+    }
+
+    for (const inv of failedInvoices) {
+      const userName = [inv.user?.first_name, inv.user?.last_name].filter(Boolean).join(' ').trim();
+      const meta = (inv.metadata as Record<string, any>) || {};
+      if (meta.lastFailedPaymentIntentId) surfacedIntentIds.add(meta.lastFailedPaymentIntentId);
+      rows.push({
+        id: `invoice:${inv.id}`,
+        source: 'invoice',
+        reference: inv.invoiceNumber,
+        user: {
+          id: inv.user?.id,
+          email: inv.user?.email || inv.guestEmail,
+          name: userName || undefined,
+          meca_id: inv.user?.meca_id ?? null,
+        },
+        amount: inv.total,
+        currency: inv.currency,
+        failureReason: meta.lastFailureReason || 'Invoice payment failed',
+        attemptCount: null,
+        dunningStep: null,
+        hostedInvoiceUrl: null,
+        stripePaymentIntentId: meta.lastFailedPaymentIntentId ?? null,
+        lastFailedAt: (inv.updatedAt ?? inv.createdAt ?? new Date()).toISOString(),
+        detailUrl: `/admin/billing/invoices`,
+      });
+    }
+
+    // Catch-all: failed Payment rows that aren't already represented by a
+    // higher-level source row. Keeps guest checkouts visible when they
+    // failed before any source-of-truth entity was created.
+    for (const p of failedPayments) {
+      if (p.stripePaymentIntentId && surfacedIntentIds.has(p.stripePaymentIntentId)) continue;
+      if ((p.membership as any)?.id) continue; // already surfaced as membership row
+      const userName = [p.user?.first_name, p.user?.last_name].filter(Boolean).join(' ').trim();
+      const meta = (p.paymentMetadata as Record<string, any>) || {};
+      rows.push({
+        id: `payment:${p.id}`,
+        source: 'payment',
+        reference: p.stripePaymentIntentId
+          ? `pi_${p.stripePaymentIntentId.slice(-8)}`
+          : p.id.slice(0, 8),
+        user: {
+          id: p.user?.id,
+          email: p.user?.email,
+          name: userName || undefined,
+          meca_id: p.user?.meca_id ?? null,
+        },
+        amount: Number(p.amount ?? 0).toFixed(2),
+        currency: p.currency || 'USD',
+        failureReason: p.failureReason || 'Payment failed',
+        attemptCount: meta.attemptCount ?? null,
+        dunningStep: null,
+        hostedInvoiceUrl: meta.hostedInvoiceUrl ?? null,
+        stripePaymentIntentId: p.stripePaymentIntentId ?? null,
+        lastFailedAt: (p.updatedAt ?? p.createdAt).toISOString(),
+        detailUrl: p.user?.id ? `/admin/members/${p.user.id}` : undefined,
+      });
+    }
+
+    rows.sort((a, b) => (a.lastFailedAt < b.lastFailedAt ? 1 : -1));
+
+    return {
+      windowDays,
+      since: since.toISOString(),
+      total: rows.length,
+      data: rows,
     };
   }
 

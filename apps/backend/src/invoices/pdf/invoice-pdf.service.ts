@@ -676,6 +676,7 @@ export class InvoicePdfService {
       [InvoiceStatus.OVERDUE]: '#d32f2f',
       [InvoiceStatus.CANCELLED]: '#757575',
       [InvoiceStatus.REFUNDED]: '#f57c00',
+      [InvoiceStatus.FAILED]: '#d32f2f',
     };
     return colors[status] || '#333';
   }

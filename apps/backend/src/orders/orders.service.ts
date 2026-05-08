@@ -138,7 +138,7 @@ export class OrdersService {
     };
   }> {
     const em = this.em.fork();
-    const { page = 1, limit = 20, status, orderType, userId, startDate, endDate, search } = query;
+    const { page = 1, limit = 20, status, orderType, userId, startDate, endDate, search, itemCategory, itemSearch } = query;
     const offset = (page - 1) * limit;
 
     // The search box on the admin orders page is intentionally broad — admins
@@ -184,6 +184,31 @@ export class OrdersService {
     if (userId) { conditions.push(`o.member_id = ?`); params.push(userId); }
     if (startDate) { conditions.push(`o.created_at >= ?`); params.push(startDate); }
     if (endDate) { conditions.push(`o.created_at <= ?`); params.push(endDate); }
+
+    // Items column filters — both restrict orders to those containing at
+    // least one matching order_items row. itemCategory maps the admin-facing
+    // dropdown (competitor/team/event_registration/etc.) to a SQL clause that
+    // mixes item_type values with description-pattern matches, since
+    // membership descriptions are formatted like "${configName} Membership"
+    // and that's the only way to distinguish competitor vs. retailer vs.
+    // manufacturer rows from the order_items table alone.
+    if (itemCategory) {
+      const itemClause = this.buildItemCategoryClause(itemCategory);
+      if (itemClause) {
+        conditions.push(`EXISTS (
+          SELECT 1 FROM order_items oi
+          WHERE oi.order_id = o.id AND ${itemClause.sql}
+        )`);
+        params.push(...itemClause.params);
+      }
+    }
+    if (itemSearch) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM order_items oi
+        WHERE oi.order_id = o.id AND oi.description ILIKE ?
+      )`);
+      params.push(`%${itemSearch}%`);
+    }
 
     if (search) {
       const term = `%${search}%`;
@@ -645,6 +670,7 @@ export class OrdersService {
       [OrderStatus.COMPLETED]: 0,
       [OrderStatus.CANCELLED]: 0,
       [OrderStatus.REFUNDED]: 0,
+      [OrderStatus.FAILED]: 0,
     };
 
     const dateFilter: any = {};
@@ -736,6 +762,46 @@ export class OrdersService {
    * "ORD-YYYY-RENEW-*" naming and legacy "PMPRO-*" rows imported from the
    * old WordPress system, which carry no naming hint.
    */
+  /**
+   * Map the admin orders-page item-category dropdown to a SQL clause that
+   * runs inside an EXISTS over order_items. Membership-flavored categories
+   * (competitor/retailer/manufacturer/judge/family_secondary) match against
+   * description because the membership_type_config name is what gets baked
+   * into the order item's description ("Competitor Membership", "Retailer
+   * Membership", "... - Secondary Membership (...)") and we don't carry the
+   * MembershipCategory enum down to order_items.
+   */
+  private buildItemCategoryClause(category: string): { sql: string; params: any[] } | null {
+    switch (category) {
+      case 'competitor':
+        return { sql: `oi.item_type = 'membership' AND oi.description ILIKE ?`, params: ['%Competitor%'] };
+      case 'retailer':
+        return { sql: `oi.item_type = 'membership' AND oi.description ILIKE ?`, params: ['%Retailer%'] };
+      case 'manufacturer':
+        return { sql: `oi.item_type = 'membership' AND oi.description ILIKE ?`, params: ['%Manufacturer%'] };
+      case 'judge':
+        return { sql: `oi.item_type = 'membership' AND oi.description ILIKE ?`, params: ['%Judge%'] };
+      case 'family_secondary':
+        return { sql: `oi.item_type = 'membership' AND oi.description ILIKE ?`, params: ['%Secondary%'] };
+      case 'team_addon':
+        return { sql: `(oi.item_type = 'team_addon' OR oi.description ILIKE ?)`, params: ['%Team Add%'] };
+      case 'event_registration':
+        return { sql: `oi.item_type = 'event_class'`, params: [] };
+      case 'shop_product':
+        return { sql: `oi.item_type = 'shop_product'`, params: [] };
+      case 'processing_fee':
+        return { sql: `oi.item_type = 'processing_fee'`, params: [] };
+      case 'discount':
+        return { sql: `oi.item_type = 'discount'`, params: [] };
+      case 'tax':
+        return { sql: `oi.item_type = 'tax'`, params: [] };
+      case 'other':
+        return { sql: `oi.item_type = 'other'`, params: [] };
+      default:
+        return null;
+    }
+  }
+
   private async attachRenewalFlags(em: EntityManager, orders: Order[]): Promise<void> {
     const membershipOrders = orders.filter(o => o.orderType === OrderType.MEMBERSHIP && o.member?.id);
     if (membershipOrders.length === 0) return;
