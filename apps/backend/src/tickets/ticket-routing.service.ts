@@ -21,6 +21,28 @@ export class TicketRoutingService {
     private readonly departmentsService: TicketDepartmentsService,
   ) {}
 
+  /**
+   * Coerce a possibly-nested FK input into a plain UUID string. The admin
+   * UI prefills its form with the API response, and our previous response
+   * shape returned `assign_to_staff_id` as the full populated TicketStaff
+   * object (because the entity uses serializedName + we populate it). When
+   * the user re-saves, the whole object comes back. Pass it through
+   * findOne and MikroORM treats `{ id: { profile_id: {...} } }` as a
+   * nested where clause and crashes with "Trying to query by not existing
+   * property TicketStaff.email". Normalizing to a string here unblocks
+   * the round-trip even if the response shape regresses again.
+   */
+  private extractId(value: unknown): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null && 'id' in value) {
+      const inner = (value as { id: unknown }).id;
+      return typeof inner === 'string' ? inner : null;
+    }
+    return null;
+  }
+
   async findAll(includeInactive: boolean = false): Promise<TicketRoutingRule[]> {
     const em = this.em.fork();
     const where: any = {};
@@ -47,21 +69,24 @@ export class TicketRoutingService {
   async create(data: CreateTicketRoutingRuleDto): Promise<TicketRoutingRule> {
     const em = this.em.fork();
 
-    // Fetch related entities if specified
+    // Fetch related entities if specified — coerce any object-shaped FK
+    // (from a UI that round-trips the populated response) to a UUID first.
     let department: TicketDepartment | undefined;
     let staff: TicketStaff | undefined;
 
-    if (data.assign_to_department_id) {
-      department = await em.findOne(TicketDepartment, { id: data.assign_to_department_id }) ?? undefined;
+    const deptId = this.extractId(data.assign_to_department_id);
+    if (deptId) {
+      department = await em.findOne(TicketDepartment, { id: deptId }) ?? undefined;
       if (!department) {
-        throw new NotFoundException(`Department with ID ${data.assign_to_department_id} not found`);
+        throw new NotFoundException(`Department with ID ${deptId} not found`);
       }
     }
 
-    if (data.assign_to_staff_id) {
-      staff = await em.findOne(TicketStaff, { id: data.assign_to_staff_id }) ?? undefined;
+    const staffId = this.extractId(data.assign_to_staff_id);
+    if (staffId) {
+      staff = await em.findOne(TicketStaff, { id: staffId }) ?? undefined;
       if (!staff) {
-        throw new NotFoundException(`Staff with ID ${data.assign_to_staff_id} not found`);
+        throw new NotFoundException(`Staff with ID ${staffId} not found`);
       }
     }
 
@@ -88,39 +113,43 @@ export class TicketRoutingService {
       throw new NotFoundException(`Routing rule with ID ${id} not found`);
     }
 
-    const updateData: Partial<TicketRoutingRule> = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.description !== undefined) updateData.description = data.description ?? undefined;
-    if (data.is_active !== undefined) updateData.isActive = data.is_active;
-    if (data.priority !== undefined) updateData.priority = data.priority;
-    if (data.conditions !== undefined) updateData.conditions = data.conditions;
-    if (data.set_priority !== undefined) updateData.setPriority = data.set_priority ?? undefined;
+    // Set properties explicitly instead of em.assign() — TicketRoutingRule
+    // has serializedName on most fields (is_active, assign_to_department_id,
+    // assign_to_staff_id, set_priority, created_at, updated_at) which makes
+    // em.assign() mis-map keys and produce the 500 we were seeing in prod.
+    if (data.name !== undefined) rule.name = data.name;
+    if (data.description !== undefined) rule.description = data.description ?? undefined;
+    if (data.is_active !== undefined) rule.isActive = data.is_active;
+    if (data.priority !== undefined) rule.priority = data.priority;
+    if (data.conditions !== undefined) rule.conditions = data.conditions;
+    if (data.set_priority !== undefined) rule.setPriority = data.set_priority ?? undefined;
 
-    if (data.assign_to_department_id !== undefined) {
-      if (data.assign_to_department_id) {
-        const department = await em.findOne(TicketDepartment, { id: data.assign_to_department_id });
+    const deptId = this.extractId(data.assign_to_department_id);
+    if (deptId !== undefined) {
+      if (deptId) {
+        const department = await em.findOne(TicketDepartment, { id: deptId });
         if (!department) {
-          throw new NotFoundException(`Department with ID ${data.assign_to_department_id} not found`);
+          throw new NotFoundException(`Department with ID ${deptId} not found`);
         }
-        updateData.assignToDepartment = department;
+        rule.assignToDepartment = department;
       } else {
-        updateData.assignToDepartment = undefined;
+        rule.assignToDepartment = undefined;
       }
     }
 
-    if (data.assign_to_staff_id !== undefined) {
-      if (data.assign_to_staff_id) {
-        const staff = await em.findOne(TicketStaff, { id: data.assign_to_staff_id });
+    const staffId = this.extractId(data.assign_to_staff_id);
+    if (staffId !== undefined) {
+      if (staffId) {
+        const staff = await em.findOne(TicketStaff, { id: staffId });
         if (!staff) {
-          throw new NotFoundException(`Staff with ID ${data.assign_to_staff_id} not found`);
+          throw new NotFoundException(`Staff with ID ${staffId} not found`);
         }
-        updateData.assignToStaff = staff;
+        rule.assignToStaff = staff;
       } else {
-        updateData.assignToStaff = undefined;
+        rule.assignToStaff = undefined;
       }
     }
 
-    em.assign(rule, updateData);
     await em.flush();
     return this.findById(id);
   }

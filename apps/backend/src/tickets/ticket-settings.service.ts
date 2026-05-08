@@ -81,7 +81,9 @@ export class TicketSettingsService {
         settingType: this.inferType(value),
       } as any);
     } else {
-      em.assign(setting, { settingValue: value });
+      // Explicit assignment instead of em.assign() — TicketSetting has
+      // serializedName on setting_key/setting_value/setting_type/updated_at.
+      setting.settingValue = value;
     }
 
     await em.persistAndFlush(setting);
@@ -100,10 +102,11 @@ export class TicketSettingsService {
         description: description,
       } as any);
     } else {
-      const updateData: Partial<TicketSetting> = { settingValue: value };
-      if (type) updateData.settingType = type;
-      if (description !== undefined) updateData.description = description;
-      em.assign(setting, updateData);
+      // Explicit assignment instead of em.assign() — TicketSetting has
+      // serializedName on setting_key/setting_value/setting_type/updated_at.
+      setting.settingValue = value;
+      if (type) setting.settingType = type;
+      if (description !== undefined) setting.description = description;
     }
 
     await em.persistAndFlush(setting);

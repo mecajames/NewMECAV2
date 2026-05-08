@@ -52,10 +52,9 @@ export class AuditService {
 
     if (session) {
       console.log(`[AUDIT] Found session, current resultCount: ${session.resultCount}`);
-      em.assign(session, {
-        sessionEnd: new Date(),
-        resultCount: resultCount,
-      });
+      // Explicit assignment — ResultsEntrySession has serializedName.
+      session.sessionEnd = new Date();
+      session.resultCount = resultCount;
       console.log(`[AUDIT] After assign, resultCount: ${session.resultCount}`);
       await em.flush();
       console.log(`[AUDIT] Session updated successfully`);
@@ -72,7 +71,7 @@ export class AuditService {
     const session = await em.findOne(ResultsEntrySession, { id: sessionId });
 
     if (session) {
-      em.assign(session, { filePath });
+      session.filePath = filePath;
       await em.flush();
     }
   }

@@ -61,7 +61,10 @@ export class CompetitionFormatsService {
       }
     }
 
-    em.assign(format, data);
+    // Explicit per-key assignment — CompetitionFormat has serializedName.
+    for (const [key, value] of Object.entries(data)) {
+      (format as any)[key] = value;
+    }
     await em.flush();
     return format;
   }

@@ -114,16 +114,18 @@ export class TicketDepartmentsService {
       throw new ConflictException('Cannot make the default department private');
     }
 
-    const updateData: Partial<TicketDepartment> = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.slug !== undefined) updateData.slug = data.slug;
-    if (data.description !== undefined) updateData.description = data.description ?? undefined;
-    if (data.is_active !== undefined) updateData.isActive = data.is_active;
-    if (data.is_private !== undefined) updateData.isPrivate = data.is_private;
-    if (data.is_default !== undefined) updateData.isDefault = data.is_default;
-    if (data.display_order !== undefined) updateData.displayOrder = data.display_order;
+    // Set properties explicitly instead of em.assign() — TicketDepartment
+    // has serializedName on is_active/is_private/is_default/display_order/
+    // created_at/updated_at. em.assign() mis-maps keys when serializedName
+    // is set and produces 500s (same bug pattern as routing-rule update).
+    if (data.name !== undefined) department.name = data.name;
+    if (data.slug !== undefined) department.slug = data.slug;
+    if (data.description !== undefined) department.description = data.description ?? undefined;
+    if (data.is_active !== undefined) department.isActive = data.is_active;
+    if (data.is_private !== undefined) department.isPrivate = data.is_private;
+    if (data.is_default !== undefined) department.isDefault = data.is_default;
+    if (data.display_order !== undefined) department.displayOrder = data.display_order;
 
-    em.assign(department, updateData);
     await em.flush();
     return department;
   }

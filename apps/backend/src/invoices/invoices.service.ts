@@ -575,7 +575,12 @@ export class InvoicesService {
       updates.paidAt = new Date();
     }
 
-    wrap(invoice).assign(updates);
+    // Direct property assignment — Invoice has serializedName on
+    // coupon_code, billing_address, company_info, last_reminder_sent_at,
+    // amount_paid, etc. Avoid em.assign().
+    for (const [key, value] of Object.entries(updates)) {
+      (invoice as any)[key] = value;
+    }
 
     // Mirror status onto the linked order so revenue stats stay accurate.
     if (invoice.order) {
@@ -708,12 +713,10 @@ export class InvoicesService {
         ? `${invoice.notes ? invoice.notes + '\n' : ''}${data.notes}`
         : invoice.notes;
 
-      wrap(invoice).assign({
-        status: fullyPaid ? InvoiceStatus.PAID : invoice.status,
-        amountPaid: newPaid.toFixed(2),
-        paidAt: fullyPaid ? paidAt : invoice.paidAt,
-        notes: updateNotes,
-      });
+      invoice.status = fullyPaid ? InvoiceStatus.PAID : invoice.status;
+      invoice.amountPaid = newPaid.toFixed(2);
+      invoice.paidAt = fullyPaid ? paidAt : invoice.paidAt;
+      invoice.notes = updateNotes;
 
       // Only flip the linked order to COMPLETED on full payment. Partial
       // payment leaves it PENDING so revenue reports don't credit revenue
@@ -809,10 +812,8 @@ export class InvoicesService {
       );
     }
 
-    wrap(invoice).assign({
-      status: InvoiceStatus.CANCELLED,
-      notes: reason || invoice.notes,
-    });
+    invoice.status = InvoiceStatus.CANCELLED;
+    invoice.notes = reason || invoice.notes;
 
     if (invoice.order) {
       const linkedOrder = invoice.order as unknown as Order;
@@ -837,10 +838,8 @@ export class InvoicesService {
       throw new NotFoundException(`Invoice with ID ${id} not found`);
     }
 
-    wrap(invoice).assign({
-      status: InvoiceStatus.REFUNDED,
-      notes: reason,
-    });
+    invoice.status = InvoiceStatus.REFUNDED;
+    invoice.notes = reason;
 
     if (invoice.order) {
       (invoice.order as unknown as Order).status = OrderStatus.REFUNDED;
@@ -987,10 +986,8 @@ export class InvoicesService {
       }
 
       // Update invoice
-      wrap(invoice).assign({
-        status: InvoiceStatus.REFUNDED,
-        notes: reason,
-      });
+      invoice.status = InvoiceStatus.REFUNDED;
+      invoice.notes = reason;
 
       await tx.flush();
 
@@ -1041,12 +1038,10 @@ export class InvoicesService {
       const fullyPaid = newPaid >= totalAmount - 0.005;
       const noteLine = `Credit memo $${credit.toFixed(2)} applied: ${reason}`;
 
-      wrap(invoice).assign({
-        amountPaid: newPaid.toFixed(2),
-        status: fullyPaid ? InvoiceStatus.PAID : invoice.status,
-        paidAt: fullyPaid ? new Date() : invoice.paidAt,
-        notes: invoice.notes ? `${invoice.notes}\n${noteLine}` : noteLine,
-      });
+      invoice.amountPaid = newPaid.toFixed(2);
+      invoice.status = fullyPaid ? InvoiceStatus.PAID : invoice.status;
+      invoice.paidAt = fullyPaid ? new Date() : invoice.paidAt;
+      invoice.notes = invoice.notes ? `${invoice.notes}\n${noteLine}` : noteLine;
 
       if (invoice.order && fullyPaid) {
         (invoice.order as unknown as Order).status = OrderStatus.COMPLETED;
@@ -1220,7 +1215,7 @@ export class InvoicesService {
     });
 
     for (const invoice of overdueInvoices) {
-      wrap(invoice).assign({ status: InvoiceStatus.OVERDUE });
+      invoice.status = InvoiceStatus.OVERDUE;
     }
 
     await em.flush();
@@ -1281,7 +1276,7 @@ export class InvoicesService {
     for (const invoice of invoicesWithNullDueDate) {
       // Set due date to created date, or today if created date is missing
       const dueDate = invoice.createdAt || new Date();
-      wrap(invoice).assign({ dueDate });
+      invoice.dueDate = dueDate;
       fixedInvoiceNumbers.push(invoice.invoiceNumber);
     }
 
@@ -1460,10 +1455,8 @@ export class InvoicesService {
     }
 
     // Update invoice status to SENT
-    wrap(invoice).assign({
-      status: InvoiceStatus.SENT,
-      sentAt: new Date(),
-    });
+    invoice.status = InvoiceStatus.SENT;
+    invoice.sentAt = new Date();
 
     await em.flush();
 

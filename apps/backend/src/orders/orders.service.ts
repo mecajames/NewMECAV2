@@ -579,10 +579,10 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
 
-    wrap(order).assign({
-      status: data.status,
-      notes: data.notes || order.notes,
-    });
+    // Direct property assignment — Order has serializedName on coupon_code,
+    // billing_address. Avoid em.assign() (documented mis-mapping bug).
+    order.status = data.status;
+    if (data.notes) order.notes = data.notes;
 
     await em.flush();
 
@@ -606,10 +606,8 @@ export class OrdersService {
       );
     }
 
-    wrap(order).assign({
-      status: OrderStatus.CANCELLED,
-      notes: data.reason,
-    });
+    order.status = OrderStatus.CANCELLED;
+    order.notes = data.reason;
 
     await em.flush();
 
@@ -627,10 +625,8 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
 
-    wrap(order).assign({
-      status: OrderStatus.REFUNDED,
-      notes: reason,
-    });
+    order.status = OrderStatus.REFUNDED;
+    order.notes = reason;
 
     await em.flush();
 
@@ -789,7 +785,7 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
-    wrap(order).assign({ invoiceId });
+    order.invoiceId = invoiceId;
     await em.flush();
 
     return order;

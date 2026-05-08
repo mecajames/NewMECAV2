@@ -129,11 +129,10 @@ export class MemberGalleryService {
       throw new ForbiddenException('You can only update your own gallery images');
     }
 
-    em.assign(image, {
-      caption: data.caption !== undefined ? data.caption : image.caption,
-      sortOrder: data.sortOrder !== undefined ? data.sortOrder : image.sortOrder,
-      isPublic: data.isPublic !== undefined ? data.isPublic : image.isPublic,
-    });
+    // Explicit assignment — MemberGalleryImage has serializedName fields.
+    if (data.caption !== undefined) image.caption = data.caption;
+    if (data.sortOrder !== undefined) image.sortOrder = data.sortOrder;
+    if (data.isPublic !== undefined) image.isPublic = data.isPublic;
 
     await em.flush();
     return image;

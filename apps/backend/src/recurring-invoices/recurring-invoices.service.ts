@@ -130,7 +130,11 @@ export class RecurringInvoicesService {
       }
     }
 
-    wrap(tpl).assign(patch);
+    // Direct property assignment — RecurringInvoiceTemplate has fieldName
+    // serializedName entries. Avoid em.assign() (documented mis-mapping bug).
+    for (const [key, value] of Object.entries(patch)) {
+      (tpl as any)[key] = value;
+    }
     await em.flush();
     return tpl;
   }
