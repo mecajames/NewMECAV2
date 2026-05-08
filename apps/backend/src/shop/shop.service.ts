@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { EntityManager, wrap } from '@mikro-orm/core';
 import {
   ShopProductCategory,
@@ -372,6 +372,100 @@ export class ShopService {
     }
 
     return fullOrder;
+  }
+
+  /**
+   * Cancel a shop order. Only PENDING orders can be cancelled (paid/shipped
+   * orders go through refund flow instead). When `userId` is supplied the
+   * caller must own the order — admin paths pass undefined to skip the
+   * ownership check. Records `reason` to the order notes and admin_notes
+   * for the audit trail.
+   */
+  async cancelOrder(id: string, opts: { reason?: string; userId?: string; cancelledBy?: 'member' | 'admin' | 'system' } = {}): Promise<ShopOrder> {
+    const em = this.em.fork();
+    const order = await em.findOne(ShopOrder, { id }, { populate: ['user'] });
+
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${id} not found`);
+    }
+
+    // Ownership check for member self-cancel
+    if (opts.userId) {
+      const ownerId = (order.user as any)?.id || order.user;
+      if (ownerId !== opts.userId) {
+        throw new ForbiddenException('You can only cancel your own orders');
+      }
+    }
+
+    // Only PENDING orders can be cancelled. Anything past payment goes
+    // through the refund flow.
+    if (order.status !== ShopOrderStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot cancel order with status "${order.status}". Only pending orders can be cancelled — paid orders need a refund.`,
+      );
+    }
+
+    const reason = opts.reason?.trim() || 'Cancelled';
+    const cancelledBy = opts.cancelledBy || (opts.userId ? 'member' : 'admin');
+    const stamp = `[${new Date().toISOString()}] Cancelled by ${cancelledBy}: ${reason}`;
+
+    order.status = ShopOrderStatus.CANCELLED;
+    order.notes = order.notes ? `${order.notes}\n${stamp}` : stamp;
+    order.adminNotes = order.adminNotes ? `${order.adminNotes}\n${stamp}` : stamp;
+
+    await em.flush();
+    return this.findOrderById(id);
+  }
+
+  /**
+   * Cron-friendly: cancel any shop order that's been PENDING for more than
+   * `olderThanHours` hours (default 24). The Stripe payment intent has
+   * already expired by then, so the row is dead. Returns the count of
+   * orders cancelled so the cron can log it.
+   */
+  async cancelAbandonedPendingOrders(olderThanHours: number = 24): Promise<{ cancelled: number; ids: string[] }> {
+    const em = this.em.fork();
+    const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+
+    const candidates = await em.find(ShopOrder, {
+      status: ShopOrderStatus.PENDING,
+      createdAt: { $lt: cutoff },
+    });
+
+    const cancelledIds: string[] = [];
+    const stamp = (id: string) => `[${new Date().toISOString()}] Auto-cancelled by system: abandoned at checkout (>${olderThanHours}h pending). Stripe payment intent expired.`;
+
+    for (const order of candidates) {
+      order.status = ShopOrderStatus.CANCELLED;
+      const note = stamp(order.id);
+      order.notes = order.notes ? `${order.notes}\n${note}` : note;
+      order.adminNotes = order.adminNotes ? `${order.adminNotes}\n${note}` : note;
+      cancelledIds.push(order.id);
+    }
+
+    if (cancelledIds.length > 0) {
+      await em.flush();
+    }
+
+    return { cancelled: cancelledIds.length, ids: cancelledIds };
+  }
+
+  /**
+   * Bulk-cancel orders by id. Per-id outcome is returned so the UI can
+   * surface partial failures (e.g. one of the selected orders is no longer
+   * pending because a webhook just landed).
+   */
+  async bulkCancelOrders(ids: string[], reason?: string): Promise<Array<{ id: string; ok: boolean; error?: string }>> {
+    const out: Array<{ id: string; ok: boolean; error?: string }> = [];
+    for (const id of ids) {
+      try {
+        await this.cancelOrder(id, { reason, cancelledBy: 'admin' });
+        out.push({ id, ok: true });
+      } catch (err: any) {
+        out.push({ id, ok: false, error: err?.message || 'failed' });
+      }
+    }
+    return out;
   }
 
   async addTrackingNumber(id: string, trackingNumber: string): Promise<ShopOrder> {

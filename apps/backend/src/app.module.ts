@@ -39,6 +39,7 @@ import { BusinessListingsModule } from './business-listings/business-listings.mo
 import { OrdersModule } from './orders/orders.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { RecurringInvoicesModule } from './recurring-invoices/recurring-invoices.module';
+import { MembershipCompsModule } from './membership-comps/membership-comps.module';
 import { BillingModule } from './billing/billing.module';
 import { JudgesModule } from './judges/judges.module';
 import { EventDirectorsModule } from './event-directors/event-directors.module';
@@ -122,6 +123,7 @@ import { SecurityModule } from './security/security.module';
     OrdersModule,
     InvoicesModule,
     RecurringInvoicesModule,
+    MembershipCompsModule,
     BillingModule,
     JudgesModule,
     EventDirectorsModule,

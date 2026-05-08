@@ -15,6 +15,8 @@ import {
   ExternalLink,
   ArrowLeft,
   FileText,
+  XCircle,
+  Trash2,
 } from 'lucide-react';
 import { ShopOrder } from '@newmeca/shared';
 import { shopApi, ShopStats } from '@/shop/shop.api-client';
@@ -72,6 +74,27 @@ export function AdminShopOrdersPage() {
 
   // Invoice creation recovery
   const [creatingInvoiceForOrderId, setCreatingInvoiceForOrderId] = useState<string | null>(null);
+
+  // Bulk-cancel + abandoned-cleanup state. Selection is reset whenever the
+  // visible page changes so an admin can't accidentally act on rows they
+  // can no longer see.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState<null | 'cancel' | 'abandoned'>(null);
+
+  const toggleSelect = (id: string, sel: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (sel) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  // Only PENDING orders are cancellable, so the "select all" header checkbox
+  // toggles only the pending visible rows — selecting a paid/shipped row
+  // would just produce a per-row failure on bulk-cancel.
+  const pendingVisible = orders.filter(o => o.status === 'pending');
+  const allPendingSelected = pendingVisible.length > 0 && pendingVisible.every(o => selectedIds.has(o.id));
+  const somePendingSelected = pendingVisible.some(o => selectedIds.has(o.id));
 
   useEffect(() => {
     loadData();
@@ -193,6 +216,55 @@ export function AdminShopOrdersPage() {
     return order.status === 'paid' || order.status === 'processing';
   };
 
+  /**
+   * Cancel a single pending order. Wraps the admin endpoint with a confirm
+   * + reason prompt; non-pending orders are blocked server-side and surfaced
+   * here as an alert.
+   */
+  const handleCancelOne = async (order: ShopOrder) => {
+    if (!window.confirm(`Cancel order ${order.orderNumber}? Card was never charged.`)) return;
+    const reason = window.prompt('Reason (optional):') || undefined;
+    try {
+      await shopApi.adminCancelOrder(order.id, reason);
+      loadData();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to cancel order');
+    }
+  };
+
+  const handleBulkCancel = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Cancel ${ids.length} pending order(s)?`)) return;
+    const reason = window.prompt('Reason (optional):') || undefined;
+    setBulkRunning('cancel');
+    try {
+      const results = await shopApi.adminBulkCancelOrders(ids, reason);
+      const ok = results.filter(r => r.ok).length;
+      const failed = results.length - ok;
+      const errors = results.filter(r => !r.ok && r.error).slice(0, 3).map(r => r.error).join('; ');
+      alert(failed > 0 ? `${ok} cancelled, ${failed} failed${errors ? ` — ${errors}` : ''}` : `${ok} cancelled`);
+      setSelectedIds(new Set());
+      loadData();
+    } finally {
+      setBulkRunning(null);
+    }
+  };
+
+  const handleCancelAbandoned = async () => {
+    if (!window.confirm('Cancel ALL pending orders older than 24h that were abandoned at checkout? This is the same job the daily cron runs at 3am.')) return;
+    setBulkRunning('abandoned');
+    try {
+      const result = await shopApi.adminCancelAbandonedOrders(24);
+      alert(`Cancelled ${result.cancelled} abandoned order(s).`);
+      loadData();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to run abandoned-cleanup');
+    } finally {
+      setBulkRunning(null);
+    }
+  };
+
   const createInvoiceForOrder = async (orderId: string) => {
     setCreatingInvoiceForOrderId(orderId);
     try {
@@ -215,13 +287,24 @@ export function AdminShopOrdersPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Shop Orders</h1>
             <p className="text-gray-400 mt-1">Manage customer orders</p>
           </div>
-          <button
-            onClick={() => navigate('/dashboard/admin')}
-            className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Back to Dashboard
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleCancelAbandoned}
+              disabled={bulkRunning !== null}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-medium rounded-lg border border-amber-500/30 transition-colors disabled:opacity-50"
+              title="Cancel any orders that have been pending >24h. Runs daily via cron — this triggers it manually."
+            >
+              <Trash2 className="h-4 w-4" />
+              {bulkRunning === 'abandoned' ? 'Working…' : 'Cancel Abandoned'}
+            </button>
+            <button
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Dashboard
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -278,6 +361,30 @@ export function AdminShopOrdersPage() {
           </div>
         </div>
 
+        {/* Bulk action bar — visible only when at least one row is selected */}
+        {selectedIds.size > 0 && (
+          <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+            <span className="text-sm text-orange-300 font-medium">
+              {selectedIds.size} selected
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={handleBulkCancel}
+              disabled={bulkRunning !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium rounded-md border border-red-500/30 disabled:opacity-50"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              {bulkRunning === 'cancel' ? 'Cancelling…' : 'Cancel Selected'}
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         {/* Orders Table */}
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
           {loading ? (
@@ -294,6 +401,20 @@ export function AdminShopOrdersPage() {
               <table className="w-full">
                 <thead className="bg-slate-700/50">
                   <tr>
+                    <th className="px-3 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allPendingSelected}
+                        ref={(el) => { if (el) el.indeterminate = !allPendingSelected && somePendingSelected; }}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          // Toggle only PENDING rows — non-pending can't be cancelled.
+                          pendingVisible.forEach(o => toggleSelect(o.id, next));
+                        }}
+                        className="h-4 w-4 rounded border-slate-500 bg-slate-800 text-orange-500 focus:ring-orange-500"
+                        title="Select all pending"
+                      />
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                       Order
                     </th>
@@ -316,7 +437,20 @@ export function AdminShopOrdersPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-700">
                   {orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-700/30">
+                    <tr key={order.id} className={`hover:bg-slate-700/30 ${selectedIds.has(order.id) ? 'bg-orange-500/5' : ''}`}>
+                      <td className="px-3 py-4 w-10">
+                        {/* Only PENDING orders are selectable — others can't be cancelled. */}
+                        {order.status === 'pending' ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(order.id)}
+                            onChange={(e) => toggleSelect(order.id, e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-500 bg-slate-800 text-orange-500 focus:ring-orange-500"
+                          />
+                        ) : (
+                          <span className="inline-block h-4 w-4" />
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="text-white font-medium">{order.orderNumber}</p>
                         <p className="text-sm text-gray-500">
@@ -387,6 +521,15 @@ export function AdminShopOrdersPage() {
                               title="Refund Order"
                             >
                               <RotateCcw className="h-4 w-4" />
+                            </button>
+                          )}
+                          {order.status === 'pending' && (
+                            <button
+                              onClick={() => handleCancelOne(order)}
+                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
+                              title="Cancel Order"
+                            >
+                              <XCircle className="h-4 w-4" />
                             </button>
                           )}
                           {order.billingOrderId ? (

@@ -10,6 +10,8 @@ import { SiteSettingsModule } from '../site-settings/site-settings.module';
 import { UserActivityModule } from '../user-activity/user-activity.module';
 import { StripeModule } from '../stripe/stripe.module';
 import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
+import { ShopModule } from '../shop/shop.module';
+import { MembershipCompsModule } from '../membership-comps/membership-comps.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AdminNotificationsModule } from '../admin-notifications/admin-notificat
     UserActivityModule,
     forwardRef(() => StripeModule),
     AdminNotificationsModule,
+    ShopModule,
+    MembershipCompsModule,
   ],
   providers: [ScheduledTasksService],
   controllers: [ScheduledTasksController],
