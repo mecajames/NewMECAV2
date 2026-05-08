@@ -152,6 +152,15 @@ export const shopApi = {
   },
 
   /**
+   * Member self-cancel: cancel one's own pending shop order. Server enforces
+   * ownership and pending-only.
+   */
+  cancelMyOrder: async (id: string, reason?: string): Promise<ShopOrder> => {
+    const response = await axios.post(`/api/shop/orders/${id}/cancel`, { reason });
+    return response.data;
+  },
+
+  /**
    * Create a payment intent for checkout
    */
   createPaymentIntent: async (dto: CreatePaymentIntentDto): Promise<PaymentIntentResult> => {
@@ -255,6 +264,36 @@ export const shopApi = {
    */
   adminRefundOrder: async (id: string, reason?: string): Promise<ShopOrder> => {
     const response = await axios.put(`/api/shop/admin/orders/${id}/refund`, { reason });
+    return response.data;
+  },
+
+  /**
+   * Cancel a single pending shop order (admin).
+   */
+  adminCancelOrder: async (id: string, reason?: string): Promise<ShopOrder> => {
+    const response = await axios.post(`/api/shop/admin/orders/${id}/cancel`, { reason });
+    return response.data;
+  },
+
+  /**
+   * Bulk-cancel pending shop orders (admin). Returns per-id outcomes.
+   */
+  adminBulkCancelOrders: async (
+    ids: string[],
+    reason?: string,
+  ): Promise<Array<{ id: string; ok: boolean; error?: string }>> => {
+    const response = await axios.post(`/api/shop/admin/orders/bulk-cancel`, { ids, reason });
+    return response.data;
+  },
+
+  /**
+   * Trigger the abandoned-pending-orders sweep on demand (admin). The cron
+   * runs daily at 3am, this lets an admin clear them immediately.
+   */
+  adminCancelAbandonedOrders: async (
+    olderThanHours?: number,
+  ): Promise<{ cancelled: number; ids: string[] }> => {
+    const response = await axios.post(`/api/shop/admin/orders/cancel-abandoned`, { olderThanHours });
     return response.data;
   },
 

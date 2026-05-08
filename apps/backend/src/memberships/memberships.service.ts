@@ -2755,11 +2755,22 @@ export class MembershipsService {
     const user = await em.findOne(Profile, { id: userId });
     if (!user || !user.email) return null;
 
-    const customer = await this.stripeService.findOrCreateCustomer(
-      user.email,
-      `${user.first_name || ''} ${user.last_name || ''}`.trim() || undefined,
-    );
-    return this.stripeService.getDefaultPaymentMethod(customer.id);
+    // Treat any Stripe failure (key missing locally, transient API error,
+    // customer doesn't exist, etc.) as "no card on file" — this is a UI
+    // accessory call, not a critical path. Returning null lets the page
+    // render without surfacing a 400 to the admin.
+    try {
+      const customer = await this.stripeService.findOrCreateCustomer(
+        user.email,
+        `${user.first_name || ''} ${user.last_name || ''}`.trim() || undefined,
+      );
+      return await this.stripeService.getDefaultPaymentMethod(customer.id);
+    } catch (err) {
+      this.logger.warn(
+        `getDefaultPaymentMethod: returning null for user ${userId} — ${(err as Error).message}`,
+      );
+      return null;
+    }
   }
 
   /**

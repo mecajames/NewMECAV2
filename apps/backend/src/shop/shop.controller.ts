@@ -152,6 +152,27 @@ export class ShopController {
     return order;
   }
 
+  /**
+   * Member self-cancel: lets a logged-in user cancel their own PENDING
+   * shop order (e.g. they walked away from checkout and want to free up
+   * the row before retrying). Service enforces ownership and the
+   * pending-only rule.
+   */
+  @Post('orders/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  async cancelMyOrder(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Body() body: { reason?: string } = {},
+  ) {
+    const { user } = await this.requireAuth(authHeader);
+    return this.shopService.cancelOrder(id, {
+      userId: user.id,
+      reason: body?.reason,
+      cancelledBy: 'member',
+    });
+  }
+
   @Post('orders')
   @HttpCode(HttpStatus.CREATED)
   async createOrder(
@@ -283,6 +304,52 @@ export class ShopController {
   ) {
     await this.requireAdmin(authHeader);
     return this.shopService.updateOrderStatus(id, body.status);
+  }
+
+  /**
+   * Admin: cancel a single pending shop order. Skips the ownership check
+   * the member-facing endpoint enforces.
+   */
+  @Post('admin/orders/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  async adminCancelOrder(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { reason?: string } = {},
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.cancelOrder(id, {
+      reason: body?.reason,
+      cancelledBy: 'admin',
+    });
+  }
+
+  /**
+   * Admin: bulk-cancel pending shop orders. Returns per-id outcome so the
+   * UI can flag partial failures (e.g. one became non-pending mid-batch).
+   */
+  @Post('admin/orders/bulk-cancel')
+  @HttpCode(HttpStatus.OK)
+  async adminBulkCancelOrders(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { ids: string[]; reason?: string },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.bulkCancelOrders(body?.ids ?? [], body?.reason);
+  }
+
+  /**
+   * Admin: trigger the abandoned-pending-orders sweep manually. The cron
+   * runs daily at 3am, this lets an admin clear them on demand.
+   */
+  @Post('admin/orders/cancel-abandoned')
+  @HttpCode(HttpStatus.OK)
+  async adminCancelAbandonedOrders(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { olderThanHours?: number } = {},
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.cancelAbandonedPendingOrders(body?.olderThanHours ?? 24);
   }
 
   @Put('admin/orders/:id/tracking')

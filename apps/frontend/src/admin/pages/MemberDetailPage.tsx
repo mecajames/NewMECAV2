@@ -68,6 +68,8 @@ import { generatePassword, calculatePasswordStrength, MIN_PASSWORD_STRENGTH } fr
 import { PasswordStrengthIndicator } from '../../shared/components/PasswordStrengthIndicator';
 import MemberActivityTab from '../components/MemberActivityTab';
 import ManualRenewalModal from '../components/ManualRenewalModal';
+import MembershipCompsSection from '../membership-comps/MembershipCompsSection';
+import AdminMemberCompBadge from '../membership-comps/AdminMemberCompBadge';
 
 type TabType =
   | 'overview'
@@ -1018,23 +1020,31 @@ export default function MemberDetailPage() {
                   >
                     {derivedMembershipStatus}
                   </span>
+                  {/* Comp Badge — shows when the member has any active comp.
+                      Admin can click → scrolls to Memberships tab to manage. */}
+                  <AdminMemberCompBadge
+                    userId={member.id}
+                    onClick={() => setActiveTab('memberships')}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="flex flex-wrap gap-2">
+            {/* Quick Actions — tightened padding + clearer labels so the
+                four buttons fit on one row at typical admin screen widths. */}
+            <div className="flex flex-wrap gap-1.5">
               {hasPermission('manage_users') && (
                 <button
                   onClick={() => setShowStaffModal(true)}
-                  className={`px-3 sm:px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2 text-sm ${
+                  className={`px-2.5 py-1.5 rounded-md transition-colors inline-flex items-center gap-1.5 text-xs font-medium ${
                     member.is_staff || member.role === 'admin'
                       ? 'bg-red-700 text-white hover:bg-red-600'
                       : 'bg-indigo-600 text-white hover:bg-indigo-500'
                   }`}
+                  title={member.is_staff || member.role === 'admin' ? 'Manage staff access (revoke or change role)' : 'Grant this member staff access'}
                 >
-                  <Shield className="h-4 w-4" />
-                  {member.is_staff || member.role === 'admin' ? 'Staff Member' : 'Grant Staff Access'}
+                  <Shield className="h-3.5 w-3.5" />
+                  {member.is_staff || member.role === 'admin' ? 'Manage Staff' : 'Grant Staff'}
                 </button>
               )}
               {hasPermission('manage_users') && (
@@ -1045,35 +1055,34 @@ export default function MemberDetailPage() {
                     setResetForceChange(true);
                     setResetSendEmail(false);
                     setShowPasswordResetModal(true);
-                    // Check email service status
                     profilesApi.getEmailServiceStatus().then(({ configured }) => {
                       setEmailServiceConfigured(configured);
                     }).catch(() => {
                       setEmailServiceConfigured(false);
                     });
                   }}
-                  className="px-3 sm:px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2 text-sm"
+                  className="px-2.5 py-1.5 bg-slate-700 text-white rounded-md hover:bg-slate-600 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
                 >
-                  <Key className="h-4 w-4" />
+                  <Key className="h-3.5 w-3.5" />
                   Reset Password
                 </button>
               )}
               {hasPermission('edit_user') && (
                 <button
                   onClick={() => setShowManualRenewal(true)}
-                  className="px-3 sm:px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors inline-flex items-center gap-2 text-sm"
+                  className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-500 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
                   title="Renew an existing membership with a manual cash or check payment"
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className="h-3.5 w-3.5" />
                   Manual Renewal
                 </button>
               )}
               {hasPermission('send_emails') && (
                 <button
                   onClick={() => setShowMessageModal(true)}
-                  className="px-3 sm:px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2 text-sm"
+                  className="px-2.5 py-1.5 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-3.5 w-3.5" />
                   Send Message
                 </button>
               )}
@@ -1824,8 +1833,11 @@ function OverviewTab({
                 No recent activity
               </div>
             ) : (
-              recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
+              recentActivity.map((activity, idx) => (
+                // Composite key — `activity.id` can repeat when the backend
+                // join surfaces the same row twice (e.g. event registration
+                // joined to multiple class entries). Index disambiguates.
+                <div key={`${activity.type}-${activity.id}-${idx}`} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
                   <span className="text-2xl">{getActivityIcon(activity.type)}</span>
                   <div className="flex-1">
                     <p className="text-white text-sm">{activity.description}</p>
@@ -1853,8 +1865,9 @@ function OverviewTab({
                 No upcoming events
               </div>
             ) : (
-              upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
+              upcomingEvents.map((event, idx) => (
+                // Composite key — same defensive pattern as recentActivity above.
+                <div key={`event-${event.id}-${idx}`} className="flex items-start gap-3 p-3 bg-slate-700 rounded-lg">
                   <Calendar className="h-5 w-5 text-orange-500 mt-1" />
                   <div className="flex-1">
                     <p className="text-white text-sm font-medium">{event.name}</p>
@@ -4759,9 +4772,10 @@ function MembershipsTab({ member }: { member: Profile }) {
 
       // Fetch the buyer's default card on file (one per member). Failure is
       // non-blocking — older members may not have a Stripe customer yet.
-      if (memberId) {
+      // The component receives `member: Profile`, not `memberId`.
+      if (member?.id) {
         try {
-          const pm = await membershipsApi.getPaymentMethod(memberId);
+          const pm = await membershipsApi.getPaymentMethod(member.id);
           setPaymentMethod(pm);
         } catch {
           setPaymentMethod(null);
@@ -5576,6 +5590,16 @@ function MembershipsTab({ member }: { member: Profile }) {
                   </div>
                 </div>
               )}
+
+              {/* Comps section — admin grant/list/revoke for free periods,
+                  free secondary slots, and renewal discounts. Hidden when
+                  caller can't edit because grant requires admin auth anyway. */}
+              {canEdit && (
+                <MembershipCompsSection
+                  membershipId={membership.id}
+                  membershipName={membership.membershipTypeConfig?.name || 'Membership'}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -6255,10 +6279,10 @@ function MembershipsTab({ member }: { member: Profile }) {
                     });
                     setApplyPaymentMembership(null);
                     setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
-                    // Refresh both the membership list AND the top-level
-                    // member state so the "Expired Member" banner clears as
-                    // soon as the now-paid membership flips to active.
-                    await Promise.all([fetchMemberships(), fetchMember()]);
+                    // Refresh the membership list. The top-level member
+                    // banner will update on next page load — we don't have a
+                    // refresh callback in scope here.
+                    await fetchMemberships();
                   } catch (err: any) {
                     setApplyPaymentError(err.response?.data?.message || err.message || 'Failed to apply payment');
                   } finally {

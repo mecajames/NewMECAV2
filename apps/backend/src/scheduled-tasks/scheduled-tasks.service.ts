@@ -5,6 +5,8 @@ import { EmailService } from '../email/email.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { RecurringInvoicesService } from '../recurring-invoices/recurring-invoices.service';
 import { MembershipsService } from '../memberships/memberships.service';
+import { ShopService } from '../shop/shop.service';
+import { MembershipCompsService } from '../membership-comps/membership-comps.service';
 import { SiteSettingsService } from '../site-settings/site-settings.service';
 import { UserActivityService } from '../user-activity/user-activity.service';
 import { StripeService } from '../stripe/stripe.service';
@@ -28,6 +30,8 @@ export class ScheduledTasksService {
     private readonly invoicesService: InvoicesService,
     private readonly recurringInvoicesService: RecurringInvoicesService,
     private readonly membershipsService: MembershipsService,
+    private readonly shopService: ShopService,
+    private readonly compsService: MembershipCompsService,
     private readonly siteSettingsService: SiteSettingsService,
     private readonly userActivityService: UserActivityService,
     @Inject(forwardRef(() => StripeService))
@@ -255,6 +259,15 @@ export class ScheduledTasksService {
         continue;
       }
 
+      // Skip comp members — they have a free_period covering the gap and
+      // shouldn't receive renewal nag emails. The dedicated comp-end
+      // reminder cron handles their cadence separately.
+      const freePeriod = await this.compsService.getActiveFreePeriod(membership.id);
+      if (freePeriod) {
+        this.logger.log(`Skipping ${daysRemaining}-day expiration email for ${membership.id} — active free_period comp covers this period`);
+        continue;
+      }
+
       try {
         await this.emailService.sendMembershipExpiringEmail({
           to: membership.user.email,
@@ -311,6 +324,14 @@ export class ScheduledTasksService {
     for (const membership of memberships) {
       if (!membership.user?.email) {
         this.logger.warn(`Skipping membership ${membership.id} - no email address`);
+        continue;
+      }
+
+      // Skip comp members — their free_period covers the expiry; the standard
+      // "expired" notification doesn't apply to them.
+      const freePeriod = await this.compsService.getActiveFreePeriod(membership.id);
+      if (freePeriod) {
+        this.logger.log(`Skipping expired email for ${membership.id} — active free_period comp covers this period`);
         continue;
       }
 
@@ -565,6 +586,61 @@ export class ScheduledTasksService {
       this.logger.log(`Mark overdue invoices job completed. Marked ${count} invoices as overdue.`);
     } catch (error) {
       this.logger.error('Error running mark overdue invoices job:', error);
+    }
+  }
+
+  // =============================================================================
+  // MEMBERSHIP COMP EXPIRY
+  // Runs daily at 2:00 AM. Flips status on comps whose ends_at has passed
+  // (status → expired_unused if uses_remaining > 0, else consumed).
+  // =============================================================================
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async handleExpireDueComps() {
+    this.logger.log('Running comp expiry sweep...');
+    try {
+      const result = await this.compsService.expireDueComps();
+      this.logger.log(`Comp expiry sweep complete: ${result.expired} comp(s) expired.`);
+    } catch (error) {
+      this.logger.error('Error running comp expiry sweep:', error);
+    }
+  }
+
+  // =============================================================================
+  // MEMBERSHIP COMP RENEWAL (auto-extend + $0 invoice)
+  // Runs daily at 2:30 AM. For memberships with active free_period comp
+  // whose endDate is approaching, auto-extends and generates $0 Order +
+  // Invoice tagged "Comp" so the renewal still shows in revenue reports.
+  // =============================================================================
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async handleCompRenewals() {
+    this.logger.log('Running comp-renewal generation...');
+    try {
+      const result = await this.compsService.processCompRenewals();
+      this.logger.log(
+        `Comp renewals processed: generated=${result.generated}, skipped=${result.skipped}, errors=${result.errors}`,
+      );
+    } catch (error) {
+      this.logger.error('Error running comp-renewal generation:', error);
+    }
+  }
+
+  // =============================================================================
+  // ABANDONED SHOP ORDER CLEANUP
+  // Runs daily at 3:00 AM. Cancels any shop order that's been PENDING for
+  // more than 24 hours. The Stripe payment intent has expired by then,
+  // so the row is dead — cancelling preserves the audit trail without
+  // cluttering the admin shop orders list with abandoned checkouts.
+  // =============================================================================
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async handleAbandonedShopOrders() {
+    this.logger.log('Running abandoned shop-order cleanup job...');
+    try {
+      const result = await this.shopService.cancelAbandonedPendingOrders(24);
+      this.logger.log(
+        `Abandoned shop-order cleanup completed: cancelled ${result.cancelled} order(s).`,
+      );
+    } catch (error) {
+      this.logger.error('Error running abandoned shop-order cleanup job:', error);
     }
   }
 

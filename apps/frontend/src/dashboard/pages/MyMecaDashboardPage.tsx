@@ -31,6 +31,7 @@ import type { CardData } from '@/memberships';
 import { Vote } from 'lucide-react';
 import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
 import { billingApi, Invoice } from '@/api-client/billing.api-client';
+import MyCompsBadge from '../components/MyCompsBadge';
 import type { VotingPublicStatus } from '@newmeca/shared';
 
 interface EventHostingRequest {
@@ -1400,6 +1401,10 @@ export default function MyMecaDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Member benefits / comps card — only renders when admin has granted
+          something (free period, free secondary slot, renewal discount). */}
+      <MyCompsBadge />
 
       {/* Outstanding Invoices alert — only renders when the user has unpaid
           invoices. Surfaces the count + total and a one-click pay button. */}

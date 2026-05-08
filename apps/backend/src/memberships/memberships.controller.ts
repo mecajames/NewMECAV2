@@ -1051,7 +1051,14 @@ export class MembershipsController {
       targetUserId = queryUserId;
     }
 
-    return this.membershipsService.getDefaultPaymentMethod(targetUserId);
+    // Card-on-file is decorative metadata — when Stripe is unconfigured
+    // (local dev with no STRIPE_SECRET_KEY) or the API errors transiently,
+    // return null instead of 400. The UI handles null cleanly.
+    try {
+      return await this.membershipsService.getDefaultPaymentMethod(targetUserId);
+    } catch {
+      return null;
+    }
   }
 
   /**

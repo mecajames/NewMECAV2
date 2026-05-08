@@ -9,6 +9,7 @@ import {
   MapPin,
   Loader2,
   ExternalLink,
+  XCircle,
 } from 'lucide-react';
 import { ShopOrder } from '@newmeca/shared';
 import { shopApi } from '../shop.api-client';
@@ -23,6 +24,7 @@ export function OrderDetailPage() {
   const [order, setOrder] = useState<ShopOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -43,6 +45,29 @@ export function OrderDetailPage() {
       setError('Order not found or you do not have access.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Member self-cancel for a pending shop order. Server enforces ownership
+   * + pending-only; we just confirm + call the endpoint and refresh.
+   */
+  const handleCancelOrder = async () => {
+    if (!order) return;
+    const confirmed = window.confirm(
+      `Cancel order ${order.orderNumber}? This frees up the order — your card was not charged. ` +
+      `You can place a new order any time.`,
+    );
+    if (!confirmed) return;
+    const reason = window.prompt('Optional: reason for cancelling (visible to admin)') || undefined;
+    setCancelling(true);
+    try {
+      const updated = await shopApi.cancelMyOrder(order.id, reason);
+      setOrder(updated);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to cancel order');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -77,7 +102,19 @@ export function OrderDetailPage() {
     <div className="min-h-screen bg-slate-900">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Top action bar */}
-        <div className="flex justify-end mb-4">
+        <div className="flex justify-end gap-2 mb-4">
+          {/* Cancel button — only on PENDING orders. Stripe never charged the
+              card on a pending order, so cancelling is safe and fast. */}
+          {order.status === 'pending' && (
+            <button
+              onClick={handleCancelOrder}
+              disabled={cancelling}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg border border-red-500/30 transition-colors disabled:opacity-50"
+            >
+              <XCircle className="h-4 w-4" />
+              {cancelling ? 'Cancelling…' : 'Cancel Order'}
+            </button>
+          )}
           <button
             onClick={() => navigate('/billing?tab=shop_orders')}
             className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
