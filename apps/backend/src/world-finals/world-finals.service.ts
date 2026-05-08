@@ -730,10 +730,10 @@ export class WorldFinalsService {
       throw new ForbiddenException('You can only update your own registrations');
     }
 
-    em.assign(registration, {
-      division: data.division !== undefined ? data.division : registration.division,
-      competitionClass: data.competitionClass !== undefined ? data.competitionClass : registration.competitionClass,
-    });
+    // Explicit assignment — FinalsRegistration has serializedName on
+    // competition_class (and many other fields). em.assign() can mis-map.
+    if (data.division !== undefined) registration.division = data.division;
+    if (data.competitionClass !== undefined) registration.competitionClass = data.competitionClass;
 
     await em.flush();
     return registration;
@@ -994,19 +994,21 @@ export class WorldFinalsService {
   async createPackage(data: any): Promise<WorldFinalsPackage> {
     const em = this.em.fork();
     const pkg = new WorldFinalsPackage();
-    em.assign(pkg, {
-      seasonId: data.seasonId,
-      wfEventId: data.wfEventId,
-      name: data.name,
-      description: data.description,
-      basePriceEarly: data.basePriceEarly,
-      basePriceRegular: data.basePriceRegular,
-      includedClasses: data.includedClasses,
-      additionalClassPriceEarly: data.additionalClassPriceEarly,
-      additionalClassPriceRegular: data.additionalClassPriceRegular,
-      displayOrder: data.displayOrder || 0,
-      isActive: data.isActive ?? true,
-    });
+    // Explicit assignment — WorldFinalsPackage has serializedName on
+    // season_id, wf_event_id, base_price_early, base_price_regular,
+    // included_classes, additional_class_price_early/regular,
+    // display_order, is_active. em.assign() can mis-map.
+    pkg.seasonId = data.seasonId;
+    pkg.wfEventId = data.wfEventId;
+    pkg.name = data.name;
+    pkg.description = data.description;
+    pkg.basePriceEarly = data.basePriceEarly;
+    pkg.basePriceRegular = data.basePriceRegular;
+    pkg.includedClasses = data.includedClasses;
+    pkg.additionalClassPriceEarly = data.additionalClassPriceEarly;
+    pkg.additionalClassPriceRegular = data.additionalClassPriceRegular;
+    pkg.displayOrder = data.displayOrder || 0;
+    pkg.isActive = data.isActive ?? true;
     await em.persistAndFlush(pkg);
 
     // Save eligible classes
@@ -1031,17 +1033,16 @@ export class WorldFinalsService {
     const pkg = await em.findOne(WorldFinalsPackage, { id: packageId });
     if (!pkg) throw new NotFoundException('Package not found');
 
-    em.assign(pkg, {
-      name: data.name ?? pkg.name,
-      description: data.description ?? pkg.description,
-      basePriceEarly: data.basePriceEarly ?? pkg.basePriceEarly,
-      basePriceRegular: data.basePriceRegular ?? pkg.basePriceRegular,
-      includedClasses: data.includedClasses ?? pkg.includedClasses,
-      additionalClassPriceEarly: data.additionalClassPriceEarly ?? pkg.additionalClassPriceEarly,
-      additionalClassPriceRegular: data.additionalClassPriceRegular ?? pkg.additionalClassPriceRegular,
-      displayOrder: data.displayOrder ?? pkg.displayOrder,
-      isActive: data.isActive ?? pkg.isActive,
-    });
+    // Explicit assignment — WorldFinalsPackage has serializedName on most fields
+    if (data.name !== undefined) pkg.name = data.name;
+    if (data.description !== undefined) pkg.description = data.description;
+    if (data.basePriceEarly !== undefined) pkg.basePriceEarly = data.basePriceEarly;
+    if (data.basePriceRegular !== undefined) pkg.basePriceRegular = data.basePriceRegular;
+    if (data.includedClasses !== undefined) pkg.includedClasses = data.includedClasses;
+    if (data.additionalClassPriceEarly !== undefined) pkg.additionalClassPriceEarly = data.additionalClassPriceEarly;
+    if (data.additionalClassPriceRegular !== undefined) pkg.additionalClassPriceRegular = data.additionalClassPriceRegular;
+    if (data.displayOrder !== undefined) pkg.displayOrder = data.displayOrder;
+    if (data.isActive !== undefined) pkg.isActive = data.isActive;
 
     // Replace eligible classes if provided
     if (data.classes && Array.isArray(data.classes)) {
@@ -1084,7 +1085,16 @@ export class WorldFinalsService {
   async createAddonItem(data: Partial<WorldFinalsAddonItem>): Promise<WorldFinalsAddonItem> {
     const em = this.em.fork();
     const item = new WorldFinalsAddonItem();
-    em.assign(item, data);
+    // Explicit assignment — entity has serializedName on season_id, wf_event_id,
+    // max_quantity, display_order, is_active. em.assign() can mis-map.
+    if (data.seasonId !== undefined) item.seasonId = data.seasonId;
+    if (data.wfEventId !== undefined) item.wfEventId = data.wfEventId;
+    if (data.name !== undefined) item.name = data.name;
+    if (data.description !== undefined) item.description = data.description;
+    if (data.price !== undefined) item.price = data.price;
+    if (data.maxQuantity !== undefined) item.maxQuantity = data.maxQuantity;
+    if (data.displayOrder !== undefined) item.displayOrder = data.displayOrder;
+    if (data.isActive !== undefined) item.isActive = data.isActive;
     await em.persistAndFlush(item);
     return item;
   }
@@ -1093,7 +1103,14 @@ export class WorldFinalsService {
     const em = this.em.fork();
     const item = await em.findOne(WorldFinalsAddonItem, { id });
     if (!item) throw new NotFoundException('Add-on item not found');
-    em.assign(item, data);
+    if (data.seasonId !== undefined) item.seasonId = data.seasonId;
+    if (data.wfEventId !== undefined) item.wfEventId = data.wfEventId;
+    if (data.name !== undefined) item.name = data.name;
+    if (data.description !== undefined) item.description = data.description;
+    if (data.price !== undefined) item.price = data.price;
+    if (data.maxQuantity !== undefined) item.maxQuantity = data.maxQuantity;
+    if (data.displayOrder !== undefined) item.displayOrder = data.displayOrder;
+    if (data.isActive !== undefined) item.isActive = data.isActive;
     await em.flush();
     return item;
   }

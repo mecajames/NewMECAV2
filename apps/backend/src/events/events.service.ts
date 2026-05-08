@@ -588,8 +588,15 @@ export class EventsService {
       }
     }
 
-    em.assign(event, transformedData);
-    console.log('🔍 UPDATE EVENT - After em.assign, event date:', event.eventDate);
+    // Apply transformedData via explicit property assignment instead of
+    // em.assign() — Event has serializedName on event_date, venue_*,
+    // flyer_url, and many others. em.assign() can mis-map keys when
+    // serializedName differs from property name, so we set properties
+    // one-by-one to be safe.
+    for (const [key, value] of Object.entries(transformedData)) {
+      (event as any)[key] = value;
+    }
+    console.log('🔍 UPDATE EVENT - After explicit assign, event date:', event.eventDate);
 
     await em.flush();
     console.log('🔍 UPDATE EVENT - After flush, event date:', event.eventDate);

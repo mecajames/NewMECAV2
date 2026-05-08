@@ -94,7 +94,10 @@ export class SeasonsService {
       await this.unmarkAllNext(em);
     }
 
-    em.assign(season, transformedData);
+    // Explicit per-key assignment — Season has serializedName fields.
+    for (const [key, value] of Object.entries(transformedData)) {
+      (season as any)[key] = value;
+    }
     await em.flush();
     return season;
   }

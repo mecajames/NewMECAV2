@@ -102,7 +102,12 @@ export class CompetitionClassesService {
       if (season) updateData.season = season;
     }
 
-    em.assign(competitionClass, updateData);
+    // Apply updates via direct property assignment — CompetitionClass has
+    // serializedName on season_id, is_active, unlimited_wattage,
+    // display_order, created_at, updated_at. em.assign() can mis-map.
+    for (const [key, value] of Object.entries(updateData)) {
+      (competitionClass as any)[key] = value;
+    }
     await em.flush();
     return competitionClass;
   }
@@ -338,13 +343,12 @@ export class CompetitionClassesService {
         if (!incoming.name) continue;
         const found = existingByName.get(incoming.name);
         if (found) {
-          em.assign(found, {
-            abbreviation: incoming.abbreviation ?? found.abbreviation,
-            description: incoming.description ?? found.description,
-            isActive: incoming.isActive ?? found.isActive,
-            displayOrder: incoming.displayOrder ?? found.displayOrder,
-            updatedAt: new Date(),
-          });
+          // Explicit assignment — CompetitionFormat has serializedName.
+          if (incoming.abbreviation !== undefined) found.abbreviation = incoming.abbreviation;
+          if (incoming.description !== undefined) found.description = incoming.description;
+          if (incoming.isActive !== undefined) found.isActive = incoming.isActive;
+          if (incoming.displayOrder !== undefined) found.displayOrder = incoming.displayOrder;
+          found.updatedAt = new Date();
           formatsUpdated++;
         } else {
           em.create(CompetitionFormat, {
@@ -378,14 +382,13 @@ export class CompetitionClassesService {
       importedKeys.add(key);
       const found = existingByKey.get(key);
       if (found) {
-        em.assign(found, {
-          name: incoming.name,
-          section: incoming.section !== undefined ? incoming.section : found.section,
-          displayOrder: incoming.displayOrder ?? found.displayOrder,
-          isActive: incoming.isActive ?? found.isActive,
-          unlimitedWattage: incoming.unlimitedWattage ?? found.unlimitedWattage,
-          updatedAt: new Date(),
-        });
+        // Explicit assignment — CompetitionClass has serializedName.
+        found.name = incoming.name;
+        if (incoming.section !== undefined) found.section = incoming.section ?? undefined;
+        if (incoming.displayOrder !== undefined) found.displayOrder = incoming.displayOrder;
+        if (incoming.isActive !== undefined) found.isActive = incoming.isActive;
+        if (incoming.unlimitedWattage !== undefined) found.unlimitedWattage = incoming.unlimitedWattage;
+        found.updatedAt = new Date();
         updated++;
       } else {
         em.create(CompetitionClass, {

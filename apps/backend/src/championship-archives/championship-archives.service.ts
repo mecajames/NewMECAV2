@@ -120,7 +120,10 @@ export class ChampionshipArchivesService {
       throw new NotFoundException(`Championship archive with ID ${id} not found`);
     }
 
-    em.assign(archive, data);
+    // Explicit per-key assignment — ChampionshipArchive has serializedName.
+    for (const [key, value] of Object.entries(data)) {
+      (archive as any)[key] = value;
+    }
     await em.flush();
     return archive;
   }
@@ -309,7 +312,10 @@ export class ChampionshipArchivesService {
       throw new NotFoundException(`Award with ID ${awardId} not found`);
     }
 
-    em.assign(award, data);
+    // Explicit per-key assignment — ChampionshipAward has serializedName.
+    for (const [key, value] of Object.entries(data)) {
+      (award as any)[key] = value;
+    }
     await em.flush();
     return award;
   }

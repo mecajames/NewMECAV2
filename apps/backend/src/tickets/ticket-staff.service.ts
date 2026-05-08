@@ -197,13 +197,15 @@ export class TicketStaffService {
       throw new NotFoundException(`Staff member with ID ${id} not found`);
     }
 
-    const updateData: Partial<TicketStaff> = {};
-    if (data.permission_level !== undefined) updateData.permissionLevel = data.permission_level;
-    if (data.is_active !== undefined) updateData.isActive = data.is_active;
-    if (data.can_be_assigned_tickets !== undefined) updateData.canBeAssignedTickets = data.can_be_assigned_tickets;
-    if (data.receive_email_notifications !== undefined) updateData.receiveEmailNotifications = data.receive_email_notifications;
+    // Set properties explicitly instead of em.assign() — TicketStaff has
+    // serializedName on profile_id, permission_level, is_active,
+    // can_be_assigned_tickets, receive_email_notifications, created_at,
+    // updated_at. em.assign() mis-maps keys when serializedName is set.
+    if (data.permission_level !== undefined) staff.permissionLevel = data.permission_level;
+    if (data.is_active !== undefined) staff.isActive = data.is_active;
+    if (data.can_be_assigned_tickets !== undefined) staff.canBeAssignedTickets = data.can_be_assigned_tickets;
+    if (data.receive_email_notifications !== undefined) staff.receiveEmailNotifications = data.receive_email_notifications;
 
-    em.assign(staff, updateData);
     await em.flush();
     return this.findById(id);
   }

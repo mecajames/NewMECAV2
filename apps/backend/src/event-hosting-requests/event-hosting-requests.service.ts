@@ -245,7 +245,10 @@ export class EventHostingRequestsService {
     if (data.country !== undefined) transformedData.country = data.country;
     if (data.status !== undefined) transformedData.status = data.status;
 
-    em.assign(request, transformedData);
+    // Explicit per-key assignment — EventHostingRequest has serializedName.
+    for (const [key, value] of Object.entries(transformedData)) {
+      (request as any)[key] = value;
+    }
     try {
       await em.flush();
     } catch (error) {

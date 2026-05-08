@@ -44,7 +44,13 @@ export class ForeverMembersService {
   async create(data: Partial<ForeverMember>): Promise<ForeverMember> {
     const em = this.em.fork();
     const member = new ForeverMember();
-    em.assign(member, data);
+    // Direct property assignment — ForeverMember has serializedName.
+    // em.assign() can mis-map keys when serializedName is set (documented
+    // MECA bug pattern). Iterating Object.entries sets each property by
+    // its actual TypeScript name without going through em.assign's resolver.
+    for (const [key, value] of Object.entries(data)) {
+      (member as any)[key] = value;
+    }
     await em.persistAndFlush(member);
     return member;
   }
@@ -53,7 +59,9 @@ export class ForeverMembersService {
     const em = this.em.fork();
     const member = await em.findOne(ForeverMember, { id });
     if (!member) throw new NotFoundException(`Forever member ${id} not found`);
-    em.assign(member, data);
+    for (const [key, value] of Object.entries(data)) {
+      (member as any)[key] = value;
+    }
     await em.flush();
     return member;
   }

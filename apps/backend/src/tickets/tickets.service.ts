@@ -198,38 +198,56 @@ export class TicketsService {
     // Track old status for email notification
     const oldStatus = ticket.status;
 
-    const updateData: any = {};
-
-    if (data.title !== undefined) updateData.title = data.title;
-    if (data.description !== undefined) updateData.description = data.description;
-    if (data.category !== undefined) updateData.category = data.category;
-    if (data.department !== undefined) updateData.department = data.department;
-    if (data.priority !== undefined) updateData.priority = data.priority;
+    // Set properties explicitly instead of em.assign() — Ticket has
+    // serializedName on ticket_number, department_id, guest_email,
+    // guest_name, access_token, is_guest_ticket, resolved_at, created_at,
+    // updated_at. em.assign() mis-maps keys when serializedName is set
+    // (same bug pattern that crashed routing-rule update with a 500).
+    if (data.title !== undefined) ticket.title = data.title;
+    if (data.description !== undefined) ticket.description = data.description;
+    if (data.category !== undefined) ticket.category = data.category as any;
+    if (data.department !== undefined) ticket.department = data.department as any;
+    if (data.priority !== undefined) ticket.priority = data.priority as any;
     if (data.status !== undefined) {
-      updateData.status = data.status;
+      ticket.status = data.status as any;
       // Auto-set resolvedAt when ticket is resolved
       if (data.status === TicketStatus.RESOLVED && !ticket.resolvedAt) {
-        updateData.resolvedAt = new Date();
+        ticket.resolvedAt = new Date();
       }
     }
 
-    if (data.assigned_to_id !== undefined) {
-      updateData.assignedTo = data.assigned_to_id
-        ? Reference.createFromPK(Profile, data.assigned_to_id)
-        : null;
+    // FK fields can come back as either UUID strings (clean) or as the
+    // populated entity object (when the UI round-trips a list/get response).
+    // Coerce to a plain UUID before passing to Reference.createFromPK.
+    const extractId = (v: unknown): string | null | undefined => {
+      if (v === undefined) return undefined;
+      if (v === null || v === '') return null;
+      if (typeof v === 'string') return v;
+      if (typeof v === 'object' && v !== null && 'id' in v) {
+        const inner = (v as { id: unknown }).id;
+        return typeof inner === 'string' ? inner : null;
+      }
+      return null;
+    };
+
+    const assignedToId = extractId(data.assigned_to_id);
+    if (assignedToId !== undefined) {
+      ticket.assignedTo = assignedToId
+        ? Reference.createFromPK(Profile, assignedToId) as any
+        : null as any;
     }
 
-    if (data.event_id !== undefined) {
-      updateData.event = data.event_id
-        ? Reference.createFromPK(Event, data.event_id)
-        : null;
+    const eventId = extractId(data.event_id);
+    if (eventId !== undefined) {
+      ticket.event = eventId
+        ? Reference.createFromPK(Event, eventId) as any
+        : null as any;
     }
 
     if (data.resolved_at !== undefined) {
-      updateData.resolvedAt = data.resolved_at;
+      ticket.resolvedAt = data.resolved_at as any;
     }
 
-    em.assign(ticket, updateData);
     await em.flush();
 
     const updatedTicket = await this.findById(id);
@@ -284,10 +302,9 @@ export class TicketsService {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
     }
 
-    em.assign(ticket, {
-      status: TicketStatus.OPEN,
-      resolvedAt: null,
-    });
+    // Explicit assignments — same serializedName-safe pattern as update().
+    ticket.status = TicketStatus.OPEN;
+    ticket.resolvedAt = undefined;
     await em.flush();
 
     return this.findById(id);

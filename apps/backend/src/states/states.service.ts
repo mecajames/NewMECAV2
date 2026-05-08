@@ -164,11 +164,10 @@ export class StatesService {
       throw new NotFoundException(`State finals date with ID ${id} not found`);
     }
 
-    em.assign(stateFinalsDate, {
-      event: data.eventId !== undefined ? data.eventId : stateFinalsDate.event,
-      stateCode: data.stateCode !== undefined ? data.stateCode.toUpperCase() : stateFinalsDate.stateCode,
-      season: data.seasonId !== undefined ? data.seasonId : stateFinalsDate.season,
-    });
+    // Explicit assignment — StateFinalsDate has serializedName fields.
+    if (data.eventId !== undefined) (stateFinalsDate as any).event = data.eventId;
+    if (data.stateCode !== undefined) stateFinalsDate.stateCode = data.stateCode.toUpperCase();
+    if (data.seasonId !== undefined) (stateFinalsDate as any).season = data.seasonId;
 
     await em.flush();
     return stateFinalsDate;

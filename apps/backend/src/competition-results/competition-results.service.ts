@@ -552,7 +552,10 @@ export class CompetitionResultsService {
       }
     }
 
-    em.assign(result, transformedData);
+    // Explicit per-key assignment — CompetitionResult has serializedName.
+    for (const [key, value] of Object.entries(transformedData)) {
+      (result as any)[key] = value;
+    }
     await em.flush();
 
     // Automatically recalculate points for all results in this event
