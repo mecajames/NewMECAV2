@@ -1804,16 +1804,24 @@ export default function SiteSettings() {
                   <option value="membership_expired">Membership Expired</option>
                   <option value="secondary_member_welcome">Secondary Member Welcome</option>
                   <option value="membership_cancelled">Membership Cancelled/Refunded</option>
+                  <option value="subscription_cancelled">Subscription Cancelled/Ended</option>
                 </optgroup>
                 <optgroup label="Billing">
                   <option value="invoice">Invoice</option>
+                  <option value="invoice_overdue">Invoice Overdue Notice</option>
                   <option value="invoice_auto_cancelled">Invoice Auto-Cancelled</option>
+                  <option value="payment_failed_dunning">Payment Failed Dunning</option>
+                  <option value="refund_confirmation">Refund Confirmation</option>
                 </optgroup>
                 <optgroup label="Events">
                   <option value="event_registration_confirmation">Event Registration Confirmation</option>
                   <option value="event_registration_cancelled">Event Registration Cancelled</option>
                   <option value="event_reminder">Event Reminder</option>
+                  <option value="event_interest_reminder">Event Interest Reminder</option>
                   <option value="event_rating_request">Event Rating Request</option>
+                  <option value="guest_interest_verification">Guest Interest Verification</option>
+                  <option value="world_finals_invitation">World Finals Invitation</option>
+                  <option value="world_finals_qualification">World Finals Qualification</option>
                 </optgroup>
                 <optgroup label="Support Tickets">
                   <option value="ticket_created">Ticket Created</option>

@@ -606,7 +606,9 @@ export class PayPalController {
         case 'BILLING.SUBSCRIPTION.ACTIVATED': {
           const paypalSubId = event.resource?.id;
           if (paypalSubId) {
-            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId });
+            const m = await em.findOne(Membership, { paypalSubscriptionId: paypalSubId }, {
+              populate: ['user', 'membershipTypeConfig'],
+            });
             if (m) {
               // Extend by one year from current end_date (matches Stripe renewal logic)
               if (m.endDate && m.endDate > new Date()) {
@@ -621,6 +623,20 @@ export class PayPalController {
               m.paymentStatus = PaymentStatus.PAID;
               await em.flush();
               this.logger.log(`Extended membership ${m.id} via PayPal ${eventType}`);
+
+              // Send renewal confirmation to the member
+              const memberEmail = m.user?.email;
+              if (memberEmail && m.mecaId != null) {
+                this.emailService.sendMembershipRenewalEmail({
+                  to: memberEmail,
+                  firstName: m.user?.first_name || undefined,
+                  mecaId: m.mecaId,
+                  membershipType: m.membershipTypeConfig?.name || 'Membership',
+                  expiryDate: m.endDate!,
+                }).catch((err) => {
+                  this.logger.error(`Failed to send PayPal renewal email to user: ${err}`);
+                });
+              }
             }
           }
           webhookRecord.processingResult = 'success';
