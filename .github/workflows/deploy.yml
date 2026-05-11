@@ -108,6 +108,8 @@ jobs:
             --arg google_maps_api_key "${{ secrets.GOOGLE_MAPS_API_KEY }}" \
             --arg mailgun_domain "${{ secrets.MAILGUN_DOMAIN }}" \
             --arg mailgun_api_key "${{ secrets.MAILGUN_API_KEY }}" \
+            --arg mailgun_smtp_password "${{ secrets.MAILGUN_SMTP_PASSWORD }}" \
+            --arg app_env "${{ secrets.APP_ENV }}" \
             --arg frontend_url "${{ secrets.FRONTEND_URL }}" \
             --arg cc_api_key "${{ secrets.CONSTANT_CONTACT_API_KEY }}" \
             --arg cc_client_secret "${{ secrets.CONSTANT_CONTACT_CLIENT_SECRET }}" \
@@ -137,6 +139,8 @@ jobs:
             .containers.backend.environment.GOOGLE_MAPS_API_KEY = $google_maps_api_key |
             .containers.backend.environment.MAILGUN_DOMAIN = $mailgun_domain |
             .containers.backend.environment.MAILGUN_API_KEY = $mailgun_api_key |
+            .containers.backend.environment.MAILGUN_SMTP_PASSWORD = $mailgun_smtp_password |
+            .containers.backend.environment.APP_ENV = $app_env |
             .containers.backend.environment.FRONTEND_URL = $frontend_url |
             .containers.backend.environment.CONSTANT_CONTACT_API_KEY = $cc_api_key |
             .containers.backend.environment.CONSTANT_CONTACT_CLIENT_SECRET = $cc_client_secret |
