@@ -6,6 +6,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Profile } from '../profiles/profiles.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { ShopOrder } from '../shop/entities/shop-order.entity';
+import { Order } from '../orders/orders.entity';
+import { Invoice } from '../invoices/invoices.entity';
 import { UserRole, PaymentStatus, ShopOrderStatus } from '@newmeca/shared';
 
 @Injectable()
@@ -80,6 +82,57 @@ export class AdminNotificationsService {
 
   private formatDate(date: Date): string {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  /**
+   * Best-effort: enrich a failed-payment notification with member info
+   * (full name, MECA ID, member-detail link) by looking up the local
+   * Profile from any of the available signals. Tries in order:
+   *   1. local Invoice row → invoice.user
+   *   2. local Order row → order.member
+   *   3. Profile lookup by email
+   *
+   * Returns null if no match is found. Callers should silently degrade
+   * (omit the extra fields) rather than fail the notification.
+   */
+  private async lookupMemberContext(args: {
+    invoiceId?: string | null;
+    orderId?: string | null;
+    customerEmail?: string | null;
+  }): Promise<{
+    fullName: string | null;
+    email: string | null;
+    mecaId: string | number | null;
+    profileId: string | null;
+  } | null> {
+    const em = this.em.fork();
+    let profile: Profile | null = null;
+
+    try {
+      if (args.invoiceId) {
+        const inv = await em.findOne(Invoice, { id: args.invoiceId }, { populate: ['user'] });
+        if (inv?.user) profile = inv.user as any as Profile;
+      }
+      if (!profile && args.orderId) {
+        const ord = await em.findOne(Order, { id: args.orderId }, { populate: ['member'] });
+        if (ord?.member) profile = ord.member as any as Profile;
+      }
+      if (!profile && args.customerEmail) {
+        profile = await em.findOne(Profile, { email: args.customerEmail });
+      }
+    } catch (err) {
+      this.logger.warn(`lookupMemberContext failed: ${err}`);
+    }
+
+    if (!profile) return null;
+
+    const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || null;
+    return {
+      fullName,
+      email: profile.email || args.customerEmail || null,
+      mecaId: profile.meca_id ?? null,
+      profileId: profile.id,
+    };
   }
 
   // ── Real-Time Notifications ────────────────────────────────────────────────
@@ -171,6 +224,8 @@ export class AdminNotificationsService {
         `${membership.user?.first_name || ''} ${membership.user?.last_name || ''}`.trim() ||
         'Unknown';
       const mecaId = membership.mecaId || 'N/A';
+      const memberEmail = membership.user?.email || null;
+      const profileId = membership.user?.id || null;
       const amount = (info.amountDueCents / 100).toFixed(2);
 
       const link = info.invoiceId
@@ -184,17 +239,24 @@ export class AdminNotificationsService {
         link,
       );
 
+      const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+      const fields: Array<{ label: string; value: string }> = [
+        { label: 'Member', value: memberName },
+        { label: 'MECA ID', value: String(mecaId) },
+      ];
+      if (memberEmail) fields.push({ label: 'Email', value: memberEmail });
+      fields.push(
+        { label: 'Amount Due', value: `$${amount}` },
+        { label: 'Attempt #', value: String(info.attemptCount) },
+        { label: 'Subscription ID', value: membership.stripeSubscriptionId || 'N/A' },
+      );
+      if (info.hostedInvoiceUrl) fields.push({ label: 'Stripe Invoice', value: info.hostedInvoiceUrl });
+      if (profileId) fields.push({ label: 'Member Profile', value: `${baseUrl}/admin/members/${profileId}` });
+
       await this.sendAlertToAllAdmins({
         title: `Renewal Payment Failed: ${memberName}`,
-        subtitle: `Attempt ${info.attemptCount} — $${amount} due`,
-        fields: [
-          { label: 'Member', value: memberName },
-          { label: 'MECA ID', value: String(mecaId) },
-          { label: 'Amount Due', value: `$${amount}` },
-          { label: 'Attempt #', value: String(info.attemptCount) },
-          { label: 'Subscription ID', value: membership.stripeSubscriptionId || 'N/A' },
-          ...(info.hostedInvoiceUrl ? [{ label: 'Stripe Invoice', value: info.hostedInvoiceUrl }] : []),
-        ],
+        subtitle: `MECA ID ${mecaId} · Attempt ${info.attemptCount} — $${amount} due`,
+        fields,
         dashboardPath: link,
         dashboardLabel,
       });
@@ -307,27 +369,37 @@ export class AdminNotificationsService {
     try {
       const amount = (args.amountCents / 100).toFixed(2);
       const dueByStr = args.evidenceDueBy ? this.formatDate(args.evidenceDueBy) : 'Not provided';
+      const ctx = await this.lookupMemberContext({ customerEmail: args.customerEmail });
+      const memberName = ctx?.fullName || args.customerName || null;
+      const memberEmail = ctx?.email || args.customerEmail || null;
+      const mecaId = ctx?.mecaId ?? null;
+      const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
 
+      const memberStr = memberName
+        ? ` — ${memberName}${mecaId ? ` (MECA ID: ${mecaId})` : ''}`
+        : '';
       await this.notifyAllAdmins(
         'CHARGEBACK OPENED',
-        `Dispute ${args.disputeId} - $${amount} (${args.reason}). Evidence due ${dueByStr}.`,
+        `Dispute ${args.disputeId} - $${amount} (${args.reason}). Evidence due ${dueByStr}.${memberStr}`,
         '/admin/billing/orders',
       );
 
-      const fields = [
+      const fields: Array<{ label: string; value: string }> = [
         { label: 'Dispute ID', value: args.disputeId },
         { label: 'Amount', value: `$${amount}` },
         { label: 'Reason', value: args.reason || 'Not specified' },
         { label: 'Evidence Due By', value: dueByStr },
         { label: 'Payment Intent', value: args.paymentIntentId },
       ];
-      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
-      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      if (memberName) fields.push({ label: 'Member', value: memberName });
+      if (mecaId != null) fields.push({ label: 'MECA ID', value: String(mecaId) });
+      if (memberEmail) fields.push({ label: 'Email', value: memberEmail });
       if (args.paymentType) fields.push({ label: 'Payment Type', value: args.paymentType });
+      if (ctx?.profileId) fields.push({ label: 'Member Profile', value: `${baseUrl}/admin/members/${ctx.profileId}` });
 
       await this.sendAlertToAllAdmins({
         title: `[URGENT] Chargeback Opened: $${amount}`,
-        subtitle: `Reason: ${args.reason || 'Not specified'} - Evidence due ${dueByStr}`,
+        subtitle: `${memberName ? `${memberName} · ` : ''}Reason: ${args.reason || 'Not specified'} - Evidence due ${dueByStr}`,
         fields,
         dashboardPath: '/admin/billing/orders',
         dashboardLabel: 'View Orders',
@@ -348,26 +420,34 @@ export class AdminNotificationsService {
   }): Promise<void> {
     try {
       const amount = (args.amountCents / 100).toFixed(2);
+      const ctx = await this.lookupMemberContext({ customerEmail: args.customerEmail });
+      const memberName = ctx?.fullName || args.customerName || null;
+      const memberEmail = ctx?.email || args.customerEmail || null;
+      const mecaId = ctx?.mecaId ?? null;
+      const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
 
+      const memberStr = memberName ? ` — ${memberName}${mecaId ? ` (MECA ID: ${mecaId})` : ''}` : '';
       await this.notifyAllAdmins(
         'CHARGEBACK LOST',
-        `Dispute ${args.disputeId} closed as LOST - $${amount} debited.`,
+        `Dispute ${args.disputeId} closed as LOST - $${amount} debited.${memberStr}`,
         '/admin/billing/orders',
       );
 
-      const fields = [
+      const fields: Array<{ label: string; value: string }> = [
         { label: 'Dispute ID', value: args.disputeId },
         { label: 'Amount Lost', value: `$${amount}` },
         { label: 'Reason', value: args.reason || 'Not specified' },
         { label: 'Payment Intent', value: args.paymentIntentId },
       ];
-      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
-      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      if (memberName) fields.push({ label: 'Member', value: memberName });
+      if (mecaId != null) fields.push({ label: 'MECA ID', value: String(mecaId) });
+      if (memberEmail) fields.push({ label: 'Email', value: memberEmail });
       if (args.paymentType) fields.push({ label: 'Payment Type', value: args.paymentType });
+      if (ctx?.profileId) fields.push({ label: 'Member Profile', value: `${baseUrl}/admin/members/${ctx.profileId}` });
 
       await this.sendAlertToAllAdmins({
         title: `[URGENT] Chargeback LOST: $${amount}`,
-        subtitle: `Funds have been debited from your account`,
+        subtitle: `${memberName ? `${memberName} · ` : ''}Funds have been debited from your account`,
         fields,
         dashboardPath: '/admin/billing/orders',
         dashboardLabel: 'View Orders',
@@ -397,6 +477,19 @@ export class AdminNotificationsService {
       const provider = args.paymentMethod === 'stripe' ? 'Stripe' : 'PayPal';
       const typeLabel = args.paymentType || 'Payment';
 
+      // Enrich with member info — payment-failed webhooks often arrive with
+      // sparse metadata (no name, no MECA ID), but we can usually resolve
+      // the local Profile from the linked Order/Invoice or by email.
+      const memberCtx = await this.lookupMemberContext({
+        invoiceId: args.invoiceId,
+        orderId: args.orderId,
+        customerEmail: args.customerEmail,
+      });
+
+      const memberName = memberCtx?.fullName || args.customerName || null;
+      const memberEmail = memberCtx?.email || args.customerEmail || null;
+      const mecaId = memberCtx?.mecaId ?? null;
+
       // Prefer the most specific link: invoice → order → fallback list page.
       const link = args.invoiceId
         ? `/admin/billing/invoices/${args.invoiceId}`
@@ -409,27 +502,54 @@ export class AdminNotificationsService {
           ? 'View Failed Order'
           : 'View Failed Payments';
 
+      // Build a richer bell-notification message so admins can identify the
+      // member from the dropdown without opening the email.
+      const memberStr = memberName
+        ? ` — ${memberName}${mecaId ? ` (MECA ID: ${mecaId})` : ''}`
+        : memberEmail
+          ? ` — ${memberEmail}`
+          : '';
       await this.notifyAllAdmins(
         'Payment Failed',
-        `${provider} ${typeLabel} payment of ${amount} failed${args.customerEmail ? ` for ${args.customerEmail}` : ''}.`,
+        `${provider} ${typeLabel} payment of ${amount} failed${memberStr}.`,
         link,
       );
 
-      const fields = [
+      const fields: Array<{ label: string; value: string }> = [
         { label: 'Provider', value: provider },
         { label: 'Type', value: typeLabel },
         { label: 'Amount', value: amount },
         { label: 'Transaction ID', value: args.transactionId },
       ];
-      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
-      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      // Member-identifying fields go FIRST so admins can tell at a glance
+      // whose payment failed. Falls through gracefully when only some
+      // signals are available.
+      if (memberName) fields.push({ label: 'Member', value: memberName });
+      if (mecaId != null) fields.push({ label: 'MECA ID', value: String(mecaId) });
+      if (memberEmail) fields.push({ label: 'Email', value: memberEmail });
       if (args.failureCode) fields.push({ label: 'Failure Code', value: args.failureCode });
       if (args.failureMessage) fields.push({ label: 'Failure Reason', value: args.failureMessage });
       fields.push({ label: 'Date', value: this.formatDate(new Date()) });
 
+      // Build subtitle with member context so it shows in the email
+      // preview/header before the field table.
+      const subtitle = memberName
+        ? `${memberName}${mecaId ? ` · MECA ID ${mecaId}` : ''} — ${typeLabel}`
+        : typeLabel;
+
+      // If we resolved a profile, append a secondary "View Member" link so
+      // the admin can jump straight to the profile detail page.
+      const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+      const memberDetailUrl = memberCtx?.profileId
+        ? `${baseUrl}/admin/members/${memberCtx.profileId}`
+        : null;
+      if (memberDetailUrl) {
+        fields.push({ label: 'Member Profile', value: memberDetailUrl });
+      }
+
       await this.sendAlertToAllAdmins({
         title: `${provider} Payment Failed: ${amount}`,
-        subtitle: typeLabel,
+        subtitle,
         fields,
         dashboardPath: link,
         dashboardLabel,
@@ -453,27 +573,35 @@ export class AdminNotificationsService {
       const provider = args.paymentMethod === 'stripe' ? 'Stripe' : 'PayPal';
       const refundType = args.isPartialRefund ? 'Partial refund' : 'Refund';
       const typeLabel = args.paymentType || 'purchase';
+      const ctx = await this.lookupMemberContext({ customerEmail: args.customerEmail });
+      const memberName = ctx?.fullName || args.customerName || null;
+      const memberEmail = ctx?.email || args.customerEmail || null;
+      const mecaId = ctx?.mecaId ?? null;
+      const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
 
+      const memberStr = memberName ? ` — ${memberName}${mecaId ? ` (MECA ID: ${mecaId})` : ''}` : memberEmail ? ` — ${memberEmail}` : '';
       await this.notifyAllAdmins(
         `${refundType} Issued`,
-        `${refundType} of $${amount} on ${provider} (${typeLabel}) for ${args.customerEmail || 'unknown'}.`,
+        `${refundType} of $${amount} on ${provider} (${typeLabel})${memberStr}.`,
         '/admin/billing/orders',
       );
 
-      const fields = [
+      const fields: Array<{ label: string; value: string }> = [
         { label: 'Refund Type', value: refundType },
         { label: 'Amount', value: `$${amount}` },
         { label: 'Provider', value: provider },
         { label: 'Type', value: typeLabel },
         { label: 'Transaction ID', value: args.transactionId },
       ];
-      if (args.customerName) fields.push({ label: 'Customer', value: args.customerName });
-      if (args.customerEmail) fields.push({ label: 'Email', value: args.customerEmail });
+      if (memberName) fields.push({ label: 'Member', value: memberName });
+      if (mecaId != null) fields.push({ label: 'MECA ID', value: String(mecaId) });
+      if (memberEmail) fields.push({ label: 'Email', value: memberEmail });
       fields.push({ label: 'Date', value: this.formatDate(new Date()) });
+      if (ctx?.profileId) fields.push({ label: 'Member Profile', value: `${baseUrl}/admin/members/${ctx.profileId}` });
 
       await this.sendAlertToAllAdmins({
         title: `${refundType} Issued: $${amount}`,
-        subtitle: `${provider} ${typeLabel}`,
+        subtitle: `${memberName ? `${memberName} · ` : ''}${provider} ${typeLabel}`,
         fields,
         dashboardPath: '/admin/billing/orders',
         dashboardLabel: 'View Orders',

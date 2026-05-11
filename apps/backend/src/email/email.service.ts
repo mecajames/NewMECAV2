@@ -357,15 +357,40 @@ export class EmailService {
   private mailgunApiKey: string | null = null;
   private mailgunApiUrl: string = 'https://api.mailgun.net'; // US region default
 
-  // Department-specific "from" addresses
-  private readonly fromAddresses = {
-    noreply: '"MECA" <noreply@mecacaraudio.com>',
-    support: '"MECA Support" <support@mecacaraudio.com>',
-    memberships: '"MECA Memberships" <memberships@mecacaraudio.com>',
-    billing: '"MECA Billing" <billing@mecacaraudio.com>',
-    events: '"MECA Events" <events@mecacaraudio.com>',
-    shop: '"MECA Shop" <shop@mecacaraudio.com>',
-  };
+  /**
+   * Environment tag baked into the display name on every "from" address so
+   * admins can see at a glance which environment an email came from when
+   * all envs share one Mailgun account. Production gets no tag (clean
+   * customer-facing emails); local and stage are obvious in the inbox.
+   *
+   * Reads APP_ENV first (set explicitly per deploy), falls back to
+   * NODE_ENV. Anything not "production" gets tagged.
+   */
+  private getEnvTag(): string {
+    const appEnv = (process.env.APP_ENV || '').toLowerCase().trim();
+    if (appEnv === 'production' || appEnv === 'prod') return '';
+    if (appEnv === 'staging' || appEnv === 'stage') return '[STAGE] ';
+    if (appEnv === 'local' || appEnv === 'development' || appEnv === 'dev') return '[LOCAL DEV] ';
+    // Fall back to NODE_ENV when APP_ENV isn't set
+    const nodeEnv = (process.env.NODE_ENV || '').toLowerCase().trim();
+    if (nodeEnv === 'production') return '';
+    if (nodeEnv === 'staging' || nodeEnv === 'stage') return '[STAGE] ';
+    // Default for unknown / development / undefined: assume local
+    return '[LOCAL DEV] ';
+  }
+
+  /** Department-specific "from" addresses, env-tagged on every read. */
+  private get fromAddresses() {
+    const tag = this.getEnvTag();
+    return {
+      noreply: `"${tag}MECA" <noreply@mecacaraudio.com>`,
+      support: `"${tag}MECA Support" <support@mecacaraudio.com>`,
+      memberships: `"${tag}MECA Memberships" <memberships@mecacaraudio.com>`,
+      billing: `"${tag}MECA Billing" <billing@mecacaraudio.com>`,
+      events: `"${tag}MECA Events" <events@mecacaraudio.com>`,
+      shop: `"${tag}MECA Shop" <shop@mecacaraudio.com>`,
+    };
+  }
 
   // Staging mode cache to avoid DB queries for every email
   private stagingModeCache: Map<string, { value: any; timestamp: number }> = new Map();
@@ -1360,6 +1385,42 @@ export class EmailService {
           });
           break;
 
+        case 'invoice_overdue':
+          result = await this.sendInvoiceOverdueEmail({
+            to: toEmail,
+            firstName: 'Test',
+            invoiceNumber: 'MECA-00001',
+            amountDue: 144.00,
+            daysOverdue: 14,
+            dueDate: new Date(Date.now() - 14 * 86400000),
+            paymentUrl: `${frontendUrl}/invoices/test-invoice-id/pay`,
+          });
+          break;
+
+        case 'refund_confirmation':
+          result = await this.sendRefundConfirmationEmail({
+            to: toEmail,
+            firstName: 'Test',
+            refundAmount: 99.00,
+            paymentDescription: 'Pro Competitor Membership',
+            refundDate: new Date(),
+            paymentMethod: 'stripe',
+            transactionId: 'ch_3PxYz2AbCdEfGhIj',
+            isPartialRefund: false,
+          });
+          break;
+
+        case 'payment_failed_dunning':
+          result = await this.sendPaymentFailedDunningEmail({
+            to: toEmail,
+            firstName: 'Test',
+            membershipType: 'Pro Competitor',
+            amountDue: '$99.00',
+            step: 2,
+            portalUrl: `${frontendUrl}/dashboard/billing`,
+          });
+          break;
+
         case 'event_rating_request':
           result = await this.sendEventRatingRequestEmail({
             to: toEmail,
@@ -1412,6 +1473,52 @@ export class EmailService {
             venueState: 'FL',
             checkInCode: 'CHK-12345',
             classes: sampleClassesSimple,
+          });
+          break;
+
+        case 'event_interest_reminder':
+          result = await this.sendEventInterestReminderEmail({
+            to: toEmail,
+            firstName: 'Test',
+            eventName: 'MECA SQ Finals 2025',
+            eventDate: sampleDate,
+            venueName: 'Tampa Convention Center',
+            venueAddress: '333 S Franklin St',
+            venueCity: 'Tampa',
+            venueState: 'FL',
+            eventId: 'test-event-id',
+          });
+          break;
+
+        case 'guest_interest_verification':
+          result = await this.sendGuestInterestVerificationEmail({
+            to: toEmail,
+            firstName: 'Test',
+            eventName: 'MECA SQ Finals 2025',
+            verificationUrl: `${frontendUrl}/events/test-event-id/verify-interest?token=test-token-12345`,
+          });
+          break;
+
+        case 'world_finals_invitation':
+          result = await this.sendWorldFinalsInvitationEmail({
+            to: toEmail,
+            firstName: 'Test',
+            competitionClass: 'SQ Modified 1',
+            totalPoints: 285,
+            seasonName: '2025 Season',
+            registrationUrl: `${frontendUrl}/world-finals/pre-register?token=test-token`,
+          });
+          break;
+
+        case 'world_finals_qualification':
+          result = await this.sendWorldFinalsQualificationEmail({
+            to: toEmail,
+            firstName: 'Test',
+            competitorName: 'Test Competitor',
+            competitionClass: 'SQ Modified 1',
+            totalPoints: 285,
+            qualificationThreshold: 200,
+            seasonName: '2025 Season',
           });
           break;
 
@@ -1545,6 +1652,20 @@ export class EmailService {
             cancellationDate: new Date(),
             refundAmount: 99.00,
             reason: 'Requested by member (test)',
+          });
+          break;
+
+        case 'subscription_cancelled':
+          result = await this.sendSubscriptionCancelledEmail({
+            to: toEmail,
+            firstName: 'Test',
+            membershipType: 'Pro Competitor',
+            mecaId: 10001,
+            cancellationDate: new Date(),
+            cancellationReason: 'Payment method removed (test)',
+            endDate: sampleDate,
+            renewalUrl: `${frontendUrl}/membership/renew`,
+            paymentMethod: 'stripe',
           });
           break;
 

@@ -1635,6 +1635,20 @@ export class StripeController {
     this.adminNotificationsService.notifySubscriptionRenewal(membership, newEndDate).catch((err) => {
       console.error('Admin notification failed (non-critical):', err);
     });
+
+    // Send renewal confirmation to the member
+    const memberEmail = membership.user?.email;
+    if (memberEmail && membership.mecaId != null) {
+      this.emailService.sendMembershipRenewalEmail({
+        to: memberEmail,
+        firstName: membership.user?.first_name || undefined,
+        mecaId: membership.mecaId,
+        membershipType: membership.membershipTypeConfig?.name || 'Membership',
+        expiryDate: newEndDate,
+      }).catch((err) => {
+        console.error('Member renewal email failed (non-critical):', err);
+      });
+    }
   }
 
   /**
