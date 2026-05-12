@@ -177,52 +177,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const ensureProfileExists = async (authUser: User) => {
-    // Check if profile already exists
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', authUser.id)
-      .maybeSingle();
-
-    if (existingProfile) {
-      // Profile exists, just refresh it
-      const profileData = await fetchProfile(authUser.id);
-      setProfile(profileData);
-      return;
-    }
-
-    // Create profile for new OAuth user
-    const { data: mecaIdData } = await supabase.rpc('generate_meca_id');
-    const mecaId = mecaIdData || 700800;
-
-    // Extract name from OAuth metadata
-    const fullName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || '';
-    const nameParts = fullName.split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
-
-    const profileFullName = [firstName, lastName].filter(Boolean).join(' ') || authUser.email || '';
-
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: authUser.id,
-        email: authUser.email,
-        first_name: firstName,
-        last_name: lastName,
-        full_name: profileFullName,
-        meca_id: mecaId,
-        role: 'user',
-        membership_status: 'none',
-      });
-
-    if (profileError) {
-      console.error('Error creating profile for OAuth user:', profileError);
-      return;
-    }
-
-    // Fetch the newly created profile
-    const profileData = await fetchProfile(authUser.id);
+    const profileData = await profilesApi.ensureProfile(authUser.id);
+    (profileData as any).full_name = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+    setForcePasswordChange(profileData.force_password_change === true);
+    setRestrictedToBilling((profileData as any).restricted_to_billing === true);
     setProfile(profileData);
   };
 

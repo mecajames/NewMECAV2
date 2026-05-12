@@ -152,6 +152,11 @@ export const profilesApi = {
     return response.data;
   },
 
+  ensureProfile: async (userId: string): Promise<Profile> => {
+    const response = await axios.post('/api/profiles/ensure', { userId });
+    return response.data;
+  },
+
   create: async (data: Partial<Profile>): Promise<Profile> => {
     const response = await axios.post('/api/profiles', data);
     return response.data;
