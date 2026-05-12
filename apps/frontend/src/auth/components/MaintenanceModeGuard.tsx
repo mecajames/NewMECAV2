@@ -67,10 +67,12 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
     );
   }
 
-  // Check if maintenance mode is enabled and user is not an admin
+  // Check if maintenance mode is enabled and user is not privileged
   const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;
+  const isMaintenanceLoginAllowed = profile?.maintenance_login_allowed === true;
+  const isPrivileged = isAdmin || isMaintenanceLoginAllowed;
   const isExemptPath = MAINTENANCE_EXEMPT_PATHS.some(p => location.pathname.startsWith(p));
-  const showMaintenancePage = maintenanceSettings.enabled && !isAdmin && !isExemptPath;
+  const showMaintenancePage = maintenanceSettings.enabled && !isPrivileged && !isExemptPath;
 
   if (showMaintenancePage) {
     const isComingSoon = maintenanceSettings.displayMode === 'coming_soon';
@@ -159,13 +161,14 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
     );
   }
 
-  // Show admin banner if in maintenance mode but user is admin
-  if (maintenanceSettings.enabled && isAdmin) {
+  // Show restricted-access banner if in maintenance mode but the user is
+  // privileged (admin / staff / member with maintenance_login_allowed flag)
+  if (maintenanceSettings.enabled && isPrivileged) {
     return (
       <>
         <div className="bg-orange-600 text-white text-center py-2 px-4 text-sm font-medium sticky top-0 z-50 flex items-center justify-center gap-2">
           <Wrench className="h-4 w-4" />
-          <span>MAINTENANCE MODE ACTIVE - Only administrators can access the site</span>
+          <span>Site is in restricted mode and access is permitted only for privileged MECA Heads Only!</span>
         </div>
         {children}
       </>
