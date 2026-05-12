@@ -94,7 +94,9 @@ export interface TicketStats {
 export interface TicketListQuery {
   page?: number;
   limit?: number;
-  status?: TicketStatus;
+  // 'active' is a synthetic status group (open + in_progress + awaiting_response)
+  // that the backend expands. Default for the admin tickets dashboard.
+  status?: TicketStatus | 'active';
   priority?: TicketPriority;
   category?: TicketCategory;
   department?: TicketDepartment;
@@ -148,6 +150,45 @@ export interface CreateAttachmentData {
   file_path: string;
   file_size: number;
   mime_type: string;
+}
+
+/**
+ * Admin-only enriched view of the reporter behind a ticket. Surfaces
+ * everything the support admin needs to identify and act on the member
+ * without bouncing between admin pages.
+ */
+export interface TicketReporterContext {
+  profile: {
+    id: string;
+    meca_id: number | null;
+    first_name: string | null;
+    last_name: string | null;
+    full_name: string;
+    email: string;
+    phone: string | null;
+    role: string;
+    is_staff: boolean;
+    account_type: string;
+    can_apply_judge: boolean;
+    can_apply_event_director: boolean;
+    maintenance_login_allowed: boolean;
+    login_banned: boolean;
+  } | null;
+  memberships: {
+    id: string;
+    type_name: string | null;
+    category: string | null;
+    payment_status: string;
+    end_date: string | null;
+    meca_id: number | null;
+  }[];
+  flags: {
+    is_judge: boolean;
+    is_event_director: boolean;
+    is_retailer: boolean;
+    is_manufacturer: boolean;
+    teams: { team_id: string; team_name: string; role: string }[];
+  } | null;
 }
 
 // =============================================================================
@@ -278,5 +319,14 @@ export const ticketsApi = {
 
   deleteAttachment: async (attachmentId: string): Promise<void> => {
     await axios.delete(`/api/tickets/attachments/${attachmentId}`);
+  },
+
+  // -------------------------------------------------------------------------
+  // Admin-only enrichment
+  // -------------------------------------------------------------------------
+
+  getReporterContext: async (ticketId: string): Promise<TicketReporterContext> => {
+    const response = await axios.get(`/api/tickets/${ticketId}/reporter-context`);
+    return response.data;
   },
 };

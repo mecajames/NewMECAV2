@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, forwardRef, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ForbiddenException, forwardRef, Logger } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
@@ -7,6 +7,13 @@ import { TicketDepartment as TicketDepartmentEntity } from './entities/ticket-de
 import { TicketStaffDepartment } from './entities/ticket-staff-department.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
+import { Membership } from '../memberships/memberships.entity';
+import { Judge } from '../judges/judge.entity';
+import { EventDirector } from '../event-directors/event-director.entity';
+import { RetailerListing } from '../business-listings/retailer-listing.entity';
+import { ManufacturerListing } from '../business-listings/manufacturer-listing.entity';
+import { TeamMember } from '../teams/team-member.entity';
+import { Team } from '../teams/team.entity';
 import {
   TicketStatus,
   TicketPriority,
@@ -65,7 +72,15 @@ export class TicketsService {
     const offset = (page - 1) * limit;
     const where: any = {};
 
-    if (status) where.status = status;
+    // 'active' is a synthetic status group meaning "anything that still
+    // needs admin attention" — open, in progress, awaiting response.
+    // Lets the admin tickets dashboard default-filter out resolved/closed
+    // without exposing a special enum value on the entity itself.
+    if (status === 'active' as any) {
+      where.status = { $in: ['open', 'in_progress', 'awaiting_response'] };
+    } else if (status) {
+      where.status = status;
+    }
     if (priority) where.priority = priority;
     if (category) where.category = category;
     // Support both legacy department enum and new department_id FK
@@ -114,6 +129,93 @@ export class TicketsService {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
     }
     return ticket;
+  }
+
+  /**
+   * Aggregates everything a support admin needs to identify the reporter
+   * at a glance: full profile, active memberships, role flags (judge / ED
+   * / retailer / manufacturer / team membership). Used by the Details
+   * panel on /admin/tickets/:id to surface MECA ID, expiration, and
+   * business affiliations without forcing the admin to bounce between
+   * pages.
+   */
+  async getReporterContext(ticketId: string): Promise<any> {
+    const em = this.em.fork();
+    const ticket = await em.findOne(Ticket, { id: ticketId }, { populate: ['reporter'] });
+    if (!ticket) {
+      throw new NotFoundException(`Ticket with ID ${ticketId} not found`);
+    }
+
+    const reporter = ticket.reporter;
+    if (!reporter) {
+      return { profile: null, memberships: [], flags: null };
+    }
+
+    // Active memberships with type config so we can show the type name
+    // and category alongside the expiration date.
+    const memberships = await em.find(
+      Membership,
+      { user: reporter.id },
+      { populate: ['membershipTypeConfig'], orderBy: { endDate: 'DESC' } },
+    );
+
+    // Resolve business roles in parallel.
+    const [judgeRec, edRec, retailerCount, manufacturerCount, teamMemberships] = await Promise.all([
+      em.findOne(Judge, { user: reporter.id }),
+      em.findOne(EventDirector, { user: reporter.id }),
+      em.count(RetailerListing, { user: reporter.id }),
+      em.count(ManufacturerListing, { user: reporter.id }),
+      em.find(TeamMember, { userId: reporter.id, status: 'active' }),
+    ]);
+
+    // Hydrate team names with a second cheap query (teamId is a raw column,
+    // not a relation we can populate directly).
+    const teamRows: { team_id: string; team_name: string; role: string }[] = [];
+    if (teamMemberships.length > 0) {
+      const teamIds = teamMemberships.map(tm => tm.teamId);
+      const teams = await em.find(Team, { id: { $in: teamIds } });
+      const teamById = new Map(teams.map(t => [t.id, t]));
+      for (const tm of teamMemberships) {
+        const t = teamById.get(tm.teamId);
+        if (t) {
+          teamRows.push({ team_id: t.id, team_name: (t as any).name, role: String(tm.role) });
+        }
+      }
+    }
+
+    return {
+      profile: {
+        id: reporter.id,
+        meca_id: reporter.meca_id,
+        first_name: reporter.first_name,
+        last_name: reporter.last_name,
+        full_name: `${reporter.first_name || ''} ${reporter.last_name || ''}`.trim() || reporter.email,
+        email: reporter.email,
+        phone: (reporter as any).phone || null,
+        role: reporter.role,
+        is_staff: (reporter as any).is_staff === true,
+        account_type: (reporter as any).account_type,
+        can_apply_judge: (reporter as any).can_apply_judge === true,
+        can_apply_event_director: (reporter as any).can_apply_event_director === true,
+        maintenance_login_allowed: (reporter as any).maintenance_login_allowed === true,
+        login_banned: (reporter as any).login_banned === true,
+      },
+      memberships: memberships.map(m => ({
+        id: m.id,
+        type_name: m.membershipTypeConfig?.name || null,
+        category: (m.membershipTypeConfig as any)?.category || null,
+        payment_status: m.paymentStatus,
+        end_date: m.endDate ? m.endDate.toISOString() : null,
+        meca_id: (m as any).meca_id || null,
+      })),
+      flags: {
+        is_judge: !!judgeRec && judgeRec.isActive === true,
+        is_event_director: !!edRec && (edRec as any).isActive === true,
+        is_retailer: retailerCount > 0,
+        is_manufacturer: manufacturerCount > 0,
+        teams: teamRows,
+      },
+    };
   }
 
   async findByTicketNumber(ticketNumber: string): Promise<Ticket> {
@@ -187,12 +289,38 @@ export class TicketsService {
     return createdTicket;
   }
 
-  async update(id: string, data: UpdateTicketDto): Promise<Ticket> {
+  async update(
+    id: string,
+    data: UpdateTicketDto,
+    requester?: { userId: string; isAdmin: boolean },
+  ): Promise<Ticket> {
     const em = this.em.fork();
     const ticket = await em.findOne(Ticket, { id }, { populate: ['reporter'] });
 
     if (!ticket) {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
+    }
+
+    // Authorization (skipped for trusted internal callers that omit
+    // `requester`, e.g. assignTicket / resolveTicket which run through
+    // admin-gated endpoints).
+    if (requester && !requester.isAdmin) {
+      const reporterId = ticket.reporter?.id;
+      if (!reporterId || reporterId !== requester.userId) {
+        throw new ForbiddenException('You can only edit tickets you reported.');
+      }
+      if (ticket.status === TicketStatus.CLOSED) {
+        throw new ForbiddenException('Closed tickets cannot be edited. Please open a new ticket.');
+      }
+      // Reporters can self-edit factual content only — title, description,
+      // and category. Admin-only fields (status, priority, assignment,
+      // department routing) are silently dropped to keep one update path.
+      const allowed = new Set(['title', 'description', 'category']);
+      for (const key of Object.keys(data)) {
+        if (!allowed.has(key)) {
+          delete (data as any)[key];
+        }
+      }
     }
 
     // Track old status for email notification
@@ -566,7 +694,12 @@ export class TicketsService {
       departmentEntity: { $in: departmentIds },
     };
 
-    if (status) where.status = status;
+    // Same synthetic 'active' status group as in findAll — see comment there.
+    if (status === 'active' as any) {
+      where.status = { $in: ['open', 'in_progress', 'awaiting_response'] };
+    } else if (status) {
+      where.status = status;
+    }
     if (priority) where.priority = priority;
     if (category) where.category = category;
 

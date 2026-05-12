@@ -194,6 +194,22 @@ export class TicketsController {
     return this.ticketsService.findById(id);
   }
 
+  /**
+   * Admin-only enriched reporter context used by the Details panel on
+   * /admin/tickets/:id. Returns the reporter's profile + active memberships
+   * + role flags (judge / ED / retailer / manufacturer / team memberships)
+   * so the admin can identify the member without opening the Members page
+   * separately.
+   */
+  @Get(':id/reporter-context')
+  async getReporterContext(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.ticketsService.getReporterContext(id);
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createTicket(
@@ -211,8 +227,16 @@ export class TicketsController {
     @Param('id') id: string,
     @Body() data: UpdateTicketDto,
   ): Promise<Ticket> {
-    await this.requireAuth(authHeader);
-    return this.ticketsService.update(id, data);
+    const user = await this.requireAuth(authHeader);
+    // Resolve admin flag once so the service can enforce field-level rules:
+    // non-admin reporters can self-edit title/description/category, admins
+    // can change everything.
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    return this.ticketsService.update(id, data, {
+      userId: user.id,
+      isAdmin: isAdminUser(profile),
+    });
   }
 
   @Delete(':id')
