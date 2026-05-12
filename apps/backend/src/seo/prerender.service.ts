@@ -220,13 +220,13 @@ export class PrerenderService {
     let match = path.match(/^\/events\/([a-f0-9-]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT title, event_date, location_name, location_city, location_state FROM events WHERE id = ? LIMIT 1`,
+        `SELECT title, event_date, venue_name, venue_city, venue_state FROM events WHERE id = ? LIMIT 1`,
         [match[1]],
       );
       if (rows.length > 0) {
         const e = rows[0];
         const dateStr = e.event_date ? new Date(e.event_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
-        const location = [e.location_name, e.location_city, e.location_state].filter(Boolean).join(', ');
+        const location = [e.venue_name, e.venue_city, e.venue_state].filter(Boolean).join(', ');
         return {
           title: `${e.title} | MECA Event`,
           description: `Join us${location ? ` at ${location}` : ''}${dateStr ? ` on ${dateStr}` : ''} for this exciting car audio competition event.`,

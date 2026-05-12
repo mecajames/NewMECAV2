@@ -80,18 +80,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })();
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
         setSession(session);
         setUser(session?.user ?? null);
-        // Update axios user ID when auth state changes
         setAxiosUserId(session?.user?.id ?? null);
 
-        if (session?.user) {
+        if (!session?.user) {
+          setProfile(null);
+          return;
+        }
+
+        // Refetch profile only when the user identity might have changed.
+        // TOKEN_REFRESHED fires roughly hourly with the same user; refetching
+        // there would flash the `loading` spinner over a working page.
+        const needsFetch = event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION';
+        if (!needsFetch) return;
+
+        setLoading(true);
+        try {
           const profileData = await fetchProfile(session.user.id);
           setProfile(profileData);
-        } else {
-          setProfile(null);
+        } finally {
+          setLoading(false);
         }
       })();
     });
