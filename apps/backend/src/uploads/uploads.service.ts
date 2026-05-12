@@ -99,6 +99,17 @@ const UPLOAD_DESTINATIONS: Record<string, UploadDestination> = {
     maxSizeBytes: 50 * 1024 * 1024, // 50MB
   },
 
+  // Support ticket attachments — both members and admins can paste/upload
+  // screenshots onto the ticket thread. Restricted to images so we don't
+  // turn the ticket pipeline into a generic file dropbox.
+  'ticket-attachments': {
+    bucket: 'documents',
+    folder: 'ticket-attachments',
+    adminOnly: false,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    maxSizeBytes: 10 * 1024 * 1024, // 10MB
+  },
+
   // Member destinations (user-scoped: file path includes user ID)
   'profile-images': {
     bucket: 'profile-images',

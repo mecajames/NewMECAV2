@@ -64,7 +64,10 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   // Filters
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
+  // 'active' is a synthetic status group meaning open + in_progress +
+  // awaiting_response — the three statuses that still need admin attention.
+  // Defaulting to it keeps resolved/closed tickets out of the working queue.
+  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'active' | ''>('active');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('');
   const [departmentFilter, setDepartmentFilter] = useState<TicketDepartment | ''>('');
 
@@ -325,9 +328,10 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
             <label className="block text-sm font-medium text-gray-300 mb-2">Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as TicketStatus | '')}
+              onChange={(e) => setStatusFilter(e.target.value as TicketStatus | 'active' | '')}
               className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
+              <option value="active">Active (Open + In Progress + Awaiting)</option>
               <option value="">All</option>
               {Object.entries(statusConfig).map(([key, { label }]) => (
                 <option key={key} value={key}>{label}</option>
