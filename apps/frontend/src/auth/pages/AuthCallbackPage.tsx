@@ -36,17 +36,17 @@ export default function AuthCallbackPage() {
     };
 
     const completeSignIn = async (user: import('@supabase/supabase-js').User) => {
-      // Try to ensure profile exists, but don't let it block redirect
       try {
         await Promise.race([
           ensureProfileRef.current(user),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
         ]);
+        doRedirect(resolveRedirect());
       } catch (err) {
-        // Profile setup failed or timed out — still redirect, profile will be fetched on next page
-        console.warn('Profile setup during callback failed/timed out, redirecting anyway:', err);
+        console.error('Profile setup during callback failed:', err);
+        setError('We could not finish setting up your account. Please contact support at mecacaraudio@gmail.com.');
+        await supabase.auth.signOut();
       }
-      doRedirect(resolveRedirect());
     };
 
     // Poll for session — handles both immediate availability and delayed token processing
@@ -97,7 +97,13 @@ export default function AuthCallbackPage() {
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
               <p className="text-red-500">{error}</p>
             </div>
-            <p className="text-gray-400">Redirecting to login...</p>
+            <button
+              type="button"
+              onClick={() => navigate('/login', { replace: true })}
+              className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Back to Sign In
+            </button>
           </div>
         </div>
       </div>
