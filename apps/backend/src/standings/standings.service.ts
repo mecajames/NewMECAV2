@@ -217,8 +217,13 @@ export class StandingsService {
 
     const results = await em.find(CompetitionResult, resultFilter);
 
-    // Aggregate points by team
+    // Aggregate points by team. We capture the first encountered membership
+    // ID per team and expose it as `teamId` so the frontend's
+    // /teams/:id link resolves to a real record. Previously this used the
+    // lowercased team name, which made every leaderboard click hit
+    // getPublicTeamById with a non-UUID and 404.
     const teamAggregates = new Map<string, {
+      teamId: string;
       teamName: string;
       teamType: 'retailer' | 'manufacturer' | 'competitor_team';
       representativeName: string;
@@ -238,6 +243,7 @@ export class StandingsService {
 
       if (!teamAggregates.has(teamKey)) {
         teamAggregates.set(teamKey, {
+          teamId: teamInfo.memberId, // membership_id from getTeamMembersFromMemberships
           teamName: teamInfo.teamName,
           teamType: teamInfo.teamType,
           representativeName: teamInfo.representativeName,
@@ -255,9 +261,9 @@ export class StandingsService {
       if (eventId) agg.eventIds.add(String(eventId));
     }
 
-    const entries: TeamStandingsEntry[] = Array.from(teamAggregates.entries())
-      .map(([teamKey, agg]) => ({
-        teamId: teamKey,
+    const entries: TeamStandingsEntry[] = Array.from(teamAggregates.values())
+      .map(agg => ({
+        teamId: agg.teamId,
         teamName: agg.teamName,
         totalPoints: agg.totalPoints,
         memberCount: agg.memberMecaIds.size,
