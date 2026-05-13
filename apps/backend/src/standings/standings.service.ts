@@ -71,6 +71,21 @@ export class StandingsService {
   ) {}
 
   /**
+   * Stable two-key comparator for standings: primary by totalPoints DESC,
+   * fallback by mecaId then competitorName so ties resolve deterministically.
+   * Without the fallback, em.find() returns rows in arbitrary order and the
+   * rank assigned to tied competitors flips between requests.
+   */
+  private byPointsThenIdentity = <T extends LeaderboardEntry>(a: T, b: T) => {
+    const points = b.totalPoints - a.totalPoints;
+    if (points !== 0) return points;
+    const idA = a.mecaId || '';
+    const idB = b.mecaId || '';
+    if (idA !== idB) return idA.localeCompare(idB);
+    return (a.competitorName || '').localeCompare(b.competitorName || '');
+  };
+
+  /**
    * Get overall season leaderboard with pagination
    */
   async getSeasonLeaderboard(
@@ -96,7 +111,7 @@ export class StandingsService {
 
     const aggregated = this.aggregateByMecaId(results);
     const sortedEntries = Array.from(aggregated.values())
-      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .sort(this.byPointsThenIdentity)
       .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
     const total = sortedEntries.length;
@@ -133,7 +148,7 @@ export class StandingsService {
 
     const aggregated = this.aggregateByMecaId(results);
     const entries = Array.from(aggregated.values())
-      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .sort(this.byPointsThenIdentity)
       .slice(0, limit)
       .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
@@ -171,7 +186,7 @@ export class StandingsService {
 
     const aggregated = this.aggregateByMecaIdWithClass(results, format, competitionClass);
     const entries = Array.from(aggregated.values())
-      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .sort(this.byPointsThenIdentity)
       .slice(0, limit)
       .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
@@ -271,7 +286,14 @@ export class StandingsService {
         teamType: agg.teamType,
         representativeName: agg.representativeName,
       }))
-      .sort((a, b) => b.totalPoints - a.totalPoints)
+      // Same stability concern as the competitor sort: equal point totals
+      // need a tiebreaker so the same two teams don't swap rank between
+      // page loads. teamName is what the user sees, so use that.
+      .sort((a, b) => {
+        const points = b.totalPoints - a.totalPoints;
+        if (points !== 0) return points;
+        return (a.teamName || '').localeCompare(b.teamName || '');
+      })
       .slice(0, limit)
       .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
@@ -376,7 +398,11 @@ export class StandingsService {
     const cached = this.getCached<FormatStandingsSummary[]>(cacheKey);
     if (cached !== null) return cached;
 
-    const formats = ['SPL', 'SQL', 'SSI', 'MK'];
+    // Build from real DB data instead of a hardcoded list so summaries
+    // surface every format that actually has results for this season —
+    // and skip formats that have none.
+    const available = await this.getFormatsWithResults(seasonId);
+    const formats = available.map(f => f.format);
     const summaries: FormatStandingsSummary[] = [];
 
     for (const format of formats) {
@@ -499,6 +525,46 @@ export class StandingsService {
   }
 
   /**
+   * Get the formats that actually have results in a given season. Powers
+   * the dynamic format chips so the UI never shows a format with zero
+   * results (which used to happen because SSI/MK were hardcoded chips
+   * but had no data in the DB).
+   *
+   * Returns sorted by result count DESC so the most-populated format is
+   * the default selection target.
+   */
+  async getFormatsWithResults(
+    seasonId?: string,
+  ): Promise<Array<{ format: string; resultCount: number }>> {
+    const cacheKey = `formats_with_results_${seasonId ?? 'all'}`;
+    const cached = this.getCached<Array<{ format: string; resultCount: number }>>(cacheKey);
+    if (cached !== null) return cached;
+
+    const em = this.em.fork();
+    const filter: any = {};
+    if (seasonId) {
+      filter.season = seasonId;
+    }
+    const results = await em.find(CompetitionResult, filter, {
+      fields: ['format'],
+    });
+
+    const counts = new Map<string, number>();
+    for (const r of results) {
+      const f = (r.format || '').trim();
+      if (!f) continue;
+      counts.set(f, (counts.get(f) || 0) + 1);
+    }
+
+    const list = Array.from(counts.entries())
+      .map(([format, resultCount]) => ({ format, resultCount }))
+      .sort((a, b) => b.resultCount - a.resultCount);
+
+    this.setCache(cacheKey, list);
+    return list;
+  }
+
+  /**
    * Get list of unique classes with results in a season
    */
   async getClassesWithResults(
@@ -562,8 +628,10 @@ export class StandingsService {
       await this.getFormatSummaries(currentSeasonId);
       await this.getTeamStandings(currentSeasonId, 50);
 
-      // Warm format-specific caches
-      for (const format of ['SPL', 'SQL', 'SSI', 'MK']) {
+      // Warm format-specific caches for whatever formats actually have
+      // data this season — keeps the hardcoded list from going stale.
+      const available = await this.getFormatsWithResults(currentSeasonId);
+      for (const { format } of available) {
         await this.getStandingsByFormat(format, currentSeasonId, 50);
       }
 
@@ -605,6 +673,11 @@ export class StandingsService {
 
   private aggregateByMecaId(results: CompetitionResult[]): Map<string, LeaderboardEntry> {
     const aggregated = new Map<string, LeaderboardEntry>();
+    // Track unique event IDs per competitor so we count events, not result
+    // rows. Previously this incremented by 1 per row, which inflated the
+    // count by ~5–10x for any competitor entering multiple classes at the
+    // same event (e.g. 31 rows / 4 events became "31 events" in the UI).
+    const eventIdsByKey = new Map<string, Set<string>>();
 
     for (const result of results) {
       const mecaId = result.mecaId;
@@ -623,15 +696,23 @@ export class StandingsService {
           thirdPlace: 0,
           isGuest,
         });
+        eventIdsByKey.set(aggregationKey, new Set());
       }
 
       const entry = aggregated.get(aggregationKey)!;
       entry.totalPoints += result.pointsEarned || 0;
-      entry.eventsParticipated += 1;
+
+      const eventId = (result.event as any)?.id || result.event;
+      if (eventId) eventIdsByKey.get(aggregationKey)!.add(String(eventId));
 
       if (result.placement === 1) entry.firstPlace++;
       if (result.placement === 2) entry.secondPlace++;
       if (result.placement === 3) entry.thirdPlace++;
+    }
+
+    // Roll up the dedup'd event sets into the final count.
+    for (const [key, entry] of aggregated) {
+      entry.eventsParticipated = eventIdsByKey.get(key)?.size ?? 0;
     }
 
     return aggregated;
@@ -643,6 +724,7 @@ export class StandingsService {
     competitionClass: string,
   ): Map<string, ClassStandingsEntry> {
     const aggregated = new Map<string, ClassStandingsEntry>();
+    const eventIdsByKey = new Map<string, Set<string>>();
 
     for (const result of results) {
       const mecaId = result.mecaId;
@@ -663,15 +745,22 @@ export class StandingsService {
           competitionClass,
           format,
         });
+        eventIdsByKey.set(aggregationKey, new Set());
       }
 
       const entry = aggregated.get(aggregationKey)!;
       entry.totalPoints += result.pointsEarned || 0;
-      entry.eventsParticipated += 1;
+
+      const eventId = (result.event as any)?.id || result.event;
+      if (eventId) eventIdsByKey.get(aggregationKey)!.add(String(eventId));
 
       if (result.placement === 1) entry.firstPlace++;
       if (result.placement === 2) entry.secondPlace++;
       if (result.placement === 3) entry.thirdPlace++;
+    }
+
+    for (const [key, entry] of aggregated) {
+      entry.eventsParticipated = eventIdsByKey.get(key)?.size ?? 0;
     }
 
     return aggregated;

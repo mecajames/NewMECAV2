@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Trophy, Medal, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, Users } from 'lucide-react';
 import { competitionResultsApi, StandingsEntry, ClassStandingsEntry } from '@/competition-results';
+import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useStandingsSEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
@@ -8,17 +9,22 @@ import { BannerDisplay, useBanners } from '@/banners';
 import { BannerPosition } from '@newmeca/shared';
 
 type ViewMode = 'overall' | 'byFormat' | 'byClass';
+// 'rank' isn't a sortable column — it always reflects the server-assigned
+// order. We keep it as the default state so the table starts in canonical
+// rank order, but clicking the Rank header just resets the table to that
+// default rather than toggling a direction. See handleSort below.
 type SortColumn = 'rank' | 'competitor' | 'mecaId' | 'points' | 'events' | 'placements';
 type SortDirection = 'asc' | 'desc';
-
-const FORMATS = ['SPL', 'SQL', 'SSI', 'MK'];
 
 export default function StandingsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('overall');
   const [standings, setStandings] = useState<StandingsEntry[]>([]);
   const [classStandings, setClassStandings] = useState<ClassStandingsEntry[]>([]);
   const [classes, setClasses] = useState<{ format: string; className: string; resultCount: number }[]>([]);
-  const [selectedFormat, setSelectedFormat] = useState<string>('SPL');
+  // Available formats for the current season — fetched, not hardcoded, so
+  // we never render a chip for a format with zero results.
+  const [availableFormats, setAvailableFormats] = useState<{ format: string; resultCount: number }[]>([]);
+  const [selectedFormat, setSelectedFormat] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -35,6 +41,38 @@ export default function StandingsPage() {
   useEffect(() => {
     fetchData();
   }, [viewMode, selectedFormat, selectedClass, selectedSeasonId]);
+
+  // Refresh the available-formats list whenever the season changes. The
+  // first item in the response is the most-populated format; pick it as
+  // the default for byFormat / byClass views so the page never lands on
+  // a chip with zero data (which is what made "By Format" appear empty
+  // when SSI/MK were hardcoded but had no results).
+  useEffect(() => {
+    let cancelled = false;
+    competitionResultsApi
+      .getAvailableFormats(selectedSeasonId || undefined)
+      .then((formats) => {
+        if (cancelled) return;
+        setAvailableFormats(formats);
+        // Only auto-select if nothing's selected yet OR the currently
+        // selected format isn't in the new season's list.
+        if (formats.length > 0) {
+          const stillValid = formats.some((f) => f.format === selectedFormat);
+          if (!selectedFormat || !stillValid) {
+            setSelectedFormat(formats[0].format);
+          }
+        } else {
+          setSelectedFormat('');
+        }
+      })
+      .catch((err) => console.error('Error fetching available formats:', err));
+    return () => {
+      cancelled = true;
+    };
+    // selectedFormat intentionally omitted — we only re-fetch on season
+    // change. Including it would re-fire whenever the user clicks a chip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeasonId]);
 
   useEffect(() => {
     // Fetch classes when format changes (for byClass view)
@@ -108,11 +146,22 @@ export default function StandingsPage() {
   };
 
   const handleSort = (column: SortColumn) => {
+    // Rank reflects the server-assigned order (points DESC with tiebreaker).
+    // Clicking the Rank header should always restore that order rather than
+    // flip the table upside down — the latter was the source of the
+    // "flipping between rank and points" UX bug, because clicking Rank
+    // twice produced visually distinct orderings of the same underlying
+    // data.
+    if (column === 'rank') {
+      setSortColumn('rank');
+      setSortDirection('asc');
+      return;
+    }
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(column);
-      setSortDirection(column === 'rank' ? 'asc' : 'desc');
+      setSortDirection('desc');
     }
   };
 
@@ -250,8 +299,15 @@ export default function StandingsPage() {
                   }}
                   className="px-3 sm:px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
-                  {FORMATS.map((fmt) => (
-                    <option key={fmt} value={fmt}>{fmt}</option>
+                  {availableFormats.length === 0 && (
+                    <option value="" disabled>
+                      No data for this season
+                    </option>
+                  )}
+                  {availableFormats.map((f) => (
+                    <option key={f.format} value={f.format}>
+                      {f.format} ({f.resultCount})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -378,9 +434,11 @@ export default function StandingsPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <div className={`font-semibold ${mecaDisplay.color}`}>
-                                {mecaDisplay.text}
-                              </div>
+                              <MecaIdLink
+                                mecaId={entry.mecaId}
+                                displayText={mecaDisplay.text}
+                                className={`font-semibold ${mecaDisplay.color}`}
+                              />
                             </td>
                             <td className="px-6 py-4 text-center">
                               <span className="text-gray-300">

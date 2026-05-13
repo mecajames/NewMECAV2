@@ -4,7 +4,7 @@ import axios from '@/lib/axios';
 // Types
 // =============================================================================
 
-export type TicketStatus = 'open' | 'in_progress' | 'awaiting_response' | 'resolved' | 'closed';
+export type TicketStatus = 'open' | 'in_progress' | 'awaiting_response' | 'on_hold' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TicketCategory = 'general' | 'membership' | 'event_registration' | 'payment' | 'technical' | 'competition_results' | 'event_hosting' | 'account' | 'other';
 export type TicketDepartment = 'general_support' | 'membership_services' | 'event_operations' | 'technical_support' | 'billing' | 'administration';
@@ -20,8 +20,15 @@ export interface Ticket {
   status: TicketStatus;
   reporter_id: string;
   assigned_to_id: string | null;
+  // FK to the new TicketDepartment table. Backend serializes the relation's
+  // id here; the legacy `department` enum above still carries the text
+  // value for older callers.
+  department_id: string | null;
   event_id: string | null;
   resolved_at: string | null;
+  closed_at: string | null;
+  customer_rating: number | null;
+  customer_feedback: string | null;
   created_at: string;
   updated_at: string;
   reporter?: {
@@ -78,6 +85,7 @@ export interface TicketStats {
   open: number;
   in_progress: number;
   awaiting_response: number;
+  on_hold: number;
   resolved: number;
   closed: number;
   by_priority: {
@@ -131,6 +139,7 @@ export interface UpdateTicketData {
   description?: string;
   category?: TicketCategory;
   department?: TicketDepartment;
+  department_id?: string | null;
   priority?: TicketPriority;
   status?: TicketStatus;
   assigned_to_id?: string | null;
@@ -148,6 +157,11 @@ export interface CreateAttachmentData {
   comment_id?: string | null;
   file_name: string;
   file_path: string;
+  // bucket + storage_path are forwarded straight from the upload response
+  // so the backend proxy-download endpoint can resolve the file without
+  // parsing the public URL.
+  bucket?: string;
+  storage_path?: string;
   file_size: number;
   mime_type: string;
 }
@@ -271,6 +285,24 @@ export const ticketsApi = {
 
   reopen: async (id: string): Promise<Ticket> => {
     const response = await axios.post(`/api/tickets/${id}/reopen`);
+    return response.data;
+  },
+
+  hold: async (id: string): Promise<Ticket> => {
+    const response = await axios.post(`/api/tickets/${id}/hold`);
+    return response.data;
+  },
+
+  /**
+   * Reporter-driven close from the member reply form. Rating + feedback
+   * are optional; backend rejects rating values outside 1–5 and ignores a
+   * blank feedback string.
+   */
+  closeByReporter: async (
+    id: string,
+    body: { rating?: number | null; feedback?: string | null } = {},
+  ): Promise<Ticket> => {
+    const response = await axios.post(`/api/tickets/${id}/close-by-reporter`, body);
     return response.data;
   },
 

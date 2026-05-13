@@ -12,7 +12,7 @@ import {
   TicketManagement,
   TicketDetail,
   TicketDepartmentManagement,
-  TicketStaffManagement,
+  TicketStaffArea,
   TicketRoutingRules,
   TicketSystemSettings,
 } from '@/tickets';
@@ -87,7 +87,7 @@ export function AdminTicketsPage() {
       case 'tickets':
         return <TicketManagement currentUserId={profile.id} />;
       case 'staff':
-        return <TicketStaffManagement />;
+        return <TicketStaffArea />;
       case 'departments':
         return <TicketDepartmentManagement />;
       case 'routing':

@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Eye,
   UserPlus,
+  PauseCircle,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -30,13 +31,36 @@ import {
 } from '../../tickets.api-client';
 import { reportError } from './error-helper';
 
-// Status configurations
+// Status configurations. Labels mirror the raw enum values — the "who has
+// the ball" framing lives in its own Waiting On column, so the Status pill
+// stays focused on the actual status name.
 const statusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
   open: { label: 'Open', className: 'bg-blue-500/10 text-blue-400 border-blue-500', icon: <AlertCircle className="w-4 h-4" /> },
   in_progress: { label: 'In Progress', className: 'bg-orange-500/10 text-orange-400 border-orange-500', icon: <Clock className="w-4 h-4" /> },
-  awaiting_response: { label: 'Awaiting', className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500', icon: <MessageSquare className="w-4 h-4" /> },
+  awaiting_response: { label: 'Awaiting Response', className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500', icon: <MessageSquare className="w-4 h-4" /> },
+  on_hold: { label: 'On Hold', className: 'bg-purple-500/10 text-purple-400 border-purple-500', icon: <PauseCircle className="w-4 h-4" /> },
   resolved: { label: 'Resolved', className: 'bg-green-500/10 text-green-400 border-green-500', icon: <CheckCircle className="w-4 h-4" /> },
   closed: { label: 'Closed', className: 'bg-gray-500/10 text-gray-400 border-gray-500', icon: <XCircle className="w-4 h-4" /> },
+};
+
+// Derived "Waiting On" badge — answers "who has the ball right now?" at a
+// glance, separately from raw status. Only shown when the raw status is
+// ambiguous about ownership:
+//   open / in_progress  → Support owes a response
+//   awaiting_response   → Customer owes a response (staff already replied)
+//   on_hold / resolved / closed → no badge (the status pill is already
+//     unambiguous about who owns it / that nobody does)
+type WaitingOn = { label: string; className: string };
+const getWaitingOn = (status: TicketStatus): WaitingOn | null => {
+  switch (status) {
+    case 'open':
+    case 'in_progress':
+      return { label: 'Waiting on Support', className: 'bg-blue-500/10 text-blue-300 border-blue-500/50' };
+    case 'awaiting_response':
+      return { label: 'Waiting on Customer', className: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/50' };
+    default:
+      return null;
+  }
 };
 
 const priorityConfig: Record<TicketPriority, { label: string; className: string }> = {
@@ -52,7 +76,7 @@ interface TicketManagementProps {
 
 export function TicketManagement({ currentUserId }: TicketManagementProps) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'unassigned' | 'critical'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'unassigned' | 'critical' | 'on_hold'>('all');
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [stats, setStats] = useState<TicketStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,8 +89,8 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   // 'active' is a synthetic status group meaning open + in_progress +
-  // awaiting_response — the three statuses that still need admin attention.
-  // Defaulting to it keeps resolved/closed tickets out of the working queue.
+  // awaiting_response + on_hold — every status that still needs admin
+  // attention. Defaulting to it keeps resolved/closed out of the working queue.
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'active' | ''>('active');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('');
   const [departmentFilter, setDepartmentFilter] = useState<TicketDepartment | ''>('');
@@ -98,12 +122,16 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       if (priorityFilter) query.priority = priorityFilter;
       if (departmentFilter) query.department = departmentFilter;
 
-      // Tab-specific filters
+      // Tab-specific filters. These pin the relevant fields regardless of
+      // the filter-panel selections so e.g. the "On Hold" tab always shows
+      // on_hold tickets even if the Status dropdown is still on "Active".
       if (activeTab === 'assigned') {
         query.assigned_to_id = currentUserId;
       } else if (activeTab === 'critical') {
         query.priority = 'critical';
         query.status = 'open';
+      } else if (activeTab === 'on_hold') {
+        query.status = 'on_hold';
       }
 
       const result = await ticketsApi.getAll(query);
@@ -155,17 +183,15 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffHours < 1) return 'Just now';
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Full month/day/year, e.g. "Dec 12, 2025". Used by the Created and
+  // Closed columns where the year matters (tickets can carry over) and
+  // there's no advantage to the relative "Xh ago" framing.
+  const formatFullDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   const getReporterName = (ticket: TicketType) => {
@@ -200,7 +226,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
           <div className="flex items-center gap-2 text-gray-400 mb-2">
             <BarChart3 className="w-4 h-4" />
@@ -225,9 +251,16 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         <div className="bg-slate-800 rounded-xl p-4 border border-yellow-500/30">
           <div className="flex items-center gap-2 text-yellow-400 mb-2">
             <MessageSquare className="w-4 h-4" />
-            <span className="text-xs uppercase">Awaiting</span>
+            <span className="text-xs uppercase">Awaiting Response</span>
           </div>
           <p className="text-2xl font-bold text-yellow-400">{stats?.awaiting_response || 0}</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-4 border border-purple-500/30">
+          <div className="flex items-center gap-2 text-purple-400 mb-2">
+            <PauseCircle className="w-4 h-4" />
+            <span className="text-xs uppercase">On Hold</span>
+          </div>
+          <p className="text-2xl font-bold text-purple-400">{stats?.on_hold || 0}</p>
         </div>
         <div className="bg-slate-800 rounded-xl p-4 border border-green-500/30">
           <div className="flex items-center gap-2 text-green-400 mb-2">
@@ -281,6 +314,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
           { id: 'assigned', label: 'Assigned to Me', icon: <User className="w-4 h-4" /> },
           { id: 'unassigned', label: 'Unassigned', icon: <Users className="w-4 h-4" /> },
           { id: 'critical', label: 'Critical', icon: <AlertCircle className="w-4 h-4" /> },
+          { id: 'on_hold', label: `Tickets on Hold${stats?.on_hold ? ` (${stats.on_hold})` : ''}`, icon: <PauseCircle className="w-4 h-4" /> },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -331,7 +365,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
               onChange={(e) => setStatusFilter(e.target.value as TicketStatus | 'active' | '')}
               className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              <option value="active">Active (Open + In Progress + Awaiting)</option>
+              <option value="active">Active (Open + In Progress + Awaiting + On Hold)</option>
               <option value="">All</option>
               {Object.entries(statusConfig).map(([key, { label }]) => (
                 <option key={key} value={key}>{label}</option>
@@ -388,10 +422,12 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ticket</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Waiting On</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Priority</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reporter</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Assigned</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Created</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Closed</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -415,6 +451,23 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                         {statusConfig[ticket.status].label}
                       </span>
                     </td>
+                    {/* "Who has the ball" — its own column so an admin can
+                        scan straight down to find tickets that need a
+                        support reply vs. ones waiting on the customer.
+                        Empty for resolved/closed/on_hold (status already
+                        conveys ownership for those). */}
+                    <td className="px-4 py-4">
+                      {(() => {
+                        const wo = getWaitingOn(ticket.status);
+                        return wo ? (
+                          <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${wo.className}`}>
+                            {wo.label}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-xs">—</span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>
                         {priorityConfig[ticket.priority].label}
@@ -433,7 +486,14 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-gray-400 text-sm">{formatDate(ticket.created_at)}</span>
+                      <span className="text-gray-400 text-sm">{formatFullDate(ticket.created_at)}</span>
+                    </td>
+                    <td className="px-4 py-4">
+                      {ticket.closed_at ? (
+                        <span className="text-gray-400 text-sm">{formatFullDate(ticket.closed_at)}</span>
+                      ) : (
+                        <span className="text-gray-600 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-right">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>

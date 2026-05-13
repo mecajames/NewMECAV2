@@ -63,6 +63,30 @@ export async function listStaff(includeInactive = false): Promise<TicketStaffRes
   return data;
 }
 
+// Per-agent rating rollup for the admin Staff → Ratings tab.
+export interface StaffRatingSummary {
+  profile_id: string;
+  full_name: string;
+  email: string;
+  rating_count: number;
+  average_rating: number;
+  five_star: number;
+  one_star: number;
+  recent: Array<{
+    ticket_id: string;
+    ticket_number: string;
+    title: string;
+    rating: number;
+    feedback: string | null;
+    closed_at: string | null;
+  }>;
+}
+
+export async function listStaffRatings(): Promise<StaffRatingSummary[]> {
+  const { data } = await axios.get(`${API_BASE}/staff/ratings`);
+  return data;
+}
+
 export async function getStaff(id: string): Promise<TicketStaffResponse> {
   const { data } = await axios.get(`${API_BASE}/staff/${id}`);
   return data;

@@ -15,6 +15,7 @@ import {
   Calendar,
   Tag,
   Building,
+  PauseCircle,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -38,9 +39,16 @@ const statusConfig: Record<TicketStatus, { label: string; className: string; ico
     icon: <Clock className="w-3 h-3" />,
   },
   awaiting_response: {
-    label: 'Awaiting Response',
+    // Member-facing wording: from the customer's perspective, this means
+    // support has replied and is now waiting on them.
+    label: 'Awaiting Your Reply',
     className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500',
     icon: <MessageSquare className="w-3 h-3" />,
+  },
+  on_hold: {
+    label: 'On Hold',
+    className: 'bg-purple-500/10 text-purple-400 border-purple-500',
+    icon: <PauseCircle className="w-3 h-3" />,
   },
   resolved: {
     label: 'Resolved',
