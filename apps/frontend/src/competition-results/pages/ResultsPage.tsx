@@ -35,6 +35,39 @@ function expandStateTerm(term: string): string {
   return STATE_ALIAS_MAP.get(term.trim().toLowerCase()) || term;
 }
 
+/**
+ * Decide whether an event matches a search term. When the term itself is a
+ * recognized state code or name (e.g. "MI", "Michigan"), match strictly
+ * against the event's venue_state so "MI" doesn't pull in events whose
+ * cities or titles happen to contain those two letters (Mississippi,
+ * Milton, Farmington, Birmingham, etc.). Otherwise, fall back to a
+ * substring search across all fields.
+ */
+function eventMatchesSearchTerm(event: any, lowTerm: string): boolean {
+  if (!lowTerm) return true;
+
+  const targetExpanded = STATE_ALIAS_MAP.get(lowTerm);
+  if (targetExpanded) {
+    // Search term IS a state alias — compare against the event's state only.
+    const eventStateRaw = (event.venue_state || '').toLowerCase();
+    const eventStateExpanded = STATE_ALIAS_MAP.get(eventStateRaw) || eventStateRaw;
+    return eventStateExpanded === targetExpanded;
+  }
+
+  const stateExpanded = expandStateTerm(event.venue_state || '');
+  const haystack = [
+    event.title,
+    event.venue_name,
+    event.venue_city,
+    stateExpanded,
+    event.venue_country,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(lowTerm);
+}
+
 interface ClassGroup {
   className: string;
   classDisplayOrder: number;
@@ -626,28 +659,12 @@ export default function ResultsPage() {
                 <div className="absolute z-50 w-full mt-1 max-h-72 overflow-y-auto bg-slate-800 border border-slate-600 rounded-lg shadow-lg">
                   {(() => {
                     const term = eventSearchTerm.trim().toLowerCase();
-                    // Match across title, venue, city, state, and country
-                    // so users can find events by location (e.g. "FL",
-                    // "Florida", "Tampa", "Iowa") without knowing the
-                    // exact event name. Each event's venue_state is also
-                    // expanded into both code + full-name forms so the
-                    // search matches whichever the user types.
+                    // State-aware matching: "MI" / "Michigan" only return
+                    // Michigan events (not Mississippi/Milton/Farmington).
+                    // Non-state terms substring-match across title, venue,
+                    // city, country.
                     const matches = term
-                      ? displayEvents.filter(e => {
-                          const stateRaw = (e as any).venue_state || '';
-                          const stateExpanded = expandStateTerm(stateRaw);
-                          const haystack = [
-                            e.title,
-                            (e as any).venue_name,
-                            (e as any).venue_city,
-                            stateExpanded,
-                            (e as any).venue_country,
-                          ]
-                            .filter(Boolean)
-                            .join(' ')
-                            .toLowerCase();
-                          return haystack.includes(term);
-                        })
+                      ? displayEvents.filter(e => eventMatchesSearchTerm(e, term))
                       : displayEvents;
                     if (matches.length === 0) {
                       return <div className="px-4 py-3 text-gray-400 text-sm">No events found</div>;

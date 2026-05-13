@@ -1,7 +1,8 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { ArrowLeft, DollarSign, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MembershipTypeManagement } from '@/memberships';
+import { lazyWithReload as lazy } from '@/shared/lazyWithReload';
 
 const ManagePermissionsPage = lazy(() => import('@/admin/pages/ManagePermissionsPage'));
 
