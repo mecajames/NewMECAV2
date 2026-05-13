@@ -23,6 +23,12 @@ export default function EventDirectorDetailPage() {
     is_active: true,
     admin_notes: '',
     bio: '',
+    preferred_name: '',
+    headshot_url: '',
+    country: '',
+    state: '',
+    city: '',
+    specialized_formats: '' as string, // edit as comma-separated text; split on save
   });
 
   useEffect(() => {
@@ -41,6 +47,14 @@ export default function EventDirectorDetailPage() {
         is_active: data.is_active ?? true,
         admin_notes: data.admin_notes || '',
         bio: data.bio || '',
+        preferred_name: data.preferred_name || '',
+        headshot_url: data.headshot_url || '',
+        country: data.country || '',
+        state: data.state || '',
+        city: data.city || '',
+        specialized_formats: Array.isArray(data.specialized_formats)
+          ? data.specialized_formats.join(', ')
+          : '',
       });
       setNotesValue(data.admin_notes || '');
     } catch (err: any) {
@@ -54,11 +68,24 @@ export default function EventDirectorDetailPage() {
     setSaving(true);
     setError(null);
     try {
+      // specialized_formats is edited as a comma-separated string for
+      // simplicity; split + trim + drop empties before sending.
+      const specializedFormatsArr = formData.specialized_formats
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
       await updateEventDirector(id!, {
         is_active: formData.is_active,
         admin_notes: formData.admin_notes,
         bio: formData.bio,
-      });
+        preferred_name: formData.preferred_name,
+        headshot_url: formData.headshot_url,
+        country: formData.country,
+        state: formData.state,
+        city: formData.city,
+        specialized_formats: specializedFormatsArr,
+      } as any);
       await loadEventDirector();
       setEditMode(false);
     } catch (err: any) {
@@ -198,7 +225,17 @@ export default function EventDirectorDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-slate-400 text-sm">Preferred Name</label>
-                  <p className="text-white">{eventDirector.preferred_name || '-'}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.preferred_name}
+                      onChange={(e) => setFormData({ ...formData, preferred_name: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="e.g. James"
+                    />
+                  ) : (
+                    <p className="text-white">{eventDirector.preferred_name || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">Status</label>
@@ -218,12 +255,38 @@ export default function EventDirectorDetailPage() {
                   )}
                 </div>
                 <div className="col-span-2">
-                  <label className="text-slate-400 text-sm">Specialized Formats</label>
-                  <p className="text-white">
-                    {eventDirector.specialized_formats?.length > 0
-                      ? eventDirector.specialized_formats.join(', ')
-                      : 'None'}
-                  </p>
+                  <label className="text-slate-400 text-sm">Headshot URL</label>
+                  {editMode ? (
+                    <input
+                      type="url"
+                      value={formData.headshot_url}
+                      onChange={(e) => setFormData({ ...formData, headshot_url: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="https://..."
+                    />
+                  ) : (
+                    <p className="text-white break-all">{eventDirector.headshot_url || '-'}</p>
+                  )}
+                </div>
+                <div className="col-span-2">
+                  <label className="text-slate-400 text-sm">
+                    Specialized Formats {editMode && <span className="text-slate-500">(comma-separated)</span>}
+                  </label>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.specialized_formats}
+                      onChange={(e) => setFormData({ ...formData, specialized_formats: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="SQ, SPL, RTA"
+                    />
+                  ) : (
+                    <p className="text-white">
+                      {eventDirector.specialized_formats?.length > 0
+                        ? eventDirector.specialized_formats.join(', ')
+                        : 'None'}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -237,15 +300,42 @@ export default function EventDirectorDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-slate-400 text-sm">City</label>
-                  <p className="text-white">{eventDirector.city}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                    />
+                  ) : (
+                    <p className="text-white">{eventDirector.city || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">State</label>
-                  <p className="text-white">{eventDirector.state}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.state}
+                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                    />
+                  ) : (
+                    <p className="text-white">{eventDirector.state || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">Country</label>
-                  <p className="text-white">{eventDirector.country}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                    />
+                  ) : (
+                    <p className="text-white">{eventDirector.country || '-'}</p>
+                  )}
                 </div>
               </div>
             </div>

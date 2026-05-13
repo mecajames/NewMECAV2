@@ -353,6 +353,10 @@ export async function updateJudge(
     admin_notes: string;
     bio: string;
     headshot_url: string;
+    preferred_name: string;
+    country: string;
+    state: string;
+    city: string;
   }>
 ): Promise<Judge> {
   const headers = await getAuthHeaders();

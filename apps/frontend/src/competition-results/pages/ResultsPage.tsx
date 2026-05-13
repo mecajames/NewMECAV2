@@ -9,6 +9,31 @@ import { SEOHead, useResultsSEO } from '@/shared/seo';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { BannerDisplay, useBanners } from '@/banners';
 import { BannerPosition } from '@newmeca/shared';
+import { US_STATES, CANADIAN_PROVINCES, MEXICAN_STATES } from '@/utils/countries';
+
+// Build a lookup that maps any state/province (code OR full name) to BOTH
+// forms. Lets the event search treat "FL" and "Florida" as equivalent so
+// users can type whichever they know. Built once at module load.
+const STATE_ALIAS_MAP: Map<string, string> = (() => {
+  const map = new Map<string, string>();
+  const all = [...US_STATES, ...CANADIAN_PROVINCES, ...MEXICAN_STATES];
+  for (const s of all) {
+    const code = s.code.toLowerCase();
+    const name = s.name.toLowerCase();
+    const both = `${code} ${name}`;
+    map.set(code, both);
+    map.set(name, both);
+  }
+  return map;
+})();
+
+/**
+ * Expand a state code or name into both forms so substring matching catches
+ * either. Returns just the original term if it's not a recognized state.
+ */
+function expandStateTerm(term: string): string {
+  return STATE_ALIAS_MAP.get(term.trim().toLowerCase()) || term;
+}
 
 interface ClassGroup {
   className: string;
@@ -117,12 +142,21 @@ export default function ResultsPage() {
     return recent.sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
   }, [events]);
 
-  // Memoized list of events for the dropdown - groups multi-day State/World Finals into single entries
+  // Memoized list of events for the dropdown - groups multi-day State/World Finals into single entries.
+  // Client-side season filter is applied here as a defensive layer so a stale
+  // initial fetch (before SeasonSelector auto-selects the current season)
+  // can't leak events from other seasons into the search dropdown.
   const displayEvents = useMemo(() => {
+    // When a specific season is selected, only consider events from that
+    // season. When selectedSeasonId is '' (All Seasons), show everything.
+    const seasonFiltered = selectedSeasonId
+      ? events.filter(e => (e as any).season_id === selectedSeasonId)
+      : events;
+
     const grouped: Event[] = [];
     const processedGroups = new Set<string>();
 
-    events.forEach(event => {
+    seasonFiltered.forEach(event => {
       // Check if this is a multi-day State/World Finals event
       if (event.multi_day_group_id &&
           (event.event_type === 'state_finals' || event.event_type === 'world_finals')) {
@@ -130,7 +164,7 @@ export default function ResultsPage() {
         if (!processedGroups.has(event.multi_day_group_id)) {
           processedGroups.add(event.multi_day_group_id);
           // Find all events in this group to get the earliest one (Day 1)
-          const groupEvents = events.filter(e => e.multi_day_group_id === event.multi_day_group_id);
+          const groupEvents = seasonFiltered.filter(e => e.multi_day_group_id === event.multi_day_group_id);
           const dayOne = groupEvents.find(e => e.day_number === 1) || groupEvents[0];
           grouped.push(dayOne);
         }
@@ -141,7 +175,7 @@ export default function ResultsPage() {
     });
 
     return grouped;
-  }, [events]);
+  }, [events, selectedSeasonId]);
 
   useEffect(() => {
     fetchEvents();
@@ -549,7 +583,7 @@ export default function ResultsPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search events..."
+                  placeholder="Search events by name, city, state, or country..."
                   value={eventSearchTerm}
                   onChange={(e) => {
                     setEventSearchTerm(e.target.value);
@@ -592,8 +626,28 @@ export default function ResultsPage() {
                 <div className="absolute z-50 w-full mt-1 max-h-72 overflow-y-auto bg-slate-800 border border-slate-600 rounded-lg shadow-lg">
                   {(() => {
                     const term = eventSearchTerm.trim().toLowerCase();
+                    // Match across title, venue, city, state, and country
+                    // so users can find events by location (e.g. "FL",
+                    // "Florida", "Tampa", "Iowa") without knowing the
+                    // exact event name. Each event's venue_state is also
+                    // expanded into both code + full-name forms so the
+                    // search matches whichever the user types.
                     const matches = term
-                      ? displayEvents.filter(e => (e.title || '').toLowerCase().includes(term))
+                      ? displayEvents.filter(e => {
+                          const stateRaw = (e as any).venue_state || '';
+                          const stateExpanded = expandStateTerm(stateRaw);
+                          const haystack = [
+                            e.title,
+                            (e as any).venue_name,
+                            (e as any).venue_city,
+                            stateExpanded,
+                            (e as any).venue_country,
+                          ]
+                            .filter(Boolean)
+                            .join(' ')
+                            .toLowerCase();
+                          return haystack.includes(term);
+                        })
                       : displayEvents;
                     if (matches.length === 0) {
                       return <div className="px-4 py-3 text-gray-400 text-sm">No events found</div>;
@@ -626,9 +680,22 @@ export default function ResultsPage() {
                           ) : (
                             <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-600/80 flex-shrink-0" title="Results pending" />
                           )}
-                          <span className="truncate font-medium">
-                            {event.title}
-                            {isMultiDayFinals && groupEvents.length > 1 ? ` (${groupEvents.length}-Day)` : ''}
+                          <span className="flex-1 min-w-0">
+                            <span className="block truncate font-medium">
+                              {event.title}
+                              {isMultiDayFinals && groupEvents.length > 1 ? ` (${groupEvents.length}-Day)` : ''}
+                            </span>
+                            {(() => {
+                              const city = (event as any).venue_city;
+                              const stateCode = (event as any).venue_state;
+                              const location = [city, stateCode].filter(Boolean).join(', ');
+                              return location ? (
+                                <span className="block truncate text-xs text-gray-400 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {location}
+                                </span>
+                              ) : null;
+                            })()}
                           </span>
                           <span className="ml-auto text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">
                             {new Date(event.event_date).toLocaleDateString('en-US', {
