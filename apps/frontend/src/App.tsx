@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyWithReload as lazy } from '@/shared/lazyWithReload';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard, BillingRestrictedGuard } from '@/auth';

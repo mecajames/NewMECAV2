@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { lazyWithReload as lazy } from '@/shared/lazyWithReload';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
