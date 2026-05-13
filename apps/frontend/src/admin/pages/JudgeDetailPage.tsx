@@ -31,6 +31,15 @@ export default function JudgeDetailPage() {
     is_active: true,
     admin_notes: '',
     bio: '',
+    preferred_name: '',
+    specialty: '' as string,
+    sub_specialties: '' as string, // comma-separated; parsed on save
+    headshot_url: '',
+    travel_radius: '',
+    additional_regions: '' as string, // comma-separated; parsed on save
+    country: '',
+    state: '',
+    city: '',
   });
 
   useEffect(() => {
@@ -50,6 +59,19 @@ export default function JudgeDetailPage() {
         is_active: data.is_active ?? true,
         admin_notes: data.admin_notes || '',
         bio: (data as any).bio || '',
+        preferred_name: (data as any).preferred_name || '',
+        specialty: (data as any).specialty || '',
+        sub_specialties: Array.isArray((data as any).sub_specialties)
+          ? (data as any).sub_specialties.join(', ')
+          : '',
+        headshot_url: (data as any).headshot_url || '',
+        travel_radius: (data as any).travel_radius || '',
+        additional_regions: Array.isArray((data as any).additional_regions)
+          ? (data as any).additional_regions.join(', ')
+          : '',
+        country: (data as any).country || '',
+        state: (data as any).state || '',
+        city: (data as any).city || '',
       });
       setNotesValue(data.admin_notes || '');
     } catch (err: any) {
@@ -63,11 +85,31 @@ export default function JudgeDetailPage() {
     setSaving(true);
     setError(null);
     try {
+      // sub_specialties / additional_regions are edited as comma-separated
+      // text — split + trim + drop empties on the way out.
+      const subSpecialtiesArr = formData.sub_specialties
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      const additionalRegionsArr = formData.additional_regions
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
       await updateJudge(id!, {
         level: formData.level as JudgeLevel,
         is_active: formData.is_active,
         admin_notes: formData.admin_notes,
         bio: formData.bio,
+        preferred_name: formData.preferred_name,
+        specialty: formData.specialty,
+        sub_specialties: subSpecialtiesArr,
+        headshot_url: formData.headshot_url,
+        travel_radius: formData.travel_radius,
+        additional_regions: additionalRegionsArr,
+        country: formData.country,
+        state: formData.state,
+        city: formData.city,
       });
       await loadJudge();
       setEditMode(false);
@@ -207,6 +249,20 @@ export default function JudgeDetailPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="text-slate-400 text-sm">Preferred Name</label>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.preferred_name}
+                      onChange={(e) => setFormData({ ...formData, preferred_name: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="e.g. James"
+                    />
+                  ) : (
+                    <p className="text-white">{judge.preferred_name || '-'}</p>
+                  )}
+                </div>
+                <div>
                   <label className="text-slate-400 text-sm">Level</label>
                   {editMode ? (
                     <select
@@ -226,7 +282,19 @@ export default function JudgeDetailPage() {
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">Specialty</label>
-                  <p className="text-white uppercase">{judge.specialty}</p>
+                  {editMode ? (
+                    <select
+                      value={formData.specialty}
+                      onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                    >
+                      <option value="sq">SQ</option>
+                      <option value="spl">SPL</option>
+                      <option value="both">Both</option>
+                    </select>
+                  ) : (
+                    <p className="text-white uppercase">{judge.specialty}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">Status</label>
@@ -245,13 +313,39 @@ export default function JudgeDetailPage() {
                     </p>
                   )}
                 </div>
-                <div>
-                  <label className="text-slate-400 text-sm">Sub-Specialties</label>
-                  <p className="text-white">
-                    {judge.sub_specialties?.length > 0
-                      ? judge.sub_specialties.join(', ')
-                      : 'None'}
-                  </p>
+                <div className="col-span-2">
+                  <label className="text-slate-400 text-sm">
+                    Sub-Specialties {editMode && <span className="text-slate-500">(comma-separated)</span>}
+                  </label>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.sub_specialties}
+                      onChange={(e) => setFormData({ ...formData, sub_specialties: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="Modified, Street A"
+                    />
+                  ) : (
+                    <p className="text-white">
+                      {judge.sub_specialties?.length > 0
+                        ? judge.sub_specialties.join(', ')
+                        : 'None'}
+                    </p>
+                  )}
+                </div>
+                <div className="col-span-2">
+                  <label className="text-slate-400 text-sm">Headshot URL</label>
+                  {editMode ? (
+                    <input
+                      type="url"
+                      value={formData.headshot_url}
+                      onChange={(e) => setFormData({ ...formData, headshot_url: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="https://..."
+                    />
+                  ) : (
+                    <p className="text-white break-all">{judge.headshot_url || '-'}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -265,19 +359,76 @@ export default function JudgeDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-slate-400 text-sm">City</label>
-                  <p className="text-white">{judge.city}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                    />
+                  ) : (
+                    <p className="text-white">{judge.city || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">State</label>
-                  <p className="text-white">{judge.state}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.state}
+                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                    />
+                  ) : (
+                    <p className="text-white">{judge.state || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">Country</label>
-                  <p className="text-white">{judge.country}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                    />
+                  ) : (
+                    <p className="text-white">{judge.country || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-slate-400 text-sm">Travel Radius</label>
-                  <p className="text-white">{judge.travel_radius || 'Not specified'}</p>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.travel_radius}
+                      onChange={(e) => setFormData({ ...formData, travel_radius: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="e.g. 250 miles"
+                    />
+                  ) : (
+                    <p className="text-white">{judge.travel_radius || 'Not specified'}</p>
+                  )}
+                </div>
+                <div className="col-span-2">
+                  <label className="text-slate-400 text-sm">
+                    Additional Regions {editMode && <span className="text-slate-500">(comma-separated)</span>}
+                  </label>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={formData.additional_regions}
+                      onChange={(e) => setFormData({ ...formData, additional_regions: e.target.value })}
+                      className="w-full mt-1 bg-slate-700 text-white px-3 py-2 rounded-lg border border-slate-600 focus:border-orange-500 focus:outline-none"
+                      placeholder="Southeast, Midwest"
+                    />
+                  ) : (
+                    <p className="text-white">
+                      {judge.additional_regions?.length > 0
+                        ? judge.additional_regions.join(', ')
+                        : 'None'}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

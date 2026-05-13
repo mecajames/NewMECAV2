@@ -267,7 +267,12 @@ export const UpdateJudgeSchema = z.object({
   additional_regions: z.array(z.string()).optional(),
   admin_notes: z.string().optional(),
   bio: z.string().optional(),
-  headshot_url: z.string().url().optional(),
+  // Accept blank string so the admin form can clear a stored URL.
+  headshot_url: z.union([z.string().url(), z.literal('')]).optional(),
+  preferred_name: z.string().optional(),
+  country: z.string().optional(),
+  state: z.string().optional(),
+  city: z.string().optional(),
 });
 export type UpdateJudgeDto = z.infer<typeof UpdateJudgeSchema>;
 

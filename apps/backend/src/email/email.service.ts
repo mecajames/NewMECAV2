@@ -1530,7 +1530,7 @@ export class EmailService {
             ticketTitle: 'Test Support Request',
             ticketDescription: 'This is a test support ticket to verify the email template is rendering correctly with the new MECA branding.',
             category: 'General Support',
-            viewTicketUrl: `${frontendUrl}/support/tickets/test-ticket-id`,
+            viewTicketUrl: `${frontendUrl}/tickets/test-ticket-id`,
           });
           break;
 
@@ -1546,7 +1546,7 @@ export class EmailService {
             departmentName: 'Technical Support',
             reporterName: 'John Smith',
             reporterEmail: 'john.smith@example.com',
-            viewTicketUrl: `${frontendUrl}/admin/support/tickets/test-ticket-id`,
+            viewTicketUrl: `${frontendUrl}/admin/tickets/test-ticket-id`,
           });
           break;
 
@@ -1559,7 +1559,7 @@ export class EmailService {
             replyContent: 'Thank you for reaching out! This is a sample reply to test the email template. We are looking into your issue and will get back to you shortly.',
             replierName: 'MECA Support Team',
             isStaffReply: true,
-            viewTicketUrl: `${frontendUrl}/support/tickets/test-ticket-id`,
+            viewTicketUrl: `${frontendUrl}/tickets/test-ticket-id`,
           });
           break;
 
@@ -1571,7 +1571,7 @@ export class EmailService {
             ticketTitle: 'Test Support Request',
             oldStatus: 'open',
             newStatus: 'in_progress',
-            viewTicketUrl: `${frontendUrl}/support/tickets/test-ticket-id`,
+            viewTicketUrl: `${frontendUrl}/tickets/test-ticket-id`,
           });
           break;
 
@@ -2502,28 +2502,34 @@ Fun, Fair, Loud and Clear!
 
   private getTicketReplyEmailTemplate(dto: SendTicketReplyEmailDto, greeting: string): string {
     const replyLabel = dto.isStaffReply ? 'MECA Support' : 'Customer';
+    // Escape user-provided content so HTML in the reply doesn't render and
+    // break layout / open XSS. Preserve newlines via white-space:pre-wrap.
+    const escapedReply = (dto.replyContent || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
 
     return `
-${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumber, `New reply on your MECA support ticket ${dto.ticketNumber}`)}
+${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumber, `${dto.replierName} replied to your MECA support ticket ${dto.ticketNumber}`)}
     <p style="font-size: 16px;">${greeting},</p>
 
-    <p>There is a new reply on your support ticket <strong>"${dto.ticketTitle}"</strong>.</p>
+    <p><strong>${dto.replierName}</strong> replied to your support ticket <strong>"${dto.ticketTitle}"</strong>:</p>
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border: 1px solid #e2e8f0; padding: 20px;">
-      <div style="margin-bottom: 15px;">
-        <span style="display: inline-block; width: 40px; height: 40px; background: ${dto.isStaffReply ? '#f97316' : '#3b82f6'}; border-radius: 50%; text-align: center; line-height: 40px; color: #fff; font-weight: bold; vertical-align: middle;">${dto.replierName.charAt(0).toUpperCase()}</span>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #ffffff; border-left: 4px solid ${dto.isStaffReply ? '#f97316' : '#3b82f6'}; padding: 0;">
+      <div style="background-color: ${dto.isStaffReply ? '#fff7ed' : '#eff6ff'}; padding: 12px 20px; border-bottom: 1px solid #e2e8f0;">
+        <span style="display: inline-block; width: 36px; height: 36px; background: ${dto.isStaffReply ? '#f97316' : '#3b82f6'}; border-radius: 50%; text-align: center; line-height: 36px; color: #fff; font-weight: bold; vertical-align: middle;">${dto.replierName.charAt(0).toUpperCase()}</span>
         <span style="margin-left: 12px; vertical-align: middle;">
-          <strong>${dto.replierName}</strong>
+          <strong style="color: #1e293b;">${dto.replierName}</strong>
           <span style="color: #64748b; font-size: 12px; display: block;">${replyLabel}</span>
         </span>
       </div>
-      <div style="padding: 15px; background: #f1f5f9; border-radius: 8px; white-space: pre-wrap;">${dto.replyContent}</div>
+      <div style="padding: 20px; color: #1e293b; font-size: 15px; line-height: 1.6; white-space: pre-wrap;">${escapedReply}</div>
     </td></tr></table>
 
-    ${this.getEmailButton('View Full Conversation', dto.viewTicketUrl)}
+    ${this.getEmailButton(dto.isStaffReply ? 'View & Reply' : 'View Full Conversation', dto.viewTicketUrl)}
 
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
-      You can reply directly to continue the conversation.
+    <p style="color: #64748b; font-size: 13px; margin-top: 30px; text-align: center;">
+      Click the button above to ${dto.isStaffReply ? 'open the ticket and continue the conversation' : 'see the full thread and respond'}.
     </p>
 ${this.getEmailFooterHtml()}
     `.trim();

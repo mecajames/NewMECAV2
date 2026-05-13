@@ -413,9 +413,14 @@ export class EventDirectorsService {
       }
     }
 
-    // Direct camelCase properties
+    // Direct camelCase properties (or single-name fields). country/state/city
+    // are entity-level camelCase names that map to location_country/state/city
+    // columns — the frontend sends them as plain `country`/`state`/`city`.
     if (updates.isActive !== undefined) ed.isActive = updates.isActive;
     if (updates.bio !== undefined) ed.bio = updates.bio;
+    if ((updates as any).country !== undefined) ed.country = (updates as any).country;
+    if ((updates as any).state !== undefined) ed.state = (updates as any).state;
+    if ((updates as any).city !== undefined) ed.city = (updates as any).city;
 
     ed.updatedAt = new Date();
     await this.em.flush();

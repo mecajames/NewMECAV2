@@ -760,7 +760,10 @@ export class TicketsService {
    * 2. Alert email to assigned department staff
    */
   private async sendTicketCreatedEmails(ticket: Ticket, departmentId?: string): Promise<void> {
-    const viewTicketUrl = `${this.frontendUrl}/support/tickets/${ticket.ticketNumber}`;
+    // Member-facing ticket detail route is /tickets/:id where :id is the
+    // ticket UUID — NOT /support/tickets/:ticketNumber. The old path matched
+    // no route, so the recipient landed on the homepage.
+    const viewTicketUrl = `${this.frontendUrl}/tickets/${ticket.id}`;
 
     // Send confirmation email to submitter
     if (ticket.reporter?.email) {
@@ -781,7 +784,7 @@ export class TicketsService {
         title: `Ticket ${ticket.ticketNumber} created`,
         message: `Your support ticket has been received. We'll respond shortly.`,
         type: 'info',
-        link: `/support/tickets/${ticket.ticketNumber}`,
+        link: `/tickets/${ticket.id}`,
       });
     }
 
@@ -841,7 +844,8 @@ export class TicketsService {
   private async sendTicketStatusEmail(ticket: Ticket, oldStatus: string, newStatus: string): Promise<void> {
     if (!ticket.reporter?.email) return;
 
-    const viewTicketUrl = `${this.frontendUrl}/support/tickets/${ticket.ticketNumber}`;
+    // Member-facing route is /tickets/:uuid — see comment in sendTicketCreatedEmails.
+    const viewTicketUrl = `${this.frontendUrl}/tickets/${ticket.id}`;
 
     await this.emailService.sendTicketStatusEmail({
       to: ticket.reporter.email,
@@ -859,7 +863,7 @@ export class TicketsService {
         title: `Ticket ${ticket.ticketNumber} updated`,
         message: `Status changed from "${oldStatus}" to "${newStatus}".`,
         type: 'info',
-        link: `/support/tickets/${ticket.ticketNumber}`,
+        link: `/tickets/${ticket.id}`,
       });
     }
   }
@@ -875,8 +879,10 @@ export class TicketsService {
     author: Profile,
     isStaffReply: boolean,
   ): Promise<void> {
+    // When staff replies, link the recipient (member) to /tickets/:uuid.
+    // When member replies, link the recipient (assigned staff) to /admin/tickets/:uuid.
     const viewTicketUrl = isStaffReply
-      ? `${this.frontendUrl}/support/tickets/${ticket.ticketNumber}`
+      ? `${this.frontendUrl}/tickets/${ticket.id}`
       : `${this.frontendUrl}/admin/tickets/${ticket.id}`;
 
     const replierName = `${author.first_name || ''} ${author.last_name || ''}`.trim() || author.email || 'Unknown';
@@ -900,7 +906,7 @@ export class TicketsService {
           title: `New reply on ticket ${ticket.ticketNumber}`,
           message: `${replierName} replied to your ticket.`,
           type: 'message',
-          link: `/support/tickets/${ticket.ticketNumber}`,
+          link: `/tickets/${ticket.id}`,
         });
       }
     } else {

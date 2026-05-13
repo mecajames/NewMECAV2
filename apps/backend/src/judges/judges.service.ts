@@ -632,6 +632,11 @@ export class JudgesService {
     if (dto.admin_notes !== undefined) judge.adminNotes = dto.admin_notes;
     if (dto.bio !== undefined) judge.bio = dto.bio;
     if (dto.headshot_url !== undefined) judge.headshotUrl = dto.headshot_url;
+    // Personal/profile fields admins should be able to fix without re-applying.
+    if ((dto as any).preferred_name !== undefined) judge.preferredName = (dto as any).preferred_name;
+    if ((dto as any).country !== undefined) judge.country = (dto as any).country;
+    if ((dto as any).state !== undefined) judge.state = (dto as any).state;
+    if ((dto as any).city !== undefined) judge.city = (dto as any).city;
 
     await em.flush();
     return judge;
