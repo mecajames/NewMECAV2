@@ -10,6 +10,8 @@ import {
   Zap,
   Search,
   MoreVertical,
+  CreditCard,
+  XOctagon,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
 
@@ -373,6 +375,34 @@ export default function BillingDashboardPage() {
         {/* Quick Links */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <button
+            onClick={() => navigate('/admin/billing/payments')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left ring-1 ring-orange-500/20 hover:ring-orange-500/40"
+          >
+            <div className="w-12 h-12 rounded-full bg-orange-500/15 text-orange-400 flex items-center justify-center mb-4">
+              <CreditCard className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">All Payments</h3>
+            <p className="text-gray-400 text-sm">Unified Stripe + PayPal — all statuses</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/billing/failed-payments')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center mb-4">
+              <XOctagon className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Failed Payments</h3>
+            <p className="text-gray-400 text-sm">
+              Triage queue —{' '}
+              <span className={subStats && subStats.failedPaymentsLast30Days > 0 ? 'text-red-400 font-semibold' : ''}>
+                {subStats?.failedPaymentsLast30Days ?? 0}
+              </span>{' '}
+              in the last 30 days
+            </p>
+          </button>
+
+          <button
             onClick={() => navigate('/admin/billing/orders')}
             className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
           >
@@ -403,6 +433,17 @@ export default function BillingDashboardPage() {
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">Revenue Reports</h3>
             <p className="text-gray-400 text-sm">View detailed analytics</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/billing/recurring')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <div className="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 flex items-center justify-center mb-4">
+              <Zap className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Recurring Invoices</h3>
+            <p className="text-gray-400 text-sm">Subscriptions & templates</p>
           </button>
         </div>
 

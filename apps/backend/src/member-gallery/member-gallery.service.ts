@@ -29,10 +29,20 @@ export class MemberGalleryService {
   // ============================================
 
   /**
-   * Get public gallery images for a member
+   * Get public gallery images for a member.
+   *
+   * Server-enforced privacy: expired members are treated as the general
+   * public. Their gallery is hidden from anonymous callers until renewal.
+   * See docs/features/MEMBERSHIP_LIFECYCLE.md §4.4.
    */
   async getPublicGalleryByMemberId(memberId: string): Promise<MemberGalleryImage[]> {
     const em = this.em.fork();
+    const rows = await em.getConnection().execute(
+      `SELECT 1 FROM public.profiles WHERE id = ? AND membership_status = 'active' LIMIT 1`,
+      [memberId],
+    );
+    if (rows.length === 0) return [];
+
     return em.find(MemberGalleryImage, {
       member: memberId,
       isPublic: true,

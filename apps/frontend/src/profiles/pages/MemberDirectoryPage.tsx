@@ -43,8 +43,15 @@ export default function MemberDirectoryPage() {
         page: currentPage,
         limit: membersPerPage,
       });
-      setProfiles(data.profiles);
-      setTotalProfiles(data.total);
+      // Hide expired members from the public directory. See
+      // docs/features/MEMBERSHIP_LIFECYCLE.md §4.4 — expired members are
+      // public visitors and shouldn't appear in member-only directory pages.
+      const activeOnly = (data.profiles ?? []).filter(
+        (p: any) => p.membership_status !== 'expired',
+      );
+      setProfiles(activeOnly);
+      // Total reported by backend may include expired; surface the filtered count.
+      setTotalProfiles(activeOnly.length === data.profiles?.length ? data.total : activeOnly.length);
     } catch (err: any) {
       console.error('Error fetching public profiles:', err);
       setError('Failed to load member profiles');

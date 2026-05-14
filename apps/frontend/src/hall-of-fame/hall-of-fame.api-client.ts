@@ -27,6 +27,23 @@ export interface CreateHallOfFameInducteeDto {
   image_url?: string | null;
 }
 
+export interface HallOfFameCommentAuthor {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  meca_id: string | null;
+}
+
+export interface HallOfFameComment {
+  id: string;
+  body: string;
+  created_at: string;
+  updated_at: string | null;
+  author: HallOfFameCommentAuthor;
+}
+
 export const hallOfFameApi = {
   getAll: async (category?: string, year?: number): Promise<HallOfFameInductee[]> => {
     const params: any = {};
@@ -58,5 +75,19 @@ export const hallOfFameApi = {
 
   delete: async (id: string): Promise<void> => {
     await axios.delete(`/api/hall-of-fame/${id}`);
+  },
+
+  listComments: async (id: string): Promise<HallOfFameComment[]> => {
+    const response = await axios.get(`/api/hall-of-fame/${id}/comments`);
+    return response.data;
+  },
+
+  createComment: async (id: string, body: string): Promise<HallOfFameComment> => {
+    const response = await axios.post(`/api/hall-of-fame/${id}/comments`, { body });
+    return response.data;
+  },
+
+  deleteComment: async (id: string, commentId: string): Promise<void> => {
+    await axios.delete(`/api/hall-of-fame/${id}/comments/${commentId}`);
   },
 };

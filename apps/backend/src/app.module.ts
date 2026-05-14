@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { GlobalAuthGuard } from './auth/global-auth.guard';
 import { MaintenanceModeGuard } from './auth/maintenance-mode.guard';
+import { ActiveMembershipGuard } from './auth/active-membership.guard';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -174,6 +175,13 @@ import { SecurityModule } from './security/security.module';
     {
       provide: APP_GUARD,
       useClass: MaintenanceModeGuard,
+    },
+    // Enforce active membership on every authenticated route except those
+    // tagged @Public() or @PublicMember(). See ActiveMembershipGuard for
+    // the full exemption matrix.
+    {
+      provide: APP_GUARD,
+      useClass: ActiveMembershipGuard,
     },
   ],
 })

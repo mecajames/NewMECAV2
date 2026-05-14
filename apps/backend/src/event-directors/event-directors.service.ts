@@ -304,6 +304,23 @@ export class EventDirectorsService {
   private async createEventDirectorFromApplication(
     application: EventDirectorApplication,
   ): Promise<EventDirector> {
+    // user_id is unique on event_directors — if a record already exists (e.g. from a prior
+    // admin direct-create or a previously approved application), link the application to it
+    // and refresh its fields rather than inserting a duplicate.
+    const existing = await this.em.findOne(EventDirector, { user: { id: application.user.id } });
+    if (existing) {
+      existing.application = application;
+      existing.isActive = true;
+      existing.state = application.state;
+      existing.city = application.city;
+      existing.country = application.country;
+      if (application.headshotUrl) existing.headshotUrl = application.headshotUrl;
+      if (application.preferredName) existing.preferredName = application.preferredName;
+      if (!existing.approvedDate) existing.approvedDate = new Date();
+      await this.em.flush();
+      return existing;
+    }
+
     const eventDirector = new EventDirector();
     eventDirector.user = application.user;
     eventDirector.application = application;

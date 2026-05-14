@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Trophy, Users, Store, Gavel, Star, Award } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Trophy, Users, Store, Gavel, Star, Award, ChevronRight } from 'lucide-react';
 import { SEOHead, useStaticPageSEO } from '@/shared/seo';
 import { hallOfFameApi, type HallOfFameInductee } from '@/hall-of-fame/hall-of-fame.api-client';
 import { getStorageUrl } from '@/lib/storage';
@@ -75,14 +76,13 @@ export default function HallOfFamePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="text-center mb-10">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Star className="w-8 h-8 text-yellow-400" />
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">
-                MECA Hall of Fame
-              </h1>
-              <Star className="w-8 h-8 text-yellow-400" />
-            </div>
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            <h1 className="sr-only">MECA Hall of Fame</h1>
+            <img
+              src="/hall-of-fame-hero.png"
+              alt="MECA Hall of Fame"
+              className="mx-auto w-full max-w-xl md:max-w-2xl h-auto rounded-lg shadow-lg shadow-black/40 mb-4"
+            />
+            <p className="text-gray-400 text-base sm:text-lg max-w-2xl mx-auto">
               Celebrating the legends and pioneers of car audio competition
             </p>
           </div>
@@ -144,9 +144,10 @@ export default function HallOfFamePage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {items.map((inductee) => (
-                      <div
+                      <Link
                         key={inductee.id}
-                        className="bg-slate-800/70 border border-slate-700/50 rounded-lg p-4 hover:border-orange-500/30 transition-colors"
+                        to={`/hall-of-fame/${inductee.id}`}
+                        className="group block bg-slate-800/70 border border-slate-700/50 rounded-lg p-4 hover:border-orange-500/40 hover:bg-slate-800 transition-colors"
                       >
                         <div className="flex items-start gap-3">
                           {inductee.image_url && (
@@ -156,9 +157,10 @@ export default function HallOfFamePage() {
                               className="w-12 h-12 rounded-full object-cover border-2 border-slate-600 flex-shrink-0"
                             />
                           )}
-                          <div className="min-w-0">
-                            <h3 className="font-semibold text-white text-sm">
-                              {inductee.name}
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-white text-sm group-hover:text-orange-300 transition-colors flex items-center gap-1">
+                              <span className="truncate">{inductee.name}</span>
+                              <ChevronRight className="w-3.5 h-3.5 text-orange-500/50 group-hover:text-orange-400 flex-shrink-0 transition-colors" />
                             </h3>
                             <div className="mt-1.5 space-y-0.5">
                               {inductee.state && (
@@ -176,7 +178,7 @@ export default function HallOfFamePage() {
                         {inductee.bio && (
                           <p className="text-gray-500 text-xs mt-2 line-clamp-2">{inductee.bio}</p>
                         )}
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 </div>

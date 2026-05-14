@@ -150,6 +150,37 @@ export interface FailedPaymentRow {
   detailUrl?: string;
 }
 
+/**
+ * Row shape returned by GET /api/billing/payments — every Stripe + PayPal
+ * payment regardless of status. Drives the unified All Payments page.
+ */
+export interface AllPaymentRow {
+  id: string;
+  createdAt: string;
+  paymentMethod: string;
+  paymentType: string;
+  paymentStatus: string;
+  amount: string;
+  currency: string;
+  transactionId: string | null;
+  stripePaymentIntentId: string | null;
+  paypalCaptureId: string | null;
+  failureReason: string | null;
+  description: string | null;
+  paidAt: string | null;
+  refundedAt: string | null;
+  member: {
+    id: string | null;
+    name: string | null;
+    email: string | null;
+    mecaId: string | null;
+  };
+  membership: {
+    id: string;
+    typeName: string | null;
+  } | null;
+}
+
 export interface MyTransaction {
   id: string;
   source: 'event_registration' | 'membership' | 'shop_order';
@@ -520,6 +551,41 @@ export const billingApi = {
     data: FailedPaymentRow[];
   }> => {
     const response = await axios.get('/api/billing/failed-payments', {
+      params: windowDays ? { windowDays } : undefined,
+    });
+    return response.data;
+  },
+
+  /**
+   * Unified All Payments admin view — every Stripe + PayPal payment row,
+   * filterable by status / method / type / free-text search.
+   */
+  getAllPayments: async (params: {
+    status?: string;
+    method?: string;
+    type?: string;
+    search?: string;
+    windowDays?: number;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{
+    windowDays: number;
+    since: string;
+    total: number;
+    limit: number;
+    offset: number;
+    data: AllPaymentRow[];
+  }> => {
+    const response = await axios.get('/api/billing/payments', { params });
+    return response.data;
+  },
+
+  getPaymentsStats: async (windowDays?: number): Promise<{
+    windowDays: number;
+    since: string;
+    rows: Array<{ status: string; method: string; count: number; total: number }>;
+  }> => {
+    const response = await axios.get('/api/billing/payments/stats', {
       params: windowDays ? { windowDays } : undefined,
     });
     return response.data;

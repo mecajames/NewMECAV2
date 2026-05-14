@@ -39,9 +39,17 @@ export class MecaIdService {
     return result[0].get_next_meca_id;
   }
 
+  // MECA ID grace tiers (see docs/features/MEMBERSHIP_LIFECYCLE.md §3)
+  static readonly GRACE_SOFT_DAYS = 30;          // days 1-30  : silent reclaim
+  static readonly GRACE_MEDIUM_DAYS = 37;        // days 31-37 : silent reclaim + internal flag
+  static readonly GRACE_ADMIN_DAYS = 45;         // days 38-45 : no self reclaim; admin may reassign
+
   /**
    * Assign a MECA ID to a membership.
-   * Handles grace period reactivation window for renewals.
+   * Handles tiered grace-period reactivation for renewals:
+   *   - days 1-30  → silent reclaim
+   *   - days 31-37 → silent reclaim, flagged on history
+   *   - days 38+   → new ID issued (admin can reassign later)
    *
    * @param membership The membership to assign a MECA ID to
    * @param previousMembership Optional previous membership for renewal tracking
@@ -56,25 +64,22 @@ export class MecaIdService {
     // Use caller's EM if provided, otherwise fork our own
     const em = callerEm || this.em.fork();
 
-    // Check if this is a renewal within the grace period window
-    // Hard cutoff: 45 days (30-day grace + 7-day redemption + internal buffer)
-    const GRACE_PERIOD_HARD_CUTOFF_DAYS = 45;
     if (previousMembership?.mecaId && previousMembership.endDate) {
       const daysSinceExpiry = this.getDaysSinceExpiry(previousMembership.endDate);
 
-      if (daysSinceExpiry <= GRACE_PERIOD_HARD_CUTOFF_DAYS) {
-        // Reactivate the same MECA ID
+      // Reclaim only within soft + medium windows (1-37 days). The 38-45
+      // admin-extension band still preserves history but does NOT reclaim
+      // automatically — an admin must call reassignMecaId() to reattach.
+      if (daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS) {
         const mecaId = previousMembership.mecaId;
         membership.mecaId = mecaId;
-
-        // Auto-create membership card when MECA ID is assigned
         membership.cardCreatedAt = new Date();
 
-        // Update history to mark reactivation
-        await this.recordReactivation(mecaId, membership, previousMembership.endDate, em);
+        const tier = daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS ? 'soft' : 'medium';
+        await this.recordReactivation(mecaId, membership, previousMembership.endDate, em, tier);
 
         this.logger.log(
-          `Reactivated MECA ID ${mecaId} for membership ${membership.id} (${daysSinceExpiry.toFixed(1)} days since expiry)`
+          `Reactivated MECA ID ${mecaId} for membership ${membership.id} (${daysSinceExpiry.toFixed(1)} days, ${tier} tier)`
         );
 
         return mecaId;
@@ -139,7 +144,7 @@ export class MecaIdService {
   }
 
   /**
-   * Find a previous membership for the same user that could be renewed.
+   * Find a previous EXPIRED membership for the same user that could be renewed.
    * Used to check grace period reactivation window.
    *
    * @param userId The user's ID
@@ -168,6 +173,65 @@ export class MecaIdService {
     );
 
     return memberships[0] || null;
+  }
+
+  /**
+   * Find the most recent paid membership for a user in a category, whether
+   * active or expired. Used to compute renewal date math which must
+   * distinguish:
+   *   - active early-renew  → extend from existing endDate
+   *   - expired-in-grace    → extend from previous endDate
+   *   - long-expired        → fresh 365-day term from renewal date
+   */
+  async findMostRecentMembership(
+    userId: string,
+    category: MembershipCategory,
+  ): Promise<Membership | null> {
+    const em = this.em.fork();
+    const memberships = await em.find(
+      Membership,
+      {
+        user: userId,
+        paymentStatus: PaymentStatus.PAID,
+        membershipTypeConfig: { category },
+      },
+      {
+        populate: ['membershipTypeConfig'],
+        orderBy: { endDate: 'DESC' },
+        limit: 1,
+      },
+    );
+    return memberships[0] || null;
+  }
+
+  /**
+   * Authoritative renewal end_date computation per
+   * docs/features/MEMBERSHIP_LIFECYCLE.md §2.
+   *
+   * @param previous The most recent membership in the same category (may be active or expired)
+   * @returns The new membership's end_date
+   */
+  computeRenewalEndDate(previous?: Membership | null): Date {
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    if (!previous?.endDate) {
+      return new Date(Date.now() + ONE_YEAR_MS);
+    }
+    const now = Date.now();
+    const prevEnd = previous.endDate.getTime();
+
+    // Active early-renew: previous still in term → extend from prev endDate
+    if (prevEnd >= now) {
+      return new Date(prevEnd + ONE_YEAR_MS);
+    }
+
+    // Expired: within MECA ID grace (1-45 days) → extend from prev endDate (A1)
+    const daysSinceExpiry = (now - prevEnd) / (1000 * 60 * 60 * 24);
+    if (daysSinceExpiry <= MecaIdService.GRACE_ADMIN_DAYS) {
+      return new Date(prevEnd + ONE_YEAR_MS);
+    }
+
+    // Past 45-day grace → fresh 365-day term from renewal date
+    return new Date(now + ONE_YEAR_MS);
   }
 
   /**
@@ -262,28 +326,81 @@ export class MecaIdService {
   }
 
   /**
-   * Check if a membership's MECA ID can be reactivated.
+   * Tiered reclaim eligibility for a previous membership's MECA ID.
    *
-   * @param membership The membership to check
-   * @returns Object with canReactivate flag and days since expiry
+   * Tiers:
+   *   - 'active'           : membership not yet expired
+   *   - 'soft' (1-30d)     : silent reclaim on renewal
+   *   - 'medium' (31-37d)  : silent reclaim on renewal (internal flag)
+   *   - 'admin' (38-45d)   : member is told they'll get a new ID; admin can reassign
+   *   - 'expired' (46d+)   : MECA ID permanently retired
+   *
+   * `daysRemaining` is computed against the member-facing 30-day window so
+   * any UI that surfaces this number always shows the same headline the
+   * member sees in their renewal emails.
    */
   checkReactivationEligibility(membership: Membership): {
-    canReactivate: boolean;
+    tier: 'active' | 'soft' | 'medium' | 'admin' | 'expired';
+    canSelfReclaim: boolean;
+    canAdminReclaim: boolean;
     daysSinceExpiry: number;
     daysRemaining: number;
   } {
     if (!membership.endDate) {
-      return { canReactivate: false, daysSinceExpiry: 0, daysRemaining: 0 };
+      return { tier: 'active', canSelfReclaim: false, canAdminReclaim: false, daysSinceExpiry: 0, daysRemaining: 0 };
     }
-
     const daysSinceExpiry = this.getDaysSinceExpiry(membership.endDate);
-    const daysRemaining = Math.max(0, 90 - daysSinceExpiry);
+    if (daysSinceExpiry <= 0) {
+      return { tier: 'active', canSelfReclaim: true, canAdminReclaim: true, daysSinceExpiry: 0, daysRemaining: MecaIdService.GRACE_SOFT_DAYS };
+    }
+    const daysRemainingPublic = Math.max(0, Math.floor(MecaIdService.GRACE_SOFT_DAYS - daysSinceExpiry));
+    if (daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS) {
+      return { tier: 'soft', canSelfReclaim: true, canAdminReclaim: true, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: daysRemainingPublic };
+    }
+    if (daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS) {
+      return { tier: 'medium', canSelfReclaim: true, canAdminReclaim: true, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: 0 };
+    }
+    if (daysSinceExpiry <= MecaIdService.GRACE_ADMIN_DAYS) {
+      return { tier: 'admin', canSelfReclaim: false, canAdminReclaim: true, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: 0 };
+    }
+    return { tier: 'expired', canSelfReclaim: false, canAdminReclaim: false, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: 0 };
+  }
 
-    return {
-      canReactivate: daysSinceExpiry <= 90,
-      daysSinceExpiry: Math.floor(daysSinceExpiry),
-      daysRemaining: Math.floor(daysRemaining),
-    };
+  /**
+   * Admin-only manual MECA ID reassignment (days 38+ scenarios, support cases).
+   *
+   * Reassigns a historical MECA ID to a target membership. Required when:
+   *   - Member renewed in the 38-45 day window and was issued a new ID, but
+   *     James/Mick decide to restore their original.
+   *   - Other support edge cases (data merges, etc.).
+   *
+   * Logs the operation to MecaIdHistory with the supplied reason.
+   */
+  async reassignMecaId(
+    mecaId: number,
+    targetMembershipId: string,
+    adminId: string,
+    reason: string,
+  ): Promise<void> {
+    if (!reason || !reason.trim()) {
+      throw new Error('A reason is required for admin MECA ID reassignment');
+    }
+    const em = this.em.fork();
+    const target = await em.findOneOrFail(Membership, { id: targetMembershipId });
+    const previousIdOnTarget = target.mecaId;
+    target.mecaId = mecaId;
+    target.cardCreatedAt = new Date();
+
+    const history = new MecaIdHistory();
+    history.mecaId = mecaId;
+    history.membership = target;
+    history.assignedAt = new Date();
+    history.reactivatedAt = new Date();
+    history.notes = `Admin reassignment by ${adminId}. Previous ID on this membership: ${previousIdOnTarget ?? 'none'}. Reason: ${reason.trim()}`;
+    em.persist(history);
+
+    await em.flush();
+    this.logger.log(`Admin ${adminId} reassigned MECA ID ${mecaId} → membership ${targetMembershipId}`);
   }
 
   /**
@@ -375,9 +492,10 @@ export class MecaIdService {
     mecaId: number,
     membership: Membership,
     previousEndDate: Date,
-    em: EntityManager
+    em: EntityManager,
+    tier: 'soft' | 'medium' = 'soft',
   ): Promise<void> {
-    // Update existing history record or create new one
+    const tierNote = `tier=${tier} (prev end ${previousEndDate.toISOString().split('T')[0]})`;
     const existingHistory = await em.findOne(MecaIdHistory, {
       mecaId,
       membership: { user: membership.user },
@@ -386,20 +504,16 @@ export class MecaIdService {
     if (existingHistory) {
       existingHistory.reactivatedAt = new Date();
       existingHistory.previousEndDate = previousEndDate;
-      existingHistory.notes = `Reactivated within grace period (previous end: ${previousEndDate.toISOString().split('T')[0]})`;
+      existingHistory.notes = `Reactivated within grace period — ${tierNote}`;
       await em.flush();
     } else {
-      // Create new history record for reactivation
       const history = new MecaIdHistory();
       history.mecaId = mecaId;
-      // Use the membership object directly since it's managed by the same EM
       history.membership = membership;
       history.assignedAt = new Date();
       history.reactivatedAt = new Date();
       history.previousEndDate = previousEndDate;
-      history.notes = 'Reactivated MECA ID within grace period';
-
-      // Just persist, don't flush - let the caller control when to flush
+      history.notes = `Reactivated MECA ID within grace period — ${tierNote}`;
       em.persist(history);
     }
   }

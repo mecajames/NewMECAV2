@@ -289,6 +289,23 @@ export class MembershipCompsService {
   }
 
   /**
+   * Does this user currently have ANY active free_period comp across any of
+   * their memberships? Used by the auth-layer ActiveMembershipGuard to
+   * treat comp'd members as active even if their `memberships.end_date`
+   * is in the past.
+   */
+  async hasActiveCompPeriod(userId: string): Promise<boolean> {
+    const em = this.em.fork();
+    const memberships = await em.find(Membership, { user: userId }, { fields: ['id'] });
+    if (memberships.length === 0) return false;
+    for (const m of memberships) {
+      const fp = await this.getActiveFreePeriod(m.id);
+      if (fp) return true;
+    }
+    return false;
+  }
+
+  /**
    * Returns the active free-secondary-slots comp on a master membership,
    * if any (with uses_remaining > 0). Used when adding a secondary to
    * decide if it's free.

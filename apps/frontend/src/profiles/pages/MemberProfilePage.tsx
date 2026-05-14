@@ -153,6 +153,32 @@ export default function MemberProfilePage() {
     );
   }
 
+  // Per docs/features/MEMBERSHIP_LIFECYCLE.md §4.4: expired members are
+  // treated as the general public — their public profile, gallery, etc. are
+  // hidden until renewal. Admins/staff can still view (no early return).
+  const profileExpired = (profile as any).membership_status === 'expired';
+  const viewerIsStaff = !!user && ((user as any).is_staff || (user as any).role === 'admin');
+  if (profileExpired && !viewerIsStaff && !isOwnProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center px-6">
+        <div className="text-center max-w-lg">
+          <User className="h-16 w-16 text-amber-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">Member profile not active</h2>
+          <p className="text-gray-400 mb-6">
+            This member's MECA membership is not currently active. Their public profile is
+            unavailable until they renew. Their competition history remains in the public results.
+          </p>
+          <button
+            onClick={() => navigate('/members')}
+            className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+          >
+            Back to Directory
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const coverImage = profile.profile_picture_url || profile.profile_images?.[0];
 
   return (

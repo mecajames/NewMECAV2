@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import axios from '@/lib/axios';
 import { Trophy, Award, User, MapPin, ArrowLeft, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
@@ -39,6 +40,11 @@ export default function MemberResultsPage() {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Authoritative "is target MECA ID currently active?" — populated from the
+  // public bulk-lookup endpoint. Independent of memberProfile (which the
+  // search route only returns to admins), so the expired-page-gate fires
+  // correctly for non-admin viewers too.
+  const [targetMecaActive, setTargetMecaActive] = useState<boolean | null>(null);
 
   // Check if current user has active membership
   const isActiveMember = useMemo(() => {
@@ -57,6 +63,7 @@ export default function MemberResultsPage() {
 
     fetchClasses();
     fetchMemberProfile();
+    fetchTargetMecaStatus();
   }, [mecaId]);
 
   useEffect(() => {
@@ -89,6 +96,24 @@ export default function MemberResultsPage() {
     } catch (err) {
       console.error('Error fetching member profile:', err);
       // Not a critical error - profile may not exist or be public
+    }
+  };
+
+  // Authoritative active-membership check for the target MECA ID via the
+  // public bulk endpoint — works for non-admin viewers too, unlike the
+  // admin-only profile search.
+  const fetchTargetMecaStatus = async () => {
+    if (!mecaId || mecaId === '999999' || mecaId === '0') {
+      setTargetMecaActive(false);
+      return;
+    }
+    try {
+      const r = await axios.post('/api/memberships/active-meca-ids', { mecaIds: [mecaId] });
+      const active: string[] = r.data?.activeMecaIds ?? [];
+      setTargetMecaActive(active.includes(String(mecaId)));
+    } catch {
+      // Fail closed — assume inactive on error so we err toward privacy.
+      setTargetMecaActive(false);
     }
   };
 
@@ -235,6 +260,40 @@ export default function MemberResultsPage() {
               className="inline-block px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
             >
               Log In
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Target MECA ID belongs to an expired member, or is the 999999 placeholder.
+  // Surface a friendly "not currently active" instead of the profile.
+  // See docs/features/MEMBERSHIP_LIFECYCLE.md §7.3. Uses the public
+  // active-meca-ids endpoint as the authority (independent of admin-only
+  // profile search) so non-admin viewers also get the right gate.
+  const targetIsInactive =
+    mecaId === '999999' ||
+    mecaId === '0' ||
+    targetMecaActive === false ||
+    (memberProfile && (memberProfile as any).membership_status === 'expired');
+  if (targetIsInactive) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center py-20 bg-slate-800 rounded-xl">
+            <AlertCircle className="h-20 w-20 text-amber-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-3">Member profile not active</h2>
+            <p className="text-gray-400 mb-6 max-w-lg mx-auto">
+              This MECA ID is not currently associated with an active membership.
+              Their competition history remains in the public results, but the member
+              profile page is unavailable until renewal.
+            </p>
+            <Link
+              to="/results"
+              className="inline-block px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              Back to Results
             </Link>
           </div>
         </div>

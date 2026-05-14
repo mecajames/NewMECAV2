@@ -27,6 +27,7 @@ import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CompetitionResultsService } from '../competition-results/competition-results.service';
 
 /**
  * Validates that a team name does not contain variations of the word "team".
@@ -159,6 +160,8 @@ export class MembershipsService {
     private readonly adminAuditService: AdminAuditService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly notificationsService: NotificationsService,
+    @Inject(forwardRef(() => CompetitionResultsService))
+    private readonly competitionResultsService: CompetitionResultsService,
   ) {}
 
   async findById(id: string): Promise<Membership> {
@@ -349,7 +352,7 @@ export class MembershipsService {
 
       if (expiredMembership) {
         const eligibility = this.mecaIdService.checkReactivationEligibility(expiredMembership);
-        if (eligibility.canReactivate) {
+        if (eligibility.canSelfReclaim || eligibility.canAdminReclaim) {
           return {
             allowed: true,
             reason: `Your previous ${config.category} membership can be renewed. Your MECA ID will be reactivated.`,
@@ -402,18 +405,12 @@ export class MembershipsService {
     // Use transaction for membership creation + MECA ID assignment
     const membership = await em.transactional(async (txEm) => {
       const startDate = new Date();
-      let endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 1); // 1 year membership
-
-      // If renewing within grace period, extend from original expiration date
-      const GRACE_PERIOD_DAYS = 45;
-      const prevMembForGrace = await this.mecaIdService.findPreviousMembership(data.userId, config.category);
-      if (prevMembForGrace?.endDate) {
-        const daysSinceExpiry = (Date.now() - prevMembForGrace.endDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysSinceExpiry > 0 && daysSinceExpiry <= GRACE_PERIOD_DAYS) {
-          endDate = new Date(prevMembForGrace.endDate.getTime() + 365 * 24 * 60 * 60 * 1000);
-          this.logger.log(`Grace period renewal: extending from original end date ${prevMembForGrace.endDate.toISOString()} to ${endDate.toISOString()}`);
-        }
+      // Authoritative end_date math (active early-renew, in-grace, fresh-start).
+      // See docs/features/MEMBERSHIP_LIFECYCLE.md §2.
+      const mostRecent = await this.mecaIdService.findMostRecentMembership(data.userId, config.category);
+      const endDate = this.mecaIdService.computeRenewalEndDate(mostRecent);
+      if (mostRecent?.endDate) {
+        this.logger.log(`Renewal endDate computed: prev ${mostRecent.endDate.toISOString()} → new ${endDate.toISOString()}`);
       }
 
       const newMembership = new Membership();
@@ -486,6 +483,23 @@ export class MembershipsService {
 
     this.logger.log(`Created membership ${membership.id} with MECA ID ${membership.mecaId} for user ${data.userId}`);
 
+    // If this renewal reactivated a previous MECA ID, back-fill any
+    // result rows that were stamped 999999 during the grace window.
+    // See docs/features/MEMBERSHIP_LIFECYCLE.md §7.2.
+    if (membership.mecaId) {
+      try {
+        const backfilled = await this.competitionResultsService.backFillForRenewal(
+          String(membership.mecaId),
+          String(membership.mecaId),
+        );
+        if (backfilled > 0) {
+          this.logger.log(`Renewal back-fill: ${backfilled} result row(s) restored for MECA ID ${membership.mecaId}`);
+        }
+      } catch (err) {
+        this.logger.error('Renewal back-fill failed (non-fatal)', err);
+      }
+    }
+
     // Auto-create team if needed (for retailer/manufacturer/team category or competitor with team add-on/includes team)
     const shouldCreateTeam =
       config.category === MembershipCategory.RETAIL ||
@@ -549,27 +563,19 @@ export class MembershipsService {
       throw new NotFoundException('Membership type not found');
     }
 
-    // Find previous membership for this category
-    const previousMembership = await this.mecaIdService.findPreviousMembership(userId, config.category);
+    // Most recent paid membership (active or expired) drives the date math.
+    // findPreviousMembership() only returns expired; we need the active case too
+    // so an early-renew correctly extends from the existing end_date.
+    const mostRecent = await this.mecaIdService.findMostRecentMembership(userId, config.category);
+    const previousMembership = mostRecent && mostRecent.endDate && mostRecent.endDate < new Date()
+      ? mostRecent
+      : null;
 
     const newMembership = new Membership();
     newMembership.user = em.getReference(Profile, userId);
     newMembership.membershipTypeConfig = config;
     newMembership.startDate = new Date();
-
-    // If renewing within grace period, extend from original expiration date (not today)
-    const GRACE_PERIOD_DAYS = 45;
-    if (previousMembership?.endDate) {
-      const daysSinceExpiry = (Date.now() - previousMembership.endDate.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceExpiry > 0 && daysSinceExpiry <= GRACE_PERIOD_DAYS) {
-        // Renewing within grace period: 365 days from original expiration
-        newMembership.endDate = new Date(previousMembership.endDate.getTime() + 365 * 24 * 60 * 60 * 1000);
-      } else {
-        newMembership.endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-      }
-    } else {
-      newMembership.endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-    }
+    newMembership.endDate = this.mecaIdService.computeRenewalEndDate(mostRecent);
     newMembership.amountPaid = 0; // Will be set when payment is processed
     newMembership.paymentStatus = PaymentStatus.PENDING;
 

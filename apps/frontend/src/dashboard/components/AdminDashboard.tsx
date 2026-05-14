@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth, isSuperAdmin } from '@/auth';
 import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
   ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe,
-  Shield, Wifi, ClipboardCheck, Flame
+  Shield, ShieldAlert, Wifi, ClipboardCheck, Flame, AlertCircle
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -30,6 +31,11 @@ interface AdminAction {
   action: string;
   color: string;
   navigateTo?: string;
+  /**
+   * If true, this tile is only visible to super-admins (James Ryan and
+   * Mick Makhool). Other admins/staff don't even see it on the dashboard.
+   */
+  superAdminOnly?: boolean;
 }
 
 interface AdminSection {
@@ -41,6 +47,8 @@ interface AdminSection {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const viewerIsSuperAdmin = isSuperAdmin(profile as any);
   const [currentView, setCurrentView] = useState<AdminView>('overview');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [stats, setStats] = useState({
@@ -229,6 +237,22 @@ export default function AdminDashboard() {
           navigateTo: '/admin/billing',
         },
         {
+          icon: CreditCard,
+          title: 'All Payments',
+          description: 'Unified Stripe + PayPal payment ledger — paid, failed, refunded, pending',
+          action: 'all-payments',
+          color: 'orange',
+          navigateTo: '/admin/billing/payments',
+        },
+        {
+          icon: AlertCircle,
+          title: 'Failed Payments',
+          description: 'Triage queue for declined and failed payments across all flows',
+          action: 'failed-payments',
+          color: 'red',
+          navigateTo: '/admin/billing/failed-payments',
+        },
+        {
           icon: Tags,
           title: 'Coupon Codes',
           description: 'Create and manage discount coupon codes',
@@ -251,6 +275,15 @@ export default function AdminDashboard() {
           action: 'forever-members',
           color: 'amber',
           navigateTo: '/admin/forever-members',
+        },
+        {
+          icon: ShieldAlert,
+          title: 'MECA ID Reassignment',
+          description: 'Manually reassign a historical MECA ID (38-45 day admin window, support cases)',
+          action: 'meca-id-reassign',
+          color: 'amber',
+          navigateTo: '/admin/meca-id-reassign',
+          superAdminOnly: true,
         },
       ],
     },
@@ -736,6 +769,13 @@ export default function AdminDashboard() {
         {adminSections.map((section) => {
           const isExpanded = expandedSections[section.id];
           const SectionIcon = section.icon;
+          // Hide super-admin-only tiles from non-super-admins. Tiles are
+          // additionally gated on the backend, but filtering here keeps the
+          // UI clean — other admins won't see things they can't use.
+          const visibleActions = section.actions.filter(
+            (a) => !a.superAdminOnly || viewerIsSuperAdmin,
+          );
+          if (visibleActions.length === 0) return null;
 
           return (
             <div key={section.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
@@ -748,7 +788,7 @@ export default function AdminDashboard() {
                   <SectionIcon className="h-5 w-5 text-slate-400" />
                   <div className="text-left">
                     <h3 className="text-white font-semibold">{section.title}</h3>
-                    <p className="text-slate-400 text-sm">{section.actions.length} actions</p>
+                    <p className="text-slate-400 text-sm">{visibleActions.length} actions</p>
                   </div>
                 </div>
                 {isExpanded ? (
@@ -761,7 +801,7 @@ export default function AdminDashboard() {
               {/* Section Content */}
               {isExpanded && (
                 <div className="border-t border-slate-700 bg-slate-800/50">
-                  {section.actions.map((action) => {
+                  {visibleActions.map((action) => {
                     const ActionIcon = action.icon;
                     return (
                       <button

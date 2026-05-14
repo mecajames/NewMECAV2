@@ -109,4 +109,19 @@ export class ScheduledTasksController {
     await this.requireAdmin(authHeader);
     return this.scheduledTasksService.triggerInvoiceAutoCancel();
   }
+
+  /**
+   * ONE-TIME production migration: issue a renewal token + send the public
+   * renewal email to EVERY currently-expired member, so when the hard
+   * expired-login gate goes live they all have a working renewal link in
+   * their inbox instead of being silently locked out for 24 hours.
+   *
+   * Safe to run multiple times — `issueToken()` rotates and the email send
+   * is idempotent at the member level. Admin-gated.
+   */
+  @Post('trigger-renewal-backfill')
+  async triggerRenewalBackfill(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.scheduledTasksService.triggerRenewalBackfillForExpired();
+  }
 }

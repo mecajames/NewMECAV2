@@ -384,7 +384,15 @@ export class ProfilesService {
 
   async findPublicById(id: string): Promise<Profile> {
     const em = this.em.fork();
-    const profile = await em.findOne(Profile, { id, is_public: true });
+    // Server-enforced expired-member privacy: only ACTIVE members appear on
+    // the public side. Expired members are treated as the general public —
+    // their profile data is not returned to anonymous callers, even with
+    // `is_public = true`. See docs/features/MEMBERSHIP_LIFECYCLE.md §4.4.
+    const profile = await em.findOne(Profile, {
+      id,
+      is_public: true,
+      membership_status: 'active',
+    });
     if (!profile) {
       throw new NotFoundException(`Public profile with ID ${id} not found`);
     }

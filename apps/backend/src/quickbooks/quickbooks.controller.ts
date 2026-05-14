@@ -7,15 +7,40 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
+  Inject,
 } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
 import { Response } from 'express';
 import { QuickBooksService } from './quickbooks.service';
 import { QuickBooksCompanyInfo } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 
 @Controller('api/quickbooks')
 export class QuickBooksController {
-  constructor(private readonly quickBooksService: QuickBooksService) {}
+  constructor(
+    private readonly quickBooksService: QuickBooksService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    @Inject('EntityManager')
+    private readonly em: EntityManager,
+  ) {}
+
+  private async requireAdmin(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) throw new UnauthorizedException('Invalid authorization token');
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (!isAdminUser(profile)) throw new ForbiddenException('Admin access required');
+  }
 
   /**
    * Get QuickBooks connection status
@@ -77,22 +102,24 @@ export class QuickBooksController {
   }
 
   /**
-   * Get available QuickBooks items (products/services)
-   * Used for mapping membership types to QuickBooks items
+   * Get available QuickBooks items (products/services).
+   * Was @Public() — fixed 2026-05-14: leaks internal accounting catalog.
+   * Now admin-only.
    */
-  @Public()
   @Get('items')
-  async getItems(): Promise<any[]> {
+  async getItems(@Headers('authorization') authHeader?: string): Promise<any[]> {
+    await this.requireAdmin(authHeader);
     return this.quickBooksService.getItems();
   }
 
   /**
-   * Get available QuickBooks bank accounts
-   * Used for configuring deposit accounts
+   * Get available QuickBooks bank accounts.
+   * Was @Public() — fixed 2026-05-14: leaks bank account list.
+   * Now admin-only.
    */
-  @Public()
   @Get('accounts')
-  async getAccounts(): Promise<any[]> {
+  async getAccounts(@Headers('authorization') authHeader?: string): Promise<any[]> {
+    await this.requireAdmin(authHeader);
     return this.quickBooksService.getAccounts();
   }
 }

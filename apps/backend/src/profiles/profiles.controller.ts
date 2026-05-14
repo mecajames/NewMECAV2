@@ -93,12 +93,17 @@ export class ProfilesController {
     return this.profilesService.ensureProfile(body.userId);
   }
 
-  @Public()
+  // Was @Public() — fixed 2026-05-14: anonymous callers could paginate the
+  // entire profiles table (including emails, phones, addresses). Now admin-
+  // gated. Public visitors should use GET /api/profiles/public for the
+  // sanitized + active-only directory.
   @Get()
   async listProfiles(
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
+    @Headers('authorization') authHeader?: string,
   ): Promise<Profile[]> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.findAll(page, limit);
   }
 
@@ -165,10 +170,32 @@ export class ProfilesController {
     return this.profilesService.findAdminMembers();
   }
 
-  @Public()
+  // Was @Public() — fixed 2026-05-14: anonymous callers could fetch the
+  // full Profile (including email, phone, billing) for any UUID. Now
+  // requires authentication and sanitizes PII for non-self / non-admin.
+  // Public-side rendering should use GET /public/:id (active-only).
   @Get(':id')
-  async getProfile(@Param('id') id: string): Promise<Profile> {
-    return this.profilesService.findById(id);
+  async getProfile(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader?: string,
+  ): Promise<Profile> {
+    const user = await this.requireAuthUser(authHeader);
+    const em = this.em.fork();
+    const viewer = await em.findOne(Profile, { id: user.id });
+    const target = await this.profilesService.findById(id);
+    if (target.id !== user.id && !isAdminUser(viewer)) {
+      const safe = { ...target } as any;
+      delete safe.email;
+      delete safe.phone;
+      delete safe.address;
+      delete safe.billing_street;
+      delete safe.billing_city;
+      delete safe.billing_state;
+      delete safe.billing_postal_code;
+      delete safe.billing_country;
+      return safe as Profile;
+    }
+    return target;
   }
 
   @Public()
