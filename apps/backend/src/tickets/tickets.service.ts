@@ -30,6 +30,7 @@ import { TicketRoutingService } from './ticket-routing.service';
 import { TicketStaffService } from './ticket-staff.service';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
 
 @Injectable()
 export class TicketsService {
@@ -45,6 +46,7 @@ export class TicketsService {
     private readonly staffService: TicketStaffService,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly supabaseAdmin: SupabaseAdminService,
   ) {}
 
   // ==========================================================================
@@ -77,7 +79,7 @@ export class TicketsService {
     // Lets the admin tickets dashboard default-filter out resolved/closed
     // without exposing a special enum value on the entity itself.
     if (status === 'active' as any) {
-      where.status = { $in: ['open', 'in_progress', 'awaiting_response'] };
+      where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'on_hold'] };
     } else if (status) {
       where.status = status;
     }
@@ -338,9 +340,15 @@ export class TicketsService {
     if (data.priority !== undefined) ticket.priority = data.priority as any;
     if (data.status !== undefined) {
       ticket.status = data.status as any;
-      // Auto-set resolvedAt when ticket is resolved
+      // Stamp the matching transition timestamp. Don't overwrite an existing
+      // value — keeps the first transition's timestamp when a ticket cycles
+      // through resolved → reopened → resolved (so the original SLA isn't
+      // lost). reopenTicket() clears these explicitly when needed.
       if (data.status === TicketStatus.RESOLVED && !ticket.resolvedAt) {
         ticket.resolvedAt = new Date();
+      }
+      if (data.status === TicketStatus.CLOSED && !ticket.closedAt) {
+        ticket.closedAt = new Date();
       }
     }
 
@@ -369,6 +377,16 @@ export class TicketsService {
     if (eventId !== undefined) {
       ticket.event = eventId
         ? Reference.createFromPK(Event, eventId) as any
+        : null as any;
+    }
+
+    // Department FK swap. We don't touch the legacy `department` text
+    // column when only department_id is sent — most callers operate on
+    // the FK and rely on relation population for the display name.
+    const departmentId = extractId((data as any).department_id);
+    if (departmentId !== undefined) {
+      ticket.departmentEntity = departmentId
+        ? Reference.createFromPK(TicketDepartmentEntity, departmentId) as any
         : null as any;
     }
 
@@ -422,6 +440,74 @@ export class TicketsService {
     return this.update(id, { status: TicketStatus.CLOSED });
   }
 
+  /**
+   * Lets the original reporter close their own ticket from the member-side
+   * reply form, optionally attaching a satisfaction rating (1–5) and a short
+   * feedback note. Admin-driven closes use the regular closeTicket path so
+   * they don't inadvertently overwrite a member's rating.
+   *
+   * Throws ForbiddenException if the caller isn't the reporter — we never
+   * want a third party setting "customer feedback" on someone else's ticket.
+   */
+  async closeByReporter(
+    id: string,
+    userId: string,
+    rating?: number,
+    feedback?: string,
+  ): Promise<Ticket> {
+    const em = this.em.fork();
+    const ticket = await em.findOne(Ticket, { id }, { populate: ['reporter'] });
+    if (!ticket) {
+      throw new NotFoundException(`Ticket with ID ${id} not found`);
+    }
+    if (!ticket.reporter || ticket.reporter.id !== userId) {
+      throw new ForbiddenException('Only the ticket reporter can close with feedback.');
+    }
+    if (ticket.status === TicketStatus.CLOSED) {
+      // Idempotent: re-submitting from a stale form shouldn't 400.
+      return this.findById(id);
+    }
+
+    if (rating !== undefined && rating !== null) {
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        throw new ForbiddenException('Rating must be an integer from 1 to 5.');
+      }
+      ticket.customerRating = rating;
+    }
+    if (feedback !== undefined && feedback !== null) {
+      // Trim + bound to keep this from accidentally becoming an unbounded
+      // free-text field. 2000 chars is plenty for a satisfaction note.
+      const trimmed = feedback.trim().slice(0, 2000);
+      if (trimmed.length > 0) {
+        ticket.customerFeedback = trimmed;
+      }
+    }
+
+    const oldStatus = ticket.status;
+    ticket.status = TicketStatus.CLOSED;
+    if (!ticket.closedAt) ticket.closedAt = new Date();
+    await em.flush();
+
+    const updated = await this.findById(id);
+
+    // Reuse the standard status-change email/notification path so the
+    // assigned staff knows the customer closed it out.
+    this.sendTicketStatusEmail(updated, oldStatus, TicketStatus.CLOSED).catch(err => {
+      this.logger.error(`Failed to send ticket status email: ${err.message}`);
+    });
+
+    return updated;
+  }
+
+  /**
+   * Place a ticket on hold (waiting on external party, vendor, legal,
+   * unreachable customer, etc.). Keeps the ticket in the "active" group
+   * so it stays visible to admins.
+   */
+  async holdTicket(id: string): Promise<Ticket> {
+    return this.update(id, { status: TicketStatus.ON_HOLD });
+  }
+
   async reopenTicket(id: string): Promise<Ticket> {
     const em = this.em.fork();
     const ticket = await em.findOne(Ticket, { id });
@@ -431,8 +517,11 @@ export class TicketsService {
     }
 
     // Explicit assignments — same serializedName-safe pattern as update().
+    // Clear both transition timestamps so a re-resolve/re-close stamps fresh
+    // ones (the ticket is back in the working queue from this point on).
     ticket.status = TicketStatus.OPEN;
     ticket.resolvedAt = undefined;
+    ticket.closedAt = undefined;
     await em.flush();
 
     return this.findById(id);
@@ -456,7 +545,10 @@ export class TicketsService {
     });
   }
 
-  async createComment(data: CreateTicketCommentDto, isStaffReply: boolean = false): Promise<TicketComment> {
+  async createComment(
+    data: CreateTicketCommentDto,
+    isStaffReply: boolean = false,
+  ): Promise<TicketComment> {
     const em = this.em.fork();
 
     // Verify ticket exists and get reporter info
@@ -480,10 +572,39 @@ export class TicketsService {
     const comment = em.create(TicketComment, commentData);
     await em.persistAndFlush(comment);
 
-    // Update ticket status if customer responded while awaiting response
-    if (ticket.status === TicketStatus.AWAITING_RESPONSE && !data.is_internal) {
-      ticket.status = TicketStatus.OPEN;
-      await em.flush();
+    // Auto-transition status to reflect "who has the ball" so admins can tell
+    // at a glance whether a ticket is waiting on the customer or on support.
+    // Internal staff notes never change status — they're a private discussion,
+    // not a customer-facing reply.
+    // on_hold / resolved / closed are intentionally untouched: hold is a
+    // manual admin state and a reply on a resolved/closed ticket should
+    // reopen via the explicit Reopen button, not via a comment side effect.
+    if (!data.is_internal) {
+      const isActive =
+        ticket.status === TicketStatus.OPEN ||
+        ticket.status === TicketStatus.IN_PROGRESS ||
+        ticket.status === TicketStatus.AWAITING_RESPONSE;
+
+      if (isActive) {
+        if (isStaffReply) {
+          // Staff replied → now waiting on the customer.
+          if (ticket.status !== TicketStatus.AWAITING_RESPONSE) {
+            ticket.status = TicketStatus.AWAITING_RESPONSE;
+            await em.flush();
+          }
+        } else {
+          // Customer replied → back to support's court. Pick in_progress
+          // when an assignee exists, otherwise open (so it shows up in
+          // unassigned queues for someone to grab).
+          const target = ticket.assignedTo
+            ? TicketStatus.IN_PROGRESS
+            : TicketStatus.OPEN;
+          if (ticket.status !== target) {
+            ticket.status = target;
+            await em.flush();
+          }
+        }
+      }
     }
 
     // Send reply notification email (only for non-internal comments)
@@ -544,6 +665,12 @@ export class TicketsService {
       uploader: Reference.createFromPK(Profile, data.uploader_id),
       fileName: data.file_name,
       filePath: data.file_path,
+      // bucket + storagePath let the proxy-download endpoint fetch the
+      // file from Supabase Storage without round-tripping through the
+      // public URL. Optional so older clients that don't send them still
+      // work (the runtime falls back to parsing file_path).
+      bucket: (data as any).bucket,
+      storagePath: (data as any).storage_path,
       fileSize: data.file_size,
       mimeType: data.mime_type,
     };
@@ -555,6 +682,88 @@ export class TicketsService {
     const attachment = em.create(TicketAttachment, attachmentData);
     await em.persistAndFlush(attachment);
     return attachment;
+  }
+
+  /**
+   * Resolve an attachment for a proxy download, enforcing access control.
+   * Allowed: the ticket reporter, the assigned staff member, any admin.
+   * Returns the raw bytes + content metadata so the controller can stream
+   * them back through our own domain (masking the Supabase storage host
+   * and preventing the public URL from leaking to anyone who copies it).
+   *
+   * Falls back to parsing file_path when bucket/storage_path aren't set,
+   * since the column-add migration only backfills standard URL shapes.
+   */
+  async getAttachmentForDownload(
+    ticketId: string,
+    attachmentId: string,
+    requesterId: string,
+    isAdmin: boolean,
+  ): Promise<{ data: Buffer; mimeType: string; fileName: string }> {
+    const em = this.em.fork();
+    const attachment = await em.findOne(
+      TicketAttachment,
+      { id: attachmentId, ticket: ticketId },
+      { populate: ['ticket', 'ticket.reporter', 'ticket.assignedTo'] },
+    );
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    if (!isAdmin) {
+      const reporterId = attachment.ticket.reporter?.id;
+      const assigneeId = attachment.ticket.assignedTo?.id;
+      const allowed = reporterId === requesterId || assigneeId === requesterId;
+      if (!allowed) {
+        throw new ForbiddenException('You do not have access to this attachment.');
+      }
+    }
+
+    const resolved = this.resolveAttachmentStorage(attachment);
+    if (!resolved) {
+      throw new NotFoundException('Attachment storage location is missing.');
+    }
+
+    const { data, error } = await this.supabaseAdmin
+      .getClient()
+      .storage.from(resolved.bucket)
+      .download(resolved.path);
+
+    if (error || !data) {
+      this.logger.error(
+        `Storage download failed for ${resolved.bucket}/${resolved.path}: ${error?.message}`,
+      );
+      throw new NotFoundException('Attachment file is unavailable.');
+    }
+
+    // Supabase returns a Blob in node — convert to Buffer for streaming.
+    const buffer = Buffer.from(await data.arrayBuffer());
+    return {
+      data: buffer,
+      mimeType: attachment.mimeType,
+      fileName: attachment.fileName,
+    };
+  }
+
+  /**
+   * Pull (bucket, path) from an attachment row. Prefers the dedicated
+   * columns; falls back to parsing the legacy file_path URL for rows
+   * created before the column-add migration.
+   */
+  private resolveAttachmentStorage(
+    attachment: TicketAttachment,
+  ): { bucket: string; path: string } | null {
+    if (attachment.bucket && attachment.storagePath) {
+      return { bucket: attachment.bucket, path: attachment.storagePath };
+    }
+    if (!attachment.filePath) return null;
+    // Standard Supabase URL shape:
+    //   https://<host>/storage/v1/object/(public|sign)/<bucket>/<path>[?token=...]
+    const match = attachment.filePath.match(
+      /\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/([^?]+)/,
+    );
+    if (!match) return null;
+    return { bucket: match[1], path: match[2] };
   }
 
   async deleteAttachment(id: string): Promise<void> {
@@ -580,6 +789,7 @@ export class TicketsService {
       open,
       inProgress,
       awaitingResponse,
+      onHold,
       resolved,
       closed,
       lowPriority,
@@ -591,6 +801,7 @@ export class TicketsService {
       em.count(Ticket, { status: TicketStatus.OPEN }),
       em.count(Ticket, { status: TicketStatus.IN_PROGRESS }),
       em.count(Ticket, { status: TicketStatus.AWAITING_RESPONSE }),
+      em.count(Ticket, { status: TicketStatus.ON_HOLD }),
       em.count(Ticket, { status: TicketStatus.RESOLVED }),
       em.count(Ticket, { status: TicketStatus.CLOSED }),
       em.count(Ticket, { priority: TicketPriority.LOW }),
@@ -634,6 +845,7 @@ export class TicketsService {
       open,
       in_progress: inProgress,
       awaiting_response: awaitingResponse,
+      on_hold: onHold,
       resolved,
       closed,
       by_priority: {
@@ -646,6 +858,133 @@ export class TicketsService {
       by_department: byDepartment,
       average_resolution_time_hours: averageResolutionTimeHours,
     };
+  }
+
+  /**
+   * Aggregate customer-rating data per support agent for the admin Staff →
+   * Ratings view. Counts and averages credit the assigned_to_id at close
+   * time (which is who the customer's rating implicitly evaluates). Tickets
+   * with no assignee or no rating are excluded entirely.
+   *
+   * Returns one row per agent with up to `recentLimit` of their most recent
+   * rated tickets inlined for the drill-down panel. Recent ratings are
+   * fetched in a second query so we don't pay JSON-aggregation gymnastics
+   * inside Postgres just for the UI.
+   */
+  async getStaffRatings(recentLimit = 5): Promise<Array<{
+    profile_id: string;
+    full_name: string;
+    email: string;
+    rating_count: number;
+    average_rating: number;
+    five_star: number;
+    one_star: number;
+    recent: Array<{
+      ticket_id: string;
+      ticket_number: string;
+      title: string;
+      rating: number;
+      feedback: string | null;
+      closed_at: string | null;
+    }>;
+  }>> {
+    const em = this.em.fork();
+
+    // Per-agent rollup. AVG returns numeric — coerce to float so JSON has a
+    // plain number, not the pg numeric "12.50" string. COUNT FILTER is
+    // standard SQL and avoids a CASE WHEN.
+    const rows: Array<{
+      profile_id: string;
+      first_name: string | null;
+      last_name: string | null;
+      email: string;
+      rating_count: string;
+      average_rating: string;
+      five_star: string;
+      one_star: string;
+    }> = await em.getConnection().execute(`
+      SELECT
+        p.id AS profile_id,
+        p.first_name,
+        p.last_name,
+        p.email,
+        COUNT(t.customer_rating) AS rating_count,
+        AVG(t.customer_rating)::float8 AS average_rating,
+        COUNT(*) FILTER (WHERE t.customer_rating = 5) AS five_star,
+        COUNT(*) FILTER (WHERE t.customer_rating = 1) AS one_star
+      FROM tickets t
+      JOIN profiles p ON p.id = t.assigned_to_id
+      WHERE t.customer_rating IS NOT NULL
+      GROUP BY p.id, p.first_name, p.last_name, p.email
+      ORDER BY AVG(t.customer_rating) DESC, COUNT(t.customer_rating) DESC
+    `);
+
+    if (rows.length === 0) return [];
+
+    const profileIds = rows.map(r => r.profile_id);
+
+    // Pull recent rated tickets per agent. We over-fetch then trim per
+    // agent in JS — keeps the SQL simple (no LATERAL or window function)
+    // and the result set stays small in practice. Build IN-clause
+    // placeholders by hand because MikroORM's raw-SQL `?` substitution
+    // expects scalar params (see project memory note).
+    const inPlaceholders = profileIds.map(() => '?').join(',');
+    const recents: Array<{
+      assigned_to_id: string;
+      ticket_id: string;
+      ticket_number: string;
+      title: string;
+      rating: number;
+      feedback: string | null;
+      closed_at: Date | null;
+    }> = await em.getConnection().execute(
+      `
+      SELECT
+        t.assigned_to_id,
+        t.id AS ticket_id,
+        t.ticket_number,
+        t.title,
+        t.customer_rating AS rating,
+        t.customer_feedback AS feedback,
+        t.closed_at
+      FROM tickets t
+      WHERE t.customer_rating IS NOT NULL
+        AND t.assigned_to_id IN (${inPlaceholders})
+      ORDER BY t.closed_at DESC NULLS LAST, t.updated_at DESC
+      `,
+      profileIds,
+    );
+
+    const recentByAgent = new Map<string, typeof recents>();
+    for (const r of recents) {
+      const list = recentByAgent.get(r.assigned_to_id) ?? [];
+      if (list.length < recentLimit) {
+        list.push(r);
+        recentByAgent.set(r.assigned_to_id, list);
+      }
+    }
+
+    return rows.map(r => {
+      const fullName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email;
+      const list = recentByAgent.get(r.profile_id) ?? [];
+      return {
+        profile_id: r.profile_id,
+        full_name: fullName,
+        email: r.email,
+        rating_count: Number(r.rating_count),
+        average_rating: Number(r.average_rating),
+        five_star: Number(r.five_star),
+        one_star: Number(r.one_star),
+        recent: list.map(rec => ({
+          ticket_id: rec.ticket_id,
+          ticket_number: rec.ticket_number,
+          title: rec.title,
+          rating: rec.rating,
+          feedback: rec.feedback,
+          closed_at: rec.closed_at ? new Date(rec.closed_at).toISOString() : null,
+        })),
+      };
+    });
   }
 
   async getMyTickets(userId: string): Promise<Ticket[]> {
@@ -696,7 +1035,7 @@ export class TicketsService {
 
     // Same synthetic 'active' status group as in findAll — see comment there.
     if (status === 'active' as any) {
-      where.status = { $in: ['open', 'in_progress', 'awaiting_response'] };
+      where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'on_hold'] };
     } else if (status) {
       where.status = status;
     }

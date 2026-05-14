@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Trophy, TrendingUp, Filter, Medal } from 'lucide-react';
 import { competitionResultsApi } from '@/competition-results';
+import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useLeaderboardSEO } from '@/shared/seo';
 import { BannerDisplay, useBanners } from '@/banners';
@@ -30,7 +31,10 @@ export default function LeaderboardPage() {
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
   const [rankBy, setRankBy] = useState<RankByType>('points');
   const [classes, setClasses] = useState<string[]>([]);
-  const [_formats, setFormats] = useState<string[]>([]);
+  // Available formats for the selected season. Replaces the previously
+  // hardcoded SPL/SQL buttons so the chip list adapts to whatever data
+  // actually exists in the season.
+  const [availableFormats, setAvailableFormats] = useState<{ format: string; resultCount: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [mostEventsAttended, setMostEventsAttended] = useState<LeaderboardEntry[]>([]);
   const [highestSPLScores, setHighestSPLScores] = useState<any[]>([]);
@@ -40,6 +44,22 @@ export default function LeaderboardPage() {
   useEffect(() => {
     fetchLeaderboard();
   }, [selectedSeasonId, selectedClass, selectedFormat, rankBy]);
+
+  // Refresh available formats whenever the season changes — keeps the
+  // chip row pruned to formats with actual data for that season.
+  useEffect(() => {
+    let cancelled = false;
+    competitionResultsApi
+      .getAvailableFormats(selectedSeasonId || undefined)
+      .then((formats) => {
+        if (cancelled) return;
+        setAvailableFormats(formats);
+      })
+      .catch((err) => console.error('Error fetching available formats:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSeasonId]);
 
   const fetchLeaderboard = async () => {
     setLoading(true);
@@ -223,36 +243,35 @@ export default function LeaderboardPage() {
             </div>
           </div>
 
-          {/* Format Toggle Buttons */}
-          <div className="flex items-center gap-4">
+          {/* Format Toggle Buttons — data-driven so a chip never points at
+              a format with zero results. Each chip shows its row count so
+              the user can tell which formats are most active this season. */}
+          <div className="flex items-center gap-4 flex-wrap">
             <span className="font-medium text-gray-300">Format:</span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setSelectedFormat(selectedFormat === 'SPL' ? 'all' : 'SPL');
-                  setSelectedClass('all');
-                }}
-                className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                  selectedFormat === 'SPL'
-                    ? 'bg-orange-500 text-white shadow-lg'
-                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                }`}
-              >
-                SPL
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedFormat(selectedFormat === 'SQL' ? 'all' : 'SQL');
-                  setSelectedClass('all');
-                }}
-                className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                  selectedFormat === 'SQL'
-                    ? 'bg-orange-500 text-white shadow-lg'
-                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                }`}
-              >
-                SQL
-              </button>
+            <div className="flex gap-2 flex-wrap">
+              {availableFormats.length === 0 ? (
+                <span className="text-sm text-gray-500 italic">
+                  No results for this season
+                </span>
+              ) : (
+                availableFormats.map((f) => (
+                  <button
+                    key={f.format}
+                    onClick={() => {
+                      setSelectedFormat(selectedFormat === f.format ? 'all' : f.format);
+                      setSelectedClass('all');
+                    }}
+                    className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                      selectedFormat === f.format
+                        ? 'bg-orange-500 text-white shadow-lg'
+                        : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {f.format}
+                    <span className="ml-1 text-xs opacity-70">({f.resultCount})</span>
+                  </button>
+                ))
+              )}
             </div>
             {selectedFormat !== 'all' && (
               <button
@@ -298,7 +317,7 @@ export default function LeaderboardPage() {
                           </div>
                           <div className="text-gray-400 text-sm font-semibold mb-1">2nd</div>
                           <h3 className="text-xl font-bold text-white mb-2">{entry.competitor_name}</h3>
-                          <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
+                          <div className="mb-3"><MecaIdLink mecaId={entry.meca_id} displayText={mecaDisplay.text} className={`text-sm font-semibold ${mecaDisplay.color}`} /></div>
                           <div className="text-3xl font-bold text-gray-400">
                             {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
                           </div>
@@ -323,7 +342,7 @@ export default function LeaderboardPage() {
                           </div>
                           <div className="text-yellow-500 text-sm font-semibold mb-1">1st</div>
                           <h3 className="text-2xl font-bold text-white mb-2">{entry.competitor_name}</h3>
-                          <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
+                          <div className="mb-3"><MecaIdLink mecaId={entry.meca_id} displayText={mecaDisplay.text} className={`text-sm font-semibold ${mecaDisplay.color}`} /></div>
                           <div className="text-4xl font-bold text-yellow-500">
                             {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
                           </div>
@@ -348,7 +367,7 @@ export default function LeaderboardPage() {
                           </div>
                           <div className="text-orange-500 text-sm font-semibold mb-1">3rd</div>
                           <h3 className="text-xl font-bold text-white mb-2">{entry.competitor_name}</h3>
-                          <div className={`text-sm font-semibold ${mecaDisplay.color} mb-3`}>{mecaDisplay.text}</div>
+                          <div className="mb-3"><MecaIdLink mecaId={entry.meca_id} displayText={mecaDisplay.text} className={`text-sm font-semibold ${mecaDisplay.color}`} /></div>
                           <div className="text-3xl font-bold text-orange-500">
                             {rankBy === 'points' ? entry.total_points : entry.best_score.toFixed(2)}
                           </div>
@@ -402,7 +421,7 @@ export default function LeaderboardPage() {
                                 <div className="font-semibold text-white text-lg">{entry.competitor_name}</div>
                               </td>
                               <td className="px-6 py-4">
-                                <div className={`font-semibold ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                                <MecaIdLink mecaId={entry.meca_id} displayText={mecaDisplay.text} className={`font-semibold ${mecaDisplay.color}`} />
                               </td>
                               <td className="px-6 py-4 text-center">
                                 <div className="flex items-center justify-center gap-1 text-gray-400">
@@ -471,7 +490,7 @@ export default function LeaderboardPage() {
                               <div className="font-semibold text-white">{entry.competitor_name}</div>
                             </td>
                             <td className="px-6 py-4">
-                              <div className={`font-semibold ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                              <MecaIdLink mecaId={entry.meca_id} displayText={mecaDisplay.text} className={`font-semibold ${mecaDisplay.color}`} />
                             </td>
                             <td className="px-6 py-4 text-center">
                               <div className="flex items-center justify-center gap-1 text-gray-400">
@@ -530,7 +549,7 @@ export default function LeaderboardPage() {
                               </div>
                               <div>
                                 <div className="font-semibold text-white">{entry.competitor_name}</div>
-                                <div className={`text-sm ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                                <MecaIdLink mecaId={entry.meca_id} displayText={mecaDisplay.text} className={`text-sm ${mecaDisplay.color}`} />
                               </div>
                             </div>
                             <div className="text-right">
@@ -568,7 +587,7 @@ export default function LeaderboardPage() {
                               </div>
                               <div>
                                 <div className="font-semibold text-white">{entry.competitor_name}</div>
-                                <div className={`text-sm ${mecaDisplay.color}`}>{mecaDisplay.text}</div>
+                                <MecaIdLink mecaId={entry.meca_id} displayText={mecaDisplay.text} className={`text-sm ${mecaDisplay.color}`} />
                                 <div className="text-xs text-gray-400">{entry.competition_class}</div>
                               </div>
                             </div>

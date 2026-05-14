@@ -20,5 +20,7 @@ export { CreateTicketForm } from './components/CreateTicketForm';
 export { TicketManagement } from './components/admin/TicketManagement';
 export { TicketDepartmentManagement } from './components/admin/TicketDepartmentManagement';
 export { TicketStaffManagement } from './components/admin/TicketStaffManagement';
+export { TicketStaffArea } from './components/admin/TicketStaffArea';
+export { TicketStaffRatings } from './components/admin/TicketStaffRatings';
 export { TicketRoutingRules } from './components/admin/TicketRoutingRules';
 export { TicketSystemSettings } from './components/admin/TicketSystemSettings';

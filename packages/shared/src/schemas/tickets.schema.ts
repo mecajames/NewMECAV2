@@ -26,12 +26,17 @@ export const CreateTicketSchema = z.object({
 });
 export type CreateTicketDto = z.infer<typeof CreateTicketSchema>;
 
-// Update Ticket DTO
+// Update Ticket DTO.
+// department_id targets the new TicketDepartment FK (the modern routing
+// model). The legacy `department` enum is still accepted for backward
+// compat — admins editing via routing rules or the legacy form path still
+// flow through that field.
 export const UpdateTicketSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().min(1).optional(),
   category: TicketCategorySchema.optional(),
   department: TicketDepartmentSchema.optional(),
+  department_id: z.string().uuid().optional().nullable(),
   priority: TicketPrioritySchema.optional(),
   status: TicketStatusSchema.optional(),
   assigned_to_id: z.string().uuid().optional().nullable(),
@@ -135,13 +140,19 @@ export type TicketCommentWithAuthor = z.infer<typeof TicketCommentWithAuthorSche
 // Ticket Attachment Schemas
 // =============================================================================
 
-// Create Attachment DTO
+// Create Attachment DTO.
+// bucket + storage_path were added alongside the proxy-download endpoint
+// so the backend can fetch the file from Supabase Storage without keeping
+// the public URL as the canonical reference. Both are optional for backward
+// compat with older clients that only know about file_path.
 export const CreateTicketAttachmentSchema = z.object({
   ticket_id: z.string().uuid(),
   comment_id: z.string().uuid().optional().nullable(),
   uploader_id: z.string().uuid(),
   file_name: z.string().min(1),
   file_path: z.string().min(1),
+  bucket: z.string().min(1).optional(),
+  storage_path: z.string().min(1).optional(),
   file_size: z.number().positive(),
   mime_type: z.string().min(1),
 });

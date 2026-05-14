@@ -19,6 +19,7 @@ import { TicketDepartmentsService } from './ticket-departments.service';
 import { TicketStaffService } from './ticket-staff.service';
 import { TicketRoutingService } from './ticket-routing.service';
 import { TicketSettingsService } from './ticket-settings.service';
+import { TicketsService } from './tickets.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
@@ -39,6 +40,7 @@ export class TicketAdminController {
     private readonly staffService: TicketStaffService,
     private readonly routingService: TicketRoutingService,
     private readonly settingsService: TicketSettingsService,
+    private readonly ticketsService: TicketsService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -131,6 +133,19 @@ export class TicketAdminController {
   ) {
     await this.requireAdmin(authHeader);
     return this.staffService.findAll(includeInactive === 'true');
+  }
+
+  /**
+   * Aggregate customer-rating data per support agent. Declared before the
+   * `staff/:id` route so it isn't shadowed (NestJS matches routes in
+   * declaration order; both are single-segment under `staff/`).
+   */
+  @Get('staff/ratings')
+  async getStaffRatings(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.ticketsService.getStaffRatings();
   }
 
   @Get('staff/:id')

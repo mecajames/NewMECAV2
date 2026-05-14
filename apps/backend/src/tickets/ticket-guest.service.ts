@@ -265,7 +265,7 @@ export class TicketGuestService {
     const ticket = await em.findOne(Ticket, {
       accessToken,
       isGuestTicket: true,
-    });
+    }, { populate: ['assignedTo'] });
 
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
@@ -284,9 +284,18 @@ export class TicketGuestService {
       isInternal: false,
     } as any);
 
-    // Update ticket status if it was resolved/waiting
-    if (ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.AWAITING_RESPONSE) {
-      ticket.status = TicketStatus.OPEN;
+    // Guest reply = customer reply → ball is back in support's court.
+    // Mirror the authenticated createComment behavior: pick in_progress if
+    // there's an assignee, otherwise open. Resolved tickets also reopen so
+    // the guest's follow-up isn't ignored. on_hold is intentionally not
+    // touched — it's a manual admin state.
+    if (
+      ticket.status === TicketStatus.RESOLVED ||
+      ticket.status === TicketStatus.AWAITING_RESPONSE
+    ) {
+      ticket.status = ticket.assignedTo
+        ? TicketStatus.IN_PROGRESS
+        : TicketStatus.OPEN;
     }
 
     await em.persistAndFlush([comment, ticket]);

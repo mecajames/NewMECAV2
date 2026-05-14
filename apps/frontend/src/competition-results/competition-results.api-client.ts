@@ -324,6 +324,23 @@ export const competitionResultsApi = {
   /**
    * Get list of classes with results
    */
+  /**
+   * Lightweight list of formats that have results for the given season.
+   * Used to render the dynamic format chips on the Standings + Top 10
+   * pages so we never show a chip for a format with no data.
+   */
+  getAvailableFormats: async (
+    seasonId?: string,
+  ): Promise<{ format: string; resultCount: number }[]> => {
+    const queryParams = new URLSearchParams();
+    if (seasonId) queryParams.set('seasonId', seasonId);
+    const url = queryParams.toString()
+      ? `/api/standings/available-formats?${queryParams}`
+      : '/api/standings/available-formats';
+    const response = await axios.get(url);
+    return response.data;
+  },
+
   getClassesWithResults: async (
     format?: string,
     seasonId?: string

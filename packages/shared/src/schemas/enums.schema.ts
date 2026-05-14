@@ -257,6 +257,10 @@ export enum TicketStatus {
   OPEN = 'open',
   IN_PROGRESS = 'in_progress',
   AWAITING_RESPONSE = 'awaiting_response',
+  // ON_HOLD = ticket is paused intentionally — waiting on an external
+  // party (vendor, legal, escalation, etc.) or the customer is
+  // unreachable. Still in the "active" filter group so admins keep eyes on it.
+  ON_HOLD = 'on_hold',
   RESOLVED = 'resolved',
   CLOSED = 'closed',
 }

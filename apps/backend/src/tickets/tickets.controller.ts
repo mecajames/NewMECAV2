@@ -10,9 +10,11 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Res,
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { UserRole } from '@newmeca/shared';
 import { TicketsService } from './tickets.service';
@@ -278,6 +280,40 @@ export class TicketsController {
     return this.ticketsService.closeTicket(id);
   }
 
+  /**
+   * Reporter-driven close from the member reply form, with optional 1–5
+   * star rating + short feedback note. The service enforces reporter
+   * identity — we don't gate at the controller level so the 403 message
+   * comes from one place.
+   */
+  @Post(':id/close-by-reporter')
+  async closeByReporter(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { rating?: number | null; feedback?: string | null },
+  ): Promise<Ticket> {
+    const user = await this.requireAuth(authHeader);
+    return this.ticketsService.closeByReporter(
+      id,
+      user.id,
+      body?.rating ?? undefined,
+      body?.feedback ?? undefined,
+    );
+  }
+
+  /**
+   * Place a ticket on hold (paused while waiting on an external party).
+   * Admin/staff only. Kept in the active filter group so it stays visible.
+   */
+  @Post(':id/hold')
+  async holdTicket(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<Ticket> {
+    await this.requireAdmin(authHeader);
+    return this.ticketsService.holdTicket(id);
+  }
+
   @Post(':id/reopen')
   async reopenTicket(
     @Headers('authorization') authHeader: string,
@@ -311,11 +347,20 @@ export class TicketsController {
     @Param('ticketId') ticketId: string,
     @Body() data: Omit<CreateTicketCommentDto, 'ticket_id'>,
   ): Promise<TicketComment> {
-    await this.requireAuth(authHeader);
-    return this.ticketsService.createComment({
-      ...data,
-      ticket_id: ticketId,
-    });
+    const user = await this.requireAuth(authHeader);
+    // Resolve admin/staff flag so the service can auto-transition the ticket
+    // to awaiting_response when staff replies (= waiting on customer) and
+    // back to in_progress when the customer replies (= waiting on support).
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    const isStaffReply = isAdminUser(profile);
+    return this.ticketsService.createComment(
+      {
+        ...data,
+        ticket_id: ticketId,
+      },
+      isStaffReply,
+    );
   }
 
   @Put('comments/:commentId')
@@ -349,6 +394,52 @@ export class TicketsController {
   ): Promise<TicketAttachment[]> {
     await this.requireAuth(authHeader);
     return this.ticketsService.findAttachmentsByTicket(ticketId);
+  }
+
+  /**
+   * Proxy a ticket attachment through our own domain. Hides the Supabase
+   * Storage hostname AND enforces per-ticket access control (the underlying
+   * bucket is public, so the public URL itself is "anyone with the link
+   * can view"). Allowed for reporter, assignee, or admins; everyone else
+   * gets 403.
+   *
+   * Uses Express @Res directly so we can set Content-Type +
+   * Content-Disposition: inline + private cache headers without fighting
+   * the Nest serializer.
+   */
+  @Get(':ticketId/attachments/:attachmentId/download')
+  async downloadAttachment(
+    @Headers('authorization') authHeader: string,
+    @Param('ticketId') ticketId: string,
+    @Param('attachmentId') attachmentId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const user = await this.requireAuth(authHeader);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    const isAdmin = isAdminUser(profile);
+
+    const { data, mimeType, fileName } =
+      await this.ticketsService.getAttachmentForDownload(
+        ticketId,
+        attachmentId,
+        user.id,
+        isAdmin,
+      );
+
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    // inline so the browser previews images instead of forcing a download;
+    // filename* lets non-ASCII names round-trip safely.
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
+    // Private cache: the response is per-user (it carries auth), so no CDN
+    // should ever store it. The short max-age keeps repeat-render thrash
+    // off the storage backend.
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(data);
   }
 
   @Post(':ticketId/attachments')

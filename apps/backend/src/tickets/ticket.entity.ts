@@ -66,6 +66,17 @@ export class Ticket {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'resolved_at', serializedName: 'resolved_at' })
   resolvedAt?: Date;
 
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'closed_at', serializedName: 'closed_at' })
+  closedAt?: Date;
+
+  // Reporter-only fields captured when the member closes their own ticket
+  // via "Close & rate". Optional — admin-closed tickets leave these null.
+  @Property({ type: 'smallint', nullable: true, fieldName: 'customer_rating', serializedName: 'customer_rating' })
+  customerRating?: number;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'customer_feedback', serializedName: 'customer_feedback' })
+  customerFeedback?: string;
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
 
@@ -104,6 +115,9 @@ export class Ticket {
       access_token: this.accessToken || null,
       is_guest_ticket: this.isGuestTicket,
       resolved_at: this.resolvedAt?.toISOString() || null,
+      closed_at: this.closedAt?.toISOString() || null,
+      customer_rating: this.customerRating ?? null,
+      customer_feedback: this.customerFeedback ?? null,
       created_at: this.createdAt.toISOString(),
       updated_at: this.updatedAt.toISOString(),
     };

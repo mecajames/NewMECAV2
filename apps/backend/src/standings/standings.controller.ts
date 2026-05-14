@@ -126,6 +126,18 @@ export class StandingsController {
   }
 
   /**
+   * Lightweight: list the formats that actually have results in a season.
+   * Powers the data-driven format chips on the Standings + Top 10 pages so
+   * we don't show chips for formats with zero data (SSI/MK historically).
+   * GET /api/standings/available-formats?seasonId=...
+   */
+  @Public()
+  @Get('available-formats')
+  async getAvailableFormats(@Query('seasonId') seasonId?: string) {
+    return this.standingsService.getFormatsWithResults(seasonId);
+  }
+
+  /**
    * Get competitor statistics
    * GET /api/standings/competitor/:mecaId
    */
