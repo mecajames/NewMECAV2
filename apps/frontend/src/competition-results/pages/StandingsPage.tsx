@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Trophy, Medal, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, Users } from 'lucide-react';
 import { competitionResultsApi, StandingsEntry, ClassStandingsEntry } from '@/competition-results';
 import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
+import { MecaIdActiveProvider } from '@/competition-results/components/MecaIdActiveContext';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useStandingsSEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
@@ -228,6 +229,7 @@ export default function StandingsPage() {
   };
 
   return (
+    <MecaIdActiveProvider mecaIds={standings.map((s: any) => s.meca_id ?? s.mecaId)}>
     <>
       <SEOHead {...seoProps} />
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
@@ -521,5 +523,6 @@ export default function StandingsPage() {
         </div>
       </div>
     </>
+    </MecaIdActiveProvider>
   );
 }

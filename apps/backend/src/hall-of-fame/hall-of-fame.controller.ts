@@ -118,4 +118,81 @@ export class HallOfFameController {
     await this.requireAdminOrEventDirector(authHeader);
     return this.hallOfFameService.delete(id);
   }
+
+  // ===== Comments =====
+
+  @Public()
+  @Get(':id/comments')
+  async listComments(@Param('id') id: string) {
+    return this.hallOfFameService.listComments(id);
+  }
+
+  @Post(':id/comments')
+  @HttpCode(HttpStatus.CREATED)
+  async createComment(
+    @Param('id') id: string,
+    @Body() body: { body?: string },
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const { profile } = await this.requireActiveMember(authHeader);
+    const comment = await this.hallOfFameService.createComment(id, profile.id, body?.body ?? '');
+    return {
+      id: comment.id,
+      body: comment.body,
+      created_at: comment.createdAt,
+      updated_at: comment.updatedAt,
+      author: {
+        id: profile.id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        full_name: profile.full_name,
+        avatar_url: profile.avatar_url,
+        meca_id: profile.meca_id,
+      },
+    };
+  }
+
+  @Delete(':id/comments/:commentId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteComment(
+    @Param('commentId') commentId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    const isAdmin = isAdminUser(profile);
+    return this.hallOfFameService.deleteComment(commentId, user.id, isAdmin);
+  }
+
+  private async requireActiveMember(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('You must be signed in to comment');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (!profile) {
+      throw new ForbiddenException('Profile not found');
+    }
+    if (isAdminUser(profile)) {
+      return { user, profile };
+    }
+    const status = (profile.membership_status || '').toLowerCase();
+    if (status !== 'active') {
+      throw new ForbiddenException('An active MECA membership is required to comment');
+    }
+    return { user, profile };
+  }
 }

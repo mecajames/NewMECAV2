@@ -4,6 +4,7 @@ import { MembershipsService } from '../memberships/memberships.service';
 import { MasterSecondaryService } from '../memberships/master-secondary.service';
 import { MecaIdService } from '../memberships/meca-id.service';
 import { MembershipSyncService } from '../memberships/membership-sync.service';
+import { MembershipRenewalTokenService } from '../memberships/membership-renewal-token.service';
 import { EventRegistrationsService } from '../event-registrations/event-registrations.service';
 import { OrdersService } from '../orders/orders.service';
 import { InvoicesService } from '../invoices/invoices.service';
@@ -52,6 +53,7 @@ export class PaymentFulfillmentService {
     private readonly shopService: ShopService,
     private readonly worldFinalsService: WorldFinalsService,
     private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly renewalTokenService: MembershipRenewalTokenService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -135,6 +137,19 @@ export class PaymentFulfillmentService {
       });
 
       this.logger.log(`Membership created successfully for: ${email}`);
+
+      // Consume the renewal token if this fulfillment came from the public
+      // /renew/:token flow. Done after success so a payment failure (which
+      // doesn't reach this method) doesn't burn the token.
+      const renewalTokenId = metadata.renewalTokenId;
+      if (renewalTokenId) {
+        try {
+          await this.renewalTokenService.markUsed(renewalTokenId);
+          this.logger.log(`Renewal token ${renewalTokenId} marked used`);
+        } catch (err) {
+          this.logger.error(`Failed to mark renewal token used: ${err}`);
+        }
+      }
 
       // Notify admins of new membership (async, non-blocking)
       this.adminNotificationsService.notifyNewMembership(membership, amountPaid).catch((err) => {

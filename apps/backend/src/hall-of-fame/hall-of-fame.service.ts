@@ -1,6 +1,8 @@
-import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { HallOfFameInductee } from './hall-of-fame.entity';
+import { HallOfFameComment } from './hall-of-fame-comment.entity';
+import { Profile } from '../profiles/profiles.entity';
 
 @Injectable()
 export class HallOfFameService {
@@ -90,5 +92,81 @@ export class HallOfFameService {
     }
     await em.removeAndFlush(inductee);
     this.logger.log(`Deleted Hall of Fame inductee: ${inductee.name}`);
+  }
+
+  // ===== Comments =====
+
+  async listComments(inducteeId: string): Promise<any[]> {
+    const em = this.em.fork();
+    const inductee = await em.findOne(HallOfFameInductee, { id: inducteeId });
+    if (!inductee) {
+      throw new NotFoundException('Inductee not found');
+    }
+    const rows = await em.getConnection().execute(
+      `SELECT c.id, c.body, c.created_at, c.updated_at, c.user_id,
+              p.first_name, p.last_name, p.full_name, p.avatar_url, p.meca_id
+         FROM public.hall_of_fame_comments c
+         JOIN public.profiles p ON p.id = c.user_id
+        WHERE c.inductee_id = ? AND c.is_hidden = false
+        ORDER BY c.created_at ASC`,
+      [inducteeId],
+    );
+    return rows.map((r: any) => ({
+      id: r.id,
+      body: r.body,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      author: {
+        id: r.user_id,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        full_name: r.full_name,
+        avatar_url: r.avatar_url,
+        meca_id: r.meca_id,
+      },
+    }));
+  }
+
+  async createComment(inducteeId: string, userId: string, body: string): Promise<HallOfFameComment> {
+    const trimmed = (body || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Comment cannot be empty');
+    }
+    if (trimmed.length > 2000) {
+      throw new BadRequestException('Comment is too long (max 2000 characters)');
+    }
+    const em = this.em.fork();
+    const inductee = await em.findOne(HallOfFameInductee, { id: inducteeId });
+    if (!inductee) {
+      throw new NotFoundException('Inductee not found');
+    }
+    const profile = await em.findOne(Profile, { id: userId });
+    if (!profile) {
+      throw new NotFoundException('Profile not found');
+    }
+    const comment = new HallOfFameComment();
+    comment.inductee = inductee;
+    comment.user = profile;
+    comment.body = trimmed;
+    await em.persistAndFlush(comment);
+    this.logger.log(`HoF comment added on ${inductee.name} by ${profile.email ?? userId}`);
+    return comment;
+  }
+
+  async deleteComment(
+    commentId: string,
+    actingUserId: string,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const em = this.em.fork();
+    const comment = await em.findOne(HallOfFameComment, { id: commentId }, { populate: ['user'] });
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+    if (!isAdmin && comment.user.id !== actingUserId) {
+      throw new ForbiddenException('You can only delete your own comments');
+    }
+    await em.removeAndFlush(comment);
+    this.logger.log(`HoF comment ${commentId} deleted by ${actingUserId} (admin=${isAdmin})`);
   }
 }

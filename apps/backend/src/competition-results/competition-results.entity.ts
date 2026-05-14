@@ -102,4 +102,14 @@ export class CompetitionResult {
 
   @Property({ type: 'text', nullable: true, fieldName: 'modification_reason', serializedName: 'modification_reason' })
   modificationReason?: string;
+
+  // Set when the ED-entered MECA ID belonged to a member whose membership was
+  // expired (within the 45-day MECA ID grace window). `mecaId` is stamped as
+  // '999999' on the public row and the original is kept here for back-fill on
+  // renewal. Not exposed publicly.
+  @Property({ type: 'text', nullable: true, fieldName: 'original_meca_id', hidden: true })
+  originalMecaId?: string;
+
+  @Property({ type: 'boolean', default: false, fieldName: 'pending_back_fill', hidden: true })
+  pendingBackFill: boolean = false;
 }

@@ -83,33 +83,51 @@ export class AuditController {
     });
   }
 
-  @Public()
+  // Audit-log endpoints — fixed 2026-05-14: previously @Public(). Audit
+  // records reveal admin actions, score modifications, and event-management
+  // operations. These belong to admins only.
   @Get('event/:eventId/sessions')
-  async getEventSessions(@Param('eventId') eventId: string) {
+  async getEventSessions(
+    @Param('eventId') eventId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.auditService.getEventSessions(eventId);
   }
 
-  @Public()
   @Get('event/:eventId/modifications')
-  async getEventModifications(@Param('eventId') eventId: string) {
+  async getEventModifications(
+    @Param('eventId') eventId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.auditService.getEventModifications(eventId);
   }
 
-  @Public()
   @Get('event/:eventId/deletions')
-  async getEventDeletions(@Param('eventId') eventId: string) {
+  async getEventDeletions(
+    @Param('eventId') eventId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.auditService.getEventDeletions(eventId);
   }
 
-  @Public()
   @Get('event/:eventId/all')
-  async getEventAllLogs(@Param('eventId') eventId: string) {
+  async getEventAllLogs(
+    @Param('eventId') eventId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.auditService.getEventAllLogs(eventId);
   }
 
-  @Public()
   @Get('log/:logId')
-  async getAuditLogById(@Param('logId') logId: string) {
+  async getAuditLogById(
+    @Param('logId') logId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
     const log = await this.auditService.getAuditLogById(logId);
     if (!log) {
       throw new NotFoundException('Audit log not found');
@@ -117,18 +135,22 @@ export class AuditController {
     return log;
   }
 
-  @Public()
   @Get('session/:sessionId/logs')
-  async getSessionAuditLogs(@Param('sessionId') sessionId: string) {
+  async getSessionAuditLogs(
+    @Param('sessionId') sessionId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
     return this.auditService.getSessionAuditLogs(sessionId);
   }
 
-  @Public()
   @Get('session/:sessionId/download')
   async downloadSessionFile(
     @Param('sessionId') sessionId: string,
-    @Res() res: Response
+    @Res() res: Response,
+    @Headers('authorization') authHeader?: string,
   ) {
+    await this.requireAdmin(authHeader);
     const filePath = await this.auditService.getSessionFilePath(sessionId);
 
     if (!filePath) {

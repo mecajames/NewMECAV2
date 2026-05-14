@@ -1097,6 +1097,10 @@ export class StripeController {
       amountCents: paymentIntent.amount,
       paymentMethod: 'stripe',
       paymentType: paymentType || null,
+      // Pass userId so the admin notification can resolve the member's
+      // name + MECA ID from Profile even when Stripe metadata didn't
+      // include a name (logged-in checkout, raw card decline, etc.).
+      customerUserId: metadata?.userId || null,
       customerEmail: metadata?.email || null,
       customerName: metadata?.competitorName || metadata?.firstName || null,
       failureCode: paymentIntent.last_payment_error?.code || null,

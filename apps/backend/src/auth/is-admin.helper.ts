@@ -23,3 +23,13 @@ export function isProtectedAccount(profile: { meca_id?: string } | null | undefi
   if (!profile) return false;
   return PROTECTED_MECA_IDS.includes(String(profile.meca_id));
 }
+
+/**
+ * Super-admin check — limited to James Ryan (202401) and Mick Makhool (700947).
+ * These two are the only accounts allowed to perform irreversible cross-account
+ * operations like MECA ID reassignment.
+ */
+export function isSuperAdmin(profile: { meca_id?: string } | null | undefined): boolean {
+  if (!profile) return false;
+  return PROTECTED_MECA_IDS.includes(String(profile.meca_id));
+}

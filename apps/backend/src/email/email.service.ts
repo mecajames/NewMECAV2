@@ -1380,7 +1380,7 @@ export class EmailService {
             invoiceNumber: 'MECA-00001',
             invoiceTotal: '$144.00',
             dueDate: sampleDate,
-            paymentUrl: `${frontendUrl}/invoices/test-invoice-id/pay`,
+            paymentUrl: `${frontendUrl}/pay/invoice/test-invoice-id`,
             items: sampleItems,
           });
           break;
@@ -1393,7 +1393,7 @@ export class EmailService {
             amountDue: 144.00,
             daysOverdue: 14,
             dueDate: new Date(Date.now() - 14 * 86400000),
-            paymentUrl: `${frontendUrl}/invoices/test-invoice-id/pay`,
+            paymentUrl: `${frontendUrl}/pay/invoice/test-invoice-id`,
           });
           break;
 
@@ -1417,7 +1417,7 @@ export class EmailService {
             membershipType: 'Pro Competitor',
             amountDue: '$99.00',
             step: 2,
-            portalUrl: `${frontendUrl}/dashboard/billing`,
+            portalUrl: `${frontendUrl}/billing`,
           });
           break;
 
@@ -1427,7 +1427,7 @@ export class EmailService {
             firstName: 'Test',
             eventName: 'MECA SQ Finals 2025',
             eventDate: sampleDate,
-            ratingUrl: `${frontendUrl}/events/test-event-id/rate`,
+            ratingUrl: `${frontendUrl}/events/test-event-id#ratings`,
           });
           break;
 
@@ -1506,7 +1506,7 @@ export class EmailService {
             competitionClass: 'SQ Modified 1',
             totalPoints: 285,
             seasonName: '2025 Season',
-            registrationUrl: `${frontendUrl}/world-finals/pre-register?token=test-token`,
+            registrationUrl: `${frontendUrl}/world-finals/register?token=test-token`,
           });
           break;
 
@@ -1609,6 +1609,9 @@ export class EmailService {
           break;
 
         case 'membership_expiring':
+          // Production: scheduled-tasks emits /membership/checkout/:membershipId
+          // (active member is still logged-in eligible). Mirror that here so
+          // the test preview lands on a real route.
           result = await this.sendMembershipExpiringEmail({
             to: toEmail,
             firstName: 'Test',
@@ -1616,18 +1619,20 @@ export class EmailService {
             membershipType: 'Pro Competitor',
             expiryDate: sampleDate,
             daysRemaining: 7,
-            renewalUrl: `${frontendUrl}/membership/renew`,
+            renewalUrl: `${frontendUrl}/membership/checkout/test-membership-id`,
           });
           break;
 
         case 'membership_expired':
+          // Production: tokenized public renewal link. Sample previews the
+          // shape; the token is a placeholder for admin preview only.
           result = await this.sendMembershipExpiredEmail({
             to: toEmail,
             firstName: 'Test',
             mecaId: 10001,
             membershipType: 'Pro Competitor',
             expiredDate: sampleDate,
-            renewalUrl: `${frontendUrl}/membership/renew`,
+            renewalUrl: `${frontendUrl}/renew/test-renewal-token-preview-only`,
           });
           break;
 
@@ -1664,7 +1669,8 @@ export class EmailService {
             cancellationDate: new Date(),
             cancellationReason: 'Payment method removed (test)',
             endDate: sampleDate,
-            renewalUrl: `${frontendUrl}/membership/renew`,
+            // Subscription cancelled — they're signed in still; route to billing portal.
+            renewalUrl: `${frontendUrl}/billing`,
             paymentMethod: 'stripe',
           });
           break;

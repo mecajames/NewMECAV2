@@ -22,6 +22,7 @@ import {
   QrCode,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { hasActiveMembership } from '@/auth/permissions';
 import { useTaxRate } from '@/hooks/useTaxRate';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes/competition-classes.api-client';
@@ -151,8 +152,8 @@ export default function EventRegistrationCheckoutPage() {
     notes: '',
   });
 
-  // Compute member status
-  const isMember = profile?.membership_status === 'active';
+  // Compute member status via centralized helper
+  const isMember = hasActiveMembership(profile as any);
 
   // Get pricing info
   const memberEntryFee = event?.member_entry_fee ?? 0;

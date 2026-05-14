@@ -5,6 +5,7 @@ import { EmailService } from '../email/email.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { RecurringInvoicesService } from '../recurring-invoices/recurring-invoices.service';
 import { MembershipsService } from '../memberships/memberships.service';
+import { MembershipRenewalTokenService } from '../memberships/membership-renewal-token.service';
 import { ShopService } from '../shop/shop.service';
 import { MembershipCompsService } from '../membership-comps/membership-comps.service';
 import { SiteSettingsService } from '../site-settings/site-settings.service';
@@ -38,6 +39,7 @@ export class ScheduledTasksService {
     private readonly stripeService: StripeService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly notificationsService: NotificationsService,
+    private readonly renewalTokenService: MembershipRenewalTokenService,
   ) {}
 
   // =============================================================================
@@ -194,32 +196,34 @@ export class ScheduledTasksService {
   // Runs every day at 8:00 AM
   // =============================================================================
 
+  // Email cadence per docs/features/MEMBERSHIP_LIFECYCLE.md §8.
+  //   Active side : -30, -14, -7, -1   → link to /membership/checkout/:id
+  //   Expired side: +1, +7, +14, +30   → link to /renew/:token (public)
+  // After +30 we send NO further nag emails.
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async handleMembershipExpirationEmails() {
     this.logger.log('Running membership expiration email job...');
 
     try {
       const em = this.em.fork();
-      const now = new Date();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      // Calculate date ranges
-      const thirtyDaysFromNow = new Date(now);
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+      const dayOffset = (days: number) => {
+        const d = new Date(today);
+        d.setDate(d.getDate() + days);
+        return d;
+      };
 
-      const sevenDaysFromNow = new Date(now);
-      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+      // Active-side reminders
+      for (const days of [30, 14, 7, 1] as const) {
+        await this.sendExpiringWarnings(em, dayOffset(days), days);
+      }
 
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      // Find memberships expiring in 30 days (send warning)
-      await this.sendExpiringWarnings(em, thirtyDaysFromNow, 30);
-
-      // Find memberships expiring in 7 days (send urgent warning)
-      await this.sendExpiringWarnings(em, sevenDaysFromNow, 7);
-
-      // Find memberships that expired yesterday (send expired notification)
-      await this.sendExpiredNotifications(em, yesterday);
+      // Expired-side reminders (token-gated, public renewal link)
+      for (const daysPast of [1, 7, 14, 30] as const) {
+        await this.sendExpiredNotifications(em, dayOffset(-daysPast), daysPast);
+      }
 
       this.logger.log('Membership expiration email job completed');
     } catch (error) {
@@ -269,6 +273,8 @@ export class ScheduledTasksService {
       }
 
       try {
+        const frontendUrl = (process.env.FRONTEND_URL || 'https://www.mecacaraudio.com').replace(/\/+$/, '');
+        const renewalUrl = `${frontendUrl}/membership/checkout/${membership.id}`;
         await this.emailService.sendMembershipExpiringEmail({
           to: membership.user.email,
           firstName: membership.user.first_name || undefined,
@@ -276,7 +282,7 @@ export class ScheduledTasksService {
           membershipType: membership.membershipTypeConfig?.name || 'Membership',
           expiryDate: membership.endDate!,
           daysRemaining,
-          renewalUrl: `${process.env.FRONTEND_URL || 'https://www.maborc.com'}/membership/renew`,
+          renewalUrl,
         });
         this.logger.log(`Sent ${daysRemaining}-day expiration warning to ${membership.user.email}`);
 
@@ -286,7 +292,7 @@ export class ScheduledTasksService {
             title: `Membership expires in ${daysRemaining} days`,
             message: `Your ${membership.membershipTypeConfig?.name || 'membership'} expires on ${new Date(membership.endDate!).toLocaleDateString()}. Renew now to keep your benefits.`,
             type: 'alert',
-            link: '/membership/renew',
+            link: `/membership/checkout/${membership.id}`,
           });
         }
       } catch (error) {
@@ -295,8 +301,9 @@ export class ScheduledTasksService {
     }
   }
 
-  private async sendExpiredNotifications(em: EntityManager, targetDate: Date) {
-    // Query for memberships that expired on the target date
+  private async sendExpiredNotifications(em: EntityManager, targetDate: Date, daysPast: number) {
+    // Memberships that expired on the target date (i.e., today's run for the
+    // matching +N day offset).
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -308,7 +315,6 @@ export class ScheduledTasksService {
       {
         endDate: { $gte: startOfDay, $lte: endOfDay },
         paymentStatus: PaymentStatus.PAID,
-        // Exclude members with active auto-renewal (Stripe will extend them)
         $or: [
           { stripeSubscriptionId: null },
           { cancelAtPeriodEnd: true },
@@ -316,10 +322,12 @@ export class ScheduledTasksService {
       },
       {
         populate: ['user', 'membershipTypeConfig'],
-      }
+      },
     );
 
-    this.logger.log(`Found ${memberships.length} memberships that expired yesterday (excluding active auto-renewals)`);
+    this.logger.log(`Found ${memberships.length} memberships expired +${daysPast}d (excluding active auto-renewals)`);
+
+    const frontendUrl = (process.env.FRONTEND_URL || 'https://www.mecacaraudio.com').replace(/\/+$/, '');
 
     for (const membership of memberships) {
       if (!membership.user?.email) {
@@ -327,24 +335,26 @@ export class ScheduledTasksService {
         continue;
       }
 
-      // Skip comp members — their free_period covers the expiry; the standard
-      // "expired" notification doesn't apply to them.
+      // Skip comp members — they have a free period covering the gap.
       const freePeriod = await this.compsService.getActiveFreePeriod(membership.id);
       if (freePeriod) {
-        this.logger.log(`Skipping expired email for ${membership.id} — active free_period comp covers this period`);
+        this.logger.log(`Skipping +${daysPast}d expired email for ${membership.id} — comp free_period active`);
         continue;
       }
 
       try {
+        const tokenRow = await this.renewalTokenService.issueToken(membership.id);
+        const renewalUrl = `${frontendUrl}/renew/${tokenRow.token}`;
+
         await this.emailService.sendMembershipExpiredEmail({
           to: membership.user.email,
           firstName: membership.user.first_name || undefined,
           mecaId: membership.mecaId || 0,
           membershipType: membership.membershipTypeConfig?.name || 'Membership',
           expiredDate: membership.endDate!,
-          renewalUrl: `${process.env.FRONTEND_URL || 'https://www.maborc.com'}/membership/renew`,
+          renewalUrl,
         });
-        this.logger.log(`Sent expiration notification to ${membership.user.email}`);
+        this.logger.log(`Sent +${daysPast}d expired email to ${membership.user.email}`);
 
         if (membership.user?.id) {
           await this.notificationsService.createForUser({
@@ -352,7 +362,7 @@ export class ScheduledTasksService {
             title: `Your MECA membership has expired`,
             message: `Your ${membership.membershipTypeConfig?.name || 'membership'} expired on ${new Date(membership.endDate!).toLocaleDateString()}. Renew now to restore access.`,
             type: 'alert',
-            link: '/membership/renew',
+            link: `/renew/${tokenRow.token}`,
           });
         }
       } catch (error) {
@@ -830,6 +840,63 @@ export class ScheduledTasksService {
     } catch (error) {
       return { success: false, message: `Error: ${error}` };
     }
+  }
+
+  /**
+   * Production migration helper — issues a renewal token + sends the
+   * tokenized renewal email to EVERY currently-expired member regardless
+   * of how long ago they expired. Bridges the gap between the new hard
+   * expired-login gate going live and the next +1 day cron run.
+   *
+   * Skips auto-renewal subscribers and members inside an active comp
+   * free_period (same exemptions as the normal cron).
+   */
+  async triggerRenewalBackfillForExpired(): Promise<{ success: boolean; processed: number; sent: number; skipped: number }> {
+    const em = this.em.fork();
+    const expired = await em.find(
+      Membership,
+      {
+        endDate: { $lt: new Date() },
+        paymentStatus: PaymentStatus.PAID,
+        $or: [{ stripeSubscriptionId: null }, { cancelAtPeriodEnd: true }],
+      },
+      { populate: ['user', 'membershipTypeConfig'] },
+    );
+
+    const frontendUrl = (process.env.FRONTEND_URL || 'https://www.mecacaraudio.com').replace(/\/+$/, '');
+    let sent = 0;
+    let skipped = 0;
+
+    for (const m of expired) {
+      if (!m.user?.email) {
+        skipped++;
+        continue;
+      }
+      const comp = await this.compsService.getActiveFreePeriod(m.id);
+      if (comp) {
+        skipped++;
+        continue;
+      }
+      try {
+        const tokenRow = await this.renewalTokenService.issueToken(m.id);
+        const renewalUrl = `${frontendUrl}/renew/${tokenRow.token}`;
+        await this.emailService.sendMembershipExpiredEmail({
+          to: m.user.email,
+          firstName: m.user.first_name || undefined,
+          mecaId: m.mecaId || 0,
+          membershipType: m.membershipTypeConfig?.name || 'Membership',
+          expiredDate: m.endDate!,
+          renewalUrl,
+        });
+        sent++;
+      } catch (err) {
+        this.logger.error(`Backfill failed for ${m.user.email}: ${err}`);
+        skipped++;
+      }
+    }
+
+    this.logger.log(`Renewal backfill complete — processed: ${expired.length}, sent: ${sent}, skipped: ${skipped}`);
+    return { success: true, processed: expired.length, sent, skipped };
   }
 
   /**

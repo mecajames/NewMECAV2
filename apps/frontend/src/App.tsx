@@ -27,7 +27,7 @@ import { RetailerDirectoryPage, RetailerProfilePage, ManufacturerDirectoryPage, 
 import { MembershipPage } from '@/memberships';
 import { HostEventPage } from '@/event-hosting-requests';
 import { ClassCalculatorPage } from '@/competition-classes';
-import { HallOfFamePage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
+import { HallOfFamePage, HallOfFameInducteeDetailPage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
 import { JudgesDirectoryPage, JudgeProfilePage } from '@/judges';
 import { EventDirectorsDirectoryPage, EventDirectorProfilePage } from '@/event-directors';
 import { MyRegistrationsPage, MyRegistrationDetailPage } from '@/event-registrations';
@@ -61,6 +61,8 @@ const MembershipReceiptPage = lazy(() => import('@/billing/pages/MembershipRecei
 // Lazy-loaded pages - Checkout pages (Stripe loaded on demand)
 const EventRegistrationCheckoutPage = lazy(() => import('@/event-registrations/pages/EventRegistrationCheckoutPage'));
 const MembershipCheckoutPage = lazy(() => import('@/memberships/pages/MembershipCheckoutPage'));
+const RenewTokenPage = lazy(() => import('@/memberships/pages/RenewTokenPage'));
+const RenewExpiredPage = lazy(() => import('@/memberships/pages/RenewExpiredPage'));
 const CheckoutPage = lazy(() => import('@/shop/pages/CheckoutPage'));
 const OrderConfirmationPage = lazy(() => import('@/shop/pages/OrderConfirmationPage'));
 const OrderHistoryPage = lazy(() => import('@/shop/pages/OrderHistoryPage'));
@@ -130,6 +132,7 @@ const SEOSettingsPage = lazy(() => import('@/admin/pages/SEOSettingsPage'));
 const WorldRecordsPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsPage'));
 const WorldRecordsAdminPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsAdminPage'));
 const HallOfFameAdminPage = lazy(() => import('@/hall-of-fame/pages/HallOfFameAdminPage'));
+const MecaIdReassignPage = lazy(() => import('@/admin/pages/MecaIdReassignPage'));
 const ForeverMembersPage = lazy(() => import('@/forever-members/pages/ForeverMembersPage'));
 const ForeverMemberDetailPage = lazy(() => import('@/forever-members/pages/ForeverMemberDetailPage'));
 const ForeverMembersAdminPage = lazy(() => import('@/forever-members/pages/ForeverMembersAdminPage'));
@@ -150,6 +153,7 @@ const OrderDetailPage = lazy(() => import('@/admin/billing/pages/OrderDetailPage
 const InvoiceDetailPage = lazy(() => import('@/admin/billing/pages/InvoiceDetailPage'));
 const CreateInvoicePage = lazy(() => import('@/admin/billing/pages/CreateInvoicePage'));
 const FailedPaymentsPage = lazy(() => import('@/admin/billing/pages/FailedPaymentsPage'));
+const AllPaymentsPage = lazy(() => import('@/admin/billing/pages/AllPaymentsPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -218,6 +222,7 @@ function App() {
               <Route path="/host-event" element={<HostEventPage />} />
               <Route path="/class-calculator" element={<ClassCalculatorPage />} />
               <Route path="/hall-of-fame" element={<HallOfFamePage />} />
+              <Route path="/hall-of-fame/:id" element={<HallOfFameInducteeDetailPage />} />
               <Route path="/world-finals/register" element={<L><WorldFinalsPreRegisterPage /></L>} />
               <Route path="/forever-members" element={<L><ForeverMembersPage /></L>} />
               <Route path="/forever-members/:id" element={<L><ForeverMemberDetailPage /></L>} />
@@ -280,6 +285,8 @@ function App() {
               <Route path="/membership/:membershipId/receipt" element={<L><MembershipReceiptPage /></L>} />
               <Route path="/membership" element={<MembershipPage />} />
               <Route path="/membership/checkout/:membershipId" element={<L><MembershipCheckoutPage /></L>} />
+              <Route path="/renew/:token" element={<L><RenewTokenPage /></L>} />
+              <Route path="/renew-expired" element={<L><RenewExpiredPage /></L>} />
               <Route path="/apply/judge" element={<L><JudgeApplicationPage /></L>} />
               <Route path="/apply/event-director" element={<L><EventDirectorApplicationPage /></L>} />
               <Route path="/my-registrations" element={<MyRegistrationsPage />} />
@@ -335,6 +342,7 @@ function App() {
               <Route path="/admin/billing/revenue" element={<L><RevenueReportsPage /></L>} />
               <Route path="/admin/billing/recurring" element={<L><RecurringInvoicesPage /></L>} />
               <Route path="/admin/billing/failed-payments" element={<L><FailedPaymentsPage /></L>} />
+              <Route path="/admin/billing/payments" element={<L><AllPaymentsPage /></L>} />
 
               {/* Shop Routes */}
               <Route path="/shop" element={<ShopPage />} />
@@ -378,6 +386,7 @@ function App() {
 
               {/* Admin Hall of Fame */}
               <Route path="/admin/hall-of-fame" element={<L><HallOfFameAdminPage /></L>} />
+              <Route path="/admin/meca-id-reassign" element={<L><MecaIdReassignPage /></L>} />
               <Route path="/admin/forever-members" element={<L><ForeverMembersAdminPage /></L>} />
 
               {/* Admin Login Audit */}

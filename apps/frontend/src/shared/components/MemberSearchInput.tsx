@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { User } from 'lucide-react';
 import { profilesApi, type Profile } from '@/profiles/profiles.api-client';
+import { hasActiveMembership } from '@/auth/permissions';
 
 interface ActiveMemberLookupProps {
   name: string;
@@ -46,7 +47,7 @@ export default function ActiveMemberLookup({
       setLoading(true);
       try {
         let profiles = await profilesApi.searchProfiles(query);
-        profiles = profiles.filter((p) => p.membership_status === 'active');
+        profiles = profiles.filter((p) => hasActiveMembership(p as any));
         setResults(profiles);
         setShowDropdown(profiles.length > 0);
       } catch {

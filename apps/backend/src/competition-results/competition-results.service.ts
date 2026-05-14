@@ -27,6 +27,78 @@ export class CompetitionResultsService {
 
   private readonly logger = new Logger(CompetitionResultsService.name);
 
+  // Days past membership end_date during which we still want the back-fill
+  // mechanic to kick in. Matches the MECA ID admin-extension cutoff
+  // (MecaIdService.GRACE_ADMIN_DAYS).
+  private static readonly RESULT_BACKFILL_GRACE_DAYS = 45;
+
+  /**
+   * If the looked-up MECA ID on an incoming result belongs to a member
+   * whose membership is currently expired but within the 45-day grace
+   * window, rewrite the row to `meca_id = '999999'` and stash the
+   * original ID on `original_meca_id` + flag `pending_back_fill = true`.
+   * The renewal flow will read these flags to restore the rows.
+   *
+   * Mutates transformedData in place.
+   */
+  private async applyExpiredMecaIdStamping(transformedData: any, em: EntityManager): Promise<void> {
+    const inboundMecaId: string | undefined = transformedData?.mecaId;
+    if (!inboundMecaId || inboundMecaId === '999999' || inboundMecaId === '0') return;
+
+    const mecaIdNum = parseInt(inboundMecaId, 10);
+    if (!Number.isFinite(mecaIdNum)) return;
+
+    // Find the most recent paid membership carrying this MECA ID.
+    const membership = await em.findOne(
+      Membership,
+      { mecaId: mecaIdNum, paymentStatus: PaymentStatus.PAID },
+      { orderBy: { endDate: 'DESC' } },
+    );
+    if (!membership?.endDate) return;
+
+    const now = Date.now();
+    const end = membership.endDate.getTime();
+    if (end >= now) return; // still active — leave row alone
+
+    const daysSinceExpiry = (now - end) / (1000 * 60 * 60 * 24);
+    if (daysSinceExpiry > CompetitionResultsService.RESULT_BACKFILL_GRACE_DAYS) {
+      // Beyond grace — the ID is permanently retired. Still record under
+      // 999999, but no back-fill will ever happen.
+      transformedData.mecaId = '999999';
+      transformedData.originalMecaId = null;
+      transformedData.pendingBackFill = false;
+      this.logger.log(`Result for expired-past-grace MECA ID ${inboundMecaId} stamped 999999 (no back-fill)`);
+      return;
+    }
+
+    transformedData.mecaId = '999999';
+    transformedData.originalMecaId = inboundMecaId;
+    transformedData.pendingBackFill = true;
+    this.logger.log(`Result for expired-in-grace MECA ID ${inboundMecaId} stamped 999999 + pending back-fill (${daysSinceExpiry.toFixed(1)} days expired)`);
+  }
+
+  /**
+   * Re-attach all `999999 + pending_back_fill = true` result rows belonging
+   * to a renewing member back to their reclaimed MECA ID. Called from the
+   * memberships renewal flow when MECA ID is reactivated.
+   */
+  async backFillForRenewal(originalMecaId: string, newMecaId: string): Promise<number> {
+    const em = this.em.fork();
+    const rows = await em.find(CompetitionResult, {
+      originalMecaId,
+      pendingBackFill: true,
+    });
+    if (rows.length === 0) return 0;
+    for (const row of rows) {
+      row.mecaId = newMecaId;
+      row.originalMecaId = undefined;
+      row.pendingBackFill = false;
+    }
+    await em.flush();
+    this.logger.log(`Back-filled ${rows.length} result row(s) from 999999 → ${newMecaId}`);
+    return rows.length;
+  }
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -365,6 +437,12 @@ export class CompetitionResultsService {
         transformedData.wattage = -1;
       }
     }
+
+    // If the supplied MECA ID belongs to a member whose membership is
+    // currently expired (within the 45-day grace window), stamp the row
+    // as 999999 + preserve the original ID for back-fill on renewal.
+    // See docs/features/MEMBERSHIP_LIFECYCLE.md §7.
+    await this.applyExpiredMecaIdStamping(transformedData, em);
 
     const result = em.create(CompetitionResult, transformedData);
     await em.persistAndFlush(result);

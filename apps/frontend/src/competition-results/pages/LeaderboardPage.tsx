@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Trophy, TrendingUp, Filter, Medal } from 'lucide-react';
 import { competitionResultsApi } from '@/competition-results';
 import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
+import { MecaIdActiveProvider } from '@/competition-results/components/MecaIdActiveContext';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useLeaderboardSEO } from '@/shared/seo';
 import { BannerDisplay, useBanners } from '@/banners';
@@ -179,9 +180,13 @@ export default function LeaderboardPage() {
   }, []);
 
   return (
+    <MecaIdActiveProvider mecaIds={leaderboard.map((e) => e.meca_id)}>
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <SEOHead {...seoProps} />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* MecaIdActiveProvider gates target-side MECA ID links: rows whose
+            referenced MECA ID belongs to an expired/retired member render
+            as plain text (no profile link), even for admin viewers. */}
         <div className="text-center mb-8 sm:mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-r from-yellow-400 to-orange-600 rounded-full mb-4">
             <Trophy className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
@@ -612,5 +617,6 @@ export default function LeaderboardPage() {
         )}
       </div>
     </div>
+    </MecaIdActiveProvider>
   );
 }

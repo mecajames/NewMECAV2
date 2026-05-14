@@ -24,14 +24,16 @@ import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole, Member
 import { PaymentFulfillmentService } from '../payments/payment-fulfillment.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
-import { isAdminUser } from '../auth/is-admin.helper';
+import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
 import { ZodError } from 'zod';
 import { MembershipsService, AdminAssignMembershipDto, CreateMembershipDto, AdminCreateMembershipResult } from './memberships.service';
 import { Membership } from './memberships.entity';
 import { MecaIdService } from './meca-id.service';
 import { MasterSecondaryService, CreateSecondaryMembershipDto, SecondaryMembershipInfo, MasterMembershipInfo } from './master-secondary.service';
 import { MembershipSyncService } from './membership-sync.service';
+import { MembershipRenewalTokenService } from './membership-renewal-token.service';
 import { Public } from '../auth/public.decorator';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('api/memberships')
 export class MembershipsController {
@@ -46,6 +48,7 @@ export class MembershipsController {
     private readonly em: EntityManager,
     @Inject(forwardRef(() => PaymentFulfillmentService))
     private readonly paymentFulfillmentService: PaymentFulfillmentService,
+    private readonly renewalTokenService: MembershipRenewalTokenService,
   ) {}
 
   // Helper to get authenticated user from token
@@ -90,6 +93,200 @@ export class MembershipsController {
     }
 
     return { user, profile };
+  }
+
+  // Super-admin: only James (202401) or Mick (700947). The MECA ID
+  // reassignment tool is irreversible and cross-account, so it's locked
+  // to these two accounts even other admins/staff are blocked.
+  private async requireSuperAdmin(authHeader?: string) {
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+    if (!isSuperAdmin(profile)) {
+      throw new ForbiddenException('Super-admin access required');
+    }
+    return { user, profile };
+  }
+
+  /**
+   * Public bulk lookup: given a list of MECA IDs, returns the subset that
+   * currently belongs to an ACTIVE paid membership. Used by the frontend
+   * results/standings/top-10 pages to decide whether each MECA ID rendered
+   * on a row should be a clickable link to the member profile (active)
+   * or a plain label (expired / retired / non-member).
+   *
+   * Body: { mecaIds: string[] }   Response: { activeMecaIds: string[] }
+   *
+   * Public because public results pages render these for non-authenticated
+   * visitors as well. No personal data is exposed — only a yes/no per ID.
+   */
+  // Tighter rate limit than the global default: 10 requests per minute per
+  // IP. Each request accepts up to 1000 MECA IDs, so a hostile scraper can
+  // probe at most 10k IDs/min — slow enough that the audit log will catch
+  // patterns before significant enumeration occurs. Legitimate page loads
+  // hit this once per page render.
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post('active-meca-ids')
+  @HttpCode(HttpStatus.OK)
+  async listActiveMecaIds(@Body() body: { mecaIds?: string[] }): Promise<{ activeMecaIds: string[] }> {
+    const input = Array.isArray(body?.mecaIds) ? body!.mecaIds : [];
+    if (input.length === 0) return { activeMecaIds: [] };
+
+    // Coerce to numeric strings only — silently drop anything not numeric.
+    // Cap to a sane batch size to avoid abuse.
+    const seen = new Set<string>();
+    const numeric: number[] = [];
+    for (const raw of input.slice(0, 1000)) {
+      const s = String(raw ?? '').trim();
+      if (!s || s === '999999' || s === '0' || seen.has(s)) continue;
+      const n = parseInt(s, 10);
+      if (!Number.isFinite(n)) continue;
+      seen.add(s);
+      numeric.push(n);
+    }
+    if (numeric.length === 0) return { activeMecaIds: [] };
+
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    const placeholders = numeric.map(() => '?').join(',');
+    const rows = await conn.execute(
+      `SELECT DISTINCT meca_id FROM public.memberships
+        WHERE meca_id IN (${placeholders})
+          AND payment_status = 'paid'
+          AND (end_date IS NULL OR end_date >= NOW())`,
+      numeric,
+    );
+    const active = rows.map((r: any) => String(r.meca_id));
+    return { activeMecaIds: active };
+  }
+
+  /**
+   * Admin tool: manually reassign a historical MECA ID to a membership.
+   * Used in the 38-45 day admin-extension window or other support cases
+   * where a member should keep their old ID even though the automatic
+   * reclaim window has passed.
+   *
+   * Body: { mecaId: number, membershipId: string, reason: string }
+   */
+  /**
+   * Admin: revoke all outstanding renewal tokens for a membership. Used
+   * when a token may be compromised or the membership has been refunded.
+   * Admin-level (not super-admin) is fine — this is destructive only to
+   * tokens, not data.
+   */
+  @Post('admin/renewal-tokens/revoke/:membershipId')
+  @HttpCode(HttpStatus.OK)
+  async adminRevokeRenewalTokens(
+    @Param('membershipId') membershipId: string,
+    @Headers('authorization') authHeader?: string,
+  ): Promise<{ revoked: number }> {
+    await this.requireAdmin(authHeader);
+    const revoked = await this.renewalTokenService.revokeAllForMembership(membershipId);
+    return { revoked };
+  }
+
+  @Post('admin/meca-id/reassign')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async adminReassignMecaId(
+    @Body() body: { mecaId?: number; membershipId?: string; reason?: string },
+    @Headers('authorization') authHeader?: string,
+  ): Promise<void> {
+    // Super-admin only — see requireSuperAdmin above.
+    const { user } = await this.requireSuperAdmin(authHeader);
+    if (!body?.mecaId || !body?.membershipId || !body?.reason?.trim()) {
+      throw new BadRequestException('mecaId, membershipId, and reason are required');
+    }
+    await this.mecaIdService.reassignMecaId(body.mecaId, body.membershipId, user.id, body.reason);
+  }
+
+  /**
+   * Super-admin search for MECA ID reassignment. Returns matching members
+   * with their full membership + MECA ID history, so the admin doesn't
+   * need to know any UUIDs. Search by name or email; results capped at 20.
+   *
+   * Response shape per profile:
+   *   {
+   *     profileId, firstName, lastName, email, currentMecaId,
+   *     memberships: [
+   *       { id, mecaId, typeName, category, startDate, endDate, isActive, paymentStatus }
+   *     ]
+   *   }
+   */
+  @Get('admin/meca-id/search')
+  async adminMecaIdSearch(
+    @Query('q') q: string,
+    @Headers('authorization') authHeader?: string,
+  ): Promise<any[]> {
+    await this.requireSuperAdmin(authHeader);
+    const term = (q ?? '').trim();
+    if (term.length < 2) return [];
+
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    const like = `%${term.toLowerCase()}%`;
+
+    // Match by email, first/last name, full_name, or — if the query is a
+    // pure number — by current profile.meca_id or any membership.meca_id.
+    const numeric = /^\d+$/.test(term) ? parseInt(term, 10) : null;
+    const params: any[] = numeric != null ? [like, like, like, like, like, numeric] : [like, like, like, like, like];
+    const numericClause = numeric != null
+      ? `OR p.meca_id::text = ?::text OR EXISTS (SELECT 1 FROM public.memberships m2 WHERE m2.user_id = p.id AND m2.meca_id = ?::int)`
+      : '';
+    if (numeric != null) params.push(numeric);
+
+    const profiles = await conn.execute(
+      `SELECT p.id, p.first_name, p.last_name, p.full_name, p.email, p.meca_id, p.membership_status
+         FROM public.profiles p
+        WHERE LOWER(COALESCE(p.email,'')) LIKE ?
+           OR LOWER(COALESCE(p.first_name,'')) LIKE ?
+           OR LOWER(COALESCE(p.last_name,'')) LIKE ?
+           OR LOWER(COALESCE(p.full_name,'')) LIKE ?
+           OR LOWER(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) LIKE ?
+           ${numericClause}
+        ORDER BY p.last_name NULLS LAST, p.first_name NULLS LAST
+        LIMIT 20`,
+      params,
+    );
+    if (profiles.length === 0) return [];
+
+    const profileIds = profiles.map((p: any) => p.id);
+    const placeholders = profileIds.map(() => '?').join(',');
+    const memberships = await conn.execute(
+      `SELECT m.id, m.user_id, m.meca_id, m.start_date, m.end_date, m.payment_status,
+              c.name AS type_name, c.category
+         FROM public.memberships m
+         LEFT JOIN public.membership_type_configs c ON c.id = m.membership_type_config_id
+        WHERE m.user_id IN (${placeholders})
+        ORDER BY m.end_date DESC NULLS LAST, m.start_date DESC`,
+      profileIds,
+    );
+    const memMap = new Map<string, any[]>();
+    const now = Date.now();
+    for (const m of memberships) {
+      const list = memMap.get(m.user_id) ?? [];
+      list.push({
+        id: m.id,
+        mecaId: m.meca_id,
+        typeName: m.type_name ?? 'Membership',
+        category: m.category ?? null,
+        startDate: m.start_date,
+        endDate: m.end_date,
+        paymentStatus: m.payment_status,
+        isActive:
+          m.payment_status === 'paid' && (!m.end_date || new Date(m.end_date).getTime() >= now),
+      });
+      memMap.set(m.user_id, list);
+    }
+
+    return profiles.map((p: any) => ({
+      profileId: p.id,
+      firstName: p.first_name,
+      lastName: p.last_name,
+      fullName: p.full_name,
+      email: p.email,
+      currentMecaId: p.meca_id,
+      membershipStatus: p.membership_status,
+      memberships: memMap.get(p.id) ?? [],
+    }));
   }
 
   /**

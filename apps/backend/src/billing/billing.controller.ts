@@ -798,6 +798,147 @@ export class BillingController {
   }
 
   /**
+   * Unified payments list — every Stripe + PayPal payment regardless of
+   * status. Used by the admin "All Payments" page so admins can review
+   * successful, failed, refunded, and pending payments in one location
+   * instead of bouncing between Orders, Invoices, and the failed-payments
+   * triage view.
+   *
+   * Query params:
+   *   - status       — filter by paymentStatus (pending|paid|failed|refunded|cancelled|inactive)
+   *   - method       — filter by paymentMethod (stripe|paypal|...)
+   *   - type         — filter by paymentType (membership|event_registration|other)
+   *   - search       — match member name / email / MECA ID / transaction id
+   *   - windowDays   — default 90, capped at 365
+   *   - limit/offset — pagination, default 50/0
+   */
+  @Get('payments')
+  async getAllPayments(
+    @Headers('authorization') authHeader: string,
+    @Query('status') statusParam?: string,
+    @Query('method') methodParam?: string,
+    @Query('type') typeParam?: string,
+    @Query('search') searchParam?: string,
+    @Query('windowDays') windowDaysParam?: string,
+    @Query('limit') limitParam?: string,
+    @Query('offset') offsetParam?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const em = this.em.fork();
+
+    const windowDays = Math.max(1, Math.min(365, Number(windowDaysParam) || 90));
+    const limit = Math.max(1, Math.min(200, Number(limitParam) || 50));
+    const offset = Math.max(0, Number(offsetParam) || 0);
+    const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+    const where: any = { createdAt: { $gte: since } };
+    if (statusParam) where.paymentStatus = statusParam;
+    if (methodParam) where.paymentMethod = methodParam;
+    if (typeParam) where.paymentType = typeParam;
+
+    const [rows, total] = await em.findAndCount(Payment, where, {
+      populate: ['user', 'membership', 'membership.membershipTypeConfig'],
+      orderBy: { createdAt: 'DESC' },
+      limit,
+      offset,
+    });
+
+    // Apply free-text search in-memory after the DB filter. Keeps the
+    // SQL simple — payment volumes here are O(thousands), not millions.
+    const search = (searchParam ?? '').trim().toLowerCase();
+    const filtered = !search
+      ? rows
+      : rows.filter((p) => {
+          const name = `${p.user?.first_name ?? ''} ${p.user?.last_name ?? ''}`.toLowerCase();
+          const email = (p.user?.email ?? '').toLowerCase();
+          const meca = String(p.user?.meca_id ?? '');
+          const txn = (p.stripePaymentIntentId ?? p.paypalCaptureId ?? p.transactionId ?? '').toLowerCase();
+          return (
+            name.includes(search) ||
+            email.includes(search) ||
+            meca.includes(search) ||
+            txn.includes(search)
+          );
+        });
+
+    const data = filtered.map((p) => {
+      const name = [p.user?.first_name, p.user?.last_name].filter(Boolean).join(' ').trim();
+      return {
+        id: p.id,
+        createdAt: p.createdAt,
+        paymentMethod: p.paymentMethod,
+        paymentType: p.paymentType,
+        paymentStatus: p.paymentStatus,
+        amount: Number(p.amount ?? 0).toFixed(2),
+        currency: p.currency || 'USD',
+        transactionId: p.stripePaymentIntentId || p.paypalCaptureId || p.transactionId || null,
+        stripePaymentIntentId: p.stripePaymentIntentId ?? null,
+        paypalCaptureId: p.paypalCaptureId ?? null,
+        failureReason: p.failureReason ?? null,
+        description: p.description ?? null,
+        paidAt: p.paidAt ?? null,
+        refundedAt: p.refundedAt ?? null,
+        member: {
+          id: p.user?.id ?? null,
+          name: name || null,
+          email: p.user?.email ?? null,
+          mecaId: p.user?.meca_id ?? null,
+        },
+        membership: p.membership
+          ? {
+              id: (p.membership as any).id,
+              typeName: (p.membership as any).membershipTypeConfig?.name ?? null,
+            }
+          : null,
+      };
+    });
+
+    return {
+      windowDays,
+      since: since.toISOString(),
+      total,
+      limit,
+      offset,
+      filters: { status: statusParam ?? null, method: methodParam ?? null, type: typeParam ?? null, search: searchParam ?? null },
+      data,
+    };
+  }
+
+  /**
+   * Aggregate counts by status for the All Payments page header.
+   */
+  @Get('payments/stats')
+  async getPaymentsStats(
+    @Headers('authorization') authHeader: string,
+    @Query('windowDays') windowDaysParam?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const em = this.em.fork();
+    const windowDays = Math.max(1, Math.min(365, Number(windowDaysParam) || 90));
+    const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+    const conn = em.getConnection();
+    const rows = await conn.execute(
+      `SELECT payment_status, payment_method, COUNT(*)::int AS count,
+              COALESCE(SUM(amount), 0)::numeric(10,2) AS total
+         FROM public.payments
+        WHERE created_at >= ?
+        GROUP BY payment_status, payment_method`,
+      [since.toISOString()],
+    );
+    return {
+      windowDays,
+      since: since.toISOString(),
+      rows: rows.map((r: any) => ({
+        status: r.payment_status,
+        method: r.payment_method,
+        count: Number(r.count) || 0,
+        total: Number(r.total) || 0,
+      })),
+    };
+  }
+
+  /**
    * Get order statistics
    */
   @Get('stats/orders')
