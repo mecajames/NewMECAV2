@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { Trophy, Medal, Search, Edit, Plus, Trash2, X, Save, ArrowLeft } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { championshipArchivesApi, ChampionshipArchive, ChampionshipAward } from '@/championship-archives';
+import { competitionFormatsApi } from '@/competition-formats';
+import { competitionClassesApi } from '@/competition-classes';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
 
@@ -108,6 +110,44 @@ export default function ChampionshipArchiveYearPage() {
   const [archive, setArchive] = useState<ChampionshipArchive | null>(null);
   const [results, setResults] = useState<any>({});
   const [stateChampions, setStateChampions] = useState<any>({});
+  // Lookups so the format/class headings on this page sort by the same
+  // admin-editable Display Order as the public Results page. Backend
+  // returns the archive data as nested plain objects with no order info.
+  const [formatOrder, setFormatOrder] = useState<Map<string, number>>(new Map());
+  const [classOrder, setClassOrder] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    Promise.all([competitionFormatsApi.getActive(), competitionClassesApi.getActive()])
+      .then(([formats, classes]) => {
+        setFormatOrder(new Map(formats.map(f => [f.name, f.display_order])));
+        // Same class name can recur per season — keep the lowest
+        // display_order so panel order stays stable across seasons.
+        const co = new Map<string, number>();
+        for (const c of classes) {
+          const key = `${c.format}::${c.name}`;
+          const prev = co.get(key);
+          if (prev === undefined || c.display_order < prev) co.set(key, c.display_order);
+        }
+        setClassOrder(co);
+      })
+      .catch(err => console.error('Error fetching format/class lookups:', err));
+  }, []);
+
+  // Sort helpers — applied to Object.entries(...) results before render so
+  // the nested format/class iterations follow admin Display Order. Unknown
+  // names fall back to +Infinity (sorted to end, alpha tiebreaker).
+  const sortFormatEntries = <T,>(entries: [string, T][]): [string, T][] =>
+    entries.sort(([a], [b]) => {
+      const oa = formatOrder.get(a) ?? Number.POSITIVE_INFINITY;
+      const ob = formatOrder.get(b) ?? Number.POSITIVE_INFINITY;
+      return oa - ob || a.localeCompare(b);
+    });
+  const sortClassEntries = <T,>(entries: [string, T][], format: string): [string, T][] =>
+    entries.sort(([a], [b]) => {
+      const oa = classOrder.get(`${format}::${a}`) ?? Number.POSITIVE_INFINITY;
+      const ob = classOrder.get(`${format}::${b}`) ?? Number.POSITIVE_INFINITY;
+      return oa - ob || a.localeCompare(b);
+    });
   const [awards, setAwards] = useState<ChampionshipAward[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -279,7 +319,7 @@ export default function ChampionshipArchiveYearPage() {
           {title}
         </h3>
 
-        {Object.entries(formatResults).map(([className, classResults]: [string, any]) => {
+        {sortClassEntries(Object.entries(formatResults) as [string, any][], formatKey).map(([className, classResults]: [string, any]) => {
           const filtered = filterResults(classResults);
           if (filtered.length === 0 && searchTerm) return null;
 
@@ -614,10 +654,10 @@ export default function ChampionshipArchiveYearPage() {
             {Object.entries(stateChampions).map(([state, stateData]: [string, any]) => (
               <div key={state} className="mb-6 last:mb-0">
                 <h4 className="text-xl font-semibold text-green-500 mb-3">{state}</h4>
-                {Object.entries(stateData).map(([format, formatData]: [string, any]) => (
+                {sortFormatEntries(Object.entries(stateData) as [string, any][]).map(([format, formatData]: [string, any]) => (
                   <div key={format} className="mb-4 ml-4">
                     <h5 className="text-lg text-white mb-2">{format}</h5>
-                    {Object.entries(formatData).map(([className, champions]: [string, any]) => (
+                    {sortClassEntries(Object.entries(formatData) as [string, any][], format).map(([className, champions]: [string, any]) => (
                       <div key={className} className="mb-2 ml-4">
                         <div className="text-gray-400 text-sm">{className}</div>
                         {Array.isArray(champions) && champions.map((champion: any, idx: number) => (

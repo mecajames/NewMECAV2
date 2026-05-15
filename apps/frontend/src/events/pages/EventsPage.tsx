@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Calendar, MapPin, Users, DollarSign, Filter, TrendingUp, Search, Globe, Map, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
+import { useFormatOrder, compareFormatNames } from '@/competition-formats';
 import { seasonsApi, Season } from '@/seasons';
 import { countries, getStatesForCountry } from '@/utils/countries';
 import { getStorageUrl } from '@/lib/storage';
@@ -15,6 +16,7 @@ type EventStatus = 'upcoming' | 'completed';
 
 export default function EventsPage() {
   const navigate = useNavigate();
+  const formatOrder = useFormatOrder();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<EventStatus | 'all'>('all');
@@ -619,7 +621,7 @@ export default function EventsPage() {
                   {(event.formats && event.formats.length > 0) || event.format ? (
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3 sm:mb-4">
                       {event.formats && event.formats.length > 0 ? (
-                        event.formats.map((format) => (
+                        [...event.formats].sort((a, b) => compareFormatNames(formatOrder, a, b)).map((format) => (
                           <span
                             key={format}
                             className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${getFormatColor(

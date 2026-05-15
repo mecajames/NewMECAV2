@@ -5,6 +5,8 @@ import { CompetitionResult } from '../competition-results/competition-results.en
 import { Season } from '../seasons/seasons.entity';
 import { ResultTeam } from '../result-teams/result-team.entity';
 import { Team } from '../teams/team.entity';
+import { CompetitionFormat } from '../competition-formats/competition-formats.entity';
+import { CompetitionClass } from '../competition-classes/competition-classes.entity';
 
 // Leaderboard entry interface
 export interface LeaderboardEntry {
@@ -530,8 +532,12 @@ export class StandingsService {
    * results (which used to happen because SSI/MK were hardcoded chips
    * but had no data in the DB).
    *
-   * Returns sorted by result count DESC so the most-populated format is
-   * the default selection target.
+   * Returns sorted by competition_formats.display_order ASC so the panel /
+   * chip order matches the admin-editable order in /admin/formats. Result
+   * count is no longer the sort key — Standings, Top 10, and Leaderboard
+   * all auto-select formats[0], and admins expect that default to follow
+   * the order they set, not whichever format happens to have the most
+   * rows this season.
    */
   async getFormatsWithResults(
     seasonId?: string,
@@ -556,16 +562,33 @@ export class StandingsService {
       counts.set(f, (counts.get(f) || 0) + 1);
     }
 
+    // Look up display_order for every distinct format. Unknown names fall
+    // back to +Infinity so any orphan/legacy bucket sorts to the end.
+    const formatRows = await em.find(CompetitionFormat, {});
+    const orderByName = new Map<string, number>(
+      formatRows.map(f => [f.name, f.displayOrder]),
+    );
+
     const list = Array.from(counts.entries())
       .map(([format, resultCount]) => ({ format, resultCount }))
-      .sort((a, b) => b.resultCount - a.resultCount);
+      .sort((a, b) => {
+        const oa = orderByName.get(a.format) ?? Number.POSITIVE_INFINITY;
+        const ob = orderByName.get(b.format) ?? Number.POSITIVE_INFINITY;
+        return oa - ob || a.format.localeCompare(b.format);
+      });
 
     this.setCache(cacheKey, list);
     return list;
   }
 
   /**
-   * Get list of unique classes with results in a season
+   * Get list of unique classes with results in a season.
+   *
+   * Sorted by (competition_formats.display_order, competition_classes.display_order,
+   * className) so the order matches the admin-editable order in /admin/formats
+   * and /admin/classes. Previously this sorted by result count DESC, which made
+   * the byClass auto-select land on whichever class happened to be the most
+   * populated this season — not the canonical "first" class admins expect.
    */
   async getClassesWithResults(
     format?: string,
@@ -598,8 +621,37 @@ export class StandingsService {
       classMap.get(key)!.count++;
     }
 
+    // Build (format -> displayOrder) and (format::className -> displayOrder)
+    // lookups so the result list sorts the same way as the Results page.
+    // Class lookup uses the lowest display_order across seasons because the
+    // same class name can recur per season; using the min keeps panels stable
+    // when admins update one season's classes without touching others.
+    const [formatRows, classRows] = await Promise.all([
+      em.find(CompetitionFormat, {}),
+      em.find(CompetitionClass, {}),
+    ]);
+    const formatOrder = new Map<string, number>(
+      formatRows.map(f => [f.name, f.displayOrder]),
+    );
+    const classOrder = new Map<string, number>();
+    for (const c of classRows) {
+      const key = `${c.format}::${c.name}`;
+      const prev = classOrder.get(key);
+      if (prev === undefined || c.displayOrder < prev) {
+        classOrder.set(key, c.displayOrder);
+      }
+    }
+
     return Array.from(classMap.values())
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => {
+        const fa = formatOrder.get(a.format) ?? Number.POSITIVE_INFINITY;
+        const fb = formatOrder.get(b.format) ?? Number.POSITIVE_INFINITY;
+        if (fa !== fb) return fa - fb;
+        const ca = classOrder.get(`${a.format}::${a.className}`) ?? Number.POSITIVE_INFINITY;
+        const cb = classOrder.get(`${b.format}::${b.className}`) ?? Number.POSITIVE_INFINITY;
+        if (ca !== cb) return ca - cb;
+        return a.className.localeCompare(b.className);
+      })
       .map(({ format, className, count }) => ({
         format,
         className,

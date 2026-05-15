@@ -11,6 +11,7 @@ import { uploadFile } from '@/api-client/uploads.api-client';
 import axios from '@/lib/axios';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
+import { competitionFormatsApi } from '@/competition-formats';
 import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
 import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink, ShoppingBag } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
@@ -56,6 +57,10 @@ export default function MyMecaDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]);
+  // Lookup keyed by format name → display_order so the analytics tab's
+  // "Points by Format" sections render in admin-editable order rather than
+  // result-iteration order.
+  const [formatOrder, setFormatOrder] = useState<Map<string, number>>(new Map());
   const [hostingRequests, setHostingRequests] = useState<EventHostingRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<EventHostingRequest | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -210,6 +215,16 @@ export default function MyMecaDashboardPage() {
     is_public: true,
     requires_approval: true,
   });
+
+  // One-shot fetch of competition_formats so the analytics tab's "Points by
+  // Format" sort key matches /admin/formats Display Order. Non-fatal — if
+  // this fails the sort falls back to +Infinity (insertion order at end).
+  useEffect(() => {
+    competitionFormatsApi
+      .getActive()
+      .then(list => setFormatOrder(new Map(list.map(f => [f.name, f.display_order]))))
+      .catch(err => console.error('Error fetching competition formats:', err));
+  }, []);
 
   useEffect(() => {
     // Wait for auth to finish loading before making API calls
@@ -4103,8 +4118,17 @@ export default function MyMecaDashboardPage() {
       return null;
     };
 
-    // Get formats that have actual results (show all formats with data)
-    const formatsWithData = Object.keys(formatStats).filter(f => formatStats[f].count > 0);
+    // Get formats that have actual results, sorted by competition_formats
+    // display_order so this page renders formats in the same order as the
+    // public Results page. Unknown names fall back to +Infinity (sorted to
+    // the end, alpha tiebreaker).
+    const formatsWithData = Object.keys(formatStats)
+      .filter(f => formatStats[f].count > 0)
+      .sort((a, b) => {
+        const oa = formatOrder.get(a) ?? Number.POSITIVE_INFINITY;
+        const ob = formatOrder.get(b) ?? Number.POSITIVE_INFINITY;
+        return oa - ob || a.localeCompare(b);
+      });
 
     return (
       <div className="space-y-6">
@@ -4216,22 +4240,25 @@ export default function MyMecaDashboardPage() {
         </div>
 
         {/* Original Points by Format */}
-        {Object.keys(formatStats).length > 0 && (
+        {formatsWithData.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h3 className="text-xl font-bold text-white mb-4">Points by Format</h3>
             <div className="space-y-4">
-              {Object.entries(formatStats).map(([format, data]: [string, any]) => (
-                <div key={format} className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-medium">{format}</p>
-                    <p className="text-gray-400 text-sm">{data.count} events</p>
+              {formatsWithData.map((format) => {
+                const data = formatStats[format];
+                return (
+                  <div key={format} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-medium">{format}</p>
+                      <p className="text-gray-400 text-sm">{data.count} events</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-orange-500 font-bold text-xl">{data.points}</p>
+                      <p className="text-gray-400 text-sm">points</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-orange-500 font-bold text-xl">{data.points}</p>
-                    <p className="text-gray-400 text-sm">points</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

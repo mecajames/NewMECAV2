@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
+import { competitionFormatsApi } from '@/competition-formats';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useResultsSEO } from '@/shared/seo';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -107,6 +108,10 @@ export default function ResultsPage() {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
+  // Lookup keyed by format name → display_order. Populated once from
+  // competition_formats so admins can re-order the Results panels by
+  // editing the format's Display Order field in /admin/formats.
+  const [formatOrder, setFormatOrder] = useState<Map<string, number>>(new Map());
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [availableFormats, setAvailableFormats] = useState<string[]>([]);
@@ -215,6 +220,15 @@ export default function ResultsPage() {
     fetchClasses();
   }, [selectedSeasonId]);
 
+  // One-shot fetch of competition_formats so we can sort format panels and
+  // filter buttons by display_order. Cached for the life of the page.
+  useEffect(() => {
+    competitionFormatsApi
+      .getActive()
+      .then(list => setFormatOrder(new Map(list.map(f => [f.name, f.display_order]))))
+      .catch(err => console.error('Error fetching competition formats:', err));
+  }, []);
+
   useEffect(() => {
     if (selectedEventId) {
       fetchResults();
@@ -231,9 +245,17 @@ export default function ResultsPage() {
           formats.add(classData.format);
         }
       });
-      setAvailableFormats(Array.from(formats).sort());
+      // Sort by competition_formats.display_order, falling back to alpha for
+      // any format name not found in the lookup (e.g. brand-new formats not
+      // yet fetched, or legacy "Unknown" buckets).
+      const sorted = Array.from(formats).sort((a, b) => {
+        const oa = formatOrder.get(a) ?? Number.POSITIVE_INFINITY;
+        const ob = formatOrder.get(b) ?? Number.POSITIVE_INFINITY;
+        return oa - ob || a.localeCompare(b);
+      });
+      setAvailableFormats(sorted);
     }
-  }, [results, classes]);
+  }, [results, classes, formatOrder]);
 
   // Handle URL param change - set selected event when URL param changes
   useEffect(() => {
@@ -559,25 +581,32 @@ export default function ResultsPage() {
       classEntry.results.push(result);
     });
 
-    // Materialize and sort: sections by display_order, then classes by display_order,
-    // then by name as a tiebreaker so the result is deterministic.
-    return Array.from(formats.entries()).map(([format, sectionBucket]) => {
-      const sections: SectionGroup[] = Array.from(sectionBucket.values())
-        .map(s => ({
-          section: s.section,
-          sectionDisplayOrder: s.sectionDisplayOrder,
-          classes: Array.from(s.classes.values())
-            .sort((a, b) => a.classDisplayOrder - b.classDisplayOrder || a.className.localeCompare(b.className)),
-        }))
-        .sort((a, b) => {
-          // Push the unassigned bucket to the bottom regardless of order.
-          if (a.section === UNASSIGNED_SECTION) return 1;
-          if (b.section === UNASSIGNED_SECTION) return -1;
-          return a.sectionDisplayOrder - b.sectionDisplayOrder || a.section.localeCompare(b.section);
-        });
-      return { format, sections };
-    });
-  }, [results, classes, selectedFormat, selectedClass, searchTerm]);
+    // Materialize and sort: formats by competition_formats.display_order,
+    // sections by min(class.display_order), classes by class.display_order,
+    // with name as the final tiebreaker so order is deterministic.
+    return Array.from(formats.entries())
+      .map(([format, sectionBucket]): FormatGroup => {
+        const sections: SectionGroup[] = Array.from(sectionBucket.values())
+          .map(s => ({
+            section: s.section,
+            sectionDisplayOrder: s.sectionDisplayOrder,
+            classes: Array.from(s.classes.values())
+              .sort((a, b) => a.classDisplayOrder - b.classDisplayOrder || a.className.localeCompare(b.className)),
+          }))
+          .sort((a, b) => {
+            // Push the unassigned bucket to the bottom regardless of order.
+            if (a.section === UNASSIGNED_SECTION) return 1;
+            if (b.section === UNASSIGNED_SECTION) return -1;
+            return a.sectionDisplayOrder - b.sectionDisplayOrder || a.section.localeCompare(b.section);
+          });
+        return { format, sections };
+      })
+      .sort((a, b) => {
+        const oa = formatOrder.get(a.format) ?? Number.POSITIVE_INFINITY;
+        const ob = formatOrder.get(b.format) ?? Number.POSITIVE_INFINITY;
+        return oa - ob || a.format.localeCompare(b.format);
+      });
+  }, [results, classes, formatOrder, selectedFormat, selectedClass, searchTerm]);
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
