@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Trophy, Medal, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, Users } from 'lucide-react';
 import { competitionResultsApi, StandingsEntry, ClassStandingsEntry } from '@/competition-results';
 import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
-import { MecaIdActiveProvider } from '@/competition-results/components/MecaIdActiveContext';
+import { MecaIdActiveProvider, useMecaIdActive } from '@/competition-results/components/MecaIdActiveContext';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useStandingsSEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
@@ -17,6 +17,38 @@ type ViewMode = 'overall' | 'byFormat' | 'byClass';
 type SortColumn = 'rank' | 'competitor' | 'mecaId' | 'points' | 'events' | 'placements';
 type SortDirection = 'asc' | 'desc';
 
+/**
+ * Renders the MECA ID cell on a standings row with three-state coloring:
+ *   - grey "Non Member" for guests / 999999 / missing IDs
+ *   - green for members whose MECA ID is currently active (clickable)
+ *   - red for members whose MECA ID is currently expired (not clickable)
+ *
+ * Lives inside <MecaIdActiveProvider> via the parent page, so the
+ * `useMecaIdActive` hook returns true / false / undefined accordingly.
+ * Falls back to green when the provider hasn't resolved yet — flips to
+ * red once the bulk lookup completes.
+ */
+function StandingsMecaIdCell({ mecaId, isGuest }: { mecaId: string | null; isGuest: boolean }) {
+  const targetActive = useMecaIdActive(mecaId);
+  if (isGuest || !mecaId || mecaId === '999999') {
+    return (
+      <MecaIdLink
+        mecaId={mecaId}
+        displayText="Non Member"
+        className="font-semibold text-gray-500"
+      />
+    );
+  }
+  const color = targetActive === false ? 'text-red-400' : 'text-green-500';
+  return (
+    <MecaIdLink
+      mecaId={mecaId}
+      displayText={mecaId}
+      className={`font-semibold ${color}`}
+    />
+  );
+}
+
 export default function StandingsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('overall');
   const [standings, setStandings] = useState<StandingsEntry[]>([]);
@@ -24,7 +56,11 @@ export default function StandingsPage() {
   const [classes, setClasses] = useState<{ format: string; className: string; resultCount: number }[]>([]);
   // Available formats for the current season — fetched, not hardcoded, so
   // we never render a chip for a format with zero results.
-  const [availableFormats, setAvailableFormats] = useState<{ format: string; resultCount: number }[]>([]);
+  // Backend may return either { format, resultCount } (legacy) or the
+  // newer { format, resultCount, competitorCount } shape. We keep
+  // resultCount in the type because StandingsPage shows row count on the
+  // chip (rows = standings rows displayed, not competitors).
+  const [availableFormats, setAvailableFormats] = useState<{ format: string; resultCount: number; competitorCount?: number }[]>([]);
   const [selectedFormat, setSelectedFormat] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
@@ -414,7 +450,6 @@ export default function StandingsPage() {
                       {paginatedData.map((entry, index) => {
                         const rank = entry.rank || (startIndex + index + 1);
                         const isTopThree = rank <= 3;
-                        const mecaDisplay = getMecaIdDisplay(entry.mecaId, entry.isGuest);
 
                         return (
                           <tr
@@ -436,10 +471,9 @@ export default function StandingsPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <MecaIdLink
+                              <StandingsMecaIdCell
                                 mecaId={entry.mecaId}
-                                displayText={mecaDisplay.text}
-                                className={`font-semibold ${mecaDisplay.color}`}
+                                isGuest={entry.isGuest}
                               />
                             </td>
                             <td className="px-6 py-4 text-center">

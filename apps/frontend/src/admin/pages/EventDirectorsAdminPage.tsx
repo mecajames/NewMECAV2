@@ -157,10 +157,26 @@ export default function EventDirectorsAdminPage() {
     }
   };
 
+  // Display name resolution for an ED row:
+  //   1. preferred_name (set by admin direct-create or by the ED on
+  //      their application — this is the authoritative public name on
+  //      the ED detail page)
+  //   2. user's first + last name from the profile
+  //   3. user's email
+  //   4. literal "Unnamed Event Director"
+  // Keeps the list row in sync with what the detail page shows.
+  const edDisplayName = (ed: any): string => {
+    const pref = (ed.preferred_name || '').trim();
+    if (pref) return pref;
+    const full = `${ed.user?.first_name || ''} ${ed.user?.last_name || ''}`.trim();
+    if (full) return full;
+    return ed.user?.email || 'Unnamed Event Director';
+  };
+
   const filteredEDs = eventDirectors.filter((ed) => {
     if (!filters.search) return true;
     const searchLower = filters.search.toLowerCase();
-    const name = `${ed.user?.first_name || ''} ${ed.user?.last_name || ''}`.toLowerCase();
+    const name = edDisplayName(ed).toLowerCase();
     const email = (ed.user?.email || '').toLowerCase();
     return name.includes(searchLower) || email.includes(searchLower);
   });
@@ -271,16 +287,24 @@ export default function EventDirectorsAdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {filteredEDs.map((ed) => (
+                {filteredEDs.map((ed) => {
+                  const displayName = edDisplayName(ed);
+                  const avatarLetter = (
+                    ed.preferred_name?.[0] ||
+                    ed.user?.first_name?.[0] ||
+                    ed.user?.email?.[0] ||
+                    'E'
+                  ).toUpperCase();
+                  return (
                   <tr key={ed.id} className="hover:bg-slate-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="h-10 w-10 rounded-full bg-slate-600 flex items-center justify-center text-white font-bold">
-                          {(ed.user?.first_name?.[0] || ed.user?.email?.[0] || 'E').toUpperCase()}
+                          {avatarLetter}
                         </div>
                         <div className="ml-4">
                           <div className="text-white font-medium">
-                            {ed.user?.first_name} {ed.user?.last_name}
+                            {displayName}
                           </div>
                           <div className="text-gray-400 text-sm">{ed.user?.email}</div>
                         </div>
@@ -342,7 +366,8 @@ export default function EventDirectorsAdminPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
            </div>

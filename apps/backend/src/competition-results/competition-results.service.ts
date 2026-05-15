@@ -840,9 +840,13 @@ export class CompetitionResultsService {
         }
       }
 
-      // Convert to array and sort
+      // Convert to array. We used to filter `total_points > 0` here which
+      // silently dropped any competitor who participated but didn't earn
+      // points — making the chip count (e.g. "SQL (3)") disagree with the
+      // visible row count. Now every unique competitor in the filtered
+      // result set appears; 0-point entries naturally sink to the bottom
+      // under either sort mode (points or best score).
       let entries = Array.from(competitorMap.values())
-        .filter(e => e.total_points > 0)
         .map(e => ({
           competitor_id: e.competitor_id,
           competitor_name: e.competitor_name,

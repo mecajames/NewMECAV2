@@ -3,6 +3,7 @@ import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, Chev
 import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { useFormatOrder, compareFormatNames } from '@/competition-formats';
 import { profilesApi, Profile } from '@/profiles';
+import { getAllEventDirectors } from '@/event-directors/event-directors.api-client';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionResultsApi } from '@/competition-results';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
@@ -233,11 +234,40 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     }
   };
 
+  // Pulls the actual `event_directors` table (active rows) instead of
+  // filtering profiles by role. A member becomes an ED via the application
+  // / admin-direct-create flow which creates an event_directors row; their
+  // profile.role almost always stays 'user'. The old filter only matched
+  // the handful of EDs whose role was promoted to 'event_director' by hand,
+  // which is why the dropdown was showing 3 names instead of 18.
   const fetchEventDirectors = async () => {
     try {
-      const data = await profilesApi.getAll(1, 1000);
-      const directors = data.filter(p => p.role === 'event_director' || p.role === 'admin');
-      setEventDirectors(directors);
+      const eds = await getAllEventDirectors({ isActive: true });
+      const profiles: Profile[] = eds
+        .filter(ed => !!ed.user)
+        .map(ed => {
+          const u = ed.user!;
+          // preferredName from EventDirector overrides the underlying
+          // profile name when set, so the dropdown matches what's displayed
+          // on the ED detail page.
+          const display = ed.preferred_name?.trim() ||
+            `${u.first_name || ''} ${u.last_name || ''}`.trim();
+          const [first, ...rest] = display ? display.split(/\s+/) : [];
+          return {
+            id: u.id,
+            email: u.email,
+            first_name: first || u.first_name || '',
+            last_name: rest.join(' ') || u.last_name || '',
+            avatar_url: u.avatar_url,
+          } as Profile;
+        })
+        // Defensive de-dupe in case a profile has multiple ED rows.
+        .filter((p, idx, arr) => arr.findIndex(x => x.id === p.id) === idx)
+        // Surface a stable alphabetical order so admins find names fast.
+        .sort((a, b) =>
+          `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`),
+        );
+      setEventDirectors(profiles);
     } catch (error) {
       console.error('Error fetching event directors:', error);
     }

@@ -331,14 +331,21 @@ export const competitionResultsApi = {
    */
   getAvailableFormats: async (
     seasonId?: string,
-  ): Promise<{ format: string; resultCount: number }[]> => {
+  ): Promise<{ format: string; resultCount: number; competitorCount: number }[]> => {
     const queryParams = new URLSearchParams();
     if (seasonId) queryParams.set('seasonId', seasonId);
     const url = queryParams.toString()
       ? `/api/standings/available-formats?${queryParams}`
       : '/api/standings/available-formats';
     const response = await axios.get(url);
-    return response.data;
+    // Defensive: older deploys returned just `resultCount`. Fall back to it
+    // so the chip badge still renders during the rollout window before
+    // the backend ships the new field.
+    return (response.data ?? []).map((f: any) => ({
+      format: f.format,
+      resultCount: f.resultCount ?? 0,
+      competitorCount: f.competitorCount ?? f.resultCount ?? 0,
+    }));
   },
 
   getClassesWithResults: async (

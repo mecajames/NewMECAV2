@@ -6,7 +6,7 @@ import {
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
   ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe,
-  Shield, ShieldAlert, Wifi, ClipboardCheck, Flame, AlertCircle
+  Shield, ShieldAlert, Wifi, ClipboardCheck, Flame
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -231,26 +231,10 @@ export default function AdminDashboard() {
         {
           icon: DollarSign,
           title: 'Billing',
-          description: 'Manage orders, invoices, and revenue',
+          description: 'Orders, invoices, revenue, all payments, and failed payments',
           action: 'billing',
           color: 'lime',
           navigateTo: '/admin/billing',
-        },
-        {
-          icon: CreditCard,
-          title: 'All Payments',
-          description: 'Unified Stripe + PayPal payment ledger — paid, failed, refunded, pending',
-          action: 'all-payments',
-          color: 'orange',
-          navigateTo: '/admin/billing/payments',
-        },
-        {
-          icon: AlertCircle,
-          title: 'Failed Payments',
-          description: 'Triage queue for declined and failed payments across all flows',
-          action: 'failed-payments',
-          color: 'red',
-          navigateTo: '/admin/billing/failed-payments',
         },
         {
           icon: Tags,

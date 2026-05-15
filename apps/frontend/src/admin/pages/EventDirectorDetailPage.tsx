@@ -149,17 +149,32 @@ export default function EventDirectorDetailPage() {
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-slate-700 flex items-center justify-center text-white text-2xl font-bold">
-              {(eventDirector.user?.first_name?.[0] || 'E').toUpperCase()}
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-white">
-                {eventDirector.user?.first_name} {eventDirector.user?.last_name}
-              </h1>
-              <p className="text-slate-400">{eventDirector.user?.email}</p>
-            </div>
-          </div>
+          {/* Name resolution mirrors the admin list view: preferred_name
+              wins, then the user's first+last, then their email. Avoids
+              the empty header that admin-direct-created EDs were showing
+              when the underlying profile lacked a first name. */}
+          {(() => {
+            const pref = (eventDirector.preferred_name || '').trim();
+            const fullName = `${eventDirector.user?.first_name || ''} ${eventDirector.user?.last_name || ''}`.trim();
+            const displayName = pref || fullName || eventDirector.user?.email || 'Unnamed Event Director';
+            const avatarLetter = (
+              pref?.[0] ||
+              eventDirector.user?.first_name?.[0] ||
+              eventDirector.user?.email?.[0] ||
+              'E'
+            ).toUpperCase();
+            return (
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-full bg-slate-700 flex items-center justify-center text-white text-2xl font-bold">
+                  {avatarLetter}
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-white">{displayName}</h1>
+                  <p className="text-slate-400">{eventDirector.user?.email}</p>
+                </div>
+              </div>
+            );
+          })()}
           <div className="flex items-center gap-4">
             {eventDirector.is_active ? (
               <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
