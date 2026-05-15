@@ -541,9 +541,9 @@ export class StandingsService {
    */
   async getFormatsWithResults(
     seasonId?: string,
-  ): Promise<Array<{ format: string; resultCount: number }>> {
+  ): Promise<Array<{ format: string; resultCount: number; competitorCount: number }>> {
     const cacheKey = `formats_with_results_${seasonId ?? 'all'}`;
-    const cached = this.getCached<Array<{ format: string; resultCount: number }>>(cacheKey);
+    const cached = this.getCached<Array<{ format: string; resultCount: number; competitorCount: number }>>(cacheKey);
     if (cached !== null) return cached;
 
     const em = this.em.fork();
@@ -552,14 +552,28 @@ export class StandingsService {
       filter.season = seasonId;
     }
     const results = await em.find(CompetitionResult, filter, {
-      fields: ['format'],
+      fields: ['format', 'mecaId', 'competitorName'],
     });
 
-    const counts = new Map<string, number>();
+    // Per-format we track raw row count AND a distinct-competitor count.
+    // Competitor identity uses MECA ID when present (real members), with
+    // guest rows (999999/0/empty/null) keyed by competitor name so multiple
+    // guest entries with the same name don't double-count. This matches
+    // how `getLeaderboard()` aggregates so the chip badge ("SQL (3)") tells
+    // the user exactly how many entries the leaderboard will render.
+    const counts = new Map<string, { rows: number; competitors: Set<string> }>();
     for (const r of results) {
       const f = (r.format || '').trim();
       if (!f) continue;
-      counts.set(f, (counts.get(f) || 0) + 1);
+      const bucket = counts.get(f) ?? { rows: 0, competitors: new Set<string>() };
+      bucket.rows += 1;
+      const mecaId = r.mecaId;
+      const isGuest = !mecaId || mecaId === '999999' || mecaId === '0' || mecaId === '';
+      const key = isGuest
+        ? `guest_${(r.competitorName || 'unknown').toLowerCase().trim()}`
+        : `meca_${mecaId}`;
+      bucket.competitors.add(key);
+      counts.set(f, bucket);
     }
 
     // Look up display_order for every distinct format. Unknown names fall
@@ -570,7 +584,11 @@ export class StandingsService {
     );
 
     const list = Array.from(counts.entries())
-      .map(([format, resultCount]) => ({ format, resultCount }))
+      .map(([format, bucket]) => ({
+        format,
+        resultCount: bucket.rows,
+        competitorCount: bucket.competitors.size,
+      }))
       .sort((a, b) => {
         const oa = orderByName.get(a.format) ?? Number.POSITIVE_INFINITY;
         const ob = orderByName.get(b.format) ?? Number.POSITIVE_INFINITY;

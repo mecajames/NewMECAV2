@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Trophy, TrendingUp, Filter, Medal } from 'lucide-react';
 import { competitionResultsApi } from '@/competition-results';
 import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
 import { MecaIdActiveProvider } from '@/competition-results/components/MecaIdActiveContext';
 import { SeasonSelector } from '@/seasons';
+import { competitionFormatsApi, CompetitionFormat } from '@/competition-formats';
 import { SEOHead, useLeaderboardSEO } from '@/shared/seo';
 import { BannerDisplay, useBanners } from '@/banners';
 import { BannerPosition } from '@newmeca/shared';
@@ -32,10 +33,17 @@ export default function LeaderboardPage() {
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
   const [rankBy, setRankBy] = useState<RankByType>('points');
   const [classes, setClasses] = useState<string[]>([]);
-  // Available formats for the selected season. Replaces the previously
-  // hardcoded SPL/SQL buttons so the chip list adapts to whatever data
-  // actually exists in the season.
-  const [availableFormats, setAvailableFormats] = useState<{ format: string; resultCount: number }[]>([]);
+  // Available formats for the selected season — only the ones with at
+  // least one result row. Tracks raw row count AND distinct-competitor
+  // count; the chip badge shows competitor count so it matches what the
+  // Top 10 list actually renders (one row per competitor).
+  const [availableFormats, setAvailableFormats] = useState<{ format: string; resultCount: number; competitorCount: number }[]>([]);
+  // Master list of every active competition format defined in admin.
+  // Drives the chip row so all formats are clickable filters, including
+  // ones with zero results yet — admins explicitly asked for this so
+  // they can see e.g. SSI / MK / Show and Shine even before scores
+  // have been entered for the season.
+  const [allFormats, setAllFormats] = useState<CompetitionFormat[]>([]);
   const [loading, setLoading] = useState(true);
   const [mostEventsAttended, setMostEventsAttended] = useState<LeaderboardEntry[]>([]);
   const [highestSPLScores, setHighestSPLScores] = useState<any[]>([]);
@@ -46,8 +54,8 @@ export default function LeaderboardPage() {
     fetchLeaderboard();
   }, [selectedSeasonId, selectedClass, selectedFormat, rankBy]);
 
-  // Refresh available formats whenever the season changes — keeps the
-  // chip row pruned to formats with actual data for that season.
+  // Refresh available-with-results whenever the season changes — used
+  // to badge each chip with its row count.
   useEffect(() => {
     let cancelled = false;
     competitionResultsApi
@@ -61,6 +69,77 @@ export default function LeaderboardPage() {
       cancelled = true;
     };
   }, [selectedSeasonId]);
+
+  // One-shot fetch of every active format. Doesn't depend on season —
+  // an admin-defined format like "Ride the Light" still shows as a
+  // selectable chip even if no events have been scored for it yet.
+  useEffect(() => {
+    let cancelled = false;
+    competitionFormatsApi
+      .getActive()
+      .then((formats) => {
+        if (cancelled) return;
+        setAllFormats(formats);
+      })
+      .catch((err) => console.error('Error fetching competition formats:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Top-10-specific format ordering. The admin-editable `display_order`
+  // governs the Results / Standings pages; the Top 10 page uses its own
+  // priority list per James 2026-05-15 so the chip row leads with the
+  // most-trafficked formats. Case-insensitive match against format name.
+  // Anything not in this list falls to the end in alphabetical order.
+  // Formats listed in TOP10_HIDDEN_FORMATS are dropped entirely (PHAT
+  // Awards isn't a competition format the leaderboard should surface).
+  const TOP10_FORMAT_ORDER = [
+    'spl',
+    'sql',
+    'dueling demos',
+    'park and pound',
+    'show and shine',
+    'ride the light',
+    'meca kids',
+  ];
+  const TOP10_HIDDEN_FORMATS = new Set(['phat awards']);
+
+  const formatChips = useMemo(() => {
+    // Index by format name for fast lookup. Tracks both row count (for
+    // tooltip context) and competitor count (the number that gets shown
+    // in the chip badge — matches the visible leaderboard row count).
+    const statsByName = new Map(
+      availableFormats.map(f => [f.format, { resultCount: f.resultCount, competitorCount: f.competitorCount }]),
+    );
+    const seen = new Set<string>();
+    const out: Array<{ format: string; resultCount: number; competitorCount: number }> = [];
+    for (const f of allFormats) {
+      if (TOP10_HIDDEN_FORMATS.has(f.name.trim().toLowerCase())) continue;
+      const stats = statsByName.get(f.name);
+      out.push({
+        format: f.name,
+        resultCount: stats?.resultCount ?? 0,
+        competitorCount: stats?.competitorCount ?? 0,
+      });
+      seen.add(f.name);
+    }
+    for (const f of availableFormats) {
+      if (seen.has(f.format)) continue;
+      if (TOP10_HIDDEN_FORMATS.has(f.format.trim().toLowerCase())) continue;
+      out.push({ format: f.format, resultCount: f.resultCount, competitorCount: f.competitorCount });
+    }
+
+    const priority = (name: string) => {
+      const idx = TOP10_FORMAT_ORDER.indexOf(name.trim().toLowerCase());
+      return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+    };
+    return out.sort((a, b) => {
+      const pa = priority(a.format);
+      const pb = priority(b.format);
+      return pa - pb || a.format.localeCompare(b.format);
+    });
+  }, [allFormats, availableFormats]);
 
   const fetchLeaderboard = async () => {
     setLoading(true);
@@ -257,34 +336,49 @@ export default function LeaderboardPage() {
             </div>
           </div>
 
-          {/* Format Toggle Buttons — data-driven so a chip never points at
-              a format with zero results. Each chip shows its row count so
-              the user can tell which formats are most active this season. */}
+          {/* Format chips. Every active format defined in /admin/formats
+              renders as a clickable filter — formats with zero result rows
+              in the current season are faded but selectable so admins can
+              confirm "no data yet" without bouncing back to admin tools.
+              Order matches the admin-editable display_order. */}
           <div className="flex items-center gap-4 flex-wrap">
             <span className="font-medium text-gray-300">Format:</span>
             <div className="flex gap-2 flex-wrap">
-              {availableFormats.length === 0 ? (
+              {formatChips.length === 0 ? (
                 <span className="text-sm text-gray-500 italic">
-                  No results for this season
+                  No competition formats configured
                 </span>
               ) : (
-                availableFormats.map((f) => (
-                  <button
-                    key={f.format}
-                    onClick={() => {
-                      setSelectedFormat(selectedFormat === f.format ? 'all' : f.format);
-                      setSelectedClass('all');
-                    }}
-                    className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                      selectedFormat === f.format
-                        ? 'bg-orange-500 text-white shadow-lg'
-                        : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                    }`}
-                  >
-                    {f.format}
-                    <span className="ml-1 text-xs opacity-70">({f.resultCount})</span>
-                  </button>
-                ))
+                formatChips.map((f) => {
+                  const isSelected = selectedFormat === f.format;
+                  const isEmpty = f.competitorCount === 0;
+                  // Tooltip surfaces BOTH numbers so it's clear what the
+                  // badge means and that the row-vs-competitor difference
+                  // is intentional (one competitor can span multiple rows).
+                  const tooltip = isEmpty
+                    ? `No ${f.format} competitors in this season yet`
+                    : `${f.competitorCount} competitor${f.competitorCount === 1 ? '' : 's'} · ${f.resultCount} ${f.format} result row${f.resultCount === 1 ? '' : 's'}`;
+                  return (
+                    <button
+                      key={f.format}
+                      onClick={() => {
+                        setSelectedFormat(isSelected ? 'all' : f.format);
+                        setSelectedClass('all');
+                      }}
+                      title={tooltip}
+                      className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                        isSelected
+                          ? 'bg-orange-500 text-white shadow-lg'
+                          : isEmpty
+                            ? 'bg-slate-700/40 text-gray-500 hover:bg-slate-700/70 hover:text-gray-300'
+                            : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {f.format}
+                      <span className="ml-1 text-xs opacity-70">({f.competitorCount})</span>
+                    </button>
+                  );
+                })
               )}
             </div>
             {selectedFormat !== 'all' && (
