@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Trophy, CheckCircle, AlertCircle, ShoppingCart, Minus, Plus, Package, MapPin, Calendar, Shirt } from 'lucide-react';
 import { worldFinalsApi } from '@/api-client/world-finals.api-client';
+import { competitionFormatsApi } from '@/competition-formats';
+import { competitionClassesApi } from '@/competition-classes';
 
 const DEFAULT_TSHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
 const DEFAULT_RING_SIZES = ['5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10', '10.5', '11', '11.5', '12', '12.5', '13', '14', '15'];
@@ -31,6 +33,32 @@ export default function WorldFinalsPreRegisterPage() {
     guestCount: 0, notes: '',
   });
   const [extraTshirtSizes, setExtraTshirtSizes] = useState<string[]>([]);
+
+  // Lookups so the eligible-class checkbox grid sorts by the same admin-
+  // editable Display Order as the public Results page. Backend's
+  // pkg.eligibleClasses is a flat list of { class_name, format, ... } with
+  // no order info, so we build (format -> display_order) and
+  // (format::name -> class.display_order) maps client-side and sort with
+  // them. Failure is non-fatal — falls back to backend insertion order.
+  const [formatOrder, setFormatOrder] = useState<Map<string, number>>(new Map());
+  const [classOrder, setClassOrder] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    Promise.all([competitionFormatsApi.getActive(), competitionClassesApi.getActive()])
+      .then(([formats, classes]) => {
+        setFormatOrder(new Map(formats.map(f => [f.name, f.display_order])));
+        // Same (format, name) pair can recur per season — keep the lowest
+        // display_order so admin tweaks to one season don't reorder the
+        // pre-register grid for another.
+        const co = new Map<string, number>();
+        for (const c of classes) {
+          const key = `${c.format}::${c.name}`;
+          const prev = co.get(key);
+          if (prev === undefined || c.display_order < prev) co.set(key, c.display_order);
+        }
+        setClassOrder(co);
+      })
+      .catch(err => console.error('Error fetching format/class lookups:', err));
+  }, []);
 
   useEffect(() => {
     if (isPreview && previewSeasonId) {
@@ -85,7 +113,21 @@ export default function WorldFinalsPreRegisterPage() {
   }, [availablePackages]);
 
   const selectedPkg = availablePackages.find(p => p.id === selectedPackageId);
-  const eligibleClasses = selectedPkg?.eligibleClasses || [];
+  // Sort eligible classes by (format.display_order, class.display_order,
+  // class_name) so this page matches the Results-page panel order. Unknown
+  // formats/classes fall back to +Infinity which sorts them to the end.
+  const eligibleClasses = useMemo(() => {
+    const raw: any[] = selectedPkg?.eligibleClasses || [];
+    return [...raw].sort((a, b) => {
+      const fa = formatOrder.get(a.format) ?? Number.POSITIVE_INFINITY;
+      const fb = formatOrder.get(b.format) ?? Number.POSITIVE_INFINITY;
+      if (fa !== fb) return fa - fb;
+      const ca = classOrder.get(`${a.format}::${a.class_name}`) ?? Number.POSITIVE_INFINITY;
+      const cb = classOrder.get(`${b.format}::${b.class_name}`) ?? Number.POSITIVE_INFINITY;
+      if (ca !== cb) return ca - cb;
+      return String(a.class_name).localeCompare(String(b.class_name));
+    });
+  }, [selectedPkg, formatOrder, classOrder]);
   const isEarlyBird = selectedPkg?._pricingTier === 'early_bird';
   const addonItems = selectedGroup?.addonItems || [];
 

@@ -140,16 +140,25 @@ export default function LeaderboardPage() {
         setHighestSPLScores([]);
       }
 
-      // Fetch available classes for the dropdown using dedicated endpoint
+      // Fetch available classes for the dropdown using dedicated endpoint.
+      // Backend already returns rows ordered by (format.display_order,
+      // class.display_order, name); preserve that order here so the dropdown
+      // matches the Results page panel order. Dedupe by name while keeping
+      // the first occurrence.
       try {
         const classesData = await competitionResultsApi.getClassesWithResults(
           selectedFormat !== 'all' ? selectedFormat : undefined,
           selectedSeasonId || undefined
         );
-        const classNames = classesData
-          .map((c) => c.className)
-          .filter(Boolean);
-        setClasses(Array.from(new Set(classNames)).sort());
+        const seen = new Set<string>();
+        const ordered: string[] = [];
+        for (const c of classesData) {
+          const name = c.className;
+          if (!name || seen.has(name)) continue;
+          seen.add(name);
+          ordered.push(name);
+        }
+        setClasses(ordered);
       } catch {
         // Ignore error for classes fetch
       }

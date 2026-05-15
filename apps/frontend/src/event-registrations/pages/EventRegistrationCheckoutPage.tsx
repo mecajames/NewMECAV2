@@ -26,6 +26,7 @@ import { hasActiveMembership } from '@/auth/permissions';
 import { useTaxRate } from '@/hooks/useTaxRate';
 import { eventsApi, Event } from '@/events/events.api-client';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes/competition-classes.api-client';
+import { competitionFormatsApi } from '@/competition-formats';
 import {
   membershipTypeConfigsApi,
   MembershipTypeConfig,
@@ -101,6 +102,10 @@ export default function EventRegistrationCheckoutPage() {
   // Data state
   const [event, setEvent] = useState<Event | null>(null);
   const [availableClasses, setAvailableClasses] = useState<CompetitionClass[]>([]);
+  // Lookup keyed by format name → display_order so the registration class
+  // picker groups by format in the same order as the Results page and the
+  // admin Formats list.
+  const [formatOrder, setFormatOrder] = useState<Map<string, number>>(new Map());
   const [membershipOptions, setMembershipOptions] = useState<MembershipTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -185,47 +190,80 @@ export default function EventRegistrationCheckoutPage() {
     };
   }, [selectedClasses.length, isMember, includeMembership, selectedMembershipId, membershipOptions, memberEntryFee, nonMemberEntryFee]);
 
-  // Determine sub-category for a class based on its name
-  const getSubCategory = (cls: CompetitionClass): string => {
-    const name = cls.name;
-    if (name.startsWith('Single Position Dueling Demos')) return 'Single Position Dueling Demos';
-    if (name.startsWith('Dueling Demos')) return 'Dueling Demos';
-    if (name.startsWith('Park and Pound') || name.startsWith('Park And Pound')) return 'Park and Pound';
-    if (name.startsWith('Radical X')) return 'Radical X';
-    if (name.startsWith('MECA Kids')) return 'MECA Kids';
-    if (name.startsWith('Show N Shine') || name.startsWith('Show and Shine')) return 'Show and Shine';
-    return '';
-  };
-
-  // Group classes by format, then by sub-category within each format
+  // Group classes by format → section → class, sorted at every level so the
+  // picker matches the Results page exactly:
+  //  - formats: competition_formats.display_order (alpha fallback)
+  //  - sections: min(class.display_order) within the section
+  //  - classes: class.display_order, then class.name
+  // Sections come from class.section directly (the field is keyed off the V1
+  // canonical panels in Migration20260505140100). Classes without a section
+  // fall into an empty-string bucket that renders without a sub-header, at
+  // the top of its format — same shape the previous heuristic produced.
   const classesByFormat = useMemo(() => {
-    const grouped: Record<string, { subCategory: string; classes: CompetitionClass[] }[]> = {};
+    const grouped: Array<{
+      format: string;
+      formatDisplayOrder: number;
+      subGroups: Array<{
+        subCategory: string;
+        sectionDisplayOrder: number;
+        classes: CompetitionClass[];
+      }>;
+    }> = [];
+    const formatLookup = new Map<string, typeof grouped[number]>();
+
     for (const cls of availableClasses) {
-      if (!grouped[cls.format]) {
-        grouped[cls.format] = [];
+      const formatName = cls.format;
+      let fmt = formatLookup.get(formatName);
+      if (!fmt) {
+        fmt = {
+          format: formatName,
+          formatDisplayOrder: formatOrder.get(formatName) ?? Number.POSITIVE_INFINITY,
+          subGroups: [],
+        };
+        formatLookup.set(formatName, fmt);
+        grouped.push(fmt);
       }
-      const sub = getSubCategory(cls);
-      let subGroup = grouped[cls.format].find(g => g.subCategory === sub);
+      const sub = cls.section ?? '';
+      let subGroup = fmt.subGroups.find(g => g.subCategory === sub);
       if (!subGroup) {
-        subGroup = { subCategory: sub, classes: [] };
-        grouped[cls.format].push(subGroup);
+        subGroup = {
+          subCategory: sub,
+          sectionDisplayOrder: cls.display_order,
+          classes: [],
+        };
+        fmt.subGroups.push(subGroup);
+      } else if (cls.display_order < subGroup.sectionDisplayOrder) {
+        subGroup.sectionDisplayOrder = cls.display_order;
       }
       subGroup.classes.push(cls);
     }
-    // Sort classes within each sub-group by display order
-    for (const format of Object.keys(grouped)) {
-      for (const subGroup of grouped[format]) {
-        subGroup.classes.sort((a, b) => a.display_order - b.display_order);
+
+    for (const fmt of grouped) {
+      for (const subGroup of fmt.subGroups) {
+        subGroup.classes.sort(
+          (a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name),
+        );
       }
-      // Sort sub-groups: unnamed (core) first, then alphabetically
-      grouped[format].sort((a, b) => {
+      // Unsectioned classes render without a sub-header at the top of the
+      // format — matches the prior "core (unnamed) first" behavior.
+      fmt.subGroups.sort((a, b) => {
         if (!a.subCategory) return -1;
         if (!b.subCategory) return 1;
-        return a.subCategory.localeCompare(b.subCategory);
+        return (
+          a.sectionDisplayOrder - b.sectionDisplayOrder ||
+          a.subCategory.localeCompare(b.subCategory)
+        );
       });
     }
+
+    grouped.sort(
+      (a, b) =>
+        a.formatDisplayOrder - b.formatDisplayOrder ||
+        a.format.localeCompare(b.format),
+    );
+
     return grouped;
-  }, [availableClasses]);
+  }, [availableClasses, formatOrder]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -251,6 +289,16 @@ export default function EventRegistrationCheckoutPage() {
             c.is_active && (eventFormats.length === 0 || eventFormats.includes(c.format))
           );
           setAvailableClasses(filteredClasses);
+        }
+
+        // Fetch competition_formats so we can group + sort the class picker
+        // by display_order (matches Results page + admin Formats list).
+        // Non-fatal — if this fails the picker falls back to insertion order.
+        try {
+          const formatRows = await competitionFormatsApi.getActive();
+          setFormatOrder(new Map(formatRows.map(f => [f.name, f.display_order])));
+        } catch (err) {
+          console.error('Error fetching competition formats:', err);
         }
 
         // Fetch competitor membership options for upsell
@@ -1249,7 +1297,7 @@ export default function EventRegistrationCheckoutPage() {
                       )}
                     </p>
 
-                    {Object.keys(classesByFormat).length === 0 ? (
+                    {classesByFormat.length === 0 ? (
                       <div className="text-center py-8 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                         <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
                         <p className="text-amber-400 font-medium mb-2">No classes available for this event</p>
@@ -1261,7 +1309,7 @@ export default function EventRegistrationCheckoutPage() {
                       </div>
                     ) : (
                       <div className="space-y-6">
-                        {Object.entries(classesByFormat).map(([format, subGroups]) => (
+                        {classesByFormat.map(({ format, subGroups }) => (
                           <div key={format}>
                             <h4 className="text-sm font-semibold text-orange-400 uppercase tracking-wide mb-3">
                               {format}
@@ -1313,7 +1361,7 @@ export default function EventRegistrationCheckoutPage() {
                   </div>
 
                   {/* Entry Fee Warning */}
-                  {memberEntryFee === 0 && nonMemberEntryFee === 0 && Object.keys(classesByFormat).length > 0 && (
+                  {memberEntryFee === 0 && nonMemberEntryFee === 0 && classesByFormat.length > 0 && (
                     <div className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                       <div className="flex items-start gap-3">
                         <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
