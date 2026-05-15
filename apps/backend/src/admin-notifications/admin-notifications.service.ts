@@ -177,7 +177,22 @@ export class AdminNotificationsService {
         { label: 'Category', value: category },
         { label: 'Amount Paid', value: `$${amountPaid.toFixed(2)}` },
         { label: 'Date', value: this.formatDate(new Date()) },
+        { label: 'Membership ID', value: membership.id || 'N/A' },
       );
+      // Payment-processor IDs — surface every captured identifier so admins
+      // can cross-reference Stripe/PayPal dashboards without digging in the DB.
+      if (membership.transactionId) {
+        fields.push({ label: 'Transaction ID', value: membership.transactionId });
+      }
+      if (membership.stripePaymentIntentId) {
+        fields.push({ label: 'Stripe Payment Intent', value: membership.stripePaymentIntentId });
+      }
+      if (membership.stripeSubscriptionId) {
+        fields.push({ label: 'Stripe Subscription ID', value: membership.stripeSubscriptionId });
+      }
+      if (membership.paypalSubscriptionId) {
+        fields.push({ label: 'PayPal Subscription ID', value: membership.paypalSubscriptionId });
+      }
 
       await this.sendAlertToAllAdmins({
         title: `New Membership: ${memberName}`,
@@ -235,6 +250,10 @@ export class AdminNotificationsService {
       // the link falls back to the failed-payments triage view (renewals
       // typically don't have a local Invoice row).
       invoiceId?: string | null;
+      // Stripe Payment Intent ID for the failed attempt — surfaced in the
+      // email so admins can pull the failure detail from Stripe directly.
+      paymentIntentId?: string | null;
+      stripeInvoiceId?: string | null;
     },
   ): Promise<void> {
     try {
@@ -276,9 +295,12 @@ export class AdminNotificationsService {
       fields.push(
         { label: 'Amount Due', value: `$${amount}` },
         { label: 'Attempt #', value: String(info.attemptCount) },
-        { label: 'Subscription ID', value: membership.stripeSubscriptionId || 'N/A' },
+        { label: 'Membership ID', value: membership.id || 'N/A' },
+        { label: 'Stripe Subscription ID', value: membership.stripeSubscriptionId || 'N/A' },
       );
-      if (info.hostedInvoiceUrl) fields.push({ label: 'Stripe Invoice', value: info.hostedInvoiceUrl });
+      if (info.paymentIntentId) fields.push({ label: 'Stripe Payment Intent', value: info.paymentIntentId });
+      if (info.stripeInvoiceId) fields.push({ label: 'Stripe Invoice ID', value: info.stripeInvoiceId });
+      if (info.hostedInvoiceUrl) fields.push({ label: 'Stripe Invoice URL', value: info.hostedInvoiceUrl });
 
       await this.sendAlertToAllAdmins({
         title: `Renewal Payment Failed: ${memberName}`,
@@ -318,8 +340,20 @@ export class AdminNotificationsService {
       if (profileId) fields.push({ label: 'Member Billing', value: `${baseUrl}/admin/members/${profileId}` });
       fields.push(
         { label: 'New End Date', value: this.formatDate(newEndDate) },
-        { label: 'Subscription ID', value: membership.stripeSubscriptionId || 'N/A' },
+        { label: 'Membership ID', value: membership.id || 'N/A' },
       );
+      if (membership.stripeSubscriptionId) {
+        fields.push({ label: 'Stripe Subscription ID', value: membership.stripeSubscriptionId });
+      }
+      if (membership.paypalSubscriptionId) {
+        fields.push({ label: 'PayPal Subscription ID', value: membership.paypalSubscriptionId });
+      }
+      if (membership.transactionId) {
+        fields.push({ label: 'Transaction ID', value: membership.transactionId });
+      }
+      if (membership.stripePaymentIntentId) {
+        fields.push({ label: 'Stripe Payment Intent', value: membership.stripePaymentIntentId });
+      }
 
       await this.sendAlertToAllAdmins({
         title: `Subscription Renewed: ${memberName}`,
@@ -357,7 +391,16 @@ export class AdminNotificationsService {
       ];
       if (memberEmail) fields.push({ label: 'Email', value: memberEmail });
       if (profileId) fields.push({ label: 'Member Billing', value: `${baseUrl}/admin/members/${profileId}` });
-      fields.push({ label: 'Date', value: this.formatDate(new Date()) });
+      fields.push(
+        { label: 'Date', value: this.formatDate(new Date()) },
+        { label: 'Membership ID', value: membership.id || 'N/A' },
+      );
+      if (membership.stripeSubscriptionId) {
+        fields.push({ label: 'Stripe Subscription ID', value: membership.stripeSubscriptionId });
+      }
+      if (membership.paypalSubscriptionId) {
+        fields.push({ label: 'PayPal Subscription ID', value: membership.paypalSubscriptionId });
+      }
 
       await this.sendAlertToAllAdmins({
         title: `Subscription Cancelled: ${memberName}`,
@@ -395,8 +438,17 @@ export class AdminNotificationsService {
       ];
       if (memberEmail) fields.push({ label: 'Email', value: memberEmail });
       if (profileId) fields.push({ label: 'Member Billing', value: `${baseUrl}/admin/members/${profileId}` });
-      fields.push({ label: 'Date', value: this.formatDate(new Date()) });
+      fields.push(
+        { label: 'Date', value: this.formatDate(new Date()) },
+        { label: 'Membership ID', value: membership.id || 'N/A' },
+      );
       if (reason) fields.push({ label: 'Reason', value: reason });
+      if (membership.transactionId) {
+        fields.push({ label: 'Original Transaction ID', value: membership.transactionId });
+      }
+      if (membership.stripeSubscriptionId) {
+        fields.push({ label: 'Stripe Subscription ID', value: membership.stripeSubscriptionId });
+      }
 
       await this.sendAlertToAllAdmins({
         title: `Membership Cancelled: ${memberName}`,

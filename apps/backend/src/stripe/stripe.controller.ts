@@ -1573,6 +1573,9 @@ export class StripeController {
           endDate: membership.endDate || null,
           renewalUrl: `${baseUrl}/membership`,
           paymentMethod: 'stripe',
+          // Reference IDs for member support inquiries.
+          membershipId: membership.id,
+          subscriptionId: membership.stripeSubscriptionId || undefined,
         }).catch((err) => {
           console.error(`Failed to send Stripe subscription cancel email to user: ${err}`);
         });
@@ -1649,6 +1652,14 @@ export class StripeController {
         mecaId: membership.mecaId,
         membershipType: membership.membershipTypeConfig?.name || 'Membership',
         expiryDate: newEndDate,
+        // Reference IDs so the member can quote them when contacting support.
+        membershipId: membership.id,
+        subscriptionId: membership.stripeSubscriptionId,
+        transactionId: typeof (invoice as any).payment_intent === 'string'
+          ? (invoice as any).payment_intent
+          : (invoice as any).payment_intent?.id,
+        paymentMethod: 'stripe',
+        amountPaid: typeof invoice.amount_paid === 'number' ? invoice.amount_paid / 100 : undefined,
       }).catch((err) => {
         console.error('Member renewal email failed (non-critical):', err);
       });
@@ -1723,6 +1734,14 @@ export class StripeController {
       attemptCount: invoice.attempt_count ?? 1,
       amountDueCents: invoice.amount_due ?? 0,
       hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+      // Surface the Stripe PI + Invoice ids so the admin email lets you
+      // jump straight to the failure detail in the Stripe dashboard.
+      paymentIntentId: (invoice as any).payment_intent
+        ? (typeof (invoice as any).payment_intent === 'string'
+            ? (invoice as any).payment_intent
+            : (invoice as any).payment_intent.id)
+        : null,
+      stripeInvoiceId: invoice.id ?? null,
     }).catch((err) => {
       console.error('Admin notification failed (non-critical):', err);
     });

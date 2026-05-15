@@ -105,6 +105,85 @@ describe('Renewal email templates', () => {
     fs.writeFileSync(path.join(previewDir, 'expiring-urgent-7d.html'), html);
   });
 
+  it('welcome email renders the For-Your-Records reference block with transaction + membership IDs', () => {
+    const html: string = (svc as any).getMembershipWelcomeEmailTemplate(
+      'Hello James',
+      {
+        to: 'james@mecacaraudio.com',
+        firstName: 'James',
+        mecaId: 202401,
+        membershipType: 'Pro Competitor',
+        membershipCategory: 'Competitor',
+        expiryDate: new Date(),
+        membershipId: 'mem_abc-123',
+        transactionId: 'pi_3TSx2LCyGPNwWbdQ1jPh6Kkx',
+        paymentMethod: 'stripe',
+      },
+      '2027-05-14',
+    );
+    const text: string = (svc as any).getMembershipWelcomeEmailText(
+      'Hello James',
+      {
+        to: 'james@mecacaraudio.com',
+        firstName: 'James',
+        mecaId: 202401,
+        membershipType: 'Pro Competitor',
+        membershipCategory: 'Competitor',
+        expiryDate: new Date(),
+        membershipId: 'mem_abc-123',
+        transactionId: 'pi_3TSx2LCyGPNwWbdQ1jPh6Kkx',
+        paymentMethod: 'stripe',
+      },
+      '2027-05-14',
+    );
+
+    expect(html).toContain('For Your Records');
+    expect(html).toContain('mem_abc-123');
+    expect(html).toContain('pi_3TSx2LCyGPNwWbdQ1jPh6Kkx');
+    expect(html).toContain('Stripe');
+    expect(text).toContain('FOR YOUR RECORDS');
+    expect(text).toContain('Transaction ID: pi_3TSx2LCyGPNwWbdQ1jPh6Kkx');
+    expect(text).toContain('Membership ID: mem_abc-123');
+    fs.writeFileSync(path.join(previewDir, 'welcome-with-refs.html'), html);
+  });
+
+  it('renewal email renders subscription ID + transaction ID in reference block', () => {
+    const html: string = (svc as any).getMembershipRenewalEmailTemplate(
+      'Hello James',
+      {
+        to: 'james@mecacaraudio.com',
+        firstName: 'James',
+        mecaId: 202401,
+        membershipType: 'Pro Competitor',
+        expiryDate: new Date(),
+        membershipId: 'mem_xyz',
+        transactionId: 'pi_renewal_999',
+        subscriptionId: 'sub_1NfooBar',
+        paymentMethod: 'stripe',
+      },
+      '2027-05-14',
+    );
+    expect(html).toContain('Subscription ID');
+    expect(html).toContain('sub_1NfooBar');
+    expect(html).toContain('pi_renewal_999');
+    fs.writeFileSync(path.join(previewDir, 'renewal-with-refs.html'), html);
+  });
+
+  it('reference block is omitted entirely when no IDs supplied (quiet by default)', () => {
+    const html: string = (svc as any).getMembershipWelcomeEmailTemplate(
+      'Hello',
+      {
+        to: 'someone@example.com',
+        mecaId: 700123,
+        membershipType: 'Competitor',
+        membershipCategory: 'Competitor',
+        expiryDate: new Date(),
+      },
+      '2027-05-14',
+    );
+    expect(html).not.toContain('For Your Records');
+  });
+
   it('renders without dto.firstName (Hello fallback)', () => {
     const html: string = (svc as any).getMembershipExpiringEmailTemplate(
       'Hello',

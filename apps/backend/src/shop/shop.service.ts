@@ -519,8 +519,8 @@ export class ShopService {
     await em.flush();
     const fullOrder = await this.findOrderById(order.id);
 
-    // Send payment receipt email
-    await this.sendPaymentReceiptEmail(fullOrder, last4);
+    // Send payment receipt email (with transaction id for member records).
+    await this.sendPaymentReceiptEmail(fullOrder, last4, paymentIntentId, 'stripe');
 
     return fullOrder;
   }
@@ -866,7 +866,12 @@ export class ShopService {
     }
   }
 
-  private async sendPaymentReceiptEmail(order: ShopOrder, last4?: string): Promise<void> {
+  private async sendPaymentReceiptEmail(
+    order: ShopOrder,
+    last4?: string,
+    transactionId?: string,
+    paymentMethod?: 'stripe' | 'paypal',
+  ): Promise<void> {
     const email = this.getCustomerEmail(order);
     if (!email) {
       this.logger.warn(`Cannot send payment receipt email - no email for order ${order.orderNumber}`);
@@ -885,6 +890,9 @@ export class ShopService {
         totalAmount: Number(order.totalAmount),
         paymentDate: new Date(),
         last4,
+        // Reference IDs for member support inquiries.
+        transactionId: transactionId || order.stripePaymentIntentId || order.stripeChargeId,
+        paymentMethod: paymentMethod || (order.stripePaymentIntentId ? 'stripe' : undefined),
       });
       this.logger.log(`Payment receipt email sent for order ${order.orderNumber}`);
     } catch (error) {

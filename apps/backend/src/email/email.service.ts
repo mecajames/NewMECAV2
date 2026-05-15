@@ -128,6 +128,14 @@ export interface SendMembershipWelcomeEmailDto {
   benefits?: string[];
   teamName?: string;
   businessName?: string;
+  // Reference IDs for support inquiries. Surfaced as a "For your records"
+  // footer block so members can quote them when contacting support, and
+  // so the bank statement / Stripe receipt can be reconciled to the
+  // membership record.
+  membershipId?: string;
+  transactionId?: string;
+  paymentMethod?: 'stripe' | 'paypal' | string;
+  amountPaid?: number;
 }
 
 export interface SendMembershipRenewalEmailDto {
@@ -137,6 +145,12 @@ export interface SendMembershipRenewalEmailDto {
   membershipType: string;
   expiryDate: Date;
   benefits?: string[];
+  // Reference IDs for support inquiries (see SendMembershipWelcomeEmailDto).
+  membershipId?: string;
+  transactionId?: string;
+  subscriptionId?: string;
+  paymentMethod?: 'stripe' | 'paypal' | string;
+  amountPaid?: number;
 }
 
 export interface SendMembershipExpiringEmailDto {
@@ -217,6 +231,9 @@ export interface SendSubscriptionCancelledEmailDto {
   endDate?: Date | null;
   renewalUrl: string;
   paymentMethod: 'stripe' | 'paypal';
+  // Reference IDs for support inquiries.
+  membershipId?: string;
+  subscriptionId?: string;
 }
 
 // ==========================================================================
@@ -323,6 +340,9 @@ export interface SendShopPaymentReceiptEmailDto {
   totalAmount: number;
   paymentDate: Date;
   last4?: string; // Last 4 digits of card (if available)
+  // Reference IDs for support inquiries.
+  transactionId?: string;
+  paymentMethod?: 'stripe' | 'paypal' | string;
 }
 
 export interface SendShopShippingNotificationEmailDto {
@@ -3092,6 +3112,53 @@ Fun, Fair, Loud and Clear!
     return benefitsList.map(b => `- ${b}`).join('\n');
   }
 
+  /**
+   * Renders a "For Your Records" reference-IDs block at the bottom of
+   * receipt/welcome/renewal emails so members can quote exact processor
+   * IDs when contacting support. Returns empty string when no IDs
+   * supplied — quiet by default.
+   */
+  private getReferenceIdsHtml(refs: {
+    membershipId?: string | null;
+    transactionId?: string | null;
+    subscriptionId?: string | null;
+    paymentMethod?: string | null;
+  }): string {
+    const rows: string[] = [];
+    if (refs.membershipId) rows.push(`<tr><td style="padding:2px 8px 2px 0; color:#64748b;">Membership ID</td><td style="padding:2px 0; font-family:monospace; color:#1e293b;">${refs.membershipId}</td></tr>`);
+    if (refs.transactionId) rows.push(`<tr><td style="padding:2px 8px 2px 0; color:#64748b;">Transaction ID</td><td style="padding:2px 0; font-family:monospace; color:#1e293b;">${refs.transactionId}</td></tr>`);
+    if (refs.subscriptionId) rows.push(`<tr><td style="padding:2px 8px 2px 0; color:#64748b;">Subscription ID</td><td style="padding:2px 0; font-family:monospace; color:#1e293b;">${refs.subscriptionId}</td></tr>`);
+    if (refs.paymentMethod) {
+      const pretty = refs.paymentMethod === 'stripe' ? 'Stripe' : refs.paymentMethod === 'paypal' ? 'PayPal' : refs.paymentMethod;
+      rows.push(`<tr><td style="padding:2px 8px 2px 0; color:#64748b;">Paid With</td><td style="padding:2px 0; color:#1e293b;">${pretty}</td></tr>`);
+    }
+    if (rows.length === 0) return '';
+    return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;"><tr><td style="background:#f8fafc; border:1px solid #e2e8f0; padding:14px 16px;">
+      <p style="margin:0 0 8px 0; font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">For Your Records</p>
+      <table cellpadding="0" cellspacing="0" border="0" style="font-size:13px;">${rows.join('')}</table>
+      <p style="margin:8px 0 0 0; font-size:12px; color:#94a3b8;">Quote these IDs if you contact <a href="mailto:memberships@mecacaraudio.com" style="color:#f97316;">memberships@mecacaraudio.com</a> about this payment.</p>
+    </td></tr></table>`;
+  }
+
+  private getReferenceIdsText(refs: {
+    membershipId?: string | null;
+    transactionId?: string | null;
+    subscriptionId?: string | null;
+    paymentMethod?: string | null;
+  }): string {
+    const lines: string[] = [];
+    if (refs.membershipId) lines.push(`Membership ID: ${refs.membershipId}`);
+    if (refs.transactionId) lines.push(`Transaction ID: ${refs.transactionId}`);
+    if (refs.subscriptionId) lines.push(`Subscription ID: ${refs.subscriptionId}`);
+    if (refs.paymentMethod) {
+      const pretty = refs.paymentMethod === 'stripe' ? 'Stripe' : refs.paymentMethod === 'paypal' ? 'PayPal' : refs.paymentMethod;
+      lines.push(`Paid With: ${pretty}`);
+    }
+    if (lines.length === 0) return '';
+    return `\nFOR YOUR RECORDS\n----------------\n${lines.join('\n')}\nQuote these IDs if you contact memberships@mecacaraudio.com about this payment.\n`;
+  }
+
   private getMembershipWelcomeEmailTemplate(greeting: string, dto: SendMembershipWelcomeEmailDto, expiryDateStr: string): string {
     const businessOrTeamInfo = dto.businessName
       ? `<p style="margin: 5px 0;"><strong>Business:</strong> ${dto.businessName}</p>`
@@ -3125,6 +3192,12 @@ ${this.getEmailHeaderHtml('Welcome to MECA!', `Your ${dto.membershipType} Member
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Keep your MECA ID handy - you'll need it when registering for events and competitions.
     </p>
+
+    ${this.getReferenceIdsHtml({
+      membershipId: dto.membershipId,
+      transactionId: dto.transactionId,
+      paymentMethod: dto.paymentMethod,
+    })}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -3155,7 +3228,11 @@ ${this.getMembershipBenefitsText(dto.benefits)}
 Go to your dashboard: https://mecacaraudio.com/dashboard
 
 Keep your MECA ID handy - you'll need it when registering for events and competitions.
-
+${this.getReferenceIdsText({
+  membershipId: dto.membershipId,
+  transactionId: dto.transactionId,
+  paymentMethod: dto.paymentMethod,
+})}
 Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
 Fun, Fair, Loud and Clear!
@@ -3189,6 +3266,13 @@ ${this.getEmailHeaderHtml('Membership Renewed!', 'Thank you for your continued s
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       Thank you for being a valued member of MECA. We look forward to seeing you at upcoming events!
     </p>
+
+    ${this.getReferenceIdsHtml({
+      membershipId: dto.membershipId,
+      transactionId: dto.transactionId,
+      subscriptionId: dto.subscriptionId,
+      paymentMethod: dto.paymentMethod,
+    })}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -3212,7 +3296,12 @@ ${this.getMembershipBenefitsText(dto.benefits)}
 Find upcoming events: https://mecacaraudio.com/events
 
 Thank you for being a valued member of MECA. We look forward to seeing you at upcoming events!
-
+${this.getReferenceIdsText({
+  membershipId: dto.membershipId,
+  transactionId: dto.transactionId,
+  subscriptionId: dto.subscriptionId,
+  paymentMethod: dto.paymentMethod,
+})}
 Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
 Fun, Fair, Loud and Clear!
@@ -3727,6 +3816,12 @@ ${this.getEmailHeaderHtml('Subscription Ended', `Your MECA ${dto.membershipType}
     <p>Once your access ends, you will no longer be able to register for MECA events as a member or access member-only benefits. You can renew at any time to restore access.</p>
 
     ${this.getEmailButton('Renew Membership', dto.renewalUrl)}
+
+    ${this.getReferenceIdsHtml({
+      membershipId: dto.membershipId,
+      subscriptionId: dto.subscriptionId,
+      paymentMethod: dto.paymentMethod,
+    })}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -3757,6 +3852,11 @@ ${reasonLine}
 Once your access ends, you will no longer be able to register for MECA events as a member or access member-only benefits. You can renew at any time to restore access.
 
 Renew membership: ${dto.renewalUrl}
+${this.getReferenceIdsText({
+  membershipId: dto.membershipId,
+  subscriptionId: dto.subscriptionId,
+  paymentMethod: dto.paymentMethod,
+})}
 Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
 Fun, Fair, Loud and Clear!
@@ -3983,6 +4083,11 @@ ${this.getEmailHeaderHtml('Payment Received!', `Order #${dto.orderNumber}`, `Pay
     <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
       This email serves as your payment receipt. Your order is now being processed and we'll notify you when it ships.
     </p>
+
+    ${this.getReferenceIdsHtml({
+      transactionId: dto.transactionId,
+      paymentMethod: dto.paymentMethod,
+    })}
 ${this.getEmailFooterHtml()}
     `.trim();
   }
@@ -4016,7 +4121,10 @@ ${dto.taxAmount > 0 ? `Tax: ${this.formatCurrency(dto.taxAmount)}` : ''}
 Total Paid: ${this.formatCurrency(dto.totalAmount)}
 
 This email serves as your payment receipt. Your order is now being processed and we'll notify you when it ships.
-
+${this.getReferenceIdsText({
+  transactionId: dto.transactionId,
+  paymentMethod: dto.paymentMethod,
+})}
 Need help? Visit our Support Desk: ${this.supportDeskUrl}
 
 Fun, Fair, Loud and Clear!
