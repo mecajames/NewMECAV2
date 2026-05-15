@@ -565,6 +565,9 @@ export class PayPalController {
                   endDate: m.endDate || null,
                   renewalUrl: `${baseUrl}/membership`,
                   paymentMethod: 'paypal',
+                  // Reference IDs for member support inquiries.
+                  membershipId: m.id,
+                  subscriptionId: m.paypalSubscriptionId || undefined,
                 }).catch((err) => {
                   this.logger.error(`Failed to send PayPal subscription cancel email to user: ${err}`);
                 });

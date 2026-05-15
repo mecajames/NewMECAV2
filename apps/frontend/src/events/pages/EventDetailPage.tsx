@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Calendar, MapPin, User, Mail, Phone, Car, Award, DollarSign, X, TrendingUp, QrCode, Move, Check, Image, ZoomIn, ArrowLeft, Star, Heart } from 'lucide-react';
 import { eventsApi, Event, EventAssignmentManager } from '@/events';
+import { useFormatOrder, compareFormatNames } from '@/competition-formats';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
@@ -15,6 +16,7 @@ import { SocialShareButtons, GoogleMapsProvider, EventLocationMap } from '@/shar
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const formatOrder = useFormatOrder();
   const [searchParams, setSearchParams] = useSearchParams();
   const [event, setEvent] = useState<Event | null>(null);
   const [multiDayEvents, setMultiDayEvents] = useState<Event[]>([]);
@@ -547,7 +549,7 @@ export default function EventDetailPage() {
           {/* Format Badges - Second Line */}
           {event.formats && event.formats.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-6">
-              {event.formats.map((format) => (
+              {[...event.formats].sort((a, b) => compareFormatNames(formatOrder, a, b)).map((format) => (
                 <span
                   key={format}
                   className={`px-3 py-1 rounded-full text-xs font-semibold border ${getFormatColor(format)}`}

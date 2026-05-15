@@ -535,6 +535,11 @@ export class MembershipsService {
           expiryDate: membership.endDate!,
           teamName: data.teamName,
           businessName: data.businessName,
+          // Reference IDs for member support inquiries.
+          membershipId: membership.id,
+          transactionId: membership.transactionId || data.stripePaymentIntentId,
+          amountPaid: Number(membership.amountPaid ?? data.amountPaid ?? 0),
+          paymentMethod: membership.stripePaymentIntentId ? 'stripe' : (membership.transactionId ? 'paypal' : undefined),
         });
         this.logger.log(`Sent welcome email for membership ${membership.id} to ${user.email}`);
       }
@@ -759,6 +764,10 @@ export class MembershipsService {
           membershipType: membershipConfig.name,
           membershipCategory: membershipConfig.category,
           expiryDate: membership.endDate!,
+          membershipId: membership.id,
+          // Admin-assigned memberships often have no external transaction id.
+          transactionId: membership.transactionId,
+          amountPaid: Number(membership.amountPaid ?? 0),
         });
         this.logger.log(`Sent welcome email for admin-assigned membership ${membership.id} to ${user.email}`);
       }
@@ -1157,6 +1166,9 @@ export class MembershipsService {
           expiryDate: managedMembership.endDate!,
           teamName: data.teamName,
           businessName: data.businessName,
+          membershipId: managedMembership.id,
+          transactionId: managedMembership.transactionId,
+          amountPaid: Number(managedMembership.amountPaid ?? 0),
         });
         this.logger.log(`Sent welcome email for admin-created membership ${managedMembership.id} to ${user.email}`);
       } catch (emailError) {

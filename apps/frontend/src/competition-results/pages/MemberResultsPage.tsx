@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
+import { competitionFormatsApi } from '@/competition-formats';
 import { profilesApi, Profile } from '@/profiles';
 import { SeasonSelector } from '@/seasons';
 import { getStorageUrl } from '@/lib/storage';
@@ -36,6 +37,9 @@ export default function MemberResultsPage() {
 
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
+  // Lookup keyed by format name → display_order. Sorts the format panels
+  // by the same Display Order admins can edit in /admin/formats.
+  const [formatOrder, setFormatOrder] = useState<Map<string, number>>(new Map());
   const [memberProfile, setMemberProfile] = useState<Profile | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -65,6 +69,15 @@ export default function MemberResultsPage() {
     fetchMemberProfile();
     fetchTargetMecaStatus();
   }, [mecaId]);
+
+  // One-shot fetch of competition_formats so format panels sort by the
+  // admin-editable display_order rather than results-iteration order.
+  useEffect(() => {
+    competitionFormatsApi
+      .getActive()
+      .then(list => setFormatOrder(new Map(list.map(f => [f.name, f.display_order]))))
+      .catch(err => console.error('Error fetching competition formats:', err));
+  }, []);
 
   useEffect(() => {
     if (!mecaId || authLoading) return;
@@ -203,22 +216,28 @@ export default function MemberResultsPage() {
       classEntry.results.push(result);
     });
 
-    return Array.from(formats.entries()).map(([format, sectionBucket]) => ({
-      format,
-      sections: Array.from(sectionBucket.values())
-        .map(s => ({
-          section: s.section,
-          sectionDisplayOrder: s.sectionDisplayOrder,
-          classes: Array.from(s.classes.values())
-            .sort((a, b) => a.classDisplayOrder - b.classDisplayOrder || a.className.localeCompare(b.className)),
-        }))
-        .sort((a, b) => {
-          if (a.section === UNASSIGNED_SECTION) return 1;
-          if (b.section === UNASSIGNED_SECTION) return -1;
-          return a.sectionDisplayOrder - b.sectionDisplayOrder || a.section.localeCompare(b.section);
-        }),
-    }));
-  }, [results, classes]);
+    return Array.from(formats.entries())
+      .map(([format, sectionBucket]) => ({
+        format,
+        sections: Array.from(sectionBucket.values())
+          .map(s => ({
+            section: s.section,
+            sectionDisplayOrder: s.sectionDisplayOrder,
+            classes: Array.from(s.classes.values())
+              .sort((a, b) => a.classDisplayOrder - b.classDisplayOrder || a.className.localeCompare(b.className)),
+          }))
+          .sort((a, b) => {
+            if (a.section === UNASSIGNED_SECTION) return 1;
+            if (b.section === UNASSIGNED_SECTION) return -1;
+            return a.sectionDisplayOrder - b.sectionDisplayOrder || a.section.localeCompare(b.section);
+          }),
+      }))
+      .sort((a, b) => {
+        const oa = formatOrder.get(a.format) ?? Number.POSITIVE_INFINITY;
+        const ob = formatOrder.get(b.format) ?? Number.POSITIVE_INFINITY;
+        return oa - ob || a.format.localeCompare(b.format);
+      });
+  }, [results, classes, formatOrder]);
 
   // Calculate statistics
   const stats = useMemo(() => {

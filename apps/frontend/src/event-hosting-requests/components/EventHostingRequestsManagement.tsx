@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import {
   eventHostingRequestsApi,
@@ -9,7 +9,7 @@ import {
   EventDirectorOption,
   getStatusLabel,
 } from '@/event-hosting-requests';
-import { competitionFormatsApi, CompetitionFormat } from '@/competition-formats';
+import { competitionFormatsApi, CompetitionFormat, compareFormatNames } from '@/competition-formats';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
 import {
   Search,
@@ -98,6 +98,13 @@ export default function EventHostingRequestsManagement() {
 
   // Competition Formats
   const [competitionFormats, setCompetitionFormats] = useState<CompetitionFormat[]>([]);
+  // Lookup keyed by format name → display_order, derived from the already-
+  // fetched competitionFormats so we can sort applicants' chosen formats
+  // by admin Display Order in the request detail/print views.
+  const formatOrder = useMemo(
+    () => new Map(competitionFormats.map(f => [f.name, f.display_order])),
+    [competitionFormats],
+  );
 
   useEffect(() => {
     fetchRequests();
@@ -517,7 +524,7 @@ export default function EventHostingRequestsManagement() {
         <h2>Competition Formats</h2>
         <div class="section">
           <div class="services-list">
-            ${selectedRequest.competition_formats.map((f: string) => `<span class="format-tag">${f}</span>`).join('')}
+            ${[...selectedRequest.competition_formats].sort((a: string, b: string) => compareFormatNames(formatOrder, a, b)).map((f: string) => `<span class="format-tag">${f}</span>`).join('')}
           </div>
         </div>
         ` : ''}
@@ -1113,7 +1120,7 @@ export default function EventHostingRequestsManagement() {
                     Competition Formats
                   </h4>
                   <div className="flex flex-wrap gap-2">
-                    {selectedRequest.competition_formats.map((format: string, index: number) => (
+                    {[...selectedRequest.competition_formats].sort((a: string, b: string) => compareFormatNames(formatOrder, a, b)).map((format: string, index: number) => (
                       <span
                         key={index}
                         className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-sm"

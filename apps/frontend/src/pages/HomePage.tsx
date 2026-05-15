@@ -2,6 +2,7 @@ import { Calendar, Trophy, Users, Award, ChevronLeft, ChevronRight, Store, Facto
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
+import { useFormatOrder, compareFormatNames } from '@/competition-formats';
 import { useSiteSettings } from '@/shared/contexts';
 import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
 import type { VotingPublicStatus } from '@newmeca/shared';
@@ -15,6 +16,7 @@ import { BannerPosition } from '@newmeca/shared';
 export default function HomePage() {
   const navigate = useNavigate();
   const { getSetting } = useSiteSettings();
+  const formatOrder = useFormatOrder();
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -371,7 +373,7 @@ export default function HomePage() {
                             {/* Format Badges - Second Line */}
                             {event.formats && event.formats.length > 0 && (
                               <div className="flex flex-wrap gap-2 mb-4">
-                                {event.formats.map((format) => (
+                                {[...event.formats].sort((a, b) => compareFormatNames(formatOrder, a, b)).map((format) => (
                                   <span
                                     key={format}
                                     className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500"

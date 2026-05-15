@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight, Upload, MapPin } from 'lucide-react';
 import { eventsApi, Event, MultiDayResultsMode } from '@/events';
+import { useFormatOrder, compareFormatNames } from '@/competition-formats';
 import { profilesApi, Profile } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionResultsApi } from '@/competition-results';
@@ -11,6 +12,7 @@ interface EventManagementProps {
 }
 
 export default function EventManagement({ onViewResults }: EventManagementProps = {}) {
+  const formatOrder = useFormatOrder();
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [eventDirectors, setEventDirectors] = useState<Profile[]>([]);
@@ -935,7 +937,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                         </span>
                       )}
                       {event.formats && event.formats.length > 0 ? (
-                        event.formats.map((format) => (
+                        [...event.formats].sort((a, b) => compareFormatNames(formatOrder, a, b)).map((format) => (
                           <span
                             key={format}
                             className={`px-2 py-1 rounded text-xs font-semibold ${getFormatColor(format)}`}
