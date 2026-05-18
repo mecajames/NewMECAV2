@@ -4,7 +4,16 @@ import axios from '@/lib/axios';
 // Types
 // =============================================================================
 
-export type TicketStatus = 'open' | 'in_progress' | 'awaiting_response' | 'on_hold' | 'resolved' | 'closed';
+export type TicketStatus =
+  | 'open'
+  | 'in_progress'
+  | 'awaiting_response'
+  | 'pending_internal_review'
+  | 'escalated'
+  | 'on_hold'
+  | 'resolved'
+  | 'reopened'
+  | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TicketCategory = 'general' | 'membership' | 'event_registration' | 'payment' | 'technical' | 'competition_results' | 'event_hosting' | 'account' | 'other';
 export type TicketDepartment = 'general_support' | 'membership_services' | 'event_operations' | 'technical_support' | 'billing' | 'administration';
@@ -290,6 +299,16 @@ export const ticketsApi = {
 
   hold: async (id: string): Promise<Ticket> => {
     const response = await axios.post(`/api/tickets/${id}/hold`);
+    return response.data;
+  },
+
+  /**
+   * Admin "Change Status" dropdown. Backend validates the transition against
+   * TICKET_STATUS_TRANSITIONS and throws 400 with a readable message if the
+   * requested status isn't reachable from the current one.
+   */
+  changeStatus: async (id: string, status: TicketStatus): Promise<Ticket> => {
+    const response = await axios.patch(`/api/tickets/${id}/status`, { status });
     return response.data;
   },
 

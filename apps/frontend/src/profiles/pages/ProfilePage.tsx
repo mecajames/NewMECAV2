@@ -5,7 +5,7 @@ import { useAuth } from '@/auth/contexts/AuthContext';
 import ChangePassword from '@/profiles/components/ChangePassword';
 import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
 import { CountrySelect, StateProvinceSelect, PhoneInput } from '@/shared/fields';
-import { MecaIdSwitcher } from '@/shared/components';
+import { MecaIdSwitcher } from '@/shared/components/MecaIdSwitcher';
 import { profilesApi, Profile as ProfileType } from '../profiles.api-client';
 import { membershipsApi, ControlledMecaId, Membership } from '@/memberships';
 import { countries, getStatesForCountry } from '@/utils/countries';

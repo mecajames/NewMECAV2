@@ -1,4 +1,4 @@
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, useRef, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Wrench, AlertTriangle, Rocket } from 'lucide-react';
 import axios from '@/lib/axios';
@@ -27,6 +27,11 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
     displayMode: 'maintenance',
   });
   const [loading, setLoading] = useState(true);
+  // Once we've finished the initial load (both maintenance-check and auth),
+  // never re-block the tree on a transient `authLoading` flip. Supabase can
+  // emit SIGNED_IN on tab focus, which used to bounce loading back to true
+  // and unmount every page in the app, wiping in-progress form state.
+  const hasMountedRef = useRef(false);
 
   useEffect(() => {
     const checkMaintenanceMode = async () => {
@@ -58,14 +63,20 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
     return () => clearInterval(interval);
   }, []);
 
-  // Show loading spinner while checking
-  if (loading || authLoading) {
+  // Show loading spinner only on the FIRST render pass, before the
+  // maintenance-mode check and the initial auth fetch have both resolved.
+  // After that, keep rendering children even if either flag briefly flips
+  // back to true (e.g. Supabase re-checking session on tab focus) — flipping
+  // back to the spinner here unmounts the whole app and loses form state.
+  const stillFirstLoad = !hasMountedRef.current && (loading || authLoading);
+  if (stillFirstLoad) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
       </div>
     );
   }
+  hasMountedRef.current = true;
 
   // Check if maintenance mode is enabled and user is not privileged
   const isAdmin = profile?.role === 'admin' || profile?.is_staff === true;

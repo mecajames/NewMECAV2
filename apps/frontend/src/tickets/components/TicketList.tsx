@@ -16,6 +16,7 @@ import {
   Tag,
   Building,
   PauseCircle,
+  RefreshCw,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -26,10 +27,11 @@ import {
   TicketListQuery,
 } from '../tickets.api-client';
 
-// Status badge styling
+// Member-facing status badge. Customer-friendly wording — admins use the
+// admin labels in TicketDetail / TicketManagement, not these.
 const statusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
   open: {
-    label: 'Open',
+    label: 'Submitted',
     className: 'bg-blue-500/10 text-blue-400 border-blue-500',
     icon: <AlertCircle className="w-3 h-3" />,
   },
@@ -39,11 +41,19 @@ const statusConfig: Record<TicketStatus, { label: string; className: string; ico
     icon: <Clock className="w-3 h-3" />,
   },
   awaiting_response: {
-    // Member-facing wording: from the customer's perspective, this means
-    // support has replied and is now waiting on them.
     label: 'Awaiting Your Reply',
     className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500',
     icon: <MessageSquare className="w-3 h-3" />,
+  },
+  pending_internal_review: {
+    label: 'Under Review',
+    className: 'bg-indigo-500/10 text-indigo-400 border-indigo-500',
+    icon: <MessageSquare className="w-3 h-3" />,
+  },
+  escalated: {
+    label: 'Escalated to Senior Support',
+    className: 'bg-red-500/10 text-red-400 border-red-500',
+    icon: <AlertCircle className="w-3 h-3" />,
   },
   on_hold: {
     label: 'On Hold',
@@ -54,6 +64,11 @@ const statusConfig: Record<TicketStatus, { label: string; className: string; ico
     label: 'Resolved',
     className: 'bg-green-500/10 text-green-400 border-green-500',
     icon: <CheckCircle className="w-3 h-3" />,
+  },
+  reopened: {
+    label: 'Reopened',
+    className: 'bg-pink-500/10 text-pink-400 border-pink-500',
+    icon: <RefreshCw className="w-3 h-3" />,
   },
   closed: {
     label: 'Closed',

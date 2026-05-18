@@ -13,7 +13,6 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  RotateCcw,
   UserPlus,
   Lock,
   Eye,
@@ -26,7 +25,6 @@ import {
   ExternalLink,
   Pencil,
   PauseCircle,
-  PlayCircle,
   Shield,
   Gavel,
   Briefcase,
@@ -34,6 +32,9 @@ import {
   Factory,
   Users,
   Star,
+  RefreshCw,
+  ChevronDown,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -45,17 +46,17 @@ import {
   TicketPriority,
 } from '../tickets.api-client';
 import * as ticketAdminApi from '../ticket-admin.api-client';
-import { TicketStaffResponse, TicketDepartmentResponse } from '@newmeca/shared';
+import { TicketStaffResponse, TicketDepartmentResponse, TICKET_STATUS_TRANSITIONS } from '@newmeca/shared';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { useDraftStorage } from '@/shared/hooks/useDraftStorage';
 import { TicketAttachmentImage } from './TicketAttachmentImage';
 import { TicketAttachmentLightbox } from './TicketAttachmentLightbox';
 
-// Status styling. Labels match the raw enum — the derived "Waiting On"
-// badge handles the who-has-the-ball framing separately.
-const statusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
+// Admin-facing status pill. The pill name itself says who has the ball —
+// no separate Waiting On badge anymore (it duplicated the status name).
+const adminStatusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
   open: {
-    label: 'Open',
+    label: 'New',
     className: 'bg-blue-500/10 text-blue-400 border-blue-500',
     icon: <AlertCircle className="w-4 h-4" />,
   },
@@ -65,9 +66,19 @@ const statusConfig: Record<TicketStatus, { label: string; className: string; ico
     icon: <Clock className="w-4 h-4" />,
   },
   awaiting_response: {
-    label: 'Awaiting Response',
+    label: 'Pending Customer',
     className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500',
     icon: <MessageSquare className="w-4 h-4" />,
+  },
+  pending_internal_review: {
+    label: 'Pending Internal Review',
+    className: 'bg-indigo-500/10 text-indigo-400 border-indigo-500',
+    icon: <MessageSquare className="w-4 h-4" />,
+  },
+  escalated: {
+    label: 'Escalated',
+    className: 'bg-red-500/10 text-red-400 border-red-500',
+    icon: <AlertCircle className="w-4 h-4" />,
   },
   on_hold: {
     label: 'On Hold',
@@ -79,6 +90,11 @@ const statusConfig: Record<TicketStatus, { label: string; className: string; ico
     className: 'bg-green-500/10 text-green-400 border-green-500',
     icon: <CheckCircle className="w-4 h-4" />,
   },
+  reopened: {
+    label: 'Reopened',
+    className: 'bg-pink-500/10 text-pink-400 border-pink-500',
+    icon: <RefreshCw className="w-4 h-4" />,
+  },
   closed: {
     label: 'Closed',
     className: 'bg-gray-500/10 text-gray-400 border-gray-500',
@@ -86,19 +102,19 @@ const statusConfig: Record<TicketStatus, { label: string; className: string; ico
   },
 };
 
-// Derived "who has the ball" indicator. Same logic as in the admin list so
-// the badge means the same thing in both places. on_hold/resolved/closed
-// don't render a badge — the status pill already says it.
-const getWaitingOn = (status: TicketStatus): { label: string; className: string } | null => {
-  switch (status) {
-    case 'open':
-    case 'in_progress':
-      return { label: 'Waiting on Support', className: 'bg-blue-500/10 text-blue-300 border-blue-500/50' };
-    case 'awaiting_response':
-      return { label: 'Waiting on Customer', className: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/50' };
-    default:
-      return null;
-  }
+// Customer-facing label set. Friendlier wording for the member ticket view
+// (the same TicketDetail component is used in both contexts; we pick which
+// config to use based on `isStaff`).
+const customerStatusLabels: Record<TicketStatus, string> = {
+  open: 'Submitted',
+  in_progress: 'In Progress',
+  awaiting_response: 'Awaiting Your Reply',
+  pending_internal_review: 'Under Review',
+  escalated: 'Escalated to Senior Support',
+  on_hold: 'On Hold',
+  resolved: 'Resolved',
+  reopened: 'Reopened',
+  closed: 'Closed',
 };
 
 // Priority styling
@@ -153,15 +169,37 @@ export function TicketDetail({
   const [feedback, setFeedback] = useState('');
   const [hoverRating, setHoverRating] = useState<number | null>(null);
 
-  // Admin-facing post-reply actions live in the Submit modal. The inline
-  // form just collects the reply text + internal-note flag; the modal
-  // picks one of: reply only, reply & close, reply & reassign (with
-  // staff picker), reply & change department (with department picker).
-  type AdminSubmitChoice = 'reply' | 'close' | 'reassign' | 'department';
+  // Admin-facing post-reply actions live in the Submit modal — the SINGLE
+  // place where an admin chooses what happens with the ticket. The inline
+  // form just collects the reply text + internal-note flag; the modal picks
+  // one of 8 mutually-exclusive outcomes:
+  //   reply         — post the reply, auto-shift status to Pending Customer
+  //   resolve       — post + status → Resolved
+  //   close         — post + status → Closed
+  //   hold          — post + status → On Hold
+  //   escalate      — post + status → Escalated
+  //   internal      — post + status → Pending Internal Review
+  //   reassign      — post, then reassign to another staff (inline picker)
+  //   department    — post, then move to another department (inline picker)
+  // Status outcomes are filtered against TICKET_STATUS_TRANSITIONS so an
+  // option only appears when the move is allowed from the current status.
+  type AdminSubmitChoice =
+    | 'reply'
+    | 'resolve'
+    | 'close'
+    | 'hold'
+    | 'escalate'
+    | 'internal'
+    | 'reopen'
+    | 'reassign'
+    | 'department';
   const [adminSubmitOpen, setAdminSubmitOpen] = useState(false);
   const [adminSubmitChoice, setAdminSubmitChoice] = useState<AdminSubmitChoice | null>(null);
   const [adminSubmitReassignId, setAdminSubmitReassignId] = useState('');
   const [adminSubmitDepartmentId, setAdminSubmitDepartmentId] = useState('');
+  // Header status pill click-to-change menu (the no-reply housekeeping path).
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
   const [departments, setDepartments] = useState<TicketDepartmentResponse[]>([]);
 
   // Image lightbox state. Index is into a filtered list of image-only
@@ -449,7 +487,7 @@ export function TicketDetail({
    * own try so the persisted reply isn't dropped if a later step fails.
    */
   type AdminAction =
-    | { kind: 'close' }
+    | { kind: 'status'; status: TicketStatus }
     | { kind: 'reassign'; assigneeId: string }
     | { kind: 'department'; departmentId: string };
 
@@ -532,8 +570,12 @@ export function TicketDetail({
       if (isStaff && adminAction) {
         try {
           let updated: TicketType | null = null;
-          if (adminAction.kind === 'close') {
-            updated = await ticketsApi.close(ticketId);
+          if (adminAction.kind === 'status') {
+            // changeStatus goes through the transition-matrix validator on
+            // the backend. The auto-transition from createComment may have
+            // moved the ticket to AWAITING_RESPONSE already; in that case
+            // skip the redundant call.
+            updated = await ticketsApi.changeStatus(ticketId, adminAction.status);
           } else if (adminAction.kind === 'reassign') {
             updated = await ticketsApi.assign(ticketId, adminAction.assigneeId);
           } else if (adminAction.kind === 'department') {
@@ -542,10 +584,11 @@ export function TicketDetail({
             });
           }
           if (updated) setTicket(updated);
-        } catch (actionErr) {
+        } catch (actionErr: any) {
           console.error(`Reply posted, but ${adminAction.kind} action failed:`, actionErr);
+          const msg = actionErr?.response?.data?.message || actionErr?.message;
           alert(
-            `Reply posted, but the follow-up "${adminAction.kind}" action failed. Please retry it from the ticket actions.`,
+            `Reply posted, but the follow-up action failed${msg ? `: ${msg}` : '.'} Please retry from the status pill.`,
           );
         }
       }
@@ -565,37 +608,40 @@ export function TicketDetail({
     }
   };
 
-  const handleStatusAction = async (action: 'resolve' | 'close' | 'reopen' | 'hold' | 'resume') => {
-    if (!ticketId) return;
+  /**
+   * Status pill click-menu handler — the no-reply housekeeping path. All
+   * other status changes flow through the Submit Reply modal so the admin
+   * can attach a comment. The backend's PATCH /status validates the
+   * transition against TICKET_STATUS_TRANSITIONS either way.
+   */
+  const handlePillStatusChange = async (nextStatus: TicketStatus) => {
+    if (!ticketId || !ticket) return;
+    if (nextStatus === ticket.status) return;
+    setStatusMenuOpen(false);
     setActionLoading(true);
     try {
-      let updatedTicket: TicketType;
-      switch (action) {
-        case 'resolve':
-          updatedTicket = await ticketsApi.resolve(ticketId);
-          break;
-        case 'close':
-          updatedTicket = await ticketsApi.close(ticketId);
-          break;
-        case 'reopen':
-          updatedTicket = await ticketsApi.reopen(ticketId);
-          break;
-        case 'hold':
-          updatedTicket = await ticketsApi.hold(ticketId);
-          break;
-        case 'resume':
-          // Resume = move back to in_progress via reopen (server treats
-          // it as "back to active work"). Avoids a dedicated endpoint.
-          updatedTicket = await ticketsApi.reopen(ticketId);
-          break;
-      }
-      setTicket(updatedTicket);
-    } catch (err) {
-      console.error(`Failed to ${action} ticket:`, err);
+      const updated = await ticketsApi.changeStatus(ticketId, nextStatus);
+      setTicket(updated);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to change status';
+      alert(msg);
     } finally {
       setActionLoading(false);
     }
   };
+
+  // Close the status pill menu on outside click. Uses mousedown so clicks
+  // inside the menu still register before the menu disappears.
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
+        setStatusMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [statusMenuOpen]);
 
   const handleAssign = async () => {
     if (!ticketId || !assigneeId) return;
@@ -683,20 +729,66 @@ export function TicketDetail({
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1 flex-wrap">
             <span className="text-sm font-mono text-orange-400">{ticket.ticket_number}</span>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${statusConfig[ticket.status].className}`}>
-              {statusConfig[ticket.status].icon}
-              {statusConfig[ticket.status].label}
-            </span>
-            {/* "Who has the ball" — derived from status so it can't drift.
-                Hidden once a ticket is resolved/closed (nobody owes a reply). */}
-            {(() => {
-              const wo = getWaitingOn(ticket.status);
-              return wo ? (
-                <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${wo.className}`}>
-                  {wo.label}
-                </span>
-              ) : null;
-            })()}
+            {/* Status pill.
+                - Staff: clickable. Opens an inline menu of allowed
+                  transitions (the no-reply housekeeping path). Reply-driven
+                  status changes go through the Submit Reply modal instead.
+                - Members: static span — read-only.
+                The pill name itself conveys who has the ball (Pending
+                Customer / In Progress / Escalated / etc.) so there's no
+                separate Waiting On badge. */}
+            {isStaff ? (
+              <div className="relative" ref={statusMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setStatusMenuOpen((v) => !v)}
+                  disabled={actionLoading}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${adminStatusConfig[ticket.status].className}`}
+                  aria-haspopup="menu"
+                  aria-expanded={statusMenuOpen}
+                  title="Click to change status without replying"
+                >
+                  {adminStatusConfig[ticket.status].icon}
+                  {adminStatusConfig[ticket.status].label}
+                  <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
+                </button>
+                {statusMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full mt-1 z-30 min-w-[14rem] bg-slate-800 border border-slate-600 rounded-lg shadow-xl py-1"
+                  >
+                    <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-500">
+                      Change status (no reply)
+                    </div>
+                    {(() => {
+                      // Bridge the shared-enum / local-union TicketStatus
+                      // mismatch with a single cast at the boundary.
+                      const opts = (TICKET_STATUS_TRANSITIONS[ticket.status as TicketStatus] || []) as unknown as TicketStatus[];
+                      if (opts.length === 0) {
+                        return <div className="px-3 py-2 text-xs text-gray-500">No transitions available.</div>;
+                      }
+                      return opts.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => handlePillStatusChange(s)}
+                          className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-slate-700 flex items-center gap-2"
+                        >
+                          {adminStatusConfig[s].icon}
+                          {adminStatusConfig[s].label}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${adminStatusConfig[ticket.status].className}`}>
+                {adminStatusConfig[ticket.status].icon}
+                {customerStatusLabels[ticket.status]}
+              </span>
+            )}
             <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>
               {priorityConfig[ticket.priority].label}
             </span>
@@ -711,110 +803,6 @@ export function TicketDetail({
           {isStaff ? 'Back to Tickets' : 'Back to Support'}
         </button>
       </div>
-
-      {/* Action buttons — horizontal row above the ticket body. Admin-only.
-          Conditional set mirrors the original sidebar Actions card. */}
-      {isStaff && (
-        <div className="flex flex-wrap items-center gap-2 -mt-2">
-          <button
-            onClick={() => setShowAssignModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white rounded-md transition-colors"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            {ticket.assigned_to ? 'Reassign' : 'Assign'}
-          </button>
-
-          {(ticket.status === 'open' || ticket.status === 'in_progress' || ticket.status === 'awaiting_response') && (
-            <>
-              <button
-                onClick={() => handleStatusAction('hold')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <PauseCircle className="w-3.5 h-3.5" />
-                Place on Hold
-              </button>
-              <button
-                onClick={() => handleStatusAction('resolve')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Mark Resolved
-              </button>
-              <button
-                onClick={() => handleStatusAction('close')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                Close Ticket
-              </button>
-            </>
-          )}
-
-          {ticket.status === 'on_hold' && (
-            <>
-              <button
-                onClick={() => handleStatusAction('resume')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <PlayCircle className="w-3.5 h-3.5" />
-                Resume
-              </button>
-              <button
-                onClick={() => handleStatusAction('resolve')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Mark Resolved
-              </button>
-              <button
-                onClick={() => handleStatusAction('close')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                Close Ticket
-              </button>
-            </>
-          )}
-
-          {ticket.status === 'resolved' && (
-            <>
-              <button
-                onClick={() => handleStatusAction('close')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                Close Ticket
-              </button>
-              <button
-                onClick={() => handleStatusAction('reopen')}
-                disabled={actionLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reopen
-              </button>
-            </>
-          )}
-
-          {ticket.status === 'closed' && (
-            <button
-              onClick={() => handleStatusAction('reopen')}
-              disabled={actionLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reopen Ticket
-            </button>
-          )}
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
@@ -1546,6 +1534,13 @@ export function TicketDetail({
           (!needsAssignee || !!adminSubmitReassignId) &&
           (!needsDepartment || !!adminSubmitDepartmentId) &&
           !submittingComment;
+        // Allowed status moves from the current ticket state — drives which
+        // "Reply & X" cards appear so we never offer an invalid transition.
+        // String-compare to bridge the two TicketStatus types (the shared
+        // enum from @newmeca/shared vs the local string union in
+        // tickets.api-client) without forcing a wider refactor.
+        const allowedNextStatuses: string[] = (TICKET_STATUS_TRANSITIONS[ticket.status as TicketStatus] || []) as unknown as string[];
+        const canMoveTo = (target: string) => allowedNextStatuses.includes(target);
 
         // Verb the modal uses for the comment itself. Drives every label
         // so we don't say "Reply" when the staff-only checkbox is on.
@@ -1608,23 +1603,58 @@ export function TicketDetail({
                 </div>
               )}
 
+              {/* Outcome cards. Status-changing options are filtered against
+                  the transition matrix so we never surface a move the
+                  backend would reject. Reply / Reassign / Department are
+                  always available; "Reply only" still triggers the
+                  auto-shift to Pending Customer on active tickets. */}
               <div className="space-y-2">
                 {choiceOption(
                   'reply',
                   <Send className="w-4 h-4 text-orange-400" />,
                   `${Noun} only`,
-                  `Post the ${noun} with no follow-up action.`,
+                  `Post the ${noun}. Status auto-shifts to Pending Customer on active tickets.`,
                 )}
-                {choiceOption(
+                {canMoveTo('resolved') && choiceOption(
+                  'resolve',
+                  <CheckCircle className="w-4 h-4 text-green-400" />,
+                  `${Noun} & Resolve`,
+                  `Post the ${noun}, then mark the ticket as Resolved.`,
+                )}
+                {canMoveTo('on_hold') && choiceOption(
+                  'hold',
+                  <PauseCircle className="w-4 h-4 text-purple-400" />,
+                  `${Noun} & Place on Hold`,
+                  `Post the ${noun}, then put the ticket on hold (waiting on an external party).`,
+                )}
+                {canMoveTo('escalated') && choiceOption(
+                  'escalate',
+                  <AlertTriangle className="w-4 h-4 text-red-400" />,
+                  `${Noun} & Escalate`,
+                  `Post the ${noun}, then flag the ticket for senior support.`,
+                )}
+                {canMoveTo('pending_internal_review') && choiceOption(
+                  'internal',
+                  <Eye className="w-4 h-4 text-indigo-400" />,
+                  `${Noun} & Send for Internal Review`,
+                  `Post the ${noun}, then mark as waiting on another internal team.`,
+                )}
+                {canMoveTo('reopened') && choiceOption(
+                  'reopen',
+                  <RefreshCw className="w-4 h-4 text-pink-400" />,
+                  `${Noun} & Reopen`,
+                  `Post the ${noun}, then reopen the ticket.`,
+                )}
+                {canMoveTo('closed') && choiceOption(
                   'close',
-                  <XCircle className="w-4 h-4 text-orange-400" />,
+                  <XCircle className="w-4 h-4 text-gray-400" />,
                   `${Noun} & Close`,
-                  `Post the ${noun}, then close the ticket.`,
+                  `Post the ${noun}, then close the ticket (terminal).`,
                 )}
                 {choiceOption(
                   'reassign',
                   <UserPlus className="w-4 h-4 text-orange-400" />,
-                  `${Noun} & Assign`,
+                  `${Noun} & Reassign`,
                   `Post the ${noun}, then assign the ticket to another staff member.`,
                 )}
                 {choiceOption(
@@ -1693,13 +1723,42 @@ export function TicketDetail({
                   disabled={!canSubmit}
                   onClick={async (e) => {
                     if (!canSubmit) return;
+                    // Map each modal choice to the post-reply action that
+                    // handleSubmitComment will run. Status outcomes funnel
+                    // through { kind: 'status', status: X } which calls the
+                    // PATCH /status validator on the backend.
                     let action: AdminAction | undefined;
-                    if (adminSubmitChoice === 'close') action = { kind: 'close' };
-                    else if (adminSubmitChoice === 'reassign')
-                      action = { kind: 'reassign', assigneeId: adminSubmitReassignId };
-                    else if (adminSubmitChoice === 'department')
-                      action = { kind: 'department', departmentId: adminSubmitDepartmentId };
-                    // 'reply' leaves action undefined.
+                    switch (adminSubmitChoice) {
+                      case 'resolve':
+                        action = { kind: 'status', status: 'resolved' };
+                        break;
+                      case 'close':
+                        action = { kind: 'status', status: 'closed' };
+                        break;
+                      case 'hold':
+                        action = { kind: 'status', status: 'on_hold' };
+                        break;
+                      case 'escalate':
+                        action = { kind: 'status', status: 'escalated' };
+                        break;
+                      case 'internal':
+                        action = { kind: 'status', status: 'pending_internal_review' };
+                        break;
+                      case 'reopen':
+                        action = { kind: 'status', status: 'reopened' };
+                        break;
+                      case 'reassign':
+                        action = { kind: 'reassign', assigneeId: adminSubmitReassignId };
+                        break;
+                      case 'department':
+                        action = { kind: 'department', departmentId: adminSubmitDepartmentId };
+                        break;
+                      case 'reply':
+                      default:
+                        // No explicit action — createComment's auto-transition
+                        // handles the status shift for active tickets.
+                        action = undefined;
+                    }
                     await handleSubmitComment(e, action);
                     setAdminSubmitOpen(false);
                   }}

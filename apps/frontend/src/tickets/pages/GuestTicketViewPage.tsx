@@ -15,10 +15,14 @@ import {
 import * as guestApi from '../ticket-guest.api-client';
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  open: { label: 'Open', color: 'bg-blue-500', icon: <Clock className="w-4 h-4" /> },
+  open: { label: 'Submitted', color: 'bg-blue-500', icon: <Clock className="w-4 h-4" /> },
   in_progress: { label: 'In Progress', color: 'bg-yellow-500', icon: <Loader2 className="w-4 h-4" /> },
-  waiting_on_customer: { label: 'Waiting on You', color: 'bg-purple-500', icon: <User className="w-4 h-4" /> },
+  awaiting_response: { label: 'Awaiting Your Reply', color: 'bg-purple-500', icon: <User className="w-4 h-4" /> },
+  pending_internal_review: { label: 'Under Review', color: 'bg-indigo-500', icon: <Loader2 className="w-4 h-4" /> },
+  escalated: { label: 'Escalated to Senior Support', color: 'bg-red-500', icon: <Loader2 className="w-4 h-4" /> },
+  on_hold: { label: 'On Hold', color: 'bg-purple-700', icon: <Clock className="w-4 h-4" /> },
   resolved: { label: 'Resolved', color: 'bg-green-500', icon: <CheckCircle2 className="w-4 h-4" /> },
+  reopened: { label: 'Reopened', color: 'bg-pink-500', icon: <Loader2 className="w-4 h-4" /> },
   closed: { label: 'Closed', color: 'bg-gray-500', icon: <XCircle className="w-4 h-4" /> },
 };
 

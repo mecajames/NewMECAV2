@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Put,
   Delete,
   Body,
@@ -13,6 +14,7 @@ import {
   Res,
   UnauthorizedException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
@@ -31,6 +33,7 @@ import {
   UpdateTicketCommentDto,
   CreateTicketAttachmentDto,
   TicketListQuery,
+  TicketStatus,
 } from '@newmeca/shared';
 
 @Controller('api/tickets')
@@ -321,6 +324,30 @@ export class TicketsController {
   ): Promise<Ticket> {
     await this.requireAuth(authHeader);
     return this.ticketsService.reopenTicket(id);
+  }
+
+  /**
+   * Admin-only "Change Status" endpoint backing the status dropdown on the
+   * ticket detail page. The service validates the transition against
+   * TICKET_STATUS_TRANSITIONS and stamps resolved_at / closed_at as needed.
+   */
+  @Patch(':id/status')
+  async changeStatus(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { status: TicketStatus },
+  ): Promise<Ticket> {
+    await this.requireAdmin(authHeader);
+    if (!body || !body.status) {
+      throw new BadRequestException('Request body must include a "status" field.');
+    }
+    const validValues = Object.values(TicketStatus) as string[];
+    if (!validValues.includes(body.status)) {
+      throw new BadRequestException(
+        `Invalid status "${body.status}". Must be one of: ${validValues.join(', ')}.`,
+      );
+    }
+    return this.ticketsService.changeStatus(id, body.status);
   }
 
   // ==========================================================================

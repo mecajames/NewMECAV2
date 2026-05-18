@@ -181,7 +181,11 @@ export const TicketStatsSchema = z.object({
   open: z.number(),
   in_progress: z.number(),
   awaiting_response: z.number(),
+  pending_internal_review: z.number(),
+  escalated: z.number(),
+  on_hold: z.number(),
   resolved: z.number(),
+  reopened: z.number(),
   closed: z.number(),
   by_priority: z.object({
     low: z.number(),
