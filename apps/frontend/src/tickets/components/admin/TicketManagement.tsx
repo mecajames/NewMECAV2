@@ -31,36 +31,19 @@ import {
 } from '../../tickets.api-client';
 import { reportError } from './error-helper';
 
-// Status configurations. Labels mirror the raw enum values — the "who has
-// the ball" framing lives in its own Waiting On column, so the Status pill
-// stays focused on the actual status name.
+// Admin-facing status pill. The pill name itself now says "who has the ball"
+// (Pending Customer vs In Progress vs Escalated, etc.) so the old separate
+// Waiting On column is gone — no more duplicated badges.
 const statusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
-  open: { label: 'Open', className: 'bg-blue-500/10 text-blue-400 border-blue-500', icon: <AlertCircle className="w-4 h-4" /> },
+  open: { label: 'New', className: 'bg-blue-500/10 text-blue-400 border-blue-500', icon: <AlertCircle className="w-4 h-4" /> },
   in_progress: { label: 'In Progress', className: 'bg-orange-500/10 text-orange-400 border-orange-500', icon: <Clock className="w-4 h-4" /> },
-  awaiting_response: { label: 'Awaiting Response', className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500', icon: <MessageSquare className="w-4 h-4" /> },
+  awaiting_response: { label: 'Pending Customer', className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500', icon: <MessageSquare className="w-4 h-4" /> },
+  pending_internal_review: { label: 'Pending Internal Review', className: 'bg-indigo-500/10 text-indigo-400 border-indigo-500', icon: <MessageSquare className="w-4 h-4" /> },
+  escalated: { label: 'Escalated', className: 'bg-red-500/10 text-red-400 border-red-500', icon: <AlertCircle className="w-4 h-4" /> },
   on_hold: { label: 'On Hold', className: 'bg-purple-500/10 text-purple-400 border-purple-500', icon: <PauseCircle className="w-4 h-4" /> },
   resolved: { label: 'Resolved', className: 'bg-green-500/10 text-green-400 border-green-500', icon: <CheckCircle className="w-4 h-4" /> },
+  reopened: { label: 'Reopened', className: 'bg-pink-500/10 text-pink-400 border-pink-500', icon: <RefreshCw className="w-4 h-4" /> },
   closed: { label: 'Closed', className: 'bg-gray-500/10 text-gray-400 border-gray-500', icon: <XCircle className="w-4 h-4" /> },
-};
-
-// Derived "Waiting On" badge — answers "who has the ball right now?" at a
-// glance, separately from raw status. Only shown when the raw status is
-// ambiguous about ownership:
-//   open / in_progress  → Support owes a response
-//   awaiting_response   → Customer owes a response (staff already replied)
-//   on_hold / resolved / closed → no badge (the status pill is already
-//     unambiguous about who owns it / that nobody does)
-type WaitingOn = { label: string; className: string };
-const getWaitingOn = (status: TicketStatus): WaitingOn | null => {
-  switch (status) {
-    case 'open':
-    case 'in_progress':
-      return { label: 'Waiting on Support', className: 'bg-blue-500/10 text-blue-300 border-blue-500/50' };
-    case 'awaiting_response':
-      return { label: 'Waiting on Customer', className: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/50' };
-    default:
-      return null;
-  }
 };
 
 const priorityConfig: Record<TicketPriority, { label: string; className: string }> = {
@@ -365,7 +348,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
               onChange={(e) => setStatusFilter(e.target.value as TicketStatus | 'active' | '')}
               className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              <option value="active">Active (Open + In Progress + Awaiting + On Hold)</option>
+              <option value="active">Active (everything except Resolved &amp; Closed)</option>
               <option value="">All</option>
               {Object.entries(statusConfig).map(([key, { label }]) => (
                 <option key={key} value={key}>{label}</option>
@@ -422,7 +405,6 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ticket</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Waiting On</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Priority</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reporter</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Assigned</th>
@@ -450,23 +432,6 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                         {statusConfig[ticket.status].icon}
                         {statusConfig[ticket.status].label}
                       </span>
-                    </td>
-                    {/* "Who has the ball" — its own column so an admin can
-                        scan straight down to find tickets that need a
-                        support reply vs. ones waiting on the customer.
-                        Empty for resolved/closed/on_hold (status already
-                        conveys ownership for those). */}
-                    <td className="px-4 py-4">
-                      {(() => {
-                        const wo = getWaitingOn(ticket.status);
-                        return wo ? (
-                          <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${wo.className}`}>
-                            {wo.label}
-                          </span>
-                        ) : (
-                          <span className="text-gray-600 text-xs">—</span>
-                        );
-                      })()}
                     </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>

@@ -4,7 +4,7 @@ import { Car, Music, Eye, EyeOff, Loader2, Save, ArrowLeft, Users } from 'lucide
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { profilesApi, Profile as ProfileType } from '@/profiles';
 import { membershipsApi, ControlledMecaId, Membership, RELATIONSHIP_TYPES } from '@/memberships';
-import { MecaIdSwitcher } from '@/shared/components';
+import { MecaIdSwitcher } from '@/shared/components/MecaIdSwitcher';
 import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
 
 export default function PublicProfilePage() {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session, Provider } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/lib/supabase';
 import { setAxiosUserId } from '@/lib/axios';
@@ -34,6 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [forcePasswordChange, setForcePasswordChange] = useState(false);
   const [restrictedToBilling, setRestrictedToBilling] = useState(false);
+  // Tracks the user id we've already loaded a profile for. Supabase fires
+  // SIGNED_IN every time the tab regains visibility (it re-checks the session
+  // on visibilitychange) — refetching on each of those would flip `loading`
+  // back to true, which unmounts the tree under MaintenanceModeGuard and
+  // wipes form state. Skip the refetch when the user identity hasn't changed.
+  const fetchedUserIdRef = useRef<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -74,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id);
           setProfile(profileData);
+          fetchedUserIdRef.current = session.user.id;
         }
 
         setLoading(false);
@@ -88,19 +95,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!session?.user) {
           setProfile(null);
+          fetchedUserIdRef.current = null;
           return;
         }
 
-        // Refetch profile only when the user identity might have changed.
-        // TOKEN_REFRESHED fires roughly hourly with the same user; refetching
-        // there would flash the `loading` spinner over a working page.
-        const needsFetch = event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION';
-        if (!needsFetch) return;
+        // Refetch profile only when the user identity actually changed, or
+        // when the user record itself was updated. Supabase fires SIGNED_IN
+        // on visibility change (tab regains focus) with the SAME user — we
+        // must NOT flip `loading` back to true there, or MaintenanceModeGuard
+        // unmounts the entire app tree and form state is lost.
+        const isNewIdentity = session.user.id !== fetchedUserIdRef.current;
+        const isUserUpdate = event === 'USER_UPDATED';
+        if (!isNewIdentity && !isUserUpdate) return;
 
         setLoading(true);
         try {
           const profileData = await fetchProfile(session.user.id);
           setProfile(profileData);
+          fetchedUserIdRef.current = session.user.id;
         } finally {
           setLoading(false);
         }

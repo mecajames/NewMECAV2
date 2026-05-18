@@ -19,6 +19,7 @@ import {
   TicketPriority,
   TicketCategory,
   TicketDepartment,
+  TICKET_STATUS_TRANSITIONS,
   CreateTicketDto,
   UpdateTicketDto,
   CreateTicketCommentDto,
@@ -26,6 +27,7 @@ import {
   CreateTicketAttachmentDto,
   TicketListQuery,
 } from '@newmeca/shared';
+import { BadRequestException } from '@nestjs/common';
 import { TicketRoutingService } from './ticket-routing.service';
 import { TicketStaffService } from './ticket-staff.service';
 import { EmailService } from '../email/email.service';
@@ -79,7 +81,7 @@ export class TicketsService {
     // Lets the admin tickets dashboard default-filter out resolved/closed
     // without exposing a special enum value on the entity itself.
     if (status === 'active' as any) {
-      where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'on_hold'] };
+      where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'pending_internal_review', 'escalated', 'on_hold', 'reopened'] };
     } else if (status) {
       where.status = status;
     }
@@ -516,12 +518,56 @@ export class TicketsService {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
     }
 
-    // Explicit assignments — same serializedName-safe pattern as update().
-    // Clear both transition timestamps so a re-resolve/re-close stamps fresh
-    // ones (the ticket is back in the working queue from this point on).
-    ticket.status = TicketStatus.OPEN;
+    // Reopened is its own status so admins can see recidivism at a glance
+    // (separate filter / count from brand-new tickets). Clear both
+    // transition timestamps so a re-resolve/re-close stamps fresh ones.
+    ticket.status = TicketStatus.REOPENED;
     ticket.resolvedAt = undefined;
     ticket.closedAt = undefined;
+    await em.flush();
+
+    return this.findById(id);
+  }
+
+  /**
+   * Admin-only "Change Status" path. Validates the transition against
+   * TICKET_STATUS_TRANSITIONS (the same matrix the UI dropdown uses) and
+   * stamps resolved_at / closed_at when moving to those terminal-ish states.
+   * Throws BadRequestException on a disallowed transition so the UI can show
+   * a clean error instead of corrupting the workflow.
+   */
+  async changeStatus(id: string, nextStatus: TicketStatus): Promise<Ticket> {
+    const em = this.em.fork();
+    const ticket = await em.findOne(Ticket, { id });
+    if (!ticket) {
+      throw new NotFoundException(`Ticket with ID ${id} not found`);
+    }
+
+    const current = ticket.status;
+    if (current === nextStatus) {
+      // No-op rather than 400 — admin clicked the current status by accident.
+      return this.findById(id);
+    }
+
+    const allowed = TICKET_STATUS_TRANSITIONS[current] || [];
+    if (!allowed.includes(nextStatus)) {
+      throw new BadRequestException(
+        `Cannot move ticket from "${current}" to "${nextStatus}". Allowed next statuses: ${allowed.join(', ') || '(none)'}.`,
+      );
+    }
+
+    ticket.status = nextStatus;
+    if (nextStatus === TicketStatus.RESOLVED && !ticket.resolvedAt) {
+      ticket.resolvedAt = new Date();
+    }
+    if (nextStatus === TicketStatus.CLOSED && !ticket.closedAt) {
+      ticket.closedAt = new Date();
+    }
+    if (nextStatus === TicketStatus.REOPENED) {
+      // Clear terminal timestamps so a subsequent re-resolve stamps fresh.
+      ticket.resolvedAt = undefined;
+      ticket.closedAt = undefined;
+    }
     await em.flush();
 
     return this.findById(id);
@@ -580,10 +626,15 @@ export class TicketsService {
     // manual admin state and a reply on a resolved/closed ticket should
     // reopen via the explicit Reopen button, not via a comment side effect.
     if (!data.is_internal) {
+      // Statuses where comment activity should auto-shift the workflow.
+      // ON_HOLD / RESOLVED / CLOSED require explicit admin moves.
       const isActive =
         ticket.status === TicketStatus.OPEN ||
         ticket.status === TicketStatus.IN_PROGRESS ||
-        ticket.status === TicketStatus.AWAITING_RESPONSE;
+        ticket.status === TicketStatus.AWAITING_RESPONSE ||
+        ticket.status === TicketStatus.PENDING_INTERNAL_REVIEW ||
+        ticket.status === TicketStatus.ESCALATED ||
+        ticket.status === TicketStatus.REOPENED;
 
       if (isActive) {
         if (isStaffReply) {
@@ -592,17 +643,15 @@ export class TicketsService {
             ticket.status = TicketStatus.AWAITING_RESPONSE;
             await em.flush();
           }
-        } else {
-          // Customer replied → back to support's court. Pick in_progress
-          // when an assignee exists, otherwise open (so it shows up in
-          // unassigned queues for someone to grab).
-          const target = ticket.assignedTo
+        } else if (ticket.status === TicketStatus.AWAITING_RESPONSE) {
+          // Customer replied while we were waiting on them — flip back
+          // to support's court. If the ticket is in an explicit staff
+          // state (ESCALATED / PENDING_INTERNAL_REVIEW), leave it alone
+          // so the workflow signal isn't lost.
+          ticket.status = ticket.assignedTo
             ? TicketStatus.IN_PROGRESS
             : TicketStatus.OPEN;
-          if (ticket.status !== target) {
-            ticket.status = target;
-            await em.flush();
-          }
+          await em.flush();
         }
       }
     }
@@ -789,8 +838,11 @@ export class TicketsService {
       open,
       inProgress,
       awaitingResponse,
+      pendingInternalReview,
+      escalated,
       onHold,
       resolved,
+      reopened,
       closed,
       lowPriority,
       mediumPriority,
@@ -801,8 +853,11 @@ export class TicketsService {
       em.count(Ticket, { status: TicketStatus.OPEN }),
       em.count(Ticket, { status: TicketStatus.IN_PROGRESS }),
       em.count(Ticket, { status: TicketStatus.AWAITING_RESPONSE }),
+      em.count(Ticket, { status: TicketStatus.PENDING_INTERNAL_REVIEW }),
+      em.count(Ticket, { status: TicketStatus.ESCALATED }),
       em.count(Ticket, { status: TicketStatus.ON_HOLD }),
       em.count(Ticket, { status: TicketStatus.RESOLVED }),
+      em.count(Ticket, { status: TicketStatus.REOPENED }),
       em.count(Ticket, { status: TicketStatus.CLOSED }),
       em.count(Ticket, { priority: TicketPriority.LOW }),
       em.count(Ticket, { priority: TicketPriority.MEDIUM }),
@@ -845,8 +900,11 @@ export class TicketsService {
       open,
       in_progress: inProgress,
       awaiting_response: awaitingResponse,
+      pending_internal_review: pendingInternalReview,
+      escalated,
       on_hold: onHold,
       resolved,
+      reopened,
       closed,
       by_priority: {
         low: lowPriority,
@@ -1035,7 +1093,7 @@ export class TicketsService {
 
     // Same synthetic 'active' status group as in findAll — see comment there.
     if (status === 'active' as any) {
-      where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'on_hold'] };
+      where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'pending_internal_review', 'escalated', 'on_hold', 'reopened'] };
     } else if (status) {
       where.status = status;
     }

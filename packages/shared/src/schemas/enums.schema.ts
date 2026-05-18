@@ -254,16 +254,127 @@ export enum MembershipAccountType {
 // =============================================================================
 
 export enum TicketStatus {
+  // OPEN (DB value kept for back-compat) = freshly created, not yet picked up.
+  // Admin UI labels this as "New". Customer-facing wording is "Submitted".
   OPEN = 'open',
   IN_PROGRESS = 'in_progress',
+  // AWAITING_RESPONSE (DB value kept) = staff replied, ball is in customer's
+  // court. Admin UI labels this as "Pending Customer".
   AWAITING_RESPONSE = 'awaiting_response',
-  // ON_HOLD = ticket is paused intentionally — waiting on an external
-  // party (vendor, legal, escalation, etc.) or the customer is
-  // unreachable. Still in the "active" filter group so admins keep eyes on it.
+  // PENDING_INTERNAL_REVIEW = waiting on another internal team (legal,
+  // accounting, lead admin). Different from ON_HOLD which implies external.
+  PENDING_INTERNAL_REVIEW = 'pending_internal_review',
+  // ESCALATED = flagged to a higher tier / specific owner attention.
+  ESCALATED = 'escalated',
+  // ON_HOLD = paused on an external party (vendor, legal external, etc.).
   ON_HOLD = 'on_hold',
   RESOLVED = 'resolved',
+  // REOPENED = was Resolved/Closed and reactivated. Distinct from IN_PROGRESS
+  // so recidivism is visible in the queue.
+  REOPENED = 'reopened',
   CLOSED = 'closed',
 }
+
+/**
+ * Allowed status transitions for the admin "Change Status" dropdown.
+ * Source-of-truth for both the frontend dropdown filter and the backend
+ * `PATCH /api/tickets/:id/status` validator. Keep these in sync — the
+ * backend rejects any transition not listed here.
+ */
+export const TICKET_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
+  [TicketStatus.OPEN]: [
+    TicketStatus.IN_PROGRESS,
+    TicketStatus.AWAITING_RESPONSE,
+    TicketStatus.ON_HOLD,
+    TicketStatus.ESCALATED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.IN_PROGRESS]: [
+    TicketStatus.AWAITING_RESPONSE,
+    TicketStatus.PENDING_INTERNAL_REVIEW,
+    TicketStatus.ON_HOLD,
+    TicketStatus.ESCALATED,
+    TicketStatus.RESOLVED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.AWAITING_RESPONSE]: [
+    TicketStatus.IN_PROGRESS,
+    TicketStatus.ON_HOLD,
+    TicketStatus.RESOLVED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.PENDING_INTERNAL_REVIEW]: [
+    TicketStatus.IN_PROGRESS,
+    TicketStatus.ON_HOLD,
+    TicketStatus.ESCALATED,
+    TicketStatus.RESOLVED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.ON_HOLD]: [
+    TicketStatus.IN_PROGRESS,
+    TicketStatus.AWAITING_RESPONSE,
+    TicketStatus.PENDING_INTERNAL_REVIEW,
+    TicketStatus.ESCALATED,
+    TicketStatus.RESOLVED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.ESCALATED]: [
+    TicketStatus.IN_PROGRESS,
+    TicketStatus.AWAITING_RESPONSE,
+    TicketStatus.PENDING_INTERNAL_REVIEW,
+    TicketStatus.ON_HOLD,
+    TicketStatus.RESOLVED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.RESOLVED]: [
+    TicketStatus.REOPENED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.REOPENED]: [
+    TicketStatus.IN_PROGRESS,
+    TicketStatus.AWAITING_RESPONSE,
+    TicketStatus.PENDING_INTERNAL_REVIEW,
+    TicketStatus.ON_HOLD,
+    TicketStatus.ESCALATED,
+    TicketStatus.RESOLVED,
+    TicketStatus.CLOSED,
+  ],
+  [TicketStatus.CLOSED]: [
+    TicketStatus.REOPENED,
+  ],
+};
+
+/**
+ * Admin-facing label for each status (the technical name).
+ * Use these in admin lists, detail headers, and the status dropdown.
+ */
+export const TICKET_STATUS_ADMIN_LABEL: Record<TicketStatus, string> = {
+  [TicketStatus.OPEN]: 'New',
+  [TicketStatus.IN_PROGRESS]: 'In Progress',
+  [TicketStatus.AWAITING_RESPONSE]: 'Pending Customer',
+  [TicketStatus.PENDING_INTERNAL_REVIEW]: 'Pending Internal Review',
+  [TicketStatus.ESCALATED]: 'Escalated',
+  [TicketStatus.ON_HOLD]: 'On Hold',
+  [TicketStatus.RESOLVED]: 'Resolved',
+  [TicketStatus.REOPENED]: 'Reopened',
+  [TicketStatus.CLOSED]: 'Closed',
+};
+
+/**
+ * Customer-facing label for each status (friendlier wording).
+ * Use these in the member ticket list / detail page and guest views.
+ */
+export const TICKET_STATUS_CUSTOMER_LABEL: Record<TicketStatus, string> = {
+  [TicketStatus.OPEN]: 'Submitted',
+  [TicketStatus.IN_PROGRESS]: 'In Progress',
+  [TicketStatus.AWAITING_RESPONSE]: 'Awaiting Your Reply',
+  [TicketStatus.PENDING_INTERNAL_REVIEW]: 'Under Review',
+  [TicketStatus.ESCALATED]: 'Escalated to Senior Support',
+  [TicketStatus.ON_HOLD]: 'On Hold',
+  [TicketStatus.RESOLVED]: 'Resolved',
+  [TicketStatus.REOPENED]: 'Reopened',
+  [TicketStatus.CLOSED]: 'Closed',
+};
 
 export enum TicketPriority {
   LOW = 'low',

@@ -8,44 +8,90 @@ import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
 import { usePageTracking } from '@/shared/hooks/usePageTracking';
 import { useMemberPageTracking } from '@/shared/hooks/useMemberPageTracking';
-// Static pages
+// Static pages — kept static for first-paint critical routes only.
+// Everything else is lazy-loaded below to shrink the main bundle.
 import HomePage from '@/pages/HomePage';
-import ContactPage from '@/pages/ContactPage';
-import MemberSupportPage from '@/pages/MemberSupportPage';
-import PrivacyPolicyPage from '@/pages/PrivacyPolicyPage';
-import TermsAndConditionsPage from '@/pages/TermsAndConditionsPage';
-import CompetitionGuidesPage from '@/pages/CompetitionGuidesPage';
-import MECAQuickStartGuidePage from '@/pages/MECAQuickStartGuidePage';
-// Feature pages - Static imports (public pages most users visit)
-import { LoginPage, ChangePasswordPage, AuthCallbackPage } from '@/auth';
-import { EventsPage, EventDetailPage } from '@/events';
-import { ResultsPage, LeaderboardPage, StandingsPage, MemberResultsPage, TeamStandingsPage, TeamLeaderboardPage } from '@/competition-results';
-import { RulebooksPage, RulebookDetailPage, RulebookArchivePage } from '@/rulebooks';
-import { ProfilePage, PublicProfilePage, MemberProfilePage, MemberDirectoryPage, MemberGalleryPage } from '@/profiles';
-import { TeamDirectoryPage, TeamPublicProfilePage } from '@/teams';
-import { RetailerDirectoryPage, RetailerProfilePage, ManufacturerDirectoryPage, ManufacturerProfilePage, ManufacturerPartnerInfoPage } from '@/business-listings';
+import { LoginPage } from '@/auth';
+import { EventsPage } from '@/events';
+import { ResultsPage } from '@/competition-results';
 import { MembershipPage } from '@/memberships';
-import { HostEventPage } from '@/event-hosting-requests';
-import { ClassCalculatorPage } from '@/competition-classes';
-import { HallOfFamePage, HallOfFameInducteeDetailPage, ChampionshipArchivesPage, ChampionshipArchiveYearPage } from '@/championship-archives';
-import { JudgesDirectoryPage, JudgeProfilePage } from '@/judges';
-import { EventDirectorsDirectoryPage, EventDirectorProfilePage } from '@/event-directors';
-import { MyRegistrationsPage, MyRegistrationDetailPage } from '@/event-registrations';
-// Ticket pages
-import {
-  TicketsPage,
-  TicketDetailPage,
-  GuestSupportPage,
-  GuestTicketCreatePage,
-  GuestTicketViewPage,
-  GuestTicketAccessPage,
-} from '@/tickets';
 // Shop (cart context must be static)
 import { CartProvider } from '@/shop/context/CartContext';
 import { PayPalProvider } from '@/shared/components/PayPalProvider';
 import { ShopPage } from '@/shop/pages/ShopPage';
-import { ProductDetailPage } from '@/shop/pages/ProductDetailPage';
-import { CartPage } from '@/shop/pages/CartPage';
+
+// Lazy-loaded pages - Static/legal pages (rarely visited, never on first paint)
+const ContactPage = lazy(() => import('@/pages/ContactPage'));
+const MemberSupportPage = lazy(() => import('@/pages/MemberSupportPage'));
+const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicyPage'));
+const TermsAndConditionsPage = lazy(() => import('@/pages/TermsAndConditionsPage'));
+const CompetitionGuidesPage = lazy(() => import('@/pages/CompetitionGuidesPage'));
+const MECAQuickStartGuidePage = lazy(() => import('@/pages/MECAQuickStartGuidePage'));
+
+// Lazy-loaded pages - Auth flows (rare)
+const ChangePasswordPage = lazy(() => import('@/auth/pages/ChangePasswordPage'));
+const AuthCallbackPage = lazy(() => import('@/auth/pages/AuthCallbackPage'));
+
+// Lazy-loaded pages - Event detail (heavy: maps, registration UI)
+const EventDetailPage = lazy(() => import('@/events/pages/EventDetailPage'));
+
+// Lazy-loaded pages - Secondary results/standings views
+const LeaderboardPage = lazy(() => import('@/competition-results/pages/LeaderboardPage'));
+const StandingsPage = lazy(() => import('@/competition-results/pages/StandingsPage'));
+const MemberResultsPage = lazy(() => import('@/competition-results/pages/MemberResultsPage'));
+const TeamStandingsPage = lazy(() => import('@/competition-results/pages/TeamStandingsPage'));
+const TeamLeaderboardPage = lazy(() => import('@/competition-results/pages/TeamLeaderboardPage'));
+
+// Lazy-loaded pages - Rulebooks
+const RulebooksPage = lazy(() => import('@/rulebooks/pages/RulebooksPage'));
+const RulebookDetailPage = lazy(() => import('@/rulebooks/pages/RulebookDetailPage'));
+const RulebookArchivePage = lazy(() => import('@/rulebooks/pages/RulebookArchivePage'));
+
+// Lazy-loaded pages - Profiles (auth-gated or detail views)
+const ProfilePage = lazy(() => import('@/profiles/pages/ProfilePage'));
+const PublicProfilePage = lazy(() => import('@/profiles/pages/PublicProfilePage'));
+const MemberProfilePage = lazy(() => import('@/profiles/pages/MemberProfilePage'));
+const MemberDirectoryPage = lazy(() => import('@/profiles/pages/MemberDirectoryPage'));
+const MemberGalleryPage = lazy(() => import('@/profiles/pages/MemberGalleryPage'));
+
+// Lazy-loaded pages - Team directory
+const TeamDirectoryPage = lazy(() => import('@/teams/pages/TeamDirectoryPage'));
+const TeamPublicProfilePage = lazy(() => import('@/teams/pages/TeamPublicProfilePage'));
+
+// Lazy-loaded pages - Business directories
+const RetailerDirectoryPage = lazy(() => import('@/business-listings/pages/RetailerDirectoryPage'));
+const RetailerProfilePage = lazy(() => import('@/business-listings/pages/RetailerProfilePage'));
+const ManufacturerDirectoryPage = lazy(() => import('@/business-listings/pages/ManufacturerDirectoryPage'));
+const ManufacturerProfilePage = lazy(() => import('@/business-listings/pages/ManufacturerProfilePage'));
+const ManufacturerPartnerInfoPage = lazy(() => import('@/business-listings/pages/ManufacturerPartnerInfoPage'));
+
+// Lazy-loaded pages - Other public pages
+const HostEventPage = lazy(() => import('@/event-hosting-requests/pages/HostEventPage'));
+const ClassCalculatorPage = lazy(() => import('@/competition-classes/pages/ClassCalculatorPage'));
+const HallOfFamePage = lazy(() => import('@/championship-archives/pages/HallOfFamePage'));
+const HallOfFameInducteeDetailPage = lazy(() => import('@/championship-archives/pages/HallOfFameInducteeDetailPage'));
+const ChampionshipArchivesPage = lazy(() => import('@/championship-archives/pages/ChampionshipArchivesPage'));
+const ChampionshipArchiveYearPage = lazy(() => import('@/championship-archives/pages/ChampionshipArchiveYearPage'));
+const JudgesDirectoryPage = lazy(() => import('@/judges/pages/JudgesDirectoryPage'));
+const JudgeProfilePage = lazy(() => import('@/judges/pages/JudgeProfilePage'));
+const EventDirectorsDirectoryPage = lazy(() => import('@/event-directors/pages/EventDirectorsDirectoryPage'));
+const EventDirectorProfilePage = lazy(() => import('@/event-directors/pages/EventDirectorProfilePage'));
+
+// Lazy-loaded pages - Auth-gated registration views
+const MyRegistrationsPage = lazy(() => import('@/event-registrations/pages/MyRegistrationsPage'));
+const MyRegistrationDetailPage = lazy(() => import('@/event-registrations/pages/MyRegistrationDetailPage'));
+
+// Lazy-loaded pages - Tickets
+const TicketsPage = lazy(() => import('@/tickets/pages/TicketsPage'));
+const TicketDetailPage = lazy(() => import('@/tickets/pages/TicketDetailPage'));
+const GuestSupportPage = lazy(() => import('@/tickets/pages/GuestSupportPage'));
+const GuestTicketCreatePage = lazy(() => import('@/tickets/pages/GuestTicketCreatePage'));
+const GuestTicketViewPage = lazy(() => import('@/tickets/pages/GuestTicketViewPage'));
+const GuestTicketAccessPage = lazy(() => import('@/tickets/pages/GuestTicketAccessPage'));
+
+// Lazy-loaded pages - Shop secondary pages
+const ProductDetailPage = lazy(() => import('@/shop/pages/ProductDetailPage'));
+const CartPage = lazy(() => import('@/shop/pages/CartPage'));
 
 // Lazy-loaded pages - Dashboard & user pages (loaded after login)
 const DashboardPage = lazy(() => import('@/dashboard/pages/DashboardPage'));
@@ -203,37 +249,37 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/auth/callback" element={<AuthCallbackPage />} />
-              <Route path="/change-password" element={<ChangePasswordPage />} />
+              <Route path="/auth/callback" element={<L><AuthCallbackPage /></L>} />
+              <Route path="/change-password" element={<L><ChangePasswordPage /></L>} />
               <Route path="/events" element={<EventsPage />} />
-              <Route path="/events/:eventId" element={<EventDetailPage />} />
+              <Route path="/events/:eventId" element={<L><EventDetailPage /></L>} />
               <Route path="/events/:eventId/register" element={<L><EventRegistrationCheckoutPage /></L>} />
               <Route path="/events/:eventId/check-in" element={<L><EventCheckInPage /></L>} />
               <Route path="/results" element={<ResultsPage />} />
-              <Route path="/results/member/:mecaId" element={<MemberResultsPage />} />
-              <Route path="/leaderboard" element={<LeaderboardPage />} />
-              <Route path="/standings" element={<StandingsPage />} />
-              <Route path="/team-standings" element={<TeamStandingsPage />} />
-              <Route path="/team-leaderboard" element={<TeamLeaderboardPage />} />
-              <Route path="/rulebooks" element={<RulebooksPage />} />
-              <Route path="/rulebooks/:rulebookId" element={<RulebookDetailPage />} />
-              <Route path="/rulebooks/archive" element={<RulebookArchivePage />} />
-              <Route path="/contact" element={<ContactPage />} />
-              <Route path="/host-event" element={<HostEventPage />} />
-              <Route path="/class-calculator" element={<ClassCalculatorPage />} />
-              <Route path="/hall-of-fame" element={<HallOfFamePage />} />
-              <Route path="/hall-of-fame/:id" element={<HallOfFameInducteeDetailPage />} />
+              <Route path="/results/member/:mecaId" element={<L><MemberResultsPage /></L>} />
+              <Route path="/leaderboard" element={<L><LeaderboardPage /></L>} />
+              <Route path="/standings" element={<L><StandingsPage /></L>} />
+              <Route path="/team-standings" element={<L><TeamStandingsPage /></L>} />
+              <Route path="/team-leaderboard" element={<L><TeamLeaderboardPage /></L>} />
+              <Route path="/rulebooks" element={<L><RulebooksPage /></L>} />
+              <Route path="/rulebooks/:rulebookId" element={<L><RulebookDetailPage /></L>} />
+              <Route path="/rulebooks/archive" element={<L><RulebookArchivePage /></L>} />
+              <Route path="/contact" element={<L><ContactPage /></L>} />
+              <Route path="/host-event" element={<L><HostEventPage /></L>} />
+              <Route path="/class-calculator" element={<L><ClassCalculatorPage /></L>} />
+              <Route path="/hall-of-fame" element={<L><HallOfFamePage /></L>} />
+              <Route path="/hall-of-fame/:id" element={<L><HallOfFameInducteeDetailPage /></L>} />
               <Route path="/world-finals/register" element={<L><WorldFinalsPreRegisterPage /></L>} />
               <Route path="/forever-members" element={<L><ForeverMembersPage /></L>} />
               <Route path="/forever-members/:id" element={<L><ForeverMemberDetailPage /></L>} />
-              <Route path="/championship-archives" element={<ChampionshipArchivesPage />} />
-              <Route path="/championship-archives/:year" element={<ChampionshipArchiveYearPage />} />
-              <Route path="/member-support" element={<MemberSupportPage />} />
-              <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
-              <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
+              <Route path="/championship-archives" element={<L><ChampionshipArchivesPage /></L>} />
+              <Route path="/championship-archives/:year" element={<L><ChampionshipArchiveYearPage /></L>} />
+              <Route path="/member-support" element={<L><MemberSupportPage /></L>} />
+              <Route path="/privacy-policy" element={<L><PrivacyPolicyPage /></L>} />
+              <Route path="/terms-and-conditions" element={<L><TermsAndConditionsPage /></L>} />
               <Route path="/knowledge-base" element={<Navigate to="/member-support" replace />} />
-              <Route path="/competition-guides" element={<CompetitionGuidesPage />} />
-              <Route path="/competition-guides/quick-start" element={<MECAQuickStartGuidePage />} />
+              <Route path="/competition-guides" element={<L><CompetitionGuidesPage /></L>} />
+              <Route path="/competition-guides/quick-start" element={<L><MECAQuickStartGuidePage /></L>} />
 
               {/* Reference Verification (public, tokenized) */}
               <Route path="/verify-reference" element={<L><VerifyReferencePage /></L>} />
@@ -242,34 +288,34 @@ function App() {
               <Route path="/pay/invoice/:invoiceId" element={<L><InvoicePaymentPage /></L>} />
 
               {/* Public Member Directory Routes */}
-              <Route path="/members" element={<MemberDirectoryPage />} />
-              <Route path="/members/:id" element={<MemberProfilePage />} />
+              <Route path="/members" element={<L><MemberDirectoryPage /></L>} />
+              <Route path="/members/:id" element={<L><MemberProfilePage /></L>} />
 
               {/* Public Team Directory Routes */}
-              <Route path="/teams" element={<TeamDirectoryPage />} />
-              <Route path="/teams/:id" element={<TeamPublicProfilePage />} />
+              <Route path="/teams" element={<L><TeamDirectoryPage /></L>} />
+              <Route path="/teams/:id" element={<L><TeamPublicProfilePage /></L>} />
 
               {/* Public Business Directory Routes */}
-              <Route path="/retailers" element={<RetailerDirectoryPage />} />
-              <Route path="/retailers/:id" element={<RetailerProfilePage />} />
-              <Route path="/manufacturers" element={<ManufacturerDirectoryPage />} />
-              <Route path="/manufacturers/:id" element={<ManufacturerProfilePage />} />
-              <Route path="/manufacturer-membership" element={<ManufacturerPartnerInfoPage />} />
+              <Route path="/retailers" element={<L><RetailerDirectoryPage /></L>} />
+              <Route path="/retailers/:id" element={<L><RetailerProfilePage /></L>} />
+              <Route path="/manufacturers" element={<L><ManufacturerDirectoryPage /></L>} />
+              <Route path="/manufacturers/:id" element={<L><ManufacturerProfilePage /></L>} />
+              <Route path="/manufacturer-membership" element={<L><ManufacturerPartnerInfoPage /></L>} />
 
               {/* Public Judges Directory Routes */}
-              <Route path="/judges" element={<JudgesDirectoryPage />} />
+              <Route path="/judges" element={<L><JudgesDirectoryPage /></L>} />
               <Route path="/judges/apply" element={<L><JudgeApplicationPage /></L>} />
               <Route path="/judges/assignments" element={<L><JudgeAssignmentsPage /></L>} />
-              <Route path="/judges/:id" element={<JudgeProfilePage />} />
+              <Route path="/judges/:id" element={<L><JudgeProfilePage /></L>} />
 
               {/* Public Event Directors Directory Routes */}
-              <Route path="/event-directors" element={<EventDirectorsDirectoryPage />} />
+              <Route path="/event-directors" element={<L><EventDirectorsDirectoryPage /></L>} />
               <Route path="/event-directors/apply" element={<L><EventDirectorApplicationPage /></L>} />
               <Route path="/event-directors/assignments" element={<L><EventDirectorAssignmentsPage /></L>} />
               <Route path="/event-directors/hosting-requests" element={<L><EDHostingRequestsPage /></L>} />
               <Route path="/event-directors/submit-event" element={<L><EDSubmitEventPage /></L>} />
               <Route path="/event-directors/event/:eventId" element={<L><EDEventManagementPage /></L>} />
-              <Route path="/event-directors/:id" element={<EventDirectorProfilePage />} />
+              <Route path="/event-directors/:id" element={<L><EventDirectorProfilePage /></L>} />
 
               {/* User Routes */}
               <Route path="/dashboard" element={<L><DashboardPage /></L>} />
@@ -277,9 +323,9 @@ function App() {
               <Route path="/dashboard/business-listing" element={<L><BusinessListingDashboardPage /></L>} />
               <Route path="/dashboard/membership" element={<L><MembershipDashboardPage /></L>} />
               <Route path="/dashboard/admin" element={<L><AdminDashboardPage /></L>} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/public-profile" element={<PublicProfilePage />} />
-              <Route path="/member-profile-gallery" element={<MemberGalleryPage />} />
+              <Route path="/profile" element={<L><ProfilePage /></L>} />
+              <Route path="/public-profile" element={<L><PublicProfilePage /></L>} />
+              <Route path="/member-profile-gallery" element={<L><MemberGalleryPage /></L>} />
               <Route path="/billing" element={<L><BillingPage /></L>} />
               <Route path="/invoice/:invoiceId" element={<L><InvoiceViewPage /></L>} />
               <Route path="/membership/:membershipId/receipt" element={<L><MembershipReceiptPage /></L>} />
@@ -289,20 +335,20 @@ function App() {
               <Route path="/renew-expired" element={<L><RenewExpiredPage /></L>} />
               <Route path="/apply/judge" element={<L><JudgeApplicationPage /></L>} />
               <Route path="/apply/event-director" element={<L><EventDirectorApplicationPage /></L>} />
-              <Route path="/my-registrations" element={<MyRegistrationsPage />} />
-              <Route path="/my-registrations/:registrationId" element={<MyRegistrationDetailPage />} />
+              <Route path="/my-registrations" element={<L><MyRegistrationsPage /></L>} />
+              <Route path="/my-registrations/:registrationId" element={<L><MyRegistrationDetailPage /></L>} />
               <Route path="/membership-billing" element={<L><MembershipBillingPage /></L>} />
               <Route path="/membership/card" element={<L><MembershipCardPage /></L>} />
 
               {/* Support Ticket Routes (Authenticated) */}
-              <Route path="/tickets" element={<TicketsPage />} />
-              <Route path="/tickets/:id" element={<TicketDetailPage />} />
+              <Route path="/tickets" element={<L><TicketsPage /></L>} />
+              <Route path="/tickets/:id" element={<L><TicketDetailPage /></L>} />
 
               {/* Guest Support Ticket Routes (No Auth Required) */}
-              <Route path="/support/guest" element={<GuestSupportPage />} />
-              <Route path="/support/guest/verify/:token" element={<GuestTicketCreatePage />} />
-              <Route path="/support/guest/ticket/:accessToken" element={<GuestTicketViewPage />} />
-              <Route path="/support/guest/access/:token" element={<GuestTicketAccessPage />} />
+              <Route path="/support/guest" element={<L><GuestSupportPage /></L>} />
+              <Route path="/support/guest/verify/:token" element={<L><GuestTicketCreatePage /></L>} />
+              <Route path="/support/guest/ticket/:accessToken" element={<L><GuestTicketViewPage /></L>} />
+              <Route path="/support/guest/access/:token" element={<L><GuestTicketAccessPage /></L>} />
 
               {/* Admin Routes */}
               <Route path="/admin/members" element={<L><MembersPage /></L>} />
@@ -346,8 +392,8 @@ function App() {
 
               {/* Shop Routes */}
               <Route path="/shop" element={<ShopPage />} />
-              <Route path="/shop/products/:id" element={<ProductDetailPage />} />
-              <Route path="/shop/cart" element={<CartPage />} />
+              <Route path="/shop/products/:id" element={<L><ProductDetailPage /></L>} />
+              <Route path="/shop/cart" element={<L><CartPage /></L>} />
               <Route path="/shop/checkout" element={<L><CheckoutPage /></L>} />
               <Route path="/shop/orders" element={<L><OrderHistoryPage /></L>} />
               <Route path="/shop/orders/:id" element={<L><ShopOrderDetailPage /></L>} />

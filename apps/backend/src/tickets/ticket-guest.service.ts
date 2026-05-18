@@ -285,18 +285,19 @@ export class TicketGuestService {
     } as any);
 
     // Guest reply = customer reply → ball is back in support's court.
-    // Mirror the authenticated createComment behavior: pick in_progress if
-    // there's an assignee, otherwise open. Resolved tickets also reopen so
-    // the guest's follow-up isn't ignored. on_hold is intentionally not
-    // touched — it's a manual admin state.
-    if (
-      ticket.status === TicketStatus.RESOLVED ||
-      ticket.status === TicketStatus.AWAITING_RESPONSE
-    ) {
+    // Mirror the authenticated createComment behavior.
+    if (ticket.status === TicketStatus.AWAITING_RESPONSE) {
       ticket.status = ticket.assignedTo
         ? TicketStatus.IN_PROGRESS
         : TicketStatus.OPEN;
+    } else if (ticket.status === TicketStatus.RESOLVED) {
+      // Guest commented on a resolved ticket — surface as Reopened so admins
+      // can see recidivism (same status the explicit Reopen button uses).
+      ticket.status = TicketStatus.REOPENED;
+      ticket.resolvedAt = undefined;
     }
+    // ESCALATED / PENDING_INTERNAL_REVIEW / ON_HOLD are explicit staff states
+    // and are intentionally not auto-transitioned by guest comments.
 
     await em.persistAndFlush([comment, ticket]);
 
