@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, UserCheck, UserX, ChevronRight, Star, Briefcase, ArrowLeft, Plus, X, Trash2, Power, PowerOff } from 'lucide-react';
+import { Search, UserCheck, UserX, ChevronRight, Star, Briefcase, ArrowLeft, Plus, X, Trash2, Power, PowerOff, RefreshCw } from 'lucide-react';
 import {
   getAllEventDirectors,
   createEventDirectorDirectly,
@@ -9,6 +9,7 @@ import {
   AdminDirectCreateEventDirectorDto,
 } from '@/event-directors/event-directors.api-client';
 import { profilesApi } from '@/profiles';
+import { eventsApi } from '@/events/events.api-client';
 
 export default function EventDirectorsAdminPage() {
   const navigate = useNavigate();
@@ -41,6 +42,36 @@ export default function EventDirectorsAdminPage() {
 
   // Per-row action busy state — keyed by `${ed.id}:${action}`.
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+
+  // "Sync Event Assignments" button — backfills missing
+  // event_director_assignments rows for every event that has
+  // event_director_id set on the events table. Run once after deploy,
+  // and any time you suspect drift (e.g. legacy V1 events imported).
+  const [syncBusy, setSyncBusy] = useState(false);
+  const handleSyncEventAssignments = async () => {
+    const ok = window.confirm(
+      'Scan every event with an Event Director assigned and create the missing ' +
+      'assignment rows so directors see those events on their dashboard?\n\n' +
+      'Safe to run repeatedly — already-linked pairs are skipped.',
+    );
+    if (!ok) return;
+    setSyncBusy(true);
+    try {
+      const result = await eventsApi.syncEventDirectorAssignments();
+      alert(
+        `Sync complete.\n\n` +
+        `Events scanned: ${result.eventsScanned}\n` +
+        `Assignments created: ${result.assignmentsCreated}\n` +
+        `Already linked (skipped): ${result.alreadyLinked}\n` +
+        `Skipped — director has no ED profile: ${result.skippedNoEd}`,
+      );
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Sync failed';
+      alert(`Failed to sync event assignments: ${msg}`);
+    } finally {
+      setSyncBusy(false);
+    }
+  };
 
   const handleToggleActive = async (ed: any) => {
     const next = !ed.is_active;
@@ -189,7 +220,16 @@ export default function EventDirectorsAdminPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Event Directors</h1>
             <p className="text-gray-400 mt-2">View and manage all approved event directors</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={handleSyncEventAssignments}
+              disabled={syncBusy}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Backfill missing event_director_assignments rows so directors see all their assigned events"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncBusy ? 'animate-spin' : ''}`} />
+              {syncBusy ? 'Syncing…' : 'Sync Event Assignments'}
+            </button>
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"

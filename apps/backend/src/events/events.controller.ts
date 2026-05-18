@@ -145,6 +145,23 @@ export class EventsController {
     return this.eventsService.startBackfillGeocode(body.startDate, body.endDate);
   }
 
+  /**
+   * One-shot backfill that creates missing event_director_assignments rows
+   * for every event whose `events.event_director_id` is set. Safe to run
+   * repeatedly — already-linked pairs are skipped. Returns counts so the
+   * admin can see what happened.
+   */
+  @Post('admin/backfill-ed-assignments')
+  async backfillEdAssignments(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ eventsScanned: number; assignmentsCreated: number; skippedNoEd: number; alreadyLinked: number }> {
+    const { profile } = await this.requireAdminOrEventDirector(authHeader);
+    if (!isAdminUser(profile)) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return this.eventsService.backfillEventDirectorAssignments();
+  }
+
   @Get('admin/backfill-geocode/:jobId')
   async getBackfillProgress(
     @Headers('authorization') authHeader: string,
