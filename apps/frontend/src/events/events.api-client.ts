@@ -161,6 +161,22 @@ export const eventsApi = {
     return response.data;
   },
 
+  /**
+   * Admin-only. Scans every event with `event_director_id` set and creates
+   * missing `event_director_assignments` rows so the ED's dashboard /
+   * Event History views pick them up. Idempotent — already-linked pairs
+   * are skipped.
+   */
+  syncEventDirectorAssignments: async (): Promise<{
+    eventsScanned: number;
+    assignmentsCreated: number;
+    skippedNoEd: number;
+    alreadyLinked: number;
+  }> => {
+    const response = await axios.post(`/api/events/admin/backfill-ed-assignments`);
+    return response.data;
+  },
+
   createMultiDay: async (
     data: Partial<Event>,
     numberOfDays: number,
