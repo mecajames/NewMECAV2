@@ -4,7 +4,15 @@ import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
-import { EventStatus, RegistrationStatus, MultiDayResultsMode } from '@newmeca/shared';
+import { EventDirector } from '../event-directors/event-director.entity';
+import { EventDirectorAssignment } from '../event-directors/event-director-assignment.entity';
+import {
+  EventStatus,
+  RegistrationStatus,
+  MultiDayResultsMode,
+  EventAssignmentStatus,
+  AssignmentRequestType,
+} from '@newmeca/shared';
 import { randomUUID } from 'crypto';
 import { EmailService } from '../email/email.service';
 import { GeocodingService } from '../geocoding/geocoding.service';
@@ -323,6 +331,12 @@ export class EventsService {
       const event = em.create(Event, transformedData);
       await em.persistAndFlush(event);
 
+      // Keep event_director_assignments in sync — Edit Event modal only sets
+      // events.event_director_id, but the ED dashboard reads from assignments.
+      if ((data as any).event_director_id) {
+        await this.ensureEventDirectorAssignment(em, event.id, (data as any).event_director_id);
+      }
+
       console.log('📝 CREATE EVENT - Success, ID:', event.id);
       return event;
     } catch (error) {
@@ -478,6 +492,15 @@ export class EventsService {
       // Persist all events
       await em.persistAndFlush(createdEvents);
 
+      // Mirror events.event_director_id into event_director_assignments
+      // for every day so the ED's dashboard picks the events up.
+      const multiDayDirectorId = (data as any).event_director_id;
+      if (multiDayDirectorId) {
+        for (const ev of createdEvents) {
+          await this.ensureEventDirectorAssignment(em, ev.id, multiDayDirectorId);
+        }
+      }
+
       console.log('📝 CREATE MULTI-DAY EVENT - Success, IDs:', createdEvents.map(e => e.id));
       return createdEvents;
     } catch (error) {
@@ -601,6 +624,12 @@ export class EventsService {
     await em.flush();
     console.log('🔍 UPDATE EVENT - After flush, event date:', event.eventDate);
 
+    // Sync the assignment row when admin (re)assigns a director via the
+    // Edit Event modal. Idempotent — already-linked pairs are skipped.
+    if ((data as any).event_director_id !== undefined && (data as any).event_director_id) {
+      await this.ensureEventDirectorAssignment(em, event.id, (data as any).event_director_id);
+    }
+
     return event;
   }
 
@@ -611,6 +640,95 @@ export class EventsService {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
     await em.removeAndFlush(event);
+  }
+
+  /**
+   * Ensure an `event_director_assignments` row exists for the given event +
+   * director-user pair. The Edit Event modal sets `events.event_director_id`
+   * (which points at a Profile), but the ED dashboard / Event History views
+   * read from the `event_director_assignments` table — without this sync,
+   * admin-assigned directors don't see the events they're directing.
+   *
+   * Non-destructive: if a row already exists (any status) we leave it alone
+   * so a DECLINED / NO_SHOW assignment isn't silently flipped back to
+   * CONFIRMED on a no-op event edit. Old assignments for previous directors
+   * are also left in place as historical record.
+   *
+   * Skips silently if the director-user has no EventDirector entity (e.g.
+   * the dropdown allows any Profile; only profiles with an event_directors
+   * row should produce a dashboard entry). A later call to this method
+   * after the ED entity is provisioned will create the missing assignment.
+   */
+  private async ensureEventDirectorAssignment(
+    em: EntityManager,
+    eventId: string,
+    directorUserId: string | null | undefined,
+  ): Promise<void> {
+    if (!directorUserId) return;
+    const ed = await em.findOne(EventDirector, { user: { id: directorUserId } });
+    if (!ed) return;
+
+    const existing = await em.findOne(EventDirectorAssignment, {
+      event: { id: eventId },
+      eventDirector: { id: ed.id },
+    });
+    if (existing) return;
+
+    const assignment = new EventDirectorAssignment();
+    assignment.event = em.getReference(Event, eventId);
+    assignment.eventDirector = ed;
+    assignment.status = EventAssignmentStatus.CONFIRMED;
+    assignment.requestType = AssignmentRequestType.ADMIN_ASSIGN;
+    assignment.requestedAt = new Date();
+    em.persist(assignment);
+    await em.flush();
+  }
+
+  /**
+   * One-shot backfill: walk every event with `event_director_id` set and
+   * create the matching `event_director_assignments` row when missing.
+   * Safe to run repeatedly — `ensureEventDirectorAssignment` is idempotent.
+   * Returns counts so the caller can show the admin a summary.
+   */
+  async backfillEventDirectorAssignments(): Promise<{
+    eventsScanned: number;
+    assignmentsCreated: number;
+    skippedNoEd: number;
+    alreadyLinked: number;
+  }> {
+    const em = this.em.fork();
+    const events = await em.find(Event, { eventDirector: { $ne: null } }, {
+      populate: ['eventDirector'],
+    });
+    let assignmentsCreated = 0;
+    let skippedNoEd = 0;
+    let alreadyLinked = 0;
+    for (const event of events) {
+      const directorUserId = event.eventDirector?.id;
+      if (!directorUserId) continue;
+      const ed = await em.findOne(EventDirector, { user: { id: directorUserId } });
+      if (!ed) { skippedNoEd++; continue; }
+      const existing = await em.findOne(EventDirectorAssignment, {
+        event: { id: event.id },
+        eventDirector: { id: ed.id },
+      });
+      if (existing) { alreadyLinked++; continue; }
+      const assignment = new EventDirectorAssignment();
+      assignment.event = em.getReference(Event, event.id);
+      assignment.eventDirector = ed;
+      assignment.status = EventAssignmentStatus.CONFIRMED;
+      assignment.requestType = AssignmentRequestType.ADMIN_ASSIGN;
+      assignment.requestedAt = event.createdAt || new Date();
+      em.persist(assignment);
+      assignmentsCreated++;
+    }
+    await em.flush();
+    return {
+      eventsScanned: events.length,
+      assignmentsCreated,
+      skippedNoEd,
+      alreadyLinked,
+    };
   }
 
   async getStats(): Promise<{ totalEvents: number }> {
