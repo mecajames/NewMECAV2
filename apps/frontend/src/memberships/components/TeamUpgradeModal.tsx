@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
   PaymentElement,
@@ -8,11 +7,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { CreditCard, Lock, Loader2, Users, X, AlertCircle, Check, Calendar, DollarSign } from 'lucide-react';
 import { membershipsApi, TeamUpgradeDetails } from '../memberships.api-client';
-
-// Initialize Stripe
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
-const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
+import { stripePromise } from '@/lib/stripe';
 
 interface TeamUpgradeModalProps {
   membershipId: string;

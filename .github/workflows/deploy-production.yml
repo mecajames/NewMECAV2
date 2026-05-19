@@ -44,6 +44,22 @@ jobs:
             -t newmeca-backend:latest \
             .
 
+      # Carry forward the prior deploy's hashed /assets/* so tabs left open
+      # across a deploy can still resolve their stale chunk URLs. Without this,
+      # clients with cached index.html 404 on the prior build's JS/CSS chunks.
+      - name: Restore prior build's legacy assets
+        uses: actions/cache@v4
+        with:
+          path: deploy/.legacy-assets
+          key: nginx-legacy-assets-prod-${{ github.run_id }}
+          restore-keys: |
+            nginx-legacy-assets-prod-
+
+      - name: Ensure legacy-assets dir exists
+        run: |
+          mkdir -p deploy/.legacy-assets
+          touch deploy/.legacy-assets/.gitkeep
+
       - name: Build nginx/frontend Docker image
         run: |
           docker build \
@@ -57,6 +73,18 @@ jobs:
             --build-arg VITE_GOOGLE_MAPS_API_KEY="${{ secrets.PROD_VITE_GOOGLE_MAPS_API_KEY }}" \
             -t newmeca-nginx:latest \
             .
+
+      # Extract the just-built image's full assets dir (prior legacy + new build)
+      # so the next CI run's cache restore carries everything forward.
+      - name: Refresh legacy-assets cache from new image
+        run: |
+          tmp=$(docker create newmeca-nginx:latest)
+          rm -rf deploy/.legacy-assets
+          mkdir -p deploy/.legacy-assets
+          docker cp "$tmp:/usr/share/nginx/html/assets/." deploy/.legacy-assets/ || \
+            echo "WARN: docker cp from new nginx image failed; next deploy will lack legacy assets"
+          docker rm "$tmp"
+          touch deploy/.legacy-assets/.gitkeep
 
       - name: Push backend image to Lightsail
         id: push-backend

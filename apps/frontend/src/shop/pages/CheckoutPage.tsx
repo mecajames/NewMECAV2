@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
   PaymentElement,
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
+import { stripePromise, isStripeConfigured } from '@/lib/stripe';
 import {
   ArrowLeft,
   CreditCard,
@@ -33,9 +33,6 @@ import { PaymentMethodSelector, SelectedPaymentMethod } from '@/shared/component
 import { PayPalPaymentButton } from '@/shared/components/PayPalPaymentButton';
 import { paypalApi } from '@/paypal/paypal.api-client';
 
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
-const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
 
 interface CheckoutFormData {
   email: string;
