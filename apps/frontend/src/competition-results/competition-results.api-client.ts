@@ -174,11 +174,18 @@ export const competitionResultsApi = {
       missingFields: string[];
       isValid: boolean;
       validationErrors: string[];
+      // Set on rows whose class name doesn't match any existing
+      // competition_classes row. Frontend uses this to drive the
+      // "Unknown Classes" section of the import review modal.
+      unknownClass?: string;
     }>;
     totalCount: number;
     needsNameConfirmation: number;
     needsDataCompletion: number;
     fileExtension: string;
+    // De-duped list of class names from the file that aren't yet in
+    // the system. Admin/ED must create each before the import can run.
+    unknownClasses: string[];
   }> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -200,6 +207,23 @@ export const competitionResultsApi = {
       createdBy,
       fileExtension,
     });
+    return response.data;
+  },
+
+  /**
+   * Admin-only one-shot backfill. Walks every result with a class_id
+   * linked and corrects result.format / result.competition_class to
+   * match the linked class. Cleans up legacy rows where the old
+   * "default to SPL" path silently mis-tagged results. Idempotent —
+   * already-correct rows are no-ops.
+   */
+  backfillFormatFromClass: async (): Promise<{
+    scanned: number;
+    formatFixed: number;
+    classNameFixed: number;
+    skippedNoClass: number;
+  }> => {
+    const response = await axios.post('/api/competition-results/admin/backfill-format-from-class');
     return response.data;
   },
 

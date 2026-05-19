@@ -22,6 +22,7 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { isAdminUser, isProtectedAccount } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 import { Public } from '../auth/public.decorator';
+import { EventDirector } from '../event-directors/event-director.entity';
 
 @Controller('api/profiles')
 export class ProfilesController {
@@ -51,6 +52,38 @@ export class ProfilesController {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile: profile! };
+  }
+
+  /**
+   * Allow admin OR any active event director. Used for the bounded
+   * /search endpoint specifically — EDs need MECA-ID / name lookups when
+   * entering results for walk-in competitors at their events. The endpoint
+   * itself returns a max of 20 rows and requires a query string, so this
+   * is not equivalent to opening up the full /profiles list.
+   */
+  private async requireAdminOrEventDirector(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (!profile) {
+      throw new ForbiddenException('Profile not found');
+    }
+    if (isAdminUser(profile)) {
+      return { user, profile, isAdmin: true };
+    }
+    // Non-admin path: must be an active EventDirector.
+    const ed = await em.findOne(EventDirector, { user: { id: user.id }, isActive: true });
+    if (!ed) {
+      throw new ForbiddenException('Admin or active event director required');
+    }
+    return { user, profile, isAdmin: false };
   }
 
   // Helper to require any authenticated user (not necessarily admin)
@@ -113,7 +146,9 @@ export class ProfilesController {
     @Query('q') query: string,
     @Query('limit') limit: number = 20,
   ): Promise<Profile[]> {
-    await this.requireAdmin(authHeader);
+    // Admin OR active event director. EDs use this for MECA-ID / name
+    // lookups during results entry; bounded by query + 20-row max.
+    await this.requireAdminOrEventDirector(authHeader);
     return this.profilesService.search(query, limit);
   }
 

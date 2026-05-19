@@ -82,17 +82,21 @@ export default function TeamLeaderboardPage() {
             {/* Top 3 Podium - Only show if we have 3 or more */}
             {leaderboard.length >= 3 ? (
               <div className="mb-12">
-                {/* Podium Display */}
-                <div className="flex items-end justify-center gap-4 mb-8">
-                  {/* 2nd Place - Left */}
+                {/* Podium Display — stacks vertically on mobile (1st on top),
+                    classic 2-1-3 horizontal podium on md+ screens. The
+                    decorative numbered "platform" bases below each card are
+                    hidden on mobile since they only make visual sense in
+                    a side-by-side layout. */}
+                <div className="flex flex-col md:flex-row items-center md:items-end justify-center gap-4 mb-8">
+                  {/* 2nd Place - md: Left, mobile: middle */}
                   {leaderboard[1] && (() => {
                     const entry = leaderboard[1];
                     return (
                       <div
-                        className="flex flex-col items-center cursor-pointer"
+                        className="flex flex-col items-center cursor-pointer w-full md:w-auto order-2 md:order-1"
                         onClick={() => handleTeamClick(entry.teamId)}
                       >
-                        <div className="bg-slate-800 rounded-xl p-6 border-2 border-gray-400 mb-4 w-64 text-center hover:bg-slate-700 transition-colors">
+                        <div className="bg-slate-800 rounded-xl p-6 border-2 border-gray-400 mb-4 w-full max-w-xs md:max-w-none md:w-64 text-center hover:bg-slate-700 transition-colors">
                           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gray-300 to-gray-500 flex items-center justify-center mx-auto mb-4 shadow-lg">
                             <Medal className="h-10 w-10 text-white" />
                           </div>
@@ -116,22 +120,22 @@ export default function TeamLeaderboardPage() {
                           </div>
                           <div className="text-sm text-gray-500">points</div>
                         </div>
-                        <div className="w-64 h-32 bg-gradient-to-t from-gray-400 to-gray-500 rounded-t-lg flex items-center justify-center">
+                        <div className="hidden md:flex w-64 h-32 bg-gradient-to-t from-gray-400 to-gray-500 rounded-t-lg items-center justify-center">
                           <span className="text-6xl font-bold text-white opacity-50">2</span>
                         </div>
                       </div>
                     );
                   })()}
 
-                  {/* 1st Place - Center (Elevated) */}
+                  {/* 1st Place - md: Center (elevated), mobile: top */}
                   {leaderboard[0] && (() => {
                     const entry = leaderboard[0];
                     return (
                       <div
-                        className="flex flex-col items-center -mt-8 cursor-pointer"
+                        className="flex flex-col items-center cursor-pointer w-full md:w-auto md:-mt-8 order-1 md:order-2"
                         onClick={() => handleTeamClick(entry.teamId)}
                       >
-                        <div className="bg-slate-800 rounded-xl p-6 border-4 border-yellow-500 mb-4 w-72 text-center shadow-2xl hover:bg-slate-700 transition-colors">
+                        <div className="bg-slate-800 rounded-xl p-6 border-4 border-yellow-500 mb-4 w-full max-w-xs md:max-w-none md:w-72 text-center shadow-2xl hover:bg-slate-700 transition-colors">
                           <div className="w-24 h-24 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
                             <Trophy className="h-12 w-12 text-white" />
                           </div>
@@ -155,22 +159,22 @@ export default function TeamLeaderboardPage() {
                           </div>
                           <div className="text-sm text-gray-500">points</div>
                         </div>
-                        <div className="w-72 h-40 bg-gradient-to-t from-yellow-500 to-yellow-400 rounded-t-lg flex items-center justify-center">
+                        <div className="hidden md:flex w-72 h-40 bg-gradient-to-t from-yellow-500 to-yellow-400 rounded-t-lg items-center justify-center">
                           <span className="text-7xl font-bold text-white opacity-50">1</span>
                         </div>
                       </div>
                     );
                   })()}
 
-                  {/* 3rd Place - Right */}
+                  {/* 3rd Place - md: Right, mobile: bottom */}
                   {leaderboard[2] && (() => {
                     const entry = leaderboard[2];
                     return (
                       <div
-                        className="flex flex-col items-center cursor-pointer"
+                        className="flex flex-col items-center cursor-pointer w-full md:w-auto order-3 md:order-3"
                         onClick={() => handleTeamClick(entry.teamId)}
                       >
-                        <div className="bg-slate-800 rounded-xl p-6 border-2 border-orange-500 mb-4 w-64 text-center hover:bg-slate-700 transition-colors">
+                        <div className="bg-slate-800 rounded-xl p-6 border-2 border-orange-500 mb-4 w-full max-w-xs md:max-w-none md:w-64 text-center hover:bg-slate-700 transition-colors">
                           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
                             <Medal className="h-10 w-10 text-white" />
                           </div>
@@ -194,7 +198,7 @@ export default function TeamLeaderboardPage() {
                           </div>
                           <div className="text-sm text-gray-500">points</div>
                         </div>
-                        <div className="w-64 h-24 bg-gradient-to-t from-orange-500 to-orange-400 rounded-t-lg flex items-center justify-center">
+                        <div className="hidden md:flex w-64 h-24 bg-gradient-to-t from-orange-500 to-orange-400 rounded-t-lg items-center justify-center">
                           <span className="text-6xl font-bold text-white opacity-50">3</span>
                         </div>
                       </div>

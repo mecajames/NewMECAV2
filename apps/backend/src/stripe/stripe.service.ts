@@ -174,6 +174,25 @@ export class StripeService {
   }
 
   /**
+   * Fetch a Stripe Customer by id. Returns null if Stripe says the
+   * customer was deleted or the id doesn't exist. Used by the webhook
+   * failure handler to resolve an orphan PaymentIntent (no metadata) to
+   * a local Profile via the customer's email.
+   */
+  async retrieveCustomer(customerId: string): Promise<Stripe.Customer | null> {
+    if (!customerId) return null;
+    const stripe = this.getStripeClient();
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer.deleted) return null;
+      return customer as Stripe.Customer;
+    } catch (error) {
+      this.logger.warn(`Stripe retrieveCustomer(${customerId}) failed: ${error}`);
+      return null;
+    }
+  }
+
+  /**
    * Create or retrieve a Stripe Customer
    */
   async findOrCreateCustomer(email: string, name?: string): Promise<Stripe.Customer> {

@@ -1092,6 +1092,13 @@ export class StripeController {
       return { orderId: null as string | null, invoiceId: null as string | null };
     });
 
+    // Pass the Stripe customer id alongside metadata so the admin
+    // notification service can resolve the member even when metadata is
+    // sparse (subscription auto-charge, raw card decline, etc.).
+    const stripeCustomerId = typeof paymentIntent.customer === 'string'
+      ? paymentIntent.customer
+      : paymentIntent.customer?.id || null;
+
     this.adminNotificationsService.notifyOneTimePaymentFailed({
       transactionId: paymentIntent.id,
       amountCents: paymentIntent.amount,
@@ -1103,6 +1110,7 @@ export class StripeController {
       customerUserId: metadata?.userId || null,
       customerEmail: metadata?.email || null,
       customerName: metadata?.competitorName || metadata?.firstName || null,
+      stripeCustomerId,
       failureCode: paymentIntent.last_payment_error?.code || null,
       failureMessage: paymentIntent.last_payment_error?.message || null,
       orderId: touched.orderId,
@@ -1134,28 +1142,83 @@ export class StripeController {
       || paymentIntent.last_payment_error?.code
       || 'Payment failed';
 
-    // Resolve the user, if any. The metadata.userId is set whenever a logged-in
-    // member starts the checkout; guest checkouts only have an email.
+    // Pull the Stripe Customer ID off the intent so we can resolve the user
+    // even when the intent has no metadata.userId / metadata.email. Stripe
+    // sets this for subscription auto-charges, saved-card invoice retries,
+    // and anywhere a Customer was attached at intent creation time.
+    const stripeCustomerId = typeof paymentIntent.customer === 'string'
+      ? paymentIntent.customer
+      : paymentIntent.customer?.id || null;
+
+    // Resolve the user. Cascade through the cheapest sources first:
+    //   1. metadata.userId — set on interactive logged-in checkout
+    //   2. metadata.email — guest checkout fallback
+    //   3. prior Payment row sharing this stripe_customer_id (no Stripe API call)
+    //   4. live Stripe API lookup of the customer's email → Profile
+    // Each step short-circuits as soon as a profile is found. The final API
+    // call is the only network round-trip and only fires when the previous
+    // three came up empty.
     let user: Profile | null = null;
+    let resolvedVia: string | null = null;
     if (metadata.userId) {
       user = await em.findOne(Profile, { id: metadata.userId });
+      if (user) resolvedVia = 'metadata.userId';
     }
     if (!user && metadata.email) {
       user = await em.findOne(Profile, { email: String(metadata.email).toLowerCase() });
+      if (user) resolvedVia = 'metadata.email';
+    }
+    if (!user && stripeCustomerId) {
+      // Find any previous payment row keyed to this Stripe customer. If a
+      // successful charge from this customer touched our system before, we
+      // already know who they are — no Stripe API call needed.
+      const priorPayment = await em.findOne(
+        Payment,
+        { stripeCustomerId, user: { $ne: null } as any },
+        { populate: ['user'] },
+      );
+      if (priorPayment?.user) {
+        user = priorPayment.user as any as Profile;
+        resolvedVia = 'prior_payment.stripeCustomerId';
+      }
+    }
+    if (!user && stripeCustomerId) {
+      // Last resort: ask Stripe directly for the customer's email and look
+      // it up locally. retrieveCustomer swallows errors and returns null
+      // so a Stripe outage doesn't break the webhook handler — we'd
+      // rather record an orphan failure than 500.
+      const customer = await this.stripeService.retrieveCustomer(stripeCustomerId);
+      const customerEmail = customer?.email;
+      if (customerEmail) {
+        user = await em.findOne(Profile, { email: customerEmail.toLowerCase() });
+        if (user) resolvedVia = 'stripe_api.customer_email';
+      }
+    }
+    if (resolvedVia) {
+      console.log(`Resolved failed PI ${paymentIntent.id} to user ${user?.id} via ${resolvedVia}`);
+    } else {
+      console.log(`Could NOT resolve failed PI ${paymentIntent.id} to a user; will persist as orphan failure`);
     }
 
     // Idempotency: if a payment row already exists for this intent, just
-    // refresh failure_reason / status (Stripe can replay the webhook).
+    // refresh failure_reason / status (Stripe can replay the webhook). We
+    // also opportunistically backfill user / stripe_customer_id if a later
+    // attempt resolves what an earlier one couldn't.
     const existing = await em.findOne(Payment, { stripePaymentIntentId: paymentIntent.id });
     if (existing) {
       existing.paymentStatus = PaymentStatus.FAILED;
       existing.failureReason = failureMessage;
-    } else if (user) {
-      // Payment.user is non-null in the schema, so we only persist a row when
-      // we can resolve a profile. Guest failures fall back to invoice/order
-      // status updates below.
+      if (!existing.user && user) existing.user = user;
+      if (!existing.stripeCustomerId && stripeCustomerId) existing.stripeCustomerId = stripeCustomerId;
+    } else {
+      // ALWAYS persist a Payment row — even when no user could be resolved
+      // (Payment.user is now nullable). Without this, orphan Stripe failures
+      // (subscription auto-charges with no metadata + new-to-us customer)
+      // disappeared from the admin Failed Payments view despite triggering
+      // the alert email.
       const payment = new Payment();
-      payment.user = user;
+      if (user) payment.user = user;
+      if (stripeCustomerId) payment.stripeCustomerId = stripeCustomerId;
       payment.amount = paymentIntent.amount / 100;
       payment.currency = (paymentIntent.currency || 'usd').toUpperCase();
       payment.stripePaymentIntentId = paymentIntent.id;
@@ -1176,6 +1239,10 @@ export class StripeController {
         stripeMetadata: metadata,
         failureCode: paymentIntent.last_payment_error?.code || null,
         amountCents: paymentIntent.amount,
+        resolvedVia: resolvedVia || 'unresolved',
+        // Carry the Stripe customer email if we got it during resolution so
+        // the admin UI can show *something* for orphan rows.
+        stripeCustomerId: stripeCustomerId || null,
       };
       em.persist(payment);
     }

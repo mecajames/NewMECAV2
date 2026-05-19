@@ -71,8 +71,11 @@ export default function RecurringInvoicesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      <div className="border-b border-slate-700 bg-slate-800">
-        <div className="mx-auto w-full px-4 py-6 sm:px-6 lg:px-8 flex items-center justify-between">
+      <div className="mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Header — lives inside the same constrained column as the body
+            so it doesn't bleed edge-to-edge across the viewport (matches
+            OrdersPage / FailedPaymentsPage / InvoicesPage). */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-700/60">
           <div className="flex items-center gap-3">
             <Repeat className="h-7 w-7 text-orange-400" />
             <div>
@@ -80,7 +83,7 @@ export default function RecurringInvoicesPage() {
               <p className="text-sm text-gray-400">Templates that auto-generate invoices on a monthly / quarterly / annual cycle</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleRunDue}
               disabled={running}
@@ -98,9 +101,7 @@ export default function RecurringInvoicesPage() {
             </button>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto w-full px-4 py-8 sm:px-6 lg:px-8">
         {error && (
           <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-300 flex items-center gap-2">
             <AlertCircle className="h-4 w-4" /> {error}

@@ -429,12 +429,26 @@ export class CompetitionResultsService {
       delete transformedData.createdBy;
     }
 
-    // Auto-set wattage to -1 ("Unlimited") for unlimited power classes
+    // CLASS IS THE SOURCE OF TRUTH for format + class-name. Whatever the
+    // client supplied for `format` / `competition_class` gets overwritten
+    // by the values on the linked competition_classes row. This is what
+    // killed the "every SQ/DD result mysteriously saves as SPL" bug —
+    // imports / forms can no longer drift from the class definition.
+    // (Wattage auto-unlimit also lives here since we already have the
+    // class entity loaded.)
     const classRef = transformedData.competitionClassEntity;
     if (classRef) {
       const classEntity = await em.findOne(CompetitionClass, { id: classRef.id ?? classRef });
-      if (classEntity?.unlimitedWattage) {
-        transformedData.wattage = -1;
+      if (classEntity) {
+        if (classEntity.format) {
+          transformedData.format = classEntity.format;
+        }
+        if (classEntity.name) {
+          transformedData.competitionClass = classEntity.name;
+        }
+        if (classEntity.unlimitedWattage) {
+          transformedData.wattage = -1;
+        }
       }
     }
 
@@ -621,12 +635,23 @@ export class CompetitionResultsService {
 
     // updatedAt will be automatically set by MikroORM's onUpdate decorator
 
-    // Auto-set wattage to -1 ("Unlimited") for unlimited power classes
+    // CLASS IS THE SOURCE OF TRUTH for format + class-name. Same rule as
+    // create(): whatever was in the update payload for `format` /
+    // `competition_class` gets overwritten by the linked class row's
+    // values. Keeps drift impossible.
     const updateClassRef = transformedData.competitionClassEntity || result.competitionClassEntity;
     if (updateClassRef) {
       const classEntity = await em.findOne(CompetitionClass, { id: updateClassRef.id ?? updateClassRef });
-      if (classEntity?.unlimitedWattage) {
-        transformedData.wattage = -1;
+      if (classEntity) {
+        if (classEntity.format) {
+          transformedData.format = classEntity.format;
+        }
+        if (classEntity.name) {
+          transformedData.competitionClass = classEntity.name;
+        }
+        if (classEntity.unlimitedWattage) {
+          transformedData.wattage = -1;
+        }
       }
     }
 
@@ -1743,6 +1768,71 @@ export class CompetitionResultsService {
   }
 
   /**
+   * One-shot backfill: walk every CompetitionResult that has a
+   * class_id linked and correct its `format` / `competition_class`
+   * text fields to match the linked class's values. Cleans up the
+   * legacy rows where the old "default missing format to SPL" path
+   * silently mis-tagged SQ / DD / etc. results.
+   *
+   * Idempotent — already-correct rows are skipped, so re-running has
+   * zero effect. Safe to run in production any time.
+   */
+  async backfillFormatFromClass(): Promise<{
+    scanned: number;
+    formatFixed: number;
+    classNameFixed: number;
+    skippedNoClass: number;
+  }> {
+    const em = this.em.fork();
+    let scanned = 0;
+    let formatFixed = 0;
+    let classNameFixed = 0;
+    let skippedNoClass = 0;
+
+    // Pull every result with a class_id set, populating the class so we
+    // have its format + name in one go. Process in batches so this can
+    // handle a large table without blowing memory.
+    const BATCH = 500;
+    let offset = 0;
+    while (true) {
+      const batch = await em.find(
+        CompetitionResult,
+        { competitionClassEntity: { $ne: null } as any },
+        { populate: ['competitionClassEntity'], limit: BATCH, offset, orderBy: { id: 'ASC' } },
+      );
+      if (batch.length === 0) break;
+      for (const r of batch) {
+        scanned++;
+        const cls = r.competitionClassEntity as any;
+        if (!cls || !cls.format || !cls.name) {
+          skippedNoClass++;
+          continue;
+        }
+        let changed = false;
+        if (r.format !== cls.format) {
+          r.format = cls.format;
+          formatFixed++;
+          changed = true;
+        }
+        if (r.competitionClass !== cls.name) {
+          r.competitionClass = cls.name;
+          classNameFixed++;
+          changed = true;
+        }
+        if (changed) {
+          em.persist(r);
+        }
+      }
+      await em.flush();
+      em.clear();
+      if (batch.length < BATCH) break;
+      offset += BATCH;
+    }
+
+    return { scanned, formatFixed, classNameFixed, skippedNoClass };
+  }
+
+  /**
    * Check if wattage/frequency is required for a given format and class
    * Required for all SPL classes except Dueling Demos
    */
@@ -1775,10 +1865,19 @@ export class CompetitionResultsService {
       missingFields: string[];
       isValid: boolean;
       validationErrors: string[];
+      // Set when the parsed row's class name doesn't match any existing
+      // competition_classes row. Frontend uses this to drive the
+      // "Unknown Classes" section of the import review modal.
+      unknownClass?: string;
     }>;
     totalCount: number;
     needsNameConfirmation: number;
     needsDataCompletion: number;
+    // De-duped list of class names from the file that don't exist in
+    // competition_classes yet. The admin/ED must create each before the
+    // import can proceed (so the class becomes available system-wide
+    // for every future import + every future manual entry).
+    unknownClasses: string[];
   }> {
     const em = this.em.fork();
     const today = new Date();
@@ -1821,10 +1920,16 @@ export class CompetitionResultsService {
       missingFields: string[];
       isValid: boolean;
       validationErrors: string[];
+      unknownClass?: string;
     }> = [];
 
     let needsNameConfirmation = 0;
     let needsDataCompletion = 0;
+    // De-duped set of class names that need to be created. Map key is
+    // a case-insensitive normalized name so "Park And Pound 7" and
+    // "park and pound 7" collapse to one prompt; value is the first
+    // raw spelling we saw so the UI shows it back exactly as typed.
+    const unknownClassMap = new Map<string, string>();
 
     for (let i = 0; i < parsedResults.length; i++) {
       const result = parsedResults[i];
@@ -1848,14 +1953,40 @@ export class CompetitionResultsService {
         validationErrors.push('Score is required');
       }
 
-      // Check for wattage/frequency requirement (SPL classes except Dueling Demos and unlimited wattage classes)
-      const format = result.format || 'SPL';
+      // Class is the source of truth for format. Look it up in
+      // competition_classes by name or abbreviation. If we find a
+      // match we copy its format onto the parsed row so create() never
+      // has to guess. If we DON'T find a match the row is flagged as
+      // unknownClass — the import preview modal shows a "create this
+      // class" prompt to the admin/ED, who picks the format and saves
+      // it to the system so every future import + manual entry can
+      // use it.
       const matchedClass = competitionClasses.find(
         c => c.name.toLowerCase() === (result.class || '').toLowerCase() ||
              c.abbreviation.toLowerCase() === (result.class || '').toLowerCase()
       );
+      let unknownClassName: string | undefined = undefined;
+      if (!matchedClass && result.class && String(result.class).trim() !== '') {
+        const trimmed: string = String(result.class).trim();
+        unknownClassName = trimmed;
+        const key = trimmed.toLowerCase();
+        if (!unknownClassMap.has(key)) {
+          unknownClassMap.set(key, trimmed);
+        }
+      }
+      const format = matchedClass?.format || result.format || null;
+      // Carry the inferred format onto the row so the eventual
+      // create() call has it. (create() itself re-derives from class
+      // when class_id is set, but this still helps the resolution
+      // path that maps classes via name when the import is finalized.)
+      if (matchedClass && !result.format) {
+        result.format = matchedClass.format;
+      }
       const isUnlimited = matchedClass?.unlimitedWattage || result.wattage === -1;
-      if (this.isWattageFrequencyRequired(format, result.class, isUnlimited)) {
+      // Only enforce wattage/frequency when we KNOW the format is SPL
+      // via the matched class. No more "default to SPL and demand
+      // wattage" — that was the SQ / DD import bug.
+      if (matchedClass && this.isWattageFrequencyRequired(matchedClass.format, result.class, isUnlimited)) {
         if (!result.wattage) {
           missingFields.push('wattage');
         }
@@ -1918,6 +2049,7 @@ export class CompetitionResultsService {
         missingFields,
         isValid,
         validationErrors,
+        unknownClass: unknownClassName,
       });
     }
 
@@ -1926,6 +2058,7 @@ export class CompetitionResultsService {
       totalCount: parsedResults.length,
       needsNameConfirmation,
       needsDataCompletion,
+      unknownClasses: Array.from(unknownClassMap.values()),
     };
   }
 

@@ -9,8 +9,13 @@ export class Payment {
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
 
-  @ManyToOne(() => Profile, { fieldName: 'user_id' })
-  user!: Profile;
+  // Nullable so orphan Stripe failures (subscription auto-charges where the
+  // PaymentIntent carries no metadata and Stripe customer can't be matched
+  // to a local Profile) can still be persisted and surfaced in the admin
+  // Failed Payments view. The actual DB constraint is also relaxed in
+  // Migration20260519140000_payments_user_id_nullable.
+  @ManyToOne(() => Profile, { fieldName: 'user_id', nullable: true })
+  user?: Profile;
 
   @ManyToOne(() => Membership, { nullable: true, fieldName: 'membership_id' })
   membership?: Membership;

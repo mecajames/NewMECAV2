@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { scrollToTop } from '@/shared/utils/scrollToTop';
 import {
   Ticket,
   Search,
@@ -484,7 +485,7 @@ export function TicketList({
           </p>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setPage(Math.max(1, page - 1))}
+              onClick={() => { setPage(Math.max(1, page - 1)); scrollToTop(); }}
               disabled={page === 1}
               className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
@@ -494,7 +495,7 @@ export function TicketList({
               Page {page} of {totalPages}
             </span>
             <button
-              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              onClick={() => { setPage(Math.min(totalPages, page + 1)); scrollToTop(); }}
               disabled={page === totalPages}
               className="px-4 py-2 bg-slate-700 text-gray-300 rounded-lg hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
