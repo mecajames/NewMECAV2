@@ -8,6 +8,13 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
   onItemsPerPageChange: (itemsPerPage: number) => void;
   itemsPerPageOptions?: number[];
+  /**
+   * After a page change, scroll the window back to the top so the user
+   * lands at the start of the new page's content instead of staying
+   * pinned to the pagination footer. Default true; set false if the
+   * paginated list lives inside a modal or other scroll container.
+   */
+  scrollToTopOnPageChange?: boolean;
 }
 
 export default function Pagination({
@@ -18,8 +25,20 @@ export default function Pagination({
   onPageChange,
   onItemsPerPageChange,
   itemsPerPageOptions = [25, 50, 100, 250],
+  scrollToTopOnPageChange = true,
 }: PaginationProps) {
   if (totalItems === 0) return null;
+
+  // Wrap page transitions so the viewport jumps back to the top of the
+  // page — clicking "Next" at the bottom of a long list and staying at
+  // the bottom is disorienting on every page that uses this component.
+  // Smooth-scroll respects `prefers-reduced-motion` automatically.
+  const handlePageChange = (page: number) => {
+    onPageChange(page);
+    if (scrollToTopOnPageChange && typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 bg-slate-800 border-t border-slate-600">
@@ -33,7 +52,7 @@ export default function Pagination({
             value={itemsPerPage}
             onChange={(e) => {
               onItemsPerPageChange(Number(e.target.value));
-              onPageChange(1);
+              handlePageChange(1);
             }}
             className="bg-slate-700 text-white text-xs sm:text-sm rounded px-2 py-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
           >
@@ -49,14 +68,14 @@ export default function Pagination({
       {totalPages > 1 && (
         <div className="flex items-center gap-1 sm:gap-2">
           <button
-            onClick={() => onPageChange(1)}
+            onClick={() => handlePageChange(1)}
             disabled={currentPage === 1}
             className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
             First
           </button>
           <button
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
             className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
@@ -66,14 +85,14 @@ export default function Pagination({
             {currentPage}
           </span>
           <button
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
             disabled={currentPage === totalPages}
             className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >
             <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
           <button
-            onClick={() => onPageChange(totalPages)}
+            onClick={() => handlePageChange(totalPages)}
             disabled={currentPage === totalPages}
             className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
           >

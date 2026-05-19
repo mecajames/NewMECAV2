@@ -28,6 +28,9 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Public } from '../auth/public.decorator';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
+import { EventDirector } from '../event-directors/event-director.entity';
+import { EventDirectorAssignment } from '../event-directors/event-director-assignment.entity';
+import { EventAssignmentStatus } from '@newmeca/shared';
 
 @Controller('api/event-registrations')
 export class EventRegistrationsController {
@@ -54,6 +57,60 @@ export class EventRegistrationsController {
       throw new ForbiddenException('Admin access required');
     }
     return { user, profile };
+  }
+
+  /**
+   * Allow either an admin OR the event director assigned to THIS event.
+   * Used by endpoints that surface event-specific operational data
+   * (registrations, check-in, results) — the assigned ED legitimately
+   * needs them for their own event, but must NOT see other events.
+   *
+   * Returns the resolved profile + a flag indicating which path was taken,
+   * in case the caller wants to log or scope further.
+   */
+  private async requireAdminOrAssignedEventDirector(
+    authHeader: string | undefined,
+    eventId: string,
+  ): Promise<{ user: any; profile: Profile; isAdmin: boolean }> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) {
+      throw new UnauthorizedException('Invalid authorization token');
+    }
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (!profile) {
+      throw new ForbiddenException('Profile not found');
+    }
+    if (isAdminUser(profile)) {
+      return { user, profile, isAdmin: true };
+    }
+    // Non-admin path: must be an EventDirector with an active assignment
+    // for the specific event being queried. Any other event → 403.
+    const ed = await em.findOne(EventDirector, { user: { id: user.id } });
+    if (!ed) {
+      throw new ForbiddenException('Event director access required');
+    }
+    const assignment = await em.findOne(EventDirectorAssignment, {
+      event: { id: eventId },
+      eventDirector: { id: ed.id },
+    });
+    if (!assignment) {
+      throw new ForbiddenException('Not assigned to this event');
+    }
+    // DECLINED / NO_SHOW assignments don't count — those EDs are explicitly
+    // off this event. Everything else (REQUESTED, ACCEPTED, CONFIRMED,
+    // COMPLETED) is fine for read-only operational access.
+    if (
+      assignment.status === EventAssignmentStatus.DECLINED ||
+      assignment.status === EventAssignmentStatus.NO_SHOW
+    ) {
+      throw new ForbiddenException('Not assigned to this event');
+    }
+    return { user, profile, isAdmin: false };
   }
 
   // ========================
@@ -379,7 +436,9 @@ export class EventRegistrationsController {
     @Headers('authorization') authHeader: string,
     @Param('eventId') eventId: string,
   ): Promise<EventRegistration[]> {
-    await this.requireAdmin(authHeader);
+    // Admin OR the event director assigned to THIS event. Other EDs and
+    // non-EDs are still 403'd — the assignment is the gate.
+    await this.requireAdminOrAssignedEventDirector(authHeader, eventId);
     return this.eventRegistrationsService.findByEvent(eventId);
   }
 

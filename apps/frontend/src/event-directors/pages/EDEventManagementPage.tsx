@@ -144,7 +144,6 @@ export default function EDEventManagementPage() {
   const [results, setResults] = useState<ResultEntry[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [competitionClasses, setCompetitionClasses] = useState<CompetitionClass[]>([]);
-  const [competitors, setCompetitors] = useState<Profile[]>([]);
   const [showEntryForm, setShowEntryForm] = useState(true);
   const [entryMethod, setEntryMethod] = useState<EntryMethod>('manual');
   const [currentEntry, setCurrentEntry] = useState<ResultEntry>({
@@ -258,7 +257,8 @@ export default function EDEventManagementPage() {
       fetchRegistrations();
       fetchResults();
       fetchCompetitionClasses();
-      fetchCompetitors();
+      // Competitor lookup is now on-demand via lookupCompetitorByMecaId /
+      // lookupCompetitorByName — no need to preload all 10K profiles.
     }
   }, [edProfile, eventId]);
 
@@ -295,22 +295,15 @@ export default function EDEventManagementPage() {
       setRegistrationsLoading(true);
       const data = await eventRegistrationsApi.getEventRegistrations(eventId);
 
-      // Fetch all profiles to get MECA IDs and membership status
-      const profiles = await profilesApi.getAll(1, 10000);
-
-      // Enrich registrations with profile data
-      const enrichedRegistrations = data.map((reg: any) => {
-        // Find profile by email or user_id
-        const matchedProfile = profiles.find(
-          (p: Profile) => p.email === reg.email || p.id === reg.user_id
-        );
-
-        return {
-          ...reg,
-          profileMecaId: matchedProfile?.meca_id || null,
-          membershipStatus: matchedProfile?.membership_status || 'none',
-        };
-      });
+      // The backend already populates the registration's `user` (Profile)
+      // — meca_id and membership_status come back nested. Use them directly
+      // instead of pulling all 10K profiles client-side, which (a) is the
+      // wrong scale and (b) requires admin permissions the ED doesn't have.
+      const enrichedRegistrations = data.map((reg: any) => ({
+        ...reg,
+        profileMecaId: reg.user?.meca_id ?? null,
+        membershipStatus: reg.user?.membership_status ?? 'none',
+      }));
 
       setRegistrations(enrichedRegistrations);
       updateStats(enrichedRegistrations);
@@ -327,32 +320,28 @@ export default function EDEventManagementPage() {
       setResultsLoading(true);
       const data = await competitionResultsApi.getByEvent(eventId);
 
-      // Fetch all profiles to get membership status
-      const profiles = await profilesApi.getAll(1, 10000);
-
-      const mappedResults = data.map((r: any) => {
-        // Find the profile for this competitor
-        const matchedProfile = profiles.find(
-          (p: Profile) => p.meca_id === r.meca_id || p.id === r.competitor_id || p.id === r.profile_id
-        );
-
-        return {
-          id: r.id,
-          competitor_id: r.competitor_id || r.profile_id,
-          competitor_name: r.competitor_name || `${r.profile?.first_name || ''} ${r.profile?.last_name || ''}`.trim(),
-          meca_id: r.meca_id || r.profile?.meca_id || '',
-          competition_class: r.competition_class || r.class?.name || '',
-          class_id: r.class_id,
-          format: r.format,
-          score: r.score?.toString() || '',
-          placement: r.placement?.toString() || '',
-          points_earned: r.points_earned?.toString() || '0',
-          wattage: r.wattage || '',
-          frequency: r.frequency || '',
-          notes: r.notes || '',
-          membership_status: matchedProfile?.membership_status || (r.meca_id === '999999' ? 'none' : 'unknown'),
-        };
-      });
+      // No more 10K profile dump for enrichment. The result row already
+      // carries meca_id, competitor_name, etc. Membership status for the
+      // display badge falls back to 'unknown' here — it gets refreshed
+      // accurately when the ED edits a row (the search lookup populates
+      // currentEntryMembershipStatus). 999999 stays 'none' (back-filled
+      // for expired members per MEMBERSHIP_LIFECYCLE).
+      const mappedResults = data.map((r: any) => ({
+        id: r.id,
+        competitor_id: r.competitor_id || r.profile_id,
+        competitor_name: r.competitor_name || `${r.profile?.first_name || ''} ${r.profile?.last_name || ''}`.trim(),
+        meca_id: r.meca_id || r.profile?.meca_id || '',
+        competition_class: r.competition_class || r.class?.name || '',
+        class_id: r.class_id,
+        format: r.format,
+        score: r.score?.toString() || '',
+        placement: r.placement?.toString() || '',
+        points_earned: r.points_earned?.toString() || '0',
+        wattage: r.wattage || '',
+        frequency: r.frequency || '',
+        notes: r.notes || '',
+        membership_status: r.meca_id === '999999' ? 'none' : 'unknown',
+      }));
       setResults(mappedResults);
       setStats(prev => ({ ...prev, resultsEntered: mappedResults.length }));
     } catch (error) {
@@ -371,13 +360,54 @@ export default function EDEventManagementPage() {
     }
   };
 
-  const fetchCompetitors = async () => {
+  // Small client-side cache so the same MECA ID / name lookup doesn't
+  // round-trip on every keystroke. Keyed by the lowercased query string.
+  const competitorLookupCache = useRef<Map<string, Profile | null>>(new Map());
+
+  /**
+   * Look up a competitor by MECA ID via the bounded profile search endpoint
+   * (returns max 20 rows, requires a query). Used by handleMecaIdChange to
+   * auto-fill name + membership status as the ED types — replacing the
+   * old "load 10K profiles into memory" approach.
+   */
+  const lookupCompetitorByMecaId = async (mecaId: string): Promise<Profile | null> => {
+    const key = `meca:${mecaId.toLowerCase()}`;
+    if (competitorLookupCache.current.has(key)) {
+      return competitorLookupCache.current.get(key) ?? null;
+    }
     try {
-      // Fetch all profiles (up to 10000) to enable MECA ID lookup
-      const data = await profilesApi.getAll(1, 10000);
-      setCompetitors(data);
+      const results = await profilesApi.searchProfiles(mecaId);
+      const target = mecaId.trim().toLowerCase();
+      const match = results.find((p) => String(p.meca_id || '').trim().toLowerCase() === target) || null;
+      competitorLookupCache.current.set(key, match);
+      return match;
     } catch (error) {
-      console.error('Error fetching competitors:', error);
+      console.error('Competitor MECA ID lookup failed:', error);
+      return null;
+    }
+  };
+
+  /**
+   * Exact-full-name lookup. Same pattern as MECA ID — bounded search,
+   * cached, returns null if no exact match.
+   */
+  const lookupCompetitorByName = async (fullName: string): Promise<Profile | null> => {
+    const key = `name:${fullName.toLowerCase()}`;
+    if (competitorLookupCache.current.has(key)) {
+      return competitorLookupCache.current.get(key) ?? null;
+    }
+    try {
+      const results = await profilesApi.searchProfiles(fullName);
+      const target = fullName.trim().toLowerCase();
+      const match = results.find((p) => {
+        const full = `${p.first_name || ''} ${p.last_name || ''}`.trim().toLowerCase();
+        return full === target;
+      }) || null;
+      competitorLookupCache.current.set(key, match);
+      return match;
+    } catch (error) {
+      console.error('Competitor name lookup failed:', error);
+      return null;
     }
   };
 
@@ -449,7 +479,14 @@ export default function EDEventManagementPage() {
     }
   };
 
-  const handleMecaIdChange = (mecaId: string) => {
+  // Tracks the latest in-flight lookup so a stale response can't overwrite
+  // a newer one (typing fast → multiple requests in flight, responses
+  // arriving out of order). The handler ignores any response that isn't
+  // its own token.
+  const mecaIdLookupTokenRef = useRef(0);
+  const nameLookupTokenRef = useRef(0);
+
+  const handleMecaIdChange = async (mecaId: string) => {
     // ALWAYS update the meca_id to whatever the user typed - no restrictions
     const updated: ResultEntry = {
       ...currentEntry,
@@ -461,37 +498,41 @@ export default function EDEventManagementPage() {
       updated.competitor_id = '';
       updated.competitor_name = '';
       setCurrentEntryMembershipStatus('');
-    } else if (mecaId.length >= 4 && competitors.length > 0) {
-      // Only do lookup when we have at least 4 characters
-      const normalizedValue = mecaId.trim().toLowerCase();
-      const competitor = competitors.find(c => {
-        // Convert meca_id to string in case it's a number
-        const profileMecaId = String(c.meca_id || '').trim().toLowerCase();
-        return profileMecaId === normalizedValue;
-      });
-
-      if (competitor) {
-        const membershipStatus = competitor.membership_status || '';
-        setCurrentEntryMembershipStatus(membershipStatus);
-        updated.competitor_id = competitor.id;
-        updated.competitor_name = `${competitor.first_name || ''} ${competitor.last_name || ''}`.trim();
-        // If membership is not active, they won't earn points
-        if (membershipStatus !== 'active') {
-          updated.points_earned = '0';
-        }
-      } else {
-        // MECA ID not found in system
-        setCurrentEntryMembershipStatus('');
-      }
-    } else {
-      // Still typing (less than 4 chars) - just clear status
-      setCurrentEntryMembershipStatus('');
+      setCurrentEntry(updated);
+      return;
     }
 
+    // Apply the typed value immediately so the input stays responsive while
+    // we fire the lookup.
     setCurrentEntry(updated);
+
+    if (mecaId.length < 4) {
+      // Still typing — too short to look up meaningfully.
+      setCurrentEntryMembershipStatus('');
+      return;
+    }
+
+    const token = ++mecaIdLookupTokenRef.current;
+    const competitor = await lookupCompetitorByMecaId(mecaId);
+    if (token !== mecaIdLookupTokenRef.current) return; // stale response
+
+    if (competitor) {
+      const membershipStatus = competitor.membership_status || '';
+      setCurrentEntryMembershipStatus(membershipStatus);
+      setCurrentEntry((prev) => ({
+        ...prev,
+        competitor_id: competitor.id,
+        competitor_name: `${competitor.first_name || ''} ${competitor.last_name || ''}`.trim(),
+        // If membership is not active, they won't earn points
+        points_earned: membershipStatus !== 'active' ? '0' : prev.points_earned,
+      }));
+    } else {
+      // MECA ID not found in system
+      setCurrentEntryMembershipStatus('');
+    }
   };
 
-  const handleNameChange = (name: string) => {
+  const handleNameChange = async (name: string) => {
     // ALWAYS update the name to whatever the user typed
     const updated: ResultEntry = {
       ...currentEntry,
@@ -504,40 +545,55 @@ export default function EDEventManagementPage() {
       updated.competitor_id = '';
       updated.points_earned = '';
       setCurrentEntryMembershipStatus('');
-    } else if (competitors.length > 0) {
-      // Search for EXACT full name match only
-      const nameLower = name.toLowerCase().trim();
-      const matchingCompetitor = competitors.find((c) => {
-        const fullName = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase().trim();
-        return fullName === nameLower;
-      });
-
-      if (matchingCompetitor) {
-        // Found exact match - check membership status
-        const membershipStatus = matchingCompetitor.membership_status || '';
-        setCurrentEntryMembershipStatus(membershipStatus);
-
-        if (membershipStatus === 'active') {
-          // Active member - populate their MECA ID
-          updated.competitor_id = matchingCompetitor.id;
-          updated.meca_id = String(matchingCompetitor.meca_id || '');
-        } else {
-          // Expired membership - keep their actual MECA ID for admin view
-          // but mark as expired (no points)
-          updated.competitor_id = matchingCompetitor.id;
-          updated.meca_id = String(matchingCompetitor.meca_id || '') || '999999';
-          updated.points_earned = '0';
-        }
-      } else {
-        // No exact match found - this is a non-member, use 999999
-        updated.competitor_id = '';
-        updated.meca_id = '999999';
-        updated.points_earned = '0';
-        setCurrentEntryMembershipStatus('');
-      }
+      setCurrentEntry(updated);
+      return;
     }
 
+    // Apply the typed name immediately so the input stays responsive.
     setCurrentEntry(updated);
+
+    if (name.trim().length < 3) {
+      // Too short for a meaningful lookup.
+      setCurrentEntryMembershipStatus('');
+      return;
+    }
+
+    const token = ++nameLookupTokenRef.current;
+    const matchingCompetitor = await lookupCompetitorByName(name);
+    if (token !== nameLookupTokenRef.current) return; // stale response
+
+    if (matchingCompetitor) {
+      // Found exact match - check membership status
+      const membershipStatus = matchingCompetitor.membership_status || '';
+      setCurrentEntryMembershipStatus(membershipStatus);
+      setCurrentEntry((prev) => {
+        if (membershipStatus === 'active') {
+          // Active member - populate their MECA ID
+          return {
+            ...prev,
+            competitor_id: matchingCompetitor.id,
+            meca_id: String(matchingCompetitor.meca_id || ''),
+          };
+        }
+        // Expired membership - keep their actual MECA ID for admin view
+        // but mark as expired (no points)
+        return {
+          ...prev,
+          competitor_id: matchingCompetitor.id,
+          meca_id: String(matchingCompetitor.meca_id || '') || '999999',
+          points_earned: '0',
+        };
+      });
+    } else {
+      // No exact match found - this is a non-member, use 999999
+      setCurrentEntry((prev) => ({
+        ...prev,
+        competitor_id: '',
+        meca_id: '999999',
+        points_earned: '0',
+      }));
+      setCurrentEntryMembershipStatus('');
+    }
   };
 
   // Check if wattage/frequency is required for this class

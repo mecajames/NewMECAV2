@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, ChevronRight, Upload, MapPin } from 'lucide-react';
+import { scrollToTop } from '@/shared/utils/scrollToTop';
 import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { useFormatOrder, compareFormatNames } from '@/competition-formats';
 import { profilesApi, Profile } from '@/profiles';
@@ -1067,14 +1068,14 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setCurrentPage(1)}
+                  onClick={() => { setCurrentPage(1); scrollToTop(); }}
                   disabled={currentPage === 1}
                   className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
                 >
                   First
                 </button>
                 <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); scrollToTop(); }}
                   disabled={currentPage === 1}
                   className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
                 >
@@ -1084,14 +1085,14 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   {currentPage}
                 </span>
                 <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); scrollToTop(); }}
                   disabled={currentPage === totalPages}
                   className="p-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
                 >
                   <ChevronRight className="h-5 w-5" />
                 </button>
                 <button
-                  onClick={() => setCurrentPage(totalPages)}
+                  onClick={() => { setCurrentPage(totalPages); scrollToTop(); }}
                   disabled={currentPage === totalPages}
                   className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors"
                 >

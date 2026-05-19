@@ -305,54 +305,52 @@ export default function InvoicesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
-      {/* Header */}
-      <div className="border-b border-slate-700 bg-slate-800">
-        <div className="mx-auto w-full px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">Invoices</h1>
-              <p className="text-sm text-gray-400">
-                Manage and track all invoices
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate('/admin/billing/invoices/new')}
-                className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-              >
-                <Plus className="h-4 w-4" />
-                Create Invoice
-              </button>
-              <button
-                onClick={handleExport}
-                disabled={loading || invoices.length === 0}
-                className="flex items-center gap-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                Export CSV
-              </button>
-              <button
-                onClick={handleBulkSendReminders}
-                disabled={bulkRunning !== null}
-                className="flex items-center gap-2 rounded-md border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-slate-600 disabled:opacity-50"
-                title="Send due-soon and overdue reminder emails now"
-              >
-                <Bell className="h-4 w-4" />
-                Run Reminders
-              </button>
-              <button
-                onClick={() => navigate('/admin/billing')}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5" />
-                Back to Billing
-              </button>
-            </div>
+      <div className="mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Header — lives inside the same constrained column as the body
+            so it doesn't bleed edge-to-edge across the viewport (matches
+            the OrdersPage / FailedPaymentsPage layout). */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-700/60">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Invoices</h1>
+            <p className="text-sm text-gray-400">
+              Manage and track all invoices
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => navigate('/admin/billing/invoices/new')}
+              className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+            >
+              <Plus className="h-4 w-4" />
+              Create Invoice
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={loading || invoices.length === 0}
+              className="flex items-center gap-2 rounded-md bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-white transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+            <button
+              onClick={handleBulkSendReminders}
+              disabled={bulkRunning !== null}
+              className="flex items-center gap-2 rounded-md border border-slate-600 bg-slate-700 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-slate-600 disabled:opacity-50"
+              title="Send due-soon and overdue reminder emails now"
+            >
+              <Bell className="h-4 w-4" />
+              Run Reminders
+            </button>
+            <button
+              onClick={() => navigate('/admin/billing')}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Billing
+            </button>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto w-full px-4 py-8 sm:px-6 lg:px-8">
         {/* Search */}
         <div className="mb-6">
           <form onSubmit={handleSearch} className="flex gap-2">

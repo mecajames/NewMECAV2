@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { scrollToTop } from '@/shared/utils/scrollToTop';
+import { listStaff } from '../../ticket-admin.api-client';
+import type { TicketStaffResponse } from '@newmeca/shared';
 import {
   Ticket,
   Search,
@@ -19,6 +22,11 @@ import {
   Eye,
   UserPlus,
   PauseCircle,
+  Save,
+  RotateCcw,
+  Star,
+  Plus,
+  X,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -26,7 +34,6 @@ import {
   TicketStats,
   TicketStatus,
   TicketPriority,
-  TicketDepartment,
   TicketListQuery,
 } from '../../tickets.api-client';
 import { reportError } from './error-helper';
@@ -57,6 +64,87 @@ interface TicketManagementProps {
   currentUserId: string;
 }
 
+/**
+ * Click-to-toggle multi-select dropdown used by the admin ticket filter
+ * bar. Each option has a checkbox; the trigger button shows "All" when
+ * nothing is selected, the single label when one option is checked, or
+ * "N selected" when more. Closes on outside click via mousedown listener.
+ */
+function MultiSelectDropdown<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  emptyLabel = 'All',
+}: {
+  label: string;
+  options: Array<{ value: T; label: string }>;
+  value: T[];
+  onChange: (next: T[]) => void;
+  emptyLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [open]);
+
+  const toggle = (v: T) => {
+    onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  };
+
+  const displayText =
+    value.length === 0
+      ? emptyLabel
+      : value.length === 1
+      ? options.find((o) => o.value === value[0])?.label ?? `${value.length} selected`
+      : `${value.length} selected`;
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <label className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-left focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-between"
+      >
+        <span className="truncate">{displayText}</span>
+        <ChevronDown className="w-4 h-4 ml-2 flex-shrink-0 opacity-70" />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto bg-slate-700 border border-slate-600 rounded-lg shadow-xl">
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-gray-400">No options available.</div>
+          ) : (
+            options.map((opt) => (
+              <label
+                key={opt.value}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-slate-600 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={value.includes(opt.value)}
+                  onChange={() => toggle(opt.value)}
+                  className="rounded accent-orange-500"
+                />
+                <span className="truncate">{opt.label}</span>
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TicketManagement({ currentUserId }: TicketManagementProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'unassigned' | 'critical' | 'on_hold'>('all');
@@ -71,12 +159,41 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   // Filters
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  // 'active' is a synthetic status group meaning open + in_progress +
-  // awaiting_response + on_hold — every status that still needs admin
-  // attention. Defaulting to it keeps resolved/closed out of the working queue.
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'active' | ''>('active');
-  const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('');
-  const [departmentFilter, setDepartmentFilter] = useState<TicketDepartment | ''>('');
+  // All filters are now multi-select. Empty array = no filter on that
+  // field. Status defaults to the 7 "non-terminal" values (matches the
+  // legacy 'active' synthetic group) so the admin queue doesn't show
+  // Resolved/Closed unless the admin explicitly opts in.
+  const ACTIVE_STATUSES: TicketStatus[] = [
+    'open', 'in_progress', 'awaiting_response',
+    'pending_internal_review', 'escalated', 'on_hold', 'reopened',
+  ];
+  const [statusFilter, setStatusFilter] = useState<TicketStatus[]>(ACTIVE_STATUSES);
+  const [priorityFilter, setPriorityFilter] = useState<TicketPriority[]>([]);
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
+  // Assignee filter — UUIDs of assigned staff, plus the sentinel
+  // 'unassigned' for tickets with no assignee. Empty = no filter.
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  // Staff list for the Assignee dropdown — fetched once on mount.
+  const [staffList, setStaffList] = useState<TicketStaffResponse[]>([]);
+  // Transient feedback after Save / Reset / Apply preset actions.
+  const [savedFilterMsg, setSavedFilterMsg] = useState<string | null>(null);
+
+  // Saved filter presets — up to 5 named combinations of
+  // status/priority/department/assignee. One can be marked default and
+  // auto-loads on mount. Stored per-admin in localStorage so two admins
+  // on the same browser don't share each other's preferred views.
+  interface FilterPreset {
+    id: string;
+    name: string;
+    status: TicketStatus[];
+    priority: TicketPriority[];
+    department: string[];
+    assignee: string[];
+  }
+  const MAX_PRESETS = 5;
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
+  const [defaultPresetId, setDefaultPresetId] = useState<string | null>(null);
+  const PRESETS_STORAGE_KEY = `meca-ticket-admin-presets:${currentUserId}`;
 
   const fetchStats = async () => {
     setStatsLoading(true);
@@ -90,7 +207,15 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     }
   };
 
+  // Bumped on every fetchTickets invocation. Only the latest invocation
+  // is allowed to write state — earlier in-flight responses are
+  // discarded. Fixes the race where the initial render's fetch and the
+  // localStorage-loaded fetch arrive out of order on mount, leaving the
+  // list looking empty even though the filter would match tickets.
+  const fetchTicketsRequestRef = useRef(0);
+
   const fetchTickets = async () => {
+    const requestToken = ++fetchTicketsRequestRef.current;
     setLoading(true);
     try {
       const query: TicketListQuery = {
@@ -101,13 +226,15 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       };
 
       if (searchQuery) query.search = searchQuery;
-      if (statusFilter) query.status = statusFilter;
-      if (priorityFilter) query.priority = priorityFilter;
-      if (departmentFilter) query.department = departmentFilter;
+      // Multi-select → array (empty = no filter). Backend joins with $in.
+      if (statusFilter.length > 0) query.status = statusFilter as any;
+      if (priorityFilter.length > 0) query.priority = priorityFilter as any;
+      if (departmentFilter.length > 0) query.department = departmentFilter as any;
+      if (assigneeFilter.length > 0) query.assigned_to_id = assigneeFilter;
 
       // Tab-specific filters. These pin the relevant fields regardless of
       // the filter-panel selections so e.g. the "On Hold" tab always shows
-      // on_hold tickets even if the Status dropdown is still on "Active".
+      // on_hold tickets even if the Status dropdown is on something else.
       if (activeTab === 'assigned') {
         query.assigned_to_id = currentUserId;
       } else if (activeTab === 'critical') {
@@ -115,23 +242,22 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         query.status = 'open';
       } else if (activeTab === 'on_hold') {
         query.status = 'on_hold';
+      } else if (activeTab === 'unassigned') {
+        // Backend now supports the 'unassigned' sentinel directly — no
+        // more client-side filtering needed.
+        query.assigned_to_id = 'unassigned';
       }
 
       const result = await ticketsApi.getAll(query);
-
-      // For unassigned tab, filter client-side (API doesn't support null filter easily)
-      let filteredData = result.data;
-      if (activeTab === 'unassigned') {
-        filteredData = result.data.filter((t) => !t.assigned_to_id);
-      }
-
-      setTickets(filteredData);
-      setTotal(activeTab === 'unassigned' ? filteredData.length : result.total);
-      setTotalPages(activeTab === 'unassigned' ? 1 : result.total_pages);
+      if (requestToken !== fetchTicketsRequestRef.current) return; // stale
+      setTickets(result.data);
+      setTotal(result.total);
+      setTotalPages(result.total_pages);
     } catch (err) {
+      if (requestToken !== fetchTicketsRequestRef.current) return;
       reportError(err, 'load tickets');
     } finally {
-      setLoading(false);
+      if (requestToken === fetchTicketsRequestRef.current) setLoading(false);
     }
   };
 
@@ -139,13 +265,118 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     fetchStats();
   }, []);
 
+  // One-time on mount: load the staff list (for the Assignee filter
+  // dropdown) and restore the admin's saved presets. If a preset is
+  // marked default, apply it immediately so the queue opens to their
+  // preferred view. The fetchTicketsRequestRef token-guard above
+  // ensures the initial-render fetch and this preset-application fetch
+  // don't race — only the latest response gets written to state.
+  useEffect(() => {
+    listStaff().then(setStaffList).catch(() => { /* non-fatal */ });
+    try {
+      const stored = localStorage.getItem(PRESETS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed.presets)) {
+          setPresets(parsed.presets);
+          const defId: string | null = parsed.defaultPresetId ?? null;
+          if (defId) {
+            const def = parsed.presets.find((p: FilterPreset) => p.id === defId);
+            if (def) {
+              setDefaultPresetId(defId);
+              setStatusFilter(def.status);
+              setPriorityFilter(def.priority);
+              setDepartmentFilter(def.department);
+              setAssigneeFilter(def.assignee);
+            }
+          }
+        }
+      }
+    } catch {
+      // Malformed entry — ignore and use defaults.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
+
+  const persistPresets = (next: FilterPreset[], nextDefaultId: string | null) => {
+    try {
+      localStorage.setItem(
+        PRESETS_STORAGE_KEY,
+        JSON.stringify({ presets: next, defaultPresetId: nextDefaultId }),
+      );
+    } catch {
+      // localStorage unavailable — non-fatal
+    }
+  };
+
+  const applyPreset = (preset: FilterPreset) => {
+    setStatusFilter(preset.status);
+    setPriorityFilter(preset.priority);
+    setDepartmentFilter(preset.department);
+    setAssigneeFilter(preset.assignee);
+    setSavedFilterMsg(`Applied "${preset.name}"`);
+    setTimeout(() => setSavedFilterMsg(null), 2000);
+  };
+
+  const handleSavePreset = () => {
+    if (presets.length >= MAX_PRESETS) {
+      alert(`You can save up to ${MAX_PRESETS} filter presets. Delete one first.`);
+      return;
+    }
+    const name = window.prompt('Name this filter:');
+    if (!name || !name.trim()) return;
+    const newPreset: FilterPreset = {
+      id: typeof crypto !== 'undefined' && (crypto as any).randomUUID
+        ? (crypto as any).randomUUID()
+        : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: name.trim().slice(0, 40),
+      status: statusFilter,
+      priority: priorityFilter,
+      department: departmentFilter,
+      assignee: assigneeFilter,
+    };
+    const next = [...presets, newPreset];
+    setPresets(next);
+    persistPresets(next, defaultPresetId);
+    setSavedFilterMsg(`Saved "${newPreset.name}"`);
+    setTimeout(() => setSavedFilterMsg(null), 2000);
+  };
+
+  const handleDeletePreset = (id: string) => {
+    const preset = presets.find((p) => p.id === id);
+    if (!preset) return;
+    if (!window.confirm(`Delete saved filter "${preset.name}"?`)) return;
+    const next = presets.filter((p) => p.id !== id);
+    const nextDefault = defaultPresetId === id ? null : defaultPresetId;
+    setPresets(next);
+    setDefaultPresetId(nextDefault);
+    persistPresets(next, nextDefault);
+  };
+
+  const handleToggleDefault = (id: string) => {
+    // Click the star to set this preset as default (auto-load on next
+    // page open). Click it again to unset — no default loads anymore.
+    const nextDefault = defaultPresetId === id ? null : id;
+    setDefaultPresetId(nextDefault);
+    persistPresets(presets, nextDefault);
+  };
+
   useEffect(() => {
     setPage(1);
-  }, [activeTab, statusFilter, priorityFilter, departmentFilter]);
+  }, [activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter]);
 
   useEffect(() => {
     fetchTickets();
-  }, [page, activeTab, statusFilter, priorityFilter, departmentFilter]);
+  }, [page, activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter]);
+
+  const handleResetFilter = () => {
+    setStatusFilter(ACTIVE_STATUSES);
+    setPriorityFilter([]);
+    setDepartmentFilter([]);
+    setAssigneeFilter([]);
+    setSavedFilterMsg('Filter reset.');
+    setTimeout(() => setSavedFilterMsg(null), 2000);
+  };
 
   // Debounced search
   useEffect(() => {
@@ -338,51 +569,149 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         </button>
       </div>
 
-      {/* Filter Panel */}
+      {/* Saved filter presets — pills below the search box and above the
+          filter panel. Each admin can save up to MAX_PRESETS named
+          combinations of status/priority/department/assignee. The
+          starred preset auto-loads on page mount. Click a pill to
+          apply, click its star to toggle "default", click its × to
+          delete. The "+ Save current" button on the right captures
+          the current panel selections as a new preset (prompts for a
+          name). Hidden entirely when the admin has no presets and
+          hasn't expanded the filter panel — keeps the UI clean for
+          first-time use. */}
+      {(presets.length > 0 || showFilters) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {presets.length > 0 && (
+            <span className="text-xs text-gray-400 mr-1">Saved filters:</span>
+          )}
+          {presets.map((preset) => {
+            const isDefault = defaultPresetId === preset.id;
+            return (
+              <div
+                key={preset.id}
+                className="group inline-flex items-center bg-slate-700 hover:bg-slate-600 rounded-full pl-2 pr-1 py-1 text-xs text-white border border-slate-600 transition-colors"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleToggleDefault(preset.id)}
+                  title={isDefault ? 'Default (auto-loads on page open). Click to unset.' : 'Set as default — auto-loads next time you open this page.'}
+                  className="mr-1.5 hover:scale-110 transition-transform"
+                >
+                  <Star
+                    className={`w-3.5 h-3.5 ${isDefault ? 'text-yellow-400 fill-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset(preset)}
+                  className="px-1 font-medium"
+                  title="Apply this filter"
+                >
+                  {preset.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeletePreset(preset.id)}
+                  title="Delete saved filter"
+                  className="ml-1 p-0.5 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+          {showFilters && presets.length < MAX_PRESETS && (
+            <button
+              type="button"
+              onClick={handleSavePreset}
+              className="inline-flex items-center gap-1 bg-orange-600 hover:bg-orange-700 rounded-full px-3 py-1 text-xs text-white transition-colors"
+              title="Save the current filter selections as a named preset"
+            >
+              <Plus className="w-3 h-3" />
+              Save current as preset
+            </button>
+          )}
+          {savedFilterMsg && (
+            <span className="text-xs text-gray-400 ml-1">{savedFilterMsg}</span>
+          )}
+        </div>
+      )}
+
+      {/* Filter Panel — multi-select on every dimension. The pill row
+          above this panel persists named presets; this panel just edits
+          the currently-applied filter set. */}
       {showFilters && (
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Status</label>
-            <select
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <MultiSelectDropdown<TicketStatus>
+              label="Status"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as TicketStatus | 'active' | '')}
-              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="active">Active (everything except Resolved &amp; Closed)</option>
-              <option value="">All</option>
-              {Object.entries(statusConfig).map(([key, { label }]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Priority</label>
-            <select
+              onChange={setStatusFilter}
+              options={Object.entries(statusConfig).map(([key, { label }]) => ({
+                value: key as TicketStatus,
+                label,
+              }))}
+            />
+            <MultiSelectDropdown<TicketPriority>
+              label="Priority"
               value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value as TicketPriority | '')}
-              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="">All</option>
-              {Object.entries(priorityConfig).map(([key, { label }]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Department</label>
-            <select
+              onChange={setPriorityFilter}
+              options={Object.entries(priorityConfig).map(([key, { label }]) => ({
+                value: key as TicketPriority,
+                label,
+              }))}
+            />
+            <MultiSelectDropdown<string>
+              label="Department"
               value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value as TicketDepartment | '')}
-              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              onChange={setDepartmentFilter}
+              options={[
+                { value: 'general_support', label: 'General Support' },
+                { value: 'membership_services', label: 'Membership Services' },
+                { value: 'event_operations', label: 'Event Operations' },
+                { value: 'technical_support', label: 'Technical Support' },
+                { value: 'billing', label: 'Billing' },
+                { value: 'administration', label: 'Administration' },
+              ]}
+            />
+            <MultiSelectDropdown<string>
+              label="Assigned To"
+              value={assigneeFilter}
+              onChange={setAssigneeFilter}
+              options={[
+                { value: 'unassigned', label: '— Unassigned —' },
+                ...staffList.map((s) => ({
+                  value: s.profile_id,
+                  label:
+                    `${s.profile?.first_name || ''} ${s.profile?.last_name || ''}`.trim() ||
+                    s.profile?.email ||
+                    'Unknown',
+                })),
+              ]}
+            />
+          </div>
+          {/* Footer actions: Reset (clear all back to defaults) and
+              Save-as-preset (only shown here too for discoverability;
+              the same button lives in the pill row above). */}
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-700">
+            <button
+              type="button"
+              onClick={handleSavePreset}
+              disabled={presets.length >= MAX_PRESETS}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md transition-colors"
+              title={presets.length >= MAX_PRESETS ? `You've saved the max of ${MAX_PRESETS} filters.` : 'Name and save the current filter selections'}
             >
-              <option value="">All</option>
-              <option value="general_support">General Support</option>
-              <option value="membership_services">Membership Services</option>
-              <option value="event_operations">Event Operations</option>
-              <option value="technical_support">Technical Support</option>
-              <option value="billing">Billing</option>
-              <option value="administration">Administration</option>
-            </select>
+              <Save className="w-3.5 h-3.5" />
+              Save as preset ({presets.length}/{MAX_PRESETS})
+            </button>
+            <button
+              type="button"
+              onClick={handleResetFilter}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white rounded-md transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset
+            </button>
           </div>
         </div>
       )}
@@ -495,14 +824,14 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
             </p>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setPage(Math.max(1, page - 1))}
+                onClick={() => { setPage(Math.max(1, page - 1)); scrollToTop(); }}
                 disabled={page === 1}
                 className="px-3 py-1 bg-slate-700 text-gray-300 rounded hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Previous
               </button>
               <button
-                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                onClick={() => { setPage(Math.min(totalPages, page + 1)); scrollToTop(); }}
                 disabled={page === totalPages}
                 className="px-3 py-1 bg-slate-700 text-gray-300 rounded hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >

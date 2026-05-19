@@ -37,7 +37,13 @@ export class Ticket {
   @Enum(() => TicketPriority)
   priority: TicketPriority = TicketPriority.MEDIUM;
 
-  @Enum(() => TicketStatus)
+  // Declared as plain text (not @Enum) because the underlying column is
+  // plain `text` in Postgres, and MikroORM's @Enum decorator has caused
+  // surprising behavior with $in queries when an enum value isn't yet
+  // present in any row (e.g. 'reopened' before the first reopen). The
+  // TicketStatus TS enum is still used everywhere for ticket.status
+  // assignment + comparison — they're just string literals at runtime.
+  @Property({ type: 'text' })
   status: TicketStatus = TicketStatus.OPEN;
 
   // Reporter is nullable for guest tickets

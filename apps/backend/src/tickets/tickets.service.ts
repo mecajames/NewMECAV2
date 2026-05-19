@@ -74,36 +74,94 @@ export class TicketsService {
     } = query as TicketListQuery & { department_id?: string };
 
     const offset = (page - 1) * limit;
-    const where: any = {};
+
+    // Build conditions into an array of sub-clauses, then combine into
+    // either a flat object (single condition) or a $and (multiple), so
+    // sub-clauses that use $or (assignee with unassigned-sentinel,
+    // search title/description) don't clobber each other. Previously
+    // two consecutive `where.$or = ...` assignments were dropping the
+    // earlier one and producing invalid SQL.
+    const andClauses: any[] = [];
+
+    // Helper: split a single-value-or-comma-separated-string into a
+    // normalized array. Returns [] for empty/undefined so the caller can
+    // skip the clause entirely. Used by every multi-select filter
+    // (status / priority / department / assigned_to_id).
+    const splitCsv = (v: unknown): string[] => {
+      if (v === undefined || v === null || v === '') return [];
+      if (Array.isArray(v)) return v.map(String).filter(Boolean);
+      return String(v).split(',').map(s => s.trim()).filter(Boolean);
+    };
 
     // 'active' is a synthetic status group meaning "anything that still
-    // needs admin attention" — open, in progress, awaiting response.
-    // Lets the admin tickets dashboard default-filter out resolved/closed
-    // without exposing a special enum value on the entity itself.
+    // needs admin attention". Expanded to every non-terminal status.
+    // Coexists with multi-select: passing 'active' alone preserves legacy
+    // behavior; passing a list (e.g. 'open,in_progress') uses $in.
     if (status === 'active' as any) {
-      where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'pending_internal_review', 'escalated', 'on_hold', 'reopened'] };
-    } else if (status) {
-      where.status = status;
+      andClauses.push({ status: { $in: ['open', 'in_progress', 'awaiting_response', 'pending_internal_review', 'escalated', 'on_hold', 'reopened'] } });
+    } else {
+      const statuses = splitCsv(status);
+      if (statuses.length === 1) andClauses.push({ status: statuses[0] });
+      else if (statuses.length > 1) andClauses.push({ status: { $in: statuses } });
     }
-    if (priority) where.priority = priority;
-    if (category) where.category = category;
-    // Support both legacy department enum and new department_id FK
+
+    const priorities = splitCsv(priority);
+    if (priorities.length === 1) andClauses.push({ priority: priorities[0] });
+    else if (priorities.length > 1) andClauses.push({ priority: { $in: priorities } });
+
+    if (category) andClauses.push({ category });
+
+    // Support both legacy department enum and new department_id FK.
+    // department_id is single (it's a UUID picker); department supports
+    // multi-select since it's a legacy enum bucket.
     if (department_id) {
-      where.departmentEntity = department_id;
-    } else if (department) {
-      where.department = department;
+      andClauses.push({ departmentEntity: department_id });
+    } else {
+      const departments = splitCsv(department);
+      if (departments.length === 1) andClauses.push({ department: departments[0] });
+      else if (departments.length > 1) andClauses.push({ department: { $in: departments } });
     }
-    if (reporter_id) where.reporter = reporter_id;
-    if (assigned_to_id) where.assignedTo = assigned_to_id;
-    if (event_id) where.event = event_id;
+
+    if (reporter_id) andClauses.push({ reporter: reporter_id });
+
+    // assigned_to_id supports multi-select PLUS the sentinel 'null' /
+    // 'unassigned' to mean "tickets with no assignee". Mixing the sentinel
+    // with UUIDs produces an OR sub-clause ("unassigned tickets OR
+    // tickets assigned to user X / Y / …"), nested inside the $and so it
+    // composes safely with the other filters.
+    const assignees = splitCsv(assigned_to_id);
+    if (assignees.length > 0) {
+      const wantsUnassigned = assignees.some(a => a === 'null' || a === 'unassigned');
+      const userIds = assignees.filter(a => a !== 'null' && a !== 'unassigned');
+      if (wantsUnassigned && userIds.length === 0) {
+        andClauses.push({ assignedTo: null });
+      } else if (wantsUnassigned && userIds.length > 0) {
+        andClauses.push({ $or: [{ assignedTo: null }, { assignedTo: { $in: userIds } }] });
+      } else if (userIds.length === 1) {
+        andClauses.push({ assignedTo: userIds[0] });
+      } else {
+        andClauses.push({ assignedTo: { $in: userIds } });
+      }
+    }
+
+    if (event_id) andClauses.push({ event: event_id });
 
     if (search) {
-      where.$or = [
-        { title: { $like: `%${search}%` } },
-        { description: { $like: `%${search}%` } },
-        { ticketNumber: { $like: `%${search}%` } },
-      ];
+      andClauses.push({
+        $or: [
+          { title: { $like: `%${search}%` } },
+          { description: { $like: `%${search}%` } },
+          { ticketNumber: { $like: `%${search}%` } },
+        ],
+      });
     }
+
+    // Compose the final where. Empty → match everything. Single clause →
+    // unwrap so we don't emit a redundant 1-element $and. Multiple → $and.
+    const where: any =
+      andClauses.length === 0 ? {} :
+      andClauses.length === 1 ? andClauses[0] :
+      { $and: andClauses };
 
     const orderBy: any = {};
     const sortField = sort_by === 'created_at' ? 'createdAt' :
@@ -1091,13 +1149,23 @@ export class TicketsService {
       departmentEntity: { $in: departmentIds },
     };
 
-    // Same synthetic 'active' status group as in findAll — see comment there.
+    // Same multi-select parsing as findAll — see splitCsv comment there.
+    const splitCsv = (v: unknown): string[] => {
+      if (v === undefined || v === null || v === '') return [];
+      if (Array.isArray(v)) return v.map(String).filter(Boolean);
+      return String(v).split(',').map(s => s.trim()).filter(Boolean);
+    };
+
     if (status === 'active' as any) {
       where.status = { $in: ['open', 'in_progress', 'awaiting_response', 'pending_internal_review', 'escalated', 'on_hold', 'reopened'] };
-    } else if (status) {
-      where.status = status;
+    } else {
+      const statuses = splitCsv(status);
+      if (statuses.length === 1) where.status = statuses[0];
+      else if (statuses.length > 1) where.status = { $in: statuses };
     }
-    if (priority) where.priority = priority;
+    const priorities = splitCsv(priority);
+    if (priorities.length === 1) where.priority = priorities[0];
+    else if (priorities.length > 1) where.priority = { $in: priorities };
     if (category) where.category = category;
 
     if (search) {
