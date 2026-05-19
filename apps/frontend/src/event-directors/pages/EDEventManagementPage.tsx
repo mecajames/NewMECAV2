@@ -4,7 +4,7 @@ import {
   ArrowLeft, Calendar, MapPin, Users, ClipboardCheck, FileText,
   DollarSign, Trophy, QrCode, Search, Save, Trash2,
   Check, ChevronDown, ChevronUp, Download, Upload, User, Calculator, FileSpreadsheet, File, RotateCcw,
-  CheckSquare, Square, CameraOff, X, HelpCircle
+  CheckSquare, Square, CameraOff, X, HelpCircle, AlertCircle
 } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -178,6 +178,15 @@ export default function EDEventManagementPage() {
   const [userDecisions, setUserDecisions] = useState<Record<number, UserDecision>>({});
   const [showImportReviewModal, setShowImportReviewModal] = useState(false);
   const [importFileExtension, setImportFileExtension] = useState<string>('xlsx');
+  // Unknown-class resolution. When parseAndValidate finds class names in
+  // the file that don't exist yet in competition_classes, we list them
+  // here. The admin/ED picks a format for each one and clicks "Create"
+  // to persist it via the competition-classes API — the class then
+  // becomes available system-wide for every future entry. Import is
+  // disabled until this list is empty.
+  const [unknownClasses, setUnknownClasses] = useState<string[]>([]);
+  const [unknownClassFormat, setUnknownClassFormat] = useState<Record<string, string>>({});
+  const [creatingClassName, setCreatingClassName] = useState<string | null>(null);
 
   // Membership status tracking for current entry
   const [currentEntryMembershipStatus, setCurrentEntryMembershipStatus] = useState<string>('');
@@ -596,13 +605,25 @@ export default function EDEventManagementPage() {
     }
   };
 
-  // Check if wattage/frequency is required for this class
+  // Check if wattage/frequency is required for this class. Mirrors the
+  // admin Results Entry helper (ResultsEntryNew.tsx) and the backend
+  // helper (competition-results.service.ts) so the ED page enforces the
+  // same rules: required ONLY for SPL classes, EXCEPT classes flagged
+  // unlimited_wattage in the class config or any legacy class-name match
+  // for "dueling demos". SQL / Dueling Demo / Show and Shine / Ride the
+  // Light / SSI / MK never require wattage or frequency. Park and Pound
+  // classes within SPL ARE required.
+  //
+  // Case-insensitive on the format value to match the backend.
   const isWattageFrequencyRequired = (format: string, className: string): boolean => {
-    if (format !== 'SPL') return false;
-    // Only Dueling Demos classes are exempt from wattage/frequency requirement
-    const exemptClasses = ['dueling demos'];
-    const classLower = className.toLowerCase();
-    return !exemptClasses.some(exempt => classLower.includes(exempt));
+    if (!format || format.toUpperCase() !== 'SPL') return false;
+    const matchedClass = competitionClasses.find(
+      c => c.name.toLowerCase() === (className || '').toLowerCase() ||
+           c.abbreviation.toLowerCase() === (className || '').toLowerCase()
+    );
+    if (matchedClass?.unlimited_wattage) return false;
+    const classLower = (className || '').toLowerCase();
+    return !classLower.includes('dueling demos');
   };
 
   const handleSaveResult = async () => {
@@ -630,15 +651,28 @@ export default function EDEventManagementPage() {
 
     setSaving(true);
     try {
+      // Look up the class NAME for the selected class id. The backend's
+      // `competition_class` text column is NOT NULL and only takes a
+      // text value — sending just `class_id` would have left it empty
+      // and triggered a NOT NULL violation. This is what was silently
+      // breaking SQ / DD manual entry from the ED page (admin worked
+      // because the admin form passed both fields).
+      const selectedClass = competitionClasses.find(c => c.id === currentEntry.class_id);
+      const competitionClassName = selectedClass?.name || currentEntry.competition_class || '';
+
       await competitionResultsApi.create({
         event_id: eventId,
         competitor_id: currentEntry.competitor_id || undefined,
         competitor_name: currentEntry.competitor_name,
         meca_id: mecaId,
         class_id: currentEntry.class_id,
+        competition_class: competitionClassName,
         format: currentEntry.format,
         score: parseFloat(currentEntry.score),
-        placement: currentEntry.placement ? parseInt(currentEntry.placement) : undefined,
+        // `placement` is NOT NULL on the entity — backend recalculates
+        // event placements after each insert, so 0 is a safe default
+        // that gets immediately overwritten when updateEventPoints runs.
+        placement: currentEntry.placement ? parseInt(currentEntry.placement) : 0,
         wattage: currentEntry.wattage ? parseFloat(currentEntry.wattage.toString()) : undefined,
         frequency: currentEntry.frequency ? parseFloat(currentEntry.frequency.toString()) : undefined,
         notes: currentEntry.notes,
@@ -744,12 +778,69 @@ export default function EDEventManagementPage() {
       setParsedResults(result.results);
       setUserDecisions(initialDecisions);
       setImportFileExtension(result.fileExtension);
+      setUnknownClasses(result.unknownClasses || []);
+      // Reset format choices for any newly-seen unknown classes.
+      setUnknownClassFormat({});
       setShowImportReviewModal(true);
     } catch (error: any) {
       alert('Error parsing file: ' + error.message);
     }
 
     setUploading(false);
+  };
+
+  /**
+   * Create an unknown class on the fly so the import can proceed.
+   * Persists the class via the competition-classes API — once created
+   * it becomes part of the system for every future entry. After
+   * success we re-parse the original file so the new class gets matched
+   * and the rows are re-validated (format gets set, wattage/frequency
+   * requirement updates, etc.).
+   */
+  const handleCreateUnknownClass = async (className: string) => {
+    const format = unknownClassFormat[className];
+    if (!format) {
+      alert(`Pick a format for "${className}" first.`);
+      return;
+    }
+    if (!event?.season_id) {
+      alert('This event has no season — cannot create a class for it.');
+      return;
+    }
+    setCreatingClassName(className);
+    try {
+      await competitionClassesApi.create({
+        name: className,
+        // Abbreviation defaults to the full name; admin can polish it
+        // later in the Classes Management page.
+        abbreviation: className,
+        format,
+        season_id: event.season_id,
+        is_active: true,
+      });
+      // Refresh local class cache so the import re-match picks it up.
+      const refreshed = await competitionClassesApi.getAll();
+      setCompetitionClasses(refreshed.filter((c: CompetitionClass) => c.is_active));
+      // Re-run parse so this class drops out of unknownClasses and
+      // its rows pick up the now-correct format inference.
+      if (selectedFile && eventId) {
+        const reparsed = await competitionResultsApi.parseAndValidate(eventId, selectedFile);
+        setParsedResults(reparsed.results);
+        setUnknownClasses(reparsed.unknownClasses || []);
+        // Wipe the chosen format only for the class we just created;
+        // remaining unknowns keep their pending choices.
+        setUnknownClassFormat(prev => {
+          const next = { ...prev };
+          delete next[className];
+          return next;
+        });
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to create class';
+      alert(`Could not create "${className}": ${msg}`);
+    } finally {
+      setCreatingClassName(null);
+    }
   };
 
   const handleConfirmImport = async () => {
@@ -2078,6 +2169,62 @@ export default function EDEventManagementPage() {
             </div>
 
             <div className="p-4">
+              {/* Unknown Classes — must be created before import can run.
+                  Each row shows the class name from the file, a format
+                  picker, and a Create button that persists the class
+                  system-wide via the competition-classes API. Once
+                  created, the parsed rows re-validate against it. */}
+              {unknownClasses.length > 0 && (
+                <div className="mb-4 p-4 bg-amber-900/30 border border-amber-500/50 rounded-lg">
+                  <div className="flex items-start gap-2 mb-3">
+                    <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-amber-200 font-semibold">
+                        {unknownClasses.length} class{unknownClasses.length === 1 ? '' : 'es'} from this file {unknownClasses.length === 1 ? 'is' : 'are'} not in the system
+                      </h3>
+                      <p className="text-amber-300/80 text-xs mt-1">
+                        Pick a format and click <strong>Create</strong> for each one. They'll be saved to the system so this file (and every future entry) can use them. Import stays disabled until they're all resolved.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {unknownClasses.map((cls) => (
+                      <div key={cls} className="flex flex-wrap items-center gap-2 bg-slate-800 rounded p-2">
+                        <div className="flex-1 min-w-[160px]">
+                          <div className="text-white text-sm font-medium">{cls}</div>
+                          <div className="text-gray-400 text-xs">
+                            From file • will be saved to the {event?.season_id ? 'current event season' : '?'}
+                          </div>
+                        </div>
+                        <select
+                          value={unknownClassFormat[cls] || ''}
+                          onChange={(e) => setUnknownClassFormat(prev => ({ ...prev, [cls]: e.target.value }))}
+                          disabled={creatingClassName === cls}
+                          className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Format…</option>
+                          <option value="SPL">SPL</option>
+                          <option value="SQL">SQL</option>
+                          <option value="SSI">SSI</option>
+                          <option value="MK">MK (MECA Kids)</option>
+                          <option value="Show and Shine">Show and Shine</option>
+                          <option value="Ride the Light">Ride the Light</option>
+                          <option value="Dueling Demo">Dueling Demo</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleCreateUnknownClass(cls)}
+                          disabled={!unknownClassFormat[cls] || creatingClassName === cls}
+                          className="px-3 py-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded transition-colors"
+                        >
+                          {creatingClassName === cls ? 'Creating…' : 'Create'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Results Table */}
               <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
                 <table className="w-full text-sm">
@@ -2266,15 +2413,24 @@ export default function EDEventManagementPage() {
                     </button>
                     <button
                       onClick={handleConfirmImport}
-                      disabled={uploading || parsedResults.filter(r => {
-                        const d = userDecisions[r.index];
-                        if (d?.skip) return false;
-                        if (!r.isValid) return false;
-                        if (r.nameMatch && d?.confirmNameMatch === null) return false;
-                        if (r.missingFields.includes('wattage') && !d?.wattage) return false;
-                        if (r.missingFields.includes('frequency') && !d?.frequency) return false;
-                        return true;
-                      }).length === 0}
+                      disabled={
+                        uploading ||
+                        // Block import while any class from the file is
+                        // still unresolved — admins/EDs must create
+                        // them first so the rows can save with the
+                        // correct format.
+                        unknownClasses.length > 0 ||
+                        parsedResults.filter(r => {
+                          const d = userDecisions[r.index];
+                          if (d?.skip) return false;
+                          if (!r.isValid) return false;
+                          if (r.nameMatch && d?.confirmNameMatch === null) return false;
+                          if (r.missingFields.includes('wattage') && !d?.wattage) return false;
+                          if (r.missingFields.includes('frequency') && !d?.frequency) return false;
+                          return true;
+                        }).length === 0
+                      }
+                      title={unknownClasses.length > 0 ? `Resolve ${unknownClasses.length} unknown class${unknownClasses.length === 1 ? '' : 'es'} first` : undefined}
                       className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Upload className="h-4 w-4" />

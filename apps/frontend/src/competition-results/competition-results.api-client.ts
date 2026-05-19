@@ -174,11 +174,18 @@ export const competitionResultsApi = {
       missingFields: string[];
       isValid: boolean;
       validationErrors: string[];
+      // Set on rows whose class name doesn't match any existing
+      // competition_classes row. Frontend uses this to drive the
+      // "Unknown Classes" section of the import review modal.
+      unknownClass?: string;
     }>;
     totalCount: number;
     needsNameConfirmation: number;
     needsDataCompletion: number;
     fileExtension: string;
+    // De-duped list of class names from the file that aren't yet in
+    // the system. Admin/ED must create each before the import can run.
+    unknownClasses: string[];
   }> => {
     const formData = new FormData();
     formData.append('file', file);

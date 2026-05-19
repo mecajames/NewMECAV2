@@ -212,6 +212,27 @@ export class CompetitionResultsController {
     };
   }
 
+  /**
+   * One-shot backfill that walks every CompetitionResult with a
+   * class_id set, looks up the class entity, and corrects the
+   * result.format / result.competition_class text fields if they
+   * don't match the class's own values. Cleans up the legacy data
+   * where some rows were silently saved with format='SPL' by the
+   * old "default to SPL if missing" code path.
+   *
+   * Idempotent — re-running is a no-op for rows already in sync.
+   */
+  @Post('admin/backfill-format-from-class')
+  @HttpCode(HttpStatus.OK)
+  async backfillFormatFromClass(): Promise<{
+    scanned: number;
+    formatFixed: number;
+    classNameFixed: number;
+    skippedNoClass: number;
+  }> {
+    return this.competitionResultsService.backfillFormatFromClass();
+  }
+
   @Post('import/:eventId')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
