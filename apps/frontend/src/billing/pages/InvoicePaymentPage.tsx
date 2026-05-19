@@ -11,7 +11,6 @@ import {
   Lock,
   ArrowLeft,
 } from 'lucide-react';
-import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
   PaymentElement,
@@ -19,15 +18,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { invoicesApi, InvoiceForPayment } from '../../api-client/billing.api-client';
-
-// Check if Stripe is configured
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const isStripeConfigured =
-  !!stripePublishableKey &&
-  !stripePublishableKey.includes('YOUR_STRIPE') &&
-  stripePublishableKey.startsWith('pk_');
-
-const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
+import { stripePromise, isStripeConfigured } from '@/lib/stripe';
 
 interface PaymentFormProps {
   invoice: InvoiceForPayment;

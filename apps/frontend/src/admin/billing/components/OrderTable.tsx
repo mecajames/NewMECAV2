@@ -39,11 +39,16 @@ export function OrderTable({
   const allSelected = selectionEnabled && orders.length > 0 && orders.every(o => selectedIds!.has(o.id));
   const someSelected = selectionEnabled && orders.some(o => selectedIds!.has(o.id));
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  // Single-line "Mon DD, YYYY HH:MM" used in the table cell. Two lines
+  // would push the row height up; one compact line keeps the table dense.
+  const formatDateTime = (dateString: string) => {
+    const d = new Date(dateString);
+    return d.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
     });
   };
 
@@ -101,6 +106,9 @@ export function OrderTable({
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Order
             </th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400 whitespace-nowrap">
+              Date
+            </th>
             {!compact && (
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
                 Customer
@@ -123,11 +131,6 @@ export function OrderTable({
             <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
               Total
             </th>
-            {!compact && (
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
-                Date
-              </th>
-            )}
             <th className="relative px-4 py-3">
               <span className="sr-only">Actions</span>
             </th>
@@ -159,6 +162,14 @@ export function OrderTable({
                     {order.items.length} item{order.items.length !== 1 ? 's' : ''}
                   </div>
                 )}
+              </td>
+              {/* Date / time the order was created. Placed early in the
+                  row so it's visible without horizontal scrolling on
+                  the wider admin tables. */}
+              <td className="whitespace-nowrap px-4 py-3">
+                <span className="text-sm text-gray-300">
+                  {formatDateTime(order.createdAt)}
+                </span>
               </td>
               {!compact && (
                 <td className="whitespace-nowrap px-4 py-3">
@@ -281,13 +292,6 @@ export function OrderTable({
                   {formatCurrency(order.total, order.currency)}
                 </span>
               </td>
-              {!compact && (
-                <td className="whitespace-nowrap px-4 py-3">
-                  <span className="text-sm text-gray-400">
-                    {formatDate(order.createdAt)}
-                  </span>
-                </td>
-              )}
               <td className="relative whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
                 <div className="relative">
                   <button

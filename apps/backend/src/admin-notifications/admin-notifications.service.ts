@@ -8,6 +8,7 @@ import { Membership } from '../memberships/memberships.entity';
 import { ShopOrder } from '../shop/entities/shop-order.entity';
 import { Order } from '../orders/orders.entity';
 import { Invoice } from '../invoices/invoices.entity';
+import { Payment } from '../payments/payments.entity';
 import { UserRole, PaymentStatus, ShopOrderStatus } from '@newmeca/shared';
 
 @Injectable()
@@ -100,6 +101,15 @@ export class AdminNotificationsService {
     invoiceId?: string | null;
     orderId?: string | null;
     customerEmail?: string | null;
+    /**
+     * Stripe PaymentIntent ID. By the time notifications fire, the failure
+     * handler has already persisted a Payment row keyed on this id (with
+     * the resolved user if any). Looking it up here picks up Stripe-API /
+     * stripe_customer_id resolutions the original notification args missed.
+     */
+    transactionId?: string | null;
+    /** Stripe Customer ID — fallback lookup via prior Payment rows. */
+    stripeCustomerId?: string | null;
   }): Promise<{
     fullName: string | null;
     email: string | null;
@@ -125,6 +135,24 @@ export class AdminNotificationsService {
       }
       if (!profile && args.customerEmail) {
         profile = await em.findOne(Profile, { email: args.customerEmail.toLowerCase() });
+      }
+      // Late fallback: read whatever user the Stripe failure handler wrote
+      // to the Payment row. recordOneTimeFailure now resolves via prior
+      // Payment + Stripe API customer lookup before persisting, so this
+      // catches cases where metadata alone couldn't identify the member.
+      if (!profile && args.transactionId) {
+        const pmt = await em.findOne(Payment, { stripePaymentIntentId: args.transactionId }, { populate: ['user'] });
+        if (pmt?.user) profile = pmt.user as any as Profile;
+      }
+      // Same idea via Stripe customer id — find any historical Payment
+      // row from this customer that already has a user attached.
+      if (!profile && args.stripeCustomerId) {
+        const priorPmt = await em.findOne(
+          Payment,
+          { stripeCustomerId: args.stripeCustomerId, user: { $ne: null } as any },
+          { populate: ['user'] },
+        );
+        if (priorPmt?.user) profile = priorPmt.user as any as Profile;
       }
     } catch (err) {
       this.logger.warn(`lookupMemberContext failed: ${err}`);
@@ -572,6 +600,12 @@ export class AdminNotificationsService {
     customerUserId?: string | null;
     customerEmail?: string | null;
     customerName?: string | null;
+    /**
+     * Stripe Customer ID — passed through so lookupMemberContext can
+     * resolve via prior-Payment join when metadata is empty (subscription
+     * auto-charges, raw card declines, etc.).
+     */
+    stripeCustomerId?: string | null;
     failureCode?: string | null;
     failureMessage?: string | null;
     // Local order/invoice ids when the failed payment was tied to one. Used to
@@ -586,14 +620,17 @@ export class AdminNotificationsService {
       const typeLabel = args.paymentType || 'Payment';
 
       // Enrich with member info — payment-failed webhooks often arrive with
-      // sparse metadata (no name, no MECA ID), but we can usually resolve
-      // the local Profile from the userId in Stripe metadata, the linked
-      // Order/Invoice, or by customer email.
+      // sparse metadata (no name, no MECA ID). The lookup cascade now also
+      // checks the Payment row written by recordOneTimeFailure (which
+      // resolved via prior Payment / Stripe API before persisting) and
+      // historical Payment rows keyed by the same Stripe customer id.
       const memberCtx = await this.lookupMemberContext({
         userId: args.customerUserId,
         invoiceId: args.invoiceId,
         orderId: args.orderId,
         customerEmail: args.customerEmail,
+        transactionId: args.transactionId,
+        stripeCustomerId: args.stripeCustomerId,
       });
 
       const memberName = memberCtx?.fullName || args.customerName || null;

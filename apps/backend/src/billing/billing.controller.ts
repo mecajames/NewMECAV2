@@ -757,12 +757,26 @@ export class BillingController {
 
     // Catch-all: failed Payment rows that aren't already represented by a
     // higher-level source row. Keeps guest checkouts visible when they
-    // failed before any source-of-truth entity was created.
+    // failed before any source-of-truth entity was created — AND keeps
+    // orphan failures (Stripe subscription auto-charges with no metadata
+    // and no resolvable customer) visible so admins can still investigate
+    // them instead of getting an alert email about an invisible failure.
     for (const p of failedPayments) {
       if (p.stripePaymentIntentId && surfacedIntentIds.has(p.stripePaymentIntentId)) continue;
       if ((p.membership as any)?.id) continue; // already surfaced as membership row
       const userName = [p.user?.first_name, p.user?.last_name].filter(Boolean).join(' ').trim();
       const meta = (p.paymentMetadata as Record<string, any>) || {};
+      // For orphan rows (user couldn't be resolved at failure time) we
+      // surface whatever signal we have: Stripe customer id stashed on
+      // the row, the email Stripe metadata may have carried, etc. The
+      // UI uses these to display "(unknown)" with a recognizable handle
+      // instead of a completely blank row.
+      const stripeMeta = (meta?.stripeMetadata as Record<string, any>) || {};
+      const fallbackEmail = stripeMeta.email || stripeMeta.customer_email || null;
+      const fallbackName = stripeMeta.competitorName || stripeMeta.firstName || null;
+      const stripeCustomerHandle = p.stripeCustomerId
+        ? `cus_${p.stripeCustomerId.slice(-8)}`
+        : null;
       rows.push({
         id: `payment:${p.id}`,
         source: 'payment',
@@ -771,8 +785,8 @@ export class BillingController {
           : p.id.slice(0, 8),
         user: {
           id: p.user?.id,
-          email: p.user?.email,
-          name: userName || undefined,
+          email: p.user?.email || fallbackEmail || undefined,
+          name: userName || fallbackName || stripeCustomerHandle || undefined,
           meca_id: p.user?.meca_id ?? null,
         },
         amount: Number(p.amount ?? 0).toFixed(2),

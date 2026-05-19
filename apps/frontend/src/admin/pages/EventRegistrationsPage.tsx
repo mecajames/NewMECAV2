@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { scrollToTop } from '@/shared/utils/scrollToTop';
 import {
   ClipboardList,
   Search,
@@ -740,7 +741,7 @@ export default function EventRegistrationsPage() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => { setPage((p) => Math.max(1, p - 1)); scrollToTop(); }}
                   disabled={page === 1}
                   className="px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >
@@ -748,7 +749,7 @@ export default function EventRegistrationsPage() {
                   Previous
                 </button>
                 <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); scrollToTop(); }}
                   disabled={page === totalPages}
                   className="px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >

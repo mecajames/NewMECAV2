@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, User, CheckCircle } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, User, CheckCircle, AlertCircle } from 'lucide-react';
 import axios from '@/lib/axios';
 import { eventsApi, Event } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
@@ -130,6 +130,14 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   const [userDecisions, setUserDecisions] = useState<Record<number, UserDecision>>({});
   const [showImportReviewModal, setShowImportReviewModal] = useState(false);
   const [importFileExtension, setImportFileExtension] = useState<string>('xlsx');
+  // Unknown-class resolution. Same flow as EDEventManagementPage: when
+  // parseAndValidate reports class names that aren't in the system,
+  // admin picks a format and creates each one via the competition-
+  // classes API. Once created the row re-matches and the import can
+  // proceed.
+  const [unknownClasses, setUnknownClasses] = useState<string[]>([]);
+  const [unknownClassFormat, setUnknownClassFormat] = useState<Record<string, string>>({});
+  const [creatingClassName, setCreatingClassName] = useState<string | null>(null);
 
   // Edit Modal
   const [editingResult, setEditingResult] = useState<ResultEntry | null>(null);
@@ -573,12 +581,60 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       setParsedResults(result.results);
       setUserDecisions(initialDecisions);
       setImportFileExtension(result.fileExtension);
+      setUnknownClasses(result.unknownClasses || []);
+      setUnknownClassFormat({});
       setShowImportReviewModal(true);
     } catch (error: any) {
       alert('Error parsing file: ' + error.message);
     }
 
     setUploading(false);
+  };
+
+  /**
+   * Create an unknown class from the import preview, persisting it
+   * via the competition-classes API so it's available system-wide.
+   * After creation we re-parse the file so the class matches.
+   */
+  const handleCreateUnknownClass = async (className: string) => {
+    const format = unknownClassFormat[className];
+    if (!format) {
+      alert(`Pick a format for "${className}" first.`);
+      return;
+    }
+    const selectedEvt = events.find(e => e.id === selectedEventId);
+    const seasonId = selectedEvt?.season_id || selectedSeasonId;
+    if (!seasonId) {
+      alert('No season available to attach the new class to.');
+      return;
+    }
+    setCreatingClassName(className);
+    try {
+      await competitionClassesApi.create({
+        name: className,
+        abbreviation: className,
+        format,
+        season_id: seasonId,
+        is_active: true,
+      });
+      const refreshed = await competitionClassesApi.getAll();
+      setCompetitionClasses(refreshed.filter((c: any) => c.is_active));
+      if (selectedFile && selectedEventId) {
+        const reparsed = await competitionResultsApi.parseAndValidate(selectedEventId, selectedFile);
+        setParsedResults(reparsed.results);
+        setUnknownClasses(reparsed.unknownClasses || []);
+        setUnknownClassFormat(prev => {
+          const next = { ...prev };
+          delete next[className];
+          return next;
+        });
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to create class';
+      alert(`Could not create "${className}": ${msg}`);
+    } finally {
+      setCreatingClassName(null);
+    }
   };
 
   const handleConfirmImport = async () => {
@@ -765,19 +821,29 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     setCurrentEntry(updated);
   };
 
-  // Check if wattage/frequency is required for this class
+  // Check if wattage/frequency is required for this class.
+  //
+  // Required only for SPL — SQL / Dueling Demo / Show and Shine / Ride the
+  // Light / SSI / MK never require them. Within SPL the only exemptions
+  // are (a) classes flagged unlimited_wattage in the class config, and
+  // (b) legacy class-name fallback for "dueling demos" (kept as belt &
+  // suspenders in case any legacy event still stored Dueling Demo as a
+  // class name inside SPL instead of its own format). Park and Pound
+  // classes within SPL ARE required — they're treated like every other
+  // SPL class.
+  //
+  // Case-insensitive on the format to match the backend's behavior; if
+  // any caller ever stored 'spl' lowercase, the frontend would silently
+  // skip the requirement otherwise.
   const isWattageFrequencyRequired = (format: string, className: string): boolean => {
-    if (format !== 'SPL') return false;
-    // Check unlimited_wattage flag from competition class data
+    if (!format || format.toUpperCase() !== 'SPL') return false;
     const matchedClass = competitionClasses.find(
       c => c.name.toLowerCase() === className.toLowerCase() ||
            c.abbreviation.toLowerCase() === className.toLowerCase()
     );
     if (matchedClass?.unlimited_wattage) return false;
-    // Only Dueling Demos classes are exempt from wattage/frequency requirement
-    const exemptClasses = ['dueling demos'];
-    const classLower = className.toLowerCase();
-    return !exemptClasses.some(exempt => classLower.includes(exempt));
+    const classLower = (className || '').toLowerCase();
+    return !classLower.includes('dueling demos');
   };
 
   const handleSaveManualEntry = async () => {
@@ -2133,6 +2199,59 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
             </div>
 
             <div className="p-4">
+              {/* Unknown Classes — must be created system-wide before
+                  the import can run. Each row: class name from the
+                  file → format dropdown → Create button that persists
+                  via competition-classes API. Re-parses after success. */}
+              {unknownClasses.length > 0 && (
+                <div className="mb-4 p-4 bg-amber-900/30 border border-amber-500/50 rounded-lg">
+                  <div className="flex items-start gap-2 mb-3">
+                    <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-amber-200 font-semibold">
+                        {unknownClasses.length} class{unknownClasses.length === 1 ? '' : 'es'} from this file {unknownClasses.length === 1 ? 'is' : 'are'} not in the system
+                      </h3>
+                      <p className="text-amber-300/80 text-xs mt-1">
+                        Pick a format and click <strong>Create</strong> for each one. They'll be saved system-wide and the import will continue.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {unknownClasses.map((cls) => (
+                      <div key={cls} className="flex flex-wrap items-center gap-2 bg-slate-800 rounded p-2">
+                        <div className="flex-1 min-w-[160px]">
+                          <div className="text-white text-sm font-medium">{cls}</div>
+                          <div className="text-gray-400 text-xs">From file</div>
+                        </div>
+                        <select
+                          value={unknownClassFormat[cls] || ''}
+                          onChange={(e) => setUnknownClassFormat(prev => ({ ...prev, [cls]: e.target.value }))}
+                          disabled={creatingClassName === cls}
+                          className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Format…</option>
+                          <option value="SPL">SPL</option>
+                          <option value="SQL">SQL</option>
+                          <option value="SSI">SSI</option>
+                          <option value="MK">MK (MECA Kids)</option>
+                          <option value="Show and Shine">Show and Shine</option>
+                          <option value="Ride the Light">Ride the Light</option>
+                          <option value="Dueling Demo">Dueling Demo</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleCreateUnknownClass(cls)}
+                          disabled={!unknownClassFormat[cls] || creatingClassName === cls}
+                          className="px-3 py-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded transition-colors"
+                        >
+                          {creatingClassName === cls ? 'Creating…' : 'Create'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Results Table */}
               <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
                 <table className="w-full text-sm">
@@ -2323,15 +2442,22 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                     </button>
                     <button
                       onClick={handleConfirmImport}
-                      disabled={uploading || parsedResults.filter(r => {
-                        const d = userDecisions[r.index];
-                        if (d?.skip) return false;
-                        if (!r.isValid) return false;
-                        if (r.nameMatch && d?.confirmNameMatch === null) return false;
-                        if (r.missingFields.includes('wattage') && !d?.wattage) return false;
-                        if (r.missingFields.includes('frequency') && !d?.frequency) return false;
-                        return true;
-                      }).length === 0}
+                      disabled={
+                        uploading ||
+                        // Block while unknown classes exist — admin
+                        // must create them system-wide first.
+                        unknownClasses.length > 0 ||
+                        parsedResults.filter(r => {
+                          const d = userDecisions[r.index];
+                          if (d?.skip) return false;
+                          if (!r.isValid) return false;
+                          if (r.nameMatch && d?.confirmNameMatch === null) return false;
+                          if (r.missingFields.includes('wattage') && !d?.wattage) return false;
+                          if (r.missingFields.includes('frequency') && !d?.frequency) return false;
+                          return true;
+                        }).length === 0
+                      }
+                      title={unknownClasses.length > 0 ? `Resolve ${unknownClasses.length} unknown class${unknownClasses.length === 1 ? '' : 'es'} first` : undefined}
                       className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Upload className="h-4 w-4" />

@@ -111,14 +111,18 @@ export interface TicketStats {
 export interface TicketListQuery {
   page?: number;
   limit?: number;
-  // 'active' is a synthetic status group (open + in_progress + awaiting_response)
-  // that the backend expands. Default for the admin tickets dashboard.
-  status?: TicketStatus | 'active';
-  priority?: TicketPriority;
+  // Status/priority/department/assigned_to_id accept either a single value
+  // or an array (sent wire-side as comma-separated, parsed by the backend
+  // into a `$in` clause). 'active' is still accepted as a synthetic status
+  // group — backend expands it to every non-terminal status.
+  // assigned_to_id also accepts the sentinel 'null' / 'unassigned' to
+  // filter for tickets with no assignee.
+  status?: TicketStatus | 'active' | string[];
+  priority?: TicketPriority | TicketPriority[];
   category?: TicketCategory;
-  department?: TicketDepartment;
+  department?: TicketDepartment | string[];
   reporter_id?: string;
-  assigned_to_id?: string;
+  assigned_to_id?: string | string[];
   event_id?: string;
   search?: string;
   sort_by?: 'created_at' | 'updated_at' | 'priority' | 'status';
@@ -225,14 +229,29 @@ export const ticketsApi = {
 
   getAll: async (query: TicketListQuery = {}): Promise<PaginatedTickets> => {
     const params = new URLSearchParams();
+    // Multi-value filters: empty arrays drop the param entirely; arrays
+    // with values are sent as repeated query params (?status=a&status=b)
+    // so NestJS / Express produce a string[] without any CSV-vs-comma
+    // ambiguity. Single strings pass through unchanged so single-value
+    // callers (and the tab quick-filters) keep working.
+    const appendMulti = (key: string, value: string | string[] | undefined) => {
+      if (value === undefined || value === null) return;
+      if (Array.isArray(value)) {
+        for (const v of value) {
+          if (v !== undefined && v !== null && v !== '') params.append(key, String(v));
+        }
+      } else if (value !== '') {
+        params.append(key, value);
+      }
+    };
     if (query.page) params.append('page', String(query.page));
     if (query.limit) params.append('limit', String(query.limit));
-    if (query.status) params.append('status', query.status);
-    if (query.priority) params.append('priority', query.priority);
+    appendMulti('status', query.status as any);
+    appendMulti('priority', query.priority as any);
     if (query.category) params.append('category', query.category);
-    if (query.department) params.append('department', query.department);
+    appendMulti('department', query.department as any);
     if (query.reporter_id) params.append('reporter_id', query.reporter_id);
-    if (query.assigned_to_id) params.append('assigned_to_id', query.assigned_to_id);
+    appendMulti('assigned_to_id', query.assigned_to_id);
     if (query.event_id) params.append('event_id', query.event_id);
     if (query.search) params.append('search', query.search);
     if (query.sort_by) params.append('sort_by', query.sort_by);

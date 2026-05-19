@@ -14,14 +14,22 @@ import {
   BadRequestException,
   InternalServerErrorException,
   Logger,
-  Req
+  Req,
+  Headers,
+  UnauthorizedException,
+  ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { EntityManager } from '@mikro-orm/core';
 import { CompetitionResultsService } from './competition-results.service';
 import { CompetitionResult } from './competition-results.entity';
 import { ResultsImportService } from './results-import.service';
 import { Public } from '../auth/public.decorator';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser } from '../auth/is-admin.helper';
 
 @Controller('api/competition-results')
 export class CompetitionResultsController {
@@ -29,8 +37,27 @@ export class CompetitionResultsController {
 
   constructor(
     private readonly competitionResultsService: CompetitionResultsService,
-    private readonly resultsImportService: ResultsImportService
+    private readonly resultsImportService: ResultsImportService,
+    private readonly supabaseAdmin: SupabaseAdminService,
+    @Inject('EntityManager')
+    private readonly em: EntityManager,
   ) {}
+
+  /**
+   * Admin-only auth guard for the back-office maintenance endpoints
+   * (backfill, recalculate, etc.). Decodes the Supabase JWT, looks up
+   * the local profile, throws 401/403 if not an admin.
+   */
+  private async requireAdmin(authHeader?: string): Promise<void> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) throw new UnauthorizedException('Invalid authorization token');
+    const profile = await this.em.fork().findOne(Profile, { id: user.id });
+    if (!isAdminUser(profile)) throw new ForbiddenException('Admin access required');
+  }
 
   @Get()
   async getAllResults(): Promise<CompetitionResult[]> {
@@ -210,6 +237,30 @@ export class CompetitionResultsController {
       message: 'State codes populated successfully',
       updated: result.updated,
     };
+  }
+
+  /**
+   * One-shot backfill that walks every CompetitionResult with a
+   * class_id set, looks up the class entity, and corrects the
+   * result.format / result.competition_class text fields if they
+   * don't match the class's own values. Cleans up the legacy data
+   * where some rows were silently saved with format='SPL' by the
+   * old "default to SPL if missing" code path.
+   *
+   * Idempotent — re-running is a no-op for rows already in sync.
+   */
+  @Post('admin/backfill-format-from-class')
+  @HttpCode(HttpStatus.OK)
+  async backfillFormatFromClass(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{
+    scanned: number;
+    formatFixed: number;
+    classNameFixed: number;
+    skippedNoClass: number;
+  }> {
+    await this.requireAdmin(authHeader);
+    return this.competitionResultsService.backfillFormatFromClass();
   }
 
   @Post('import/:eventId')
