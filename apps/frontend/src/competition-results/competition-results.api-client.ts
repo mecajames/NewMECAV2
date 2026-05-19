@@ -210,6 +210,23 @@ export const competitionResultsApi = {
     return response.data;
   },
 
+  /**
+   * Admin-only one-shot backfill. Walks every result with a class_id
+   * linked and corrects result.format / result.competition_class to
+   * match the linked class. Cleans up legacy rows where the old
+   * "default to SPL" path silently mis-tagged results. Idempotent —
+   * already-correct rows are no-ops.
+   */
+  backfillFormatFromClass: async (): Promise<{
+    scanned: number;
+    formatFixed: number;
+    classNameFixed: number;
+    skippedNoClass: number;
+  }> => {
+    const response = await axios.post('/api/competition-results/admin/backfill-format-from-class');
+    return response.data;
+  },
+
   // ==========================================
   // STANDINGS ENDPOINTS (New optimized backend)
   // ==========================================

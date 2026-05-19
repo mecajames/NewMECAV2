@@ -1,15 +1,45 @@
 import { useState, useEffect } from 'react';
-import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X, Download, Upload } from 'lucide-react';
+import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X, Download, Upload, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CompetitionFormat } from '@/types/database';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { competitionFormatsApi, CompetitionFormat as FormatObject } from '@/competition-formats';
+import { competitionResultsApi } from '@/competition-results';
 
 export default function ClassesManagementPage() {
-  const { user: _user } = useAuth();
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const navigate = useNavigate();
+  // Admin-only "Backfill format from class" maintenance action — fixes
+  // legacy results whose format text drifted from the linked class's
+  // actual format. Re-runnable any time; idempotent.
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const handleBackfillFormat = async () => {
+    if (!window.confirm(
+      'Backfill result format from linked class?\n\n' +
+      'This walks every result with a class_id linked and corrects its ' +
+      'format / class-name text fields to match the class definition. ' +
+      'Cleans up legacy rows wrongly tagged as SPL. Safe to run any time — ' +
+      'rows already in sync are skipped.',
+    )) return;
+    setBackfillRunning(true);
+    setBackfillMsg(null);
+    try {
+      const r = await competitionResultsApi.backfillFormatFromClass();
+      setBackfillMsg(
+        `Backfill complete. Scanned ${r.scanned}, format fixed ${r.formatFixed}, ` +
+        `class name fixed ${r.classNameFixed}, skipped ${r.skippedNoClass} (no class).`,
+      );
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Backfill failed';
+      setBackfillMsg(`Backfill failed: ${msg}`);
+    } finally {
+      setBackfillRunning(false);
+    }
+  };
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<CompetitionClass[]>([]);
@@ -382,19 +412,40 @@ export default function ClassesManagementPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2">Competition Classes Management</h1>
             <p className="text-gray-400">Manage competition classes for each season and format</p>
           </div>
-          <button
-            onClick={() => navigate('/dashboard/admin')}
-            className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            Back to Dashboard
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Admin-only "Backfill format from class" maintenance
+                button. Safe to click any time — corrects every result
+                whose format text doesn't match its linked class. */}
+            {isAdmin && (
+              <button
+                onClick={handleBackfillFormat}
+                disabled={backfillRunning}
+                title="Walk every result with a class_id and correct its format/class-name text to match the linked class. Idempotent."
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+              >
+                <RefreshCw className={`h-5 w-5 ${backfillRunning ? 'animate-spin' : ''}`} />
+                {backfillRunning ? 'Backfilling…' : 'Backfill Format from Class'}
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Dashboard
+            </button>
+          </div>
         </div>
+        {backfillMsg && (
+          <div className="mb-6 px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-sm text-gray-200">
+            {backfillMsg}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-slate-800 rounded-xl p-6 mb-6">
