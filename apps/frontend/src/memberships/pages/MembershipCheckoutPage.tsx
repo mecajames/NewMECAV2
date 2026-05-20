@@ -35,11 +35,7 @@ import { PaymentMethodSelector, SelectedPaymentMethod } from '@/shared/component
 import { PayPalPaymentButton } from '@/shared/components/PayPalPaymentButton';
 import { paypalApi } from '@/paypal/paypal.api-client';
 
-// Check if Stripe is configured (without loading it)
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const isStripeConfigured = !!stripePublishableKey &&
-  !stripePublishableKey.includes('YOUR_STRIPE') &&
-  stripePublishableKey.startsWith('pk_');
+import { isStripeConfigured } from '@/lib/stripe';
 
 // Lazy load Stripe payment form only when configured
 const LazyMembershipStripePaymentForm = isStripeConfigured

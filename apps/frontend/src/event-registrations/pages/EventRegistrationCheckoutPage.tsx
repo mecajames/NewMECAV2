@@ -38,11 +38,7 @@ import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } fro
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 
-// Check if Stripe is configured (without loading it)
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const isStripeConfigured = !!stripePublishableKey &&
-  !stripePublishableKey.includes('YOUR_STRIPE') &&
-  stripePublishableKey.startsWith('pk_');
+import { isStripeConfigured } from '@/lib/stripe';
 
 // Lazy load Stripe payment form only when configured
 const LazyStripePaymentForm = isStripeConfigured

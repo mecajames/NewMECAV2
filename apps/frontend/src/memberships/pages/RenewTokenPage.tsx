@@ -1,17 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from '@/lib/axios';
-import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { AlertCircle, CheckCircle, Lock, ShieldCheck, Loader2, CreditCard } from 'lucide-react';
 import { PayPalPaymentButton } from '@/shared/components/PayPalPaymentButton';
-
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const isStripeReady =
-  !!stripePublishableKey &&
-  !stripePublishableKey.includes('YOUR_STRIPE') &&
-  stripePublishableKey.startsWith('pk_');
-const stripePromise = isStripeReady ? loadStripe(stripePublishableKey) : null;
+import { stripePromise, isStripeConfigured as isStripeReady } from '@/lib/stripe';
 
 interface RenewalContext {
   token: string;

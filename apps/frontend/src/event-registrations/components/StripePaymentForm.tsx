@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
   PaymentElement,
@@ -7,11 +6,7 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { CreditCard, Lock, Loader2 } from 'lucide-react';
-
-// Initialize Stripe (conditionally to handle missing config)
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const isStripeConfigured = !!stripePublishableKey && !stripePublishableKey.includes('YOUR_STRIPE') && stripePublishableKey.startsWith('pk_');
-const stripePromise = isStripeConfigured ? loadStripe(stripePublishableKey) : null;
+import { stripePromise } from '@/lib/stripe';
 
 interface FormData {
   email: string;
