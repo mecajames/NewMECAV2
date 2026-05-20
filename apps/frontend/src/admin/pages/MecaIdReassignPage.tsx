@@ -1,7 +1,8 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from '@/lib/axios';
-import { useAuth, isSuperAdmin } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
+import { isSuperAdmin } from '@/auth/permissions';
 import {
   ArrowLeft,
   ShieldAlert,

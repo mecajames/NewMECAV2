@@ -11,7 +11,7 @@ import {
 import {
   membershipTypeConfigsApi, MembershipTypeConfig,
 } from '@/membership-type-configs/membership-type-configs.api-client';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 type FilterChip = 'all' | 'no_membership' | 'invisible_login' | 'staff' | 'banned' | 'login_disabled' | 'billing_restricted';
 
