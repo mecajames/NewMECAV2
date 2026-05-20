@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X, Download, Upload, RefreshCw } from 'lucide-react';
+import { useState, useEffect, Fragment } from 'react';
+import { Award, Plus, Edit, Trash2, Filter, ArrowLeft, Search, X, Download, Upload, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, FileJson, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CompetitionFormat } from '@/types/database';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -53,7 +53,24 @@ export default function ClassesManagementPage() {
   const [selectedFormat, setSelectedFormat] = useState<CompetitionFormat | ''>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'abbreviation' | 'display_order'>('display_order');
+  // Sort state — column + direction. Clicking a column header sets it
+  // as the sort column. Clicking the SAME header again toggles asc ↔
+  // desc. The standalone "Sort By" dropdown also writes to this.
+  type SortColumn = 'name' | 'abbreviation' | 'format' | 'status' | 'display_order';
+  const [sortBy, setSortBy] = useState<SortColumn>('display_order');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const handleSortClick = (col: SortColumn) => {
+    setSortBy(prev => {
+      if (prev === col) {
+        // Same column → flip direction.
+        setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      // New column → reset to asc.
+      setSortDir('asc');
+      return col;
+    });
+  };
 
   // Bulk Delete
   const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set());
@@ -102,7 +119,7 @@ export default function ClassesManagementPage() {
     // Clear selections when filters change
     setSelectedClassIds(new Set());
     setSelectAll(false);
-  }, [classes, searchQuery, activeFilter, sortBy]);
+  }, [classes, searchQuery, activeFilter, sortBy, sortDir]);
 
   const fetchSeasons = async () => {
     try {
@@ -167,15 +184,27 @@ export default function ClassesManagementPage() {
 
     // Apply sorting
     filtered.sort((a, b) => {
+      let cmp = 0;
       switch (sortBy) {
         case 'name':
-          return a.name.localeCompare(b.name);
+          cmp = a.name.localeCompare(b.name);
+          break;
         case 'abbreviation':
-          return a.abbreviation.localeCompare(b.abbreviation);
+          cmp = a.abbreviation.localeCompare(b.abbreviation);
+          break;
+        case 'format':
+          cmp = (a.format || '').localeCompare(b.format || '');
+          break;
+        case 'status':
+          // Active first when asc, inactive first when desc — treat true > false.
+          cmp = (a.is_active === b.is_active) ? 0 : (a.is_active ? -1 : 1);
+          break;
         case 'display_order':
         default:
-          return a.display_order - b.display_order;
+          cmp = a.display_order - b.display_order;
+          break;
       }
+      return sortDir === 'asc' ? cmp : -cmp;
     });
 
     setFilteredClasses(filtered);
@@ -312,22 +341,48 @@ export default function ClassesManagementPage() {
     }
   };
 
-  const handleExport = async () => {
+  // Whether the Export dropdown menu is open.
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
+  /**
+   * Trigger a download of `data` as a file. Single helper so JSON and
+   * CSV paths share blob URL lifecycle / DOM cleanup.
+   */
+  const downloadBlob = (data: BlobPart, filename: string, mime: string) => {
+    const blob = new Blob([data], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  /** Quote a CSV cell. Wraps in double-quotes when needed and escapes
+   *  internal quotes per RFC 4180. */
+  const csvCell = (val: unknown): string => {
+    if (val === null || val === undefined) return '';
+    const s = String(val);
+    if (/[",\n\r]/.test(s)) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const handleExportJson = async () => {
+    setExportMenuOpen(false);
     if (!selectedSeasonId) return;
     setExportBusy(true);
     try {
       const data = await competitionClassesApi.exportSeason(selectedSeasonId);
-      // Download as a JSON file the admin can carry between environments.
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
       const seasonName = (data.season?.name || `season-${data.season?.year}`).replace(/\s+/g, '_');
-      a.href = url;
-      a.download = `competition-classes-${seasonName}-${data.exportedAt.slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(
+        JSON.stringify(data, null, 2),
+        `competition-classes-${seasonName}-${data.exportedAt.slice(0, 10)}.json`,
+        'application/json',
+      );
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Export failed');
     } finally {
@@ -335,19 +390,215 @@ export default function ClassesManagementPage() {
     }
   };
 
+  /**
+   * CSV export — flat row-per-class layout suitable for editing in
+   * Excel / Google Sheets and re-importing. Includes season_year on
+   * every row so an import knows which season the file targets even
+   * if the admin renamed the file. Formats from the same season are
+   * encoded as standalone "format-only" rows whose `name` is empty,
+   * so the round-trip preserves them.
+   */
+  const handleExportCsv = async () => {
+    setExportMenuOpen(false);
+    if (!selectedSeasonId) return;
+    setExportBusy(true);
+    try {
+      const data = await competitionClassesApi.exportSeason(selectedSeasonId);
+      const seasonYear = data.season?.year ?? '';
+      const seasonNameForFile = (data.season?.name || `season-${data.season?.year}`).replace(/\s+/g, '_');
+      const header = [
+        'row_type',
+        'season_year',
+        'season_name',
+        'name',
+        'abbreviation',
+        'format',
+        'section',
+        'display_order',
+        'is_active',
+        'unlimited_wattage',
+      ];
+      const rows: string[] = [header.map(csvCell).join(',')];
+
+      // Format-only rows so an import can recreate missing formats too.
+      for (const f of data.formats || []) {
+        rows.push([
+          'format',
+          seasonYear,
+          data.season?.name || '',
+          f.name || '',
+          f.abbreviation || '',
+          f.name || '',
+          '',
+          f.displayOrder ?? '',
+          f.isActive === false ? 'false' : 'true',
+          '',
+        ].map(csvCell).join(','));
+      }
+
+      // Class rows — the main payload.
+      for (const c of data.classes || []) {
+        rows.push([
+          'class',
+          seasonYear,
+          data.season?.name || '',
+          c.name || '',
+          c.abbreviation || '',
+          c.format || '',
+          (c as any).section || '',
+          c.displayOrder ?? '',
+          c.isActive === false ? 'false' : 'true',
+          c.unlimitedWattage ? 'true' : 'false',
+        ].map(csvCell).join(','));
+      }
+
+      downloadBlob(
+        rows.join('\r\n') + '\r\n',
+        `competition-classes-${seasonNameForFile}-${data.exportedAt.slice(0, 10)}.csv`,
+        'text/csv;charset=utf-8',
+      );
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Export failed');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  /**
+   * RFC 4180-ish CSV parser. Handles quoted cells, escaped quotes,
+   * and CRLF / LF line endings. Returns an array of row-arrays.
+   */
+  const parseCsv = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let cell = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') {
+            cell += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          cell += c;
+        }
+      } else {
+        if (c === '"') {
+          inQuotes = true;
+        } else if (c === ',') {
+          row.push(cell);
+          cell = '';
+        } else if (c === '\n' || c === '\r') {
+          if (c === '\r' && text[i + 1] === '\n') i++;
+          row.push(cell);
+          rows.push(row);
+          row = [];
+          cell = '';
+        } else {
+          cell += c;
+        }
+      }
+    }
+    if (cell !== '' || row.length > 0) {
+      row.push(cell);
+      rows.push(row);
+    }
+    return rows.filter(r => r.length > 0 && r.some(c => c !== ''));
+  };
+
   const handleImport = async () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'application/json,.json';
+    // Accept both JSON (full export) and CSV (the flat row-per-class
+    // format produced by Export → Export as CSV).
+    input.accept = '.json,.csv,application/json,text/csv';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      const text = await file.text();
+      const isCsv = file.name.toLowerCase().endsWith('.csv') ||
+        // Fall back to content sniffing — first non-whitespace char of
+        // CSV exports is "r" (header starts with row_type); JSON starts
+        // with "{" or "[".
+        !/^\s*[\{\[]/.test(text);
+
       let payload: any;
-      try {
-        payload = JSON.parse(await file.text());
-      } catch {
-        alert('Selected file is not valid JSON.');
-        return;
+      if (isCsv) {
+        try {
+          const grid = parseCsv(text);
+          if (grid.length < 2) {
+            alert('CSV is empty or missing rows.');
+            return;
+          }
+          const headerRow = grid[0].map(h => h.trim().toLowerCase());
+          const idx = (col: string) => headerRow.indexOf(col);
+          const requiredCols = ['name', 'abbreviation', 'format', 'season_year'];
+          for (const c of requiredCols) {
+            if (idx(c) === -1) {
+              alert(`CSV is missing required column "${c}". Required columns: ${requiredCols.join(', ')}.`);
+              return;
+            }
+          }
+          const classes: any[] = [];
+          const formats: any[] = [];
+          let seasonYear: number | null = null;
+          let seasonName: string | undefined = undefined;
+
+          for (let i = 1; i < grid.length; i++) {
+            const r = grid[i];
+            const get = (col: string) => (idx(col) >= 0 ? (r[idx(col)] ?? '').trim() : '');
+            const rowType = (get('row_type') || 'class').toLowerCase();
+            const yr = parseInt(get('season_year'), 10);
+            if (!Number.isFinite(yr)) continue;
+            if (seasonYear === null) seasonYear = yr;
+            else if (yr !== seasonYear) {
+              alert(`CSV mixes multiple season years (${seasonYear} and ${yr}). One season per file.`);
+              return;
+            }
+            if (!seasonName && get('season_name')) seasonName = get('season_name');
+
+            if (rowType === 'format') {
+              formats.push({
+                name: get('name') || get('format'),
+                abbreviation: get('abbreviation') || undefined,
+                displayOrder: get('display_order') ? parseInt(get('display_order'), 10) : undefined,
+                isActive: get('is_active') === 'false' ? false : true,
+              });
+            } else {
+              classes.push({
+                name: get('name'),
+                abbreviation: get('abbreviation'),
+                format: get('format'),
+                displayOrder: get('display_order') ? parseInt(get('display_order'), 10) : 0,
+                isActive: get('is_active') === 'false' ? false : true,
+                unlimitedWattage: get('unlimited_wattage') === 'true',
+              });
+            }
+          }
+          if (seasonYear === null) {
+            alert('CSV has no rows with a valid season_year.');
+            return;
+          }
+          payload = {
+            season: { year: seasonYear, name: seasonName },
+            formats: formats.length > 0 ? formats : undefined,
+            classes,
+          };
+        } catch (err: any) {
+          alert(`Could not parse CSV: ${err?.message || err}`);
+          return;
+        }
+      } else {
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          alert('Selected file is not valid JSON.');
+          return;
+        }
       }
       if (!payload?.season?.year || !Array.isArray(payload?.classes)) {
         alert('Import file is missing required fields (season.year, classes).');
@@ -558,23 +809,63 @@ export default function ClassesManagementPage() {
                 <Plus className="h-5 w-5" />
                 Create New Class
               </button>
-              <button
-                onClick={handleExport}
-                disabled={exportBusy}
-                className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-                title="Download all classes for this season as a JSON file you can carry between environments"
-              >
-                <Download className="h-5 w-5" />
-                {exportBusy ? 'Exporting…' : 'Export'}
-              </button>
+              {/* Export menu — pick format. JSON is the canonical
+                  cross-environment payload (formats + classes + season
+                  metadata). CSV is the flat row-per-class layout that
+                  admins can edit in Excel and re-import. */}
+              <div className="relative">
+                <button
+                  onClick={() => setExportMenuOpen(v => !v)}
+                  disabled={exportBusy}
+                  className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  title="Download all classes for this season"
+                >
+                  <Download className="h-5 w-5" />
+                  {exportBusy ? 'Exporting…' : 'Export'}
+                  <ChevronDown className="h-4 w-4 ml-1 opacity-70" />
+                </button>
+                {exportMenuOpen && (
+                  <>
+                    {/* Click-outside scrim */}
+                    <div
+                      className="fixed inset-0 z-20"
+                      onClick={() => setExportMenuOpen(false)}
+                    />
+                    <div className="absolute left-0 mt-1 z-30 w-56 bg-slate-700 border border-slate-600 rounded-lg shadow-xl py-1">
+                      <button
+                        type="button"
+                        onClick={handleExportJson}
+                        className="w-full text-left px-4 py-2 text-sm text-white hover:bg-slate-600 flex items-center gap-2"
+                      >
+                        <FileJson className="h-4 w-4 text-orange-400" />
+                        <div>
+                          <div>Export as JSON</div>
+                          <div className="text-xs text-gray-400">For Stage → Prod sync</div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportCsv}
+                        className="w-full text-left px-4 py-2 text-sm text-white hover:bg-slate-600 flex items-center gap-2"
+                      >
+                        <FileText className="h-4 w-4 text-orange-400" />
+                        <div>
+                          <div>Export as CSV</div>
+                          <div className="text-xs text-gray-400">For Excel / spreadsheet editing</div>
+                        </div>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 onClick={handleImport}
                 disabled={importBusy}
                 className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-cyan-700 hover:bg-cyan-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-                title="Upload a JSON exported from another environment to sync classes"
+                title="Upload a JSON or CSV file exported from this page (or another environment) to sync classes"
               >
                 <Upload className="h-5 w-5" />
-                {importBusy ? 'Importing…' : 'Import'}
+                {importBusy ? 'Importing…' : 'Import (JSON or CSV)'}
               </button>
               {selectedClassIds.size > 0 && (
                 <button
@@ -755,12 +1046,59 @@ export default function ClassesManagementPage() {
                           className="w-4 h-4 cursor-pointer rounded border-slate-500 bg-slate-600 text-orange-500 focus:ring-orange-500"
                         />
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Order</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Name</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Abbreviation</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Format</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Section</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Status</th>
+                      {/* Sortable column headers. Click toggles sort.
+                          Active column shows the direction arrow; the
+                          others show a muted up/down hint so admins
+                          can tell which columns are clickable. */}
+                      {(() => {
+                        const sortable: Array<{ col: SortColumn; label: string; align?: 'left' | 'right' }> = [
+                          { col: 'display_order', label: 'Order' },
+                          { col: 'name', label: 'Name' },
+                          { col: 'abbreviation', label: 'Abbreviation' },
+                          { col: 'format', label: 'Format' },
+                          { col: 'status', label: 'Status' },
+                        ];
+                        return (
+                          <>
+                            {sortable.map((s) => {
+                              // Section sits between Format and Status — not sortable.
+                              const isActive = sortBy === s.col;
+                              const cell = (
+                                <th
+                                  onClick={() => handleSortClick(s.col)}
+                                  className="px-6 py-4 text-left text-sm font-semibold text-gray-300 cursor-pointer select-none hover:bg-slate-600/50"
+                                  title={`Sort by ${s.label}${isActive ? (sortDir === 'asc' ? ' (asc — click for desc)' : ' (desc — click for asc)') : ''}`}
+                                >
+                                  <span className="inline-flex items-center gap-1">
+                                    {s.label}
+                                    {isActive ? (
+                                      sortDir === 'asc' ? (
+                                        <ArrowUp className="h-3.5 w-3.5 text-orange-400" />
+                                      ) : (
+                                        <ArrowDown className="h-3.5 w-3.5 text-orange-400" />
+                                      )
+                                    ) : (
+                                      <ArrowUpDown className="h-3.5 w-3.5 text-gray-500 opacity-50" />
+                                    )}
+                                  </span>
+                                </th>
+                              );
+                              // Use keyed Fragment so the wrapper itself
+                              // satisfies React's list-key requirement.
+                              // The Format column also injects the
+                              // un-sortable Section header right after it.
+                              return (
+                                <Fragment key={s.col}>
+                                  {cell}
+                                  {s.col === 'format' && (
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Section</th>
+                                  )}
+                                </Fragment>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
                       <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">Actions</th>
                     </tr>
                   </thead>
