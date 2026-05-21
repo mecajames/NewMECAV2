@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, isSuperAdmin } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
+import { isSuperAdmin } from '@/auth/permissions';
 import {
   Users, Calendar, Trophy, CreditCard, DollarSign, BookOpen, Image as ImageIcon,
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Star, ArrowLeft, Trophy, Users, Store, Gavel, Award, MapPin, MessageCircle, Trash2, Send } from 'lucide-react';
 import { hallOfFameApi, type HallOfFameInductee, type HallOfFameComment } from '@/hall-of-fame/hall-of-fame.api-client';
 import { getStorageUrl } from '@/lib/storage';
-import { useAuth } from '@/auth';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
 
 const KNOWN_ICONS: Record<string, typeof Trophy> = {
