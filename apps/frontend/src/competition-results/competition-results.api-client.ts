@@ -253,6 +253,24 @@ export const competitionResultsApi = {
       format: string;
       isActive: boolean;
     } | null;
+    linkedClass: {
+      id: string;
+      name: string;
+      abbreviation: string;
+      format: string;
+      isActive: boolean;
+    } | null;
+    mappingMatch: {
+      mappingId: string;
+      sourceName: string;
+      targetClass: {
+        id: string;
+        name: string;
+        abbreviation: string;
+        format: string;
+        isActive: boolean;
+      } | null;
+    } | null;
   }>> => {
     const response = await axios.get('/api/competition-results/admin/orphan-results');
     return response.data;

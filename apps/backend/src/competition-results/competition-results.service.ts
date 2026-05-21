@@ -1860,10 +1860,30 @@ export class CompetitionResultsService {
      *  abbreviation matches the result's competition_class text
      *  (and format if both sides are set). Null if no candidate. */
     suggestedClass: { id: string; name: string; abbreviation: string; format: string; isActive: boolean } | null;
+    /** The class the row's class_id actually points to right now, if
+     *  any. Will commonly be an inactive or otherwise-unusable class
+     *  (that's WHY the row is orphan). Helps admins recognise rows
+     *  that were imported under an old class name that's since been
+     *  deleted or renamed. Null when class_id is null or dangling. */
+    linkedClass: { id: string; name: string; abbreviation: string; format: string; isActive: boolean } | null;
+    /** Active class_name_mapping whose source_name matches the row's
+     *  competition_class text. If `target_class_id` resolves to an
+     *  active class, admin can apply the mapping in one click. */
+    mappingMatch: {
+      mappingId: string;
+      sourceName: string;
+      targetClass: { id: string; name: string; abbreviation: string; format: string; isActive: boolean } | null;
+    } | null;
   }>> {
     const em = this.em.fork();
     const allClasses = await em.find(CompetitionClass, {});
     const classById = new Map(allClasses.map(c => [c.id, c]));
+    const mappings = await em.find(ClassNameMapping, { isActive: true });
+    const mappingBySource = new Map<string, ClassNameMapping>();
+    for (const m of mappings) {
+      const key = (m.sourceName || '').trim().toLowerCase();
+      if (key) mappingBySource.set(key, m);
+    }
 
     // Tolerant text matcher — same algorithm the frontend uses.
     const norm = (v: unknown): string => String(v ?? '').trim().toLowerCase();
@@ -1893,6 +1913,43 @@ export class CompetitionResultsService {
       // Text fallback against active classes.
       const suggested = matchByText(r.competitionClass, r.format);
       if (suggested) continue; // Public pages will resolve it; not orphan.
+      // What does the dangling class_id actually point to? Almost
+      // always an inactive or rename-victim class — surfacing it to
+      // admins makes the "wait why does this say DDM here but Park
+      // and Pound on the result page" mystery obvious at a glance.
+      const linkedClassInfo = linked
+        ? {
+            id: linked.id,
+            name: linked.name,
+            abbreviation: linked.abbreviation,
+            format: linked.format,
+            isActive: linked.isActive,
+          }
+        : null;
+
+      // Active class_name_mapping (CSV-import resolver) whose
+      // source_name matches the row's competition_class text. If
+      // present, the admin can repoint to whatever target the
+      // mapping already specifies in one click.
+      const mappingHit = mappingBySource.get(norm(r.competitionClass));
+      const mappingMatch = mappingHit
+        ? {
+            mappingId: mappingHit.id,
+            sourceName: mappingHit.sourceName,
+            targetClass: (() => {
+              const t = mappingHit.targetClassId ? classById.get(mappingHit.targetClassId) : undefined;
+              if (!t) return null;
+              return {
+                id: t.id,
+                name: t.name,
+                abbreviation: t.abbreviation,
+                format: t.format,
+                isActive: t.isActive,
+              };
+            })(),
+          }
+        : null;
+
       orphans.push({
         id: r.id,
         eventId: (r as any).event?.id ?? null,
@@ -1924,6 +1981,8 @@ export class CompetitionResultsService {
             isActive: near.isActive,
           };
         })(),
+        linkedClass: linkedClassInfo,
+        mappingMatch,
       });
     }
     return orphans;
