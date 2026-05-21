@@ -266,7 +266,15 @@ export default function ResultsPage() {
 
   const fetchClasses = async () => {
     try {
-      const data = await competitionClassesApi.getActive();
+      // Use getAll() — NOT getActive() — because this list is the
+      // lookup map for decoding result.class_id → format/section/name
+      // when rendering historical results. If we only loaded active
+      // classes, any result tied to a now-deactivated class would
+      // bucket as "Unknown" even though the class still exists.
+      // (The entry/picker UIs in ResultsEntryNew etc. still use
+      // getActive() because new results should only target active
+      // classes.)
+      const data = await competitionClassesApi.getAll();
       setClasses(data);
     } catch (error) {
       console.error('Error fetching classes:', error);
@@ -491,20 +499,58 @@ export default function ResultsPage() {
     });
   };
 
+  /**
+   * Resolve a result row to its CompetitionClass entity. Cascades:
+   *   1. result.class_id matches a class by UUID — the happy path.
+   *   2. Fallback: match by competition_class TEXT (vs class.name OR
+   *      class.abbreviation, case-insensitive) constrained by the
+   *      result.format text when both sides have it.
+   *
+   * Why the fallback exists: legacy data has results whose class_id
+   * points at a class UUID that no longer exists (deleted/replaced by
+   * an older import). The active class lives in the table under a
+   * new UUID with the same name + abbreviation. Without this, those
+   * results bucket as "Unknown" even though the class is right there.
+   */
+  const resolveClass = (result: CompetitionResult): CompetitionClass | undefined => {
+    const idRef = (result.classId || result.class_id) as string | undefined;
+    if (idRef) {
+      const byId = classes.find(c => c.id === idRef);
+      if (byId) return byId;
+    }
+    const className = (result.competitionClass || result.competition_class || '').trim().toLowerCase();
+    if (!className) return undefined;
+    const resultFormat = (result.format || '').trim().toLowerCase();
+    // Prefer exact (name OR abbreviation) + format match. Fall back to
+    // name/abbreviation alone if format isn't set on either side.
+    const formatMatches = (c: CompetitionClass) => {
+      if (!resultFormat) return true;
+      return (c.format || '').trim().toLowerCase() === resultFormat;
+    };
+    return classes.find(c => {
+      if (!formatMatches(c)) return false;
+      const n = (c.name || '').trim().toLowerCase();
+      const a = (c.abbreviation || '').trim().toLowerCase();
+      return n === className || a === className;
+    });
+  };
+
   // Memoized available classes based on loaded results and selected format
   const availableClasses = useMemo(() => {
     const classSet = new Set<string>();
     results.forEach(result => {
-      const classData = classes.find(c => c.id === (result.classId || result.class_id));
-      const format = classData?.format || 'Unknown';
-      const className = result.competitionClass || result.competition_class || 'Unknown';
-
-      // Only include classes for the selected format (or all if no format filter)
+      const classData = resolveClass(result);
+      // Skip rows we still can't resolve — they're shown in the admin
+      // review tool, not in the public format/class filter dropdowns.
+      if (!classData) return;
+      const format = classData.format;
+      const className = classData.name;
       if (selectedFormat === 'all' || format === selectedFormat) {
         classSet.add(className);
       }
     });
     return Array.from(classSet).sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results, classes, selectedFormat]);
 
   // Memoized grouped results: format → section → class.
@@ -528,11 +574,16 @@ export default function ResultsPage() {
     const formats = new Map<string, SectionBucket>();
 
     results.forEach(result => {
-      const classData = classes.find(c => c.id === (result.classId || result.class_id));
-      const format = classData?.format || 'Unknown';
-      const className = result.competitionClass || result.competition_class || 'Unknown';
-      const section = classData?.section ?? UNASSIGNED_SECTION;
-      const classDisplayOrder = classData?.display_order ?? 0;
+      const classData = resolveClass(result);
+      // Drop unresolvable rows from public view — no more "Unknown
+      // Results" bucket. These rows are still in the DB and surface in
+      // the admin "Results needing class assignment" tool where an
+      // admin can repoint them or create the missing class.
+      if (!classData) return;
+      const format = classData.format;
+      const className = classData.name;
+      const section = classData.section ?? UNASSIGNED_SECTION;
+      const classDisplayOrder = classData.display_order ?? 0;
 
       if (selectedFormat !== 'all' && format !== selectedFormat) {
         return;

@@ -227,6 +227,50 @@ export const competitionResultsApi = {
     return response.data;
   },
 
+  /**
+   * Admin-only — list every result whose class_id can't be resolved
+   * (deleted/inactive class AND no text fallback match). These rows
+   * are hidden from public results pages but tracked here so an
+   * admin can fix them.
+   */
+  getOrphanResults: async (): Promise<Array<{
+    id: string;
+    eventId: string | null;
+    eventTitle: string | null;
+    eventDate: string | null;
+    competitorName: string | null;
+    mecaId: string | null;
+    competitionClass: string;
+    format: string | null;
+    classId: string | null;
+    score: number | null;
+    placement: number | null;
+    createdAt: string;
+    suggestedClass: {
+      id: string;
+      name: string;
+      abbreviation: string;
+      format: string;
+      isActive: boolean;
+    } | null;
+  }>> => {
+    const response = await axios.get('/api/competition-results/admin/orphan-results');
+    return response.data;
+  },
+
+  /**
+   * Admin-only — point a set of orphan results at a specific class.
+   * Updates each row's class_id + auto-syncs format / competition_class
+   * text from the target class.
+   */
+  repointToClass: async (resultIds: string[], classId: string): Promise<{ updated: number }> => {
+    const response = await axios.post('/api/competition-results/admin/repoint-to-class', {
+      resultIds,
+      classId,
+    });
+    return response.data;
+  },
+
   // ==========================================
   // STANDINGS ENDPOINTS (New optimized backend)
   // ==========================================

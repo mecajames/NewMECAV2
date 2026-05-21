@@ -164,6 +164,10 @@ export const competitionClassesApi = {
         name: string;
         abbreviation: string;
         format: string;
+        // Optional section text (e.g. "Show & Shine", "Park n Pound").
+        // Backend treats null/undefined as "no section" and treats
+        // empty-string identically to null.
+        section?: string | null;
         isActive?: boolean;
         displayOrder?: number;
         unlimitedWattage?: boolean;
@@ -177,6 +181,10 @@ export const competitionClassesApi = {
     formatsUpdated: number;
     created: number;
     updated: number;
+    // Existing rows whose values already matched the import — separated
+    // from `updated` so the result message can report what actually
+    // changed instead of falsely claiming every row was updated.
+    unchanged: number;
     deactivated: number;
     skipped: number;
   }> => {

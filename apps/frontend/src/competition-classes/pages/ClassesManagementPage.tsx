@@ -569,10 +569,15 @@ export default function ClassesManagementPage() {
                 isActive: get('is_active') === 'false' ? false : true,
               });
             } else {
+              const sectionVal = get('section');
               classes.push({
                 name: get('name'),
                 abbreviation: get('abbreviation'),
                 format: get('format'),
+                // Column G in the CSV. The previous parser dropped this
+                // entirely, so edits to Section were silently ignored on
+                // import. Empty string → null (so backend can clear it).
+                section: sectionVal === '' ? null : sectionVal,
                 displayOrder: get('display_order') ? parseInt(get('display_order'), 10) : 0,
                 isActive: get('is_active') === 'false' ? false : true,
                 unlimitedWattage: get('unlimited_wattage') === 'true',
@@ -622,7 +627,9 @@ export default function ClassesManagementPage() {
         alert(
           `Import complete (${mode}):\n` +
           `  Formats: ${result.formatsCreated} created, ${result.formatsUpdated} updated\n` +
-          `  Classes: ${result.created} created, ${result.updated} updated, ${result.deactivated} deactivated, ${result.skipped} skipped`
+          `  Classes: ${result.created} created, ${result.updated} updated, ` +
+          `${(result as any).unchanged ?? 0} unchanged, ` +
+          `${result.deactivated} deactivated, ${result.skipped} skipped`
         );
         if (selectedSeasonId === result.seasonId) await fetchClasses();
       } catch (err: any) {

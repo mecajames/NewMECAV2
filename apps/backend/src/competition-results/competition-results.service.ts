@@ -1833,6 +1833,132 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Find every result that the public results pages can't render —
+   * either class_id is null, points to a deleted class, points to an
+   * inactive class, AND the text fallback (competition_class + format
+   * vs class.name/.abbreviation + .format, case-insensitive) doesn't
+   * match an active class either.
+   *
+   * Used by /admin/results-needing-class to give admins a queue they
+   * can work through instead of those results silently dropping out
+   * of public display.
+   */
+  async findOrphanResults(): Promise<Array<{
+    id: string;
+    eventId: string | null;
+    eventTitle: string | null;
+    eventDate: string | null;
+    competitorName: string | null;
+    mecaId: string | null;
+    competitionClass: string;
+    format: string | null;
+    classId: string | null;
+    score: number | null;
+    placement: number | null;
+    createdAt: string;
+    /** Best-effort suggestion: an active class whose name OR
+     *  abbreviation matches the result's competition_class text
+     *  (and format if both sides are set). Null if no candidate. */
+    suggestedClass: { id: string; name: string; abbreviation: string; format: string; isActive: boolean } | null;
+  }>> {
+    const em = this.em.fork();
+    const allClasses = await em.find(CompetitionClass, {});
+    const classById = new Map(allClasses.map(c => [c.id, c]));
+
+    // Tolerant text matcher — same algorithm the frontend uses.
+    const norm = (v: unknown): string => String(v ?? '').trim().toLowerCase();
+    const matchByText = (className: string, format: string | null | undefined) => {
+      const n = norm(className);
+      if (!n) return undefined;
+      const f = norm(format);
+      return allClasses.find(c => {
+        if (!c.isActive) return false;
+        if (f && norm(c.format) !== f) return false;
+        return norm(c.name) === n || norm(c.abbreviation) === n;
+      });
+    };
+
+    const results = await em.find(
+      CompetitionResult,
+      {},
+      { populate: ['event'], orderBy: { createdAt: 'DESC' } },
+    );
+
+    const orphans: any[] = [];
+    for (const r of results) {
+      const cid = (r as any).competitionClassEntity?.id || null;
+      const linked = cid ? classById.get(cid) : undefined;
+      // Resolved if linked class exists AND is active.
+      if (linked && linked.isActive) continue;
+      // Text fallback against active classes.
+      const suggested = matchByText(r.competitionClass, r.format);
+      if (suggested) continue; // Public pages will resolve it; not orphan.
+      orphans.push({
+        id: r.id,
+        eventId: (r as any).event?.id ?? null,
+        eventTitle: (r as any).event?.title ?? null,
+        eventDate: (r as any).event?.eventDate?.toISOString?.() ?? null,
+        competitorName: r.competitorName,
+        mecaId: r.mecaId,
+        competitionClass: r.competitionClass,
+        format: r.format,
+        classId: cid,
+        score: r.score == null ? null : Number(r.score),
+        placement: r.placement,
+        createdAt: r.createdAt.toISOString(),
+        // Suggestion: even though public lookup couldn't fully match,
+        // we may still have a near-miss (e.g. matched name but wrong
+        // format) admins can use as a shortcut.
+        suggestedClass: (() => {
+          const n = norm(r.competitionClass);
+          if (!n) return null;
+          const near = allClasses.find(c =>
+            norm(c.name) === n || norm(c.abbreviation) === n,
+          );
+          if (!near) return null;
+          return {
+            id: near.id,
+            name: near.name,
+            abbreviation: near.abbreviation,
+            format: near.format,
+            isActive: near.isActive,
+          };
+        })(),
+      });
+    }
+    return orphans;
+  }
+
+  /**
+   * Bulk repoint a set of result rows to a specific class. Sets the
+   * competitionClassEntity FK and lets the entity's downstream
+   * triggers (or, more reliably, the next update() / leaderboard
+   * recompute) pick up the new class. Returns the count updated.
+   */
+  async repointResultsToClass(resultIds: string[], classId: string): Promise<{ updated: number }> {
+    if (!Array.isArray(resultIds) || resultIds.length === 0) {
+      return { updated: 0 };
+    }
+    const em = this.em.fork();
+    const targetClass = await em.findOne(CompetitionClass, { id: classId });
+    if (!targetClass) {
+      throw new NotFoundException(`Target class ${classId} not found`);
+    }
+    const rows = await em.find(CompetitionResult, { id: { $in: resultIds } });
+    let updated = 0;
+    for (const r of rows) {
+      (r as any).competitionClassEntity = targetClass;
+      // Also sync the text fields so the resolver doesn't have to
+      // text-fallback for these from now on.
+      r.format = targetClass.format;
+      r.competitionClass = targetClass.name;
+      updated++;
+    }
+    await em.flush();
+    return { updated };
+  }
+
+  /**
    * Check if wattage/frequency is required for a given format and class
    * Required for all SPL classes except Dueling Demos
    */

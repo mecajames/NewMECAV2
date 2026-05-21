@@ -263,6 +263,38 @@ export class CompetitionResultsController {
     return this.competitionResultsService.backfillFormatFromClass();
   }
 
+  /**
+   * Admin-only — lists every result whose class_id is missing or
+   * points at a class that no longer exists / is inactive, AND can't
+   * be resolved by the same text-fallback (competition_class + format)
+   * the public pages use. These rows still exist in the DB but are
+   * hidden from public results until an admin links them to a class.
+   */
+  @Get('admin/orphan-results')
+  async getOrphanResults(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.competitionResultsService.findOrphanResults();
+  }
+
+  /**
+   * Admin-only — repoint one or more results to a specific class.
+   * Used by the orphan-review page: admin sees an unresolvable
+   * result, picks the correct class, this endpoint updates the
+   * class_id (and via create()/update() the format + competition_class
+   * text are auto-derived from the class).
+   */
+  @Post('admin/repoint-to-class')
+  @HttpCode(HttpStatus.OK)
+  async repointToClass(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { resultIds: string[]; classId: string },
+  ): Promise<{ updated: number }> {
+    await this.requireAdmin(authHeader);
+    return this.competitionResultsService.repointResultsToClass(body.resultIds, body.classId);
+  }
+
   @Post('import/:eventId')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
