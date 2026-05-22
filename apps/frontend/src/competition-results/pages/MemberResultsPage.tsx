@@ -90,7 +90,10 @@ export default function MemberResultsPage() {
 
   const fetchClasses = async () => {
     try {
-      const data = await competitionClassesApi.getActive();
+      // Use getAll() not getActive() — see ResultsPage.fetchClasses
+      // for the rationale. Historical result display needs to resolve
+      // class_id → format even when the class is now inactive.
+      const data = await competitionClassesApi.getAll();
       setClasses(data);
     } catch (err) {
       console.error('Error fetching classes:', err);
@@ -176,6 +179,32 @@ export default function MemberResultsPage() {
     return 'bg-slate-700 text-gray-300';
   };
 
+  // Resolve a result to its class — same cascade as ResultsPage.
+  // class_id first, then fall back to matching by competition_class
+  // text + format text (case-insensitive). Lets the page survive
+  // legacy data with orphan class_ids whose name/abbrev still match
+  // an existing active class.
+  const resolveClass = (result: any): CompetitionClass | undefined => {
+    const idRef = (result.classId || result.class_id) as string | undefined;
+    if (idRef) {
+      const byId = classes.find(c => c.id === idRef);
+      if (byId) return byId;
+    }
+    const className = (result.competitionClass || result.competition_class || '').trim().toLowerCase();
+    if (!className) return undefined;
+    const resultFormat = (result.format || '').trim().toLowerCase();
+    const formatMatches = (c: CompetitionClass) => {
+      if (!resultFormat) return true;
+      return (c.format || '').trim().toLowerCase() === resultFormat;
+    };
+    return classes.find(c => {
+      if (!formatMatches(c)) return false;
+      const n = (c.name || '').trim().toLowerCase();
+      const a = (c.abbreviation || '').trim().toLowerCase();
+      return n === className || a === className;
+    });
+  };
+
   // Group results by format → section → class. Mirrors ResultsPage so
   // members see their history laid out the same way as event results.
   const groupedResults: FormatGroup[] = useMemo(() => {
@@ -188,11 +217,14 @@ export default function MemberResultsPage() {
     const formats = new Map<string, SectionBucket>();
 
     results.forEach(result => {
-      const classData = classes.find(c => c.id === (result.classId || result.class_id));
-      const format = classData?.format || 'Unknown';
-      const className = result.competitionClass || result.competition_class || 'Unknown';
-      const section = classData?.section ?? UNASSIGNED_SECTION;
-      const classDisplayOrder = classData?.display_order ?? 0;
+      const classData = resolveClass(result);
+      // Hide unresolvable rows from public view — they're captured for
+      // the admin review tool. No more "Unknown" bucket.
+      if (!classData) return;
+      const format = classData.format;
+      const className = classData.name;
+      const section = classData.section ?? UNASSIGNED_SECTION;
+      const classDisplayOrder = classData.display_order ?? 0;
 
       let sectionBucket = formats.get(format);
       if (!sectionBucket) {

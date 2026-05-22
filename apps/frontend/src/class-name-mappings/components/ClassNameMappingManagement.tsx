@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Link2,
   Plus,
@@ -11,6 +11,10 @@ import {
   Search,
   ArrowRight,
   Eye,
+  ChevronDown,
+  ChevronRight,
+  HelpCircle,
+  ExternalLink,
 } from 'lucide-react';
 import {
   classNameMappingsApi,
@@ -18,7 +22,10 @@ import {
   UnmappedClass,
   UnmappedResult,
 } from '@/class-name-mappings';
-import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
+import { competitionClassesApi, CompetitionClass, ClassPicker } from '@/competition-classes';
+import { competitionResultsApi } from '@/competition-results';
+
+type OrphanRow = Awaited<ReturnType<typeof competitionResultsApi.getOrphanResults>>[number];
 
 export default function ClassNameMappingManagement() {
   const [mappings, setMappings] = useState<ClassNameMapping[]>([]);
@@ -47,6 +54,39 @@ export default function ClassNameMappingManagement() {
     notes: '',
   });
 
+  // ---- Orphan results section (merged from /admin/results-needing-class) ----
+  // These are results whose `class_id` points at a class that no
+  // longer exists or is inactive AND can't be resolved by text
+  // fallback (name/abbr+format match against active classes). Lives
+  // here so admins manage every "results don't have a real class"
+  // case in one place.
+  const [orphans, setOrphans] = useState<OrphanRow[]>([]);
+  const [orphanGroupTarget, setOrphanGroupTarget] = useState<Record<string, string>>({});
+  const [orphanLinkBusy, setOrphanLinkBusy] = useState<string | null>(null);
+  const [orphanOpenGroups, setOrphanOpenGroups] = useState<Set<string>>(new Set());
+  const ORPHAN_ROW_PREVIEW = 10;
+  const [orphanShowAll, setOrphanShowAll] = useState<Set<string>>(new Set());
+  const [orphanSearch, setOrphanSearch] = useState('');
+  const [orphanSelectedRowIds, setOrphanSelectedRowIds] = useState<Set<string>>(new Set());
+  const [orphanBulkTarget, setOrphanBulkTarget] = useState('');
+  const [orphanBulkBusy, setOrphanBulkBusy] = useState(false);
+  const toggleOrphanGroupOpen = (key: string) => {
+    setOrphanOpenGroups((p) => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  };
+  const toggleOrphanShowAll = (key: string) => {
+    setOrphanShowAll((p) => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  };
+  const toggleOrphanRow = (id: string) => {
+    setOrphanSelectedRowIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+  const setOrphanRowsSelected = (ids: string[], selected: boolean) => {
+    setOrphanSelectedRowIds((p) => {
+      const n = new Set(p);
+      for (const id of ids) { selected ? n.add(id) : n.delete(id); }
+      return n;
+    });
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -54,14 +94,19 @@ export default function ClassNameMappingManagement() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [mappingsData, unmappedData, classesData] = await Promise.all([
+      const [mappingsData, unmappedData, classesData, orphansData] = await Promise.all([
         classNameMappingsApi.getAll(),
         classNameMappingsApi.getUnmapped(),
         competitionClassesApi.getAll(),
+        // Admin endpoint — only super admin / admin can call this.
+        // Non-admins land with an empty list rather than blocking the
+        // whole page from loading the mappings section.
+        competitionResultsApi.getOrphanResults().catch(() => [] as OrphanRow[]),
       ]);
       setMappings(mappingsData);
       setUnmappedClasses(unmappedData);
       setCompetitionClasses(classesData);
+      setOrphans(orphansData);
     } catch (error) {
       console.error('Error fetching data:', error);
     }
@@ -196,6 +241,87 @@ export default function ClassNameMappingManagement() {
     setShowForm(false);
   };
 
+  // Group orphans by (format, competition_class text). Each group
+  // carries forward the linkedClass / mappingMatch / suggestedClass
+  // diagnostic info from whichever row had it first — they're keyed
+  // off the same (format, text) tuple so rows in the same group
+  // almost always agree on these.
+  const orphanGroups = useMemo(() => {
+    const m = new Map<string, {
+      key: string;
+      format: string;
+      competitionClass: string;
+      rows: OrphanRow[];
+      suggestedClass: OrphanRow['suggestedClass'];
+      linkedClass: OrphanRow['linkedClass'];
+      mappingMatch: OrphanRow['mappingMatch'];
+    }>();
+    for (const r of orphans) {
+      const key = `${(r.format || '∅').toLowerCase()}::${(r.competitionClass || '∅').toLowerCase()}`;
+      const e = m.get(key);
+      if (e) {
+        e.rows.push(r);
+        if (!e.linkedClass && r.linkedClass) e.linkedClass = r.linkedClass;
+        if (!e.mappingMatch && r.mappingMatch) e.mappingMatch = r.mappingMatch;
+      } else {
+        m.set(key, {
+          key,
+          format: r.format || '',
+          competitionClass: r.competitionClass || '',
+          rows: [r],
+          suggestedClass: r.suggestedClass,
+          linkedClass: r.linkedClass,
+          mappingMatch: r.mappingMatch,
+        });
+      }
+    }
+    return Array.from(m.values()).sort((a, b) => b.rows.length - a.rows.length);
+  }, [orphans]);
+
+  const handleLinkOrphanGroup = async (group: typeof orphanGroups[number]) => {
+    const classId = orphanGroupTarget[group.key];
+    if (!classId) {
+      alert('Pick a target class first.');
+      return;
+    }
+    const ok = window.confirm(
+      `Link ${group.rows.length} result${group.rows.length === 1 ? '' : 's'} for "${group.competitionClass}" to the selected class?`,
+    );
+    if (!ok) return;
+    setOrphanLinkBusy(group.key);
+    try {
+      const r = await competitionResultsApi.repointToClass(group.rows.map((x) => x.id), classId);
+      alert(`Linked ${r.updated} result(s).`);
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Link failed');
+    } finally {
+      setOrphanLinkBusy(null);
+    }
+  };
+
+  const handleLinkOrphanSelected = async () => {
+    if (!orphanBulkTarget) { alert('Pick a target class for the selected rows.'); return; }
+    const ids = Array.from(orphanSelectedRowIds);
+    if (ids.length === 0) return;
+    const cls = competitionClasses.find((c) => c.id === orphanBulkTarget);
+    const label = cls ? `${cls.name} (${cls.abbreviation}, ${cls.format})` : 'the selected class';
+    const ok = window.confirm(`Link ${ids.length} selected result${ids.length === 1 ? '' : 's'} to ${label}?`);
+    if (!ok) return;
+    setOrphanBulkBusy(true);
+    try {
+      const r = await competitionResultsApi.repointToClass(ids, orphanBulkTarget);
+      alert(`Linked ${r.updated} result(s).`);
+      setOrphanSelectedRowIds(new Set());
+      setOrphanBulkTarget('');
+      await fetchData();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Link failed');
+    } finally {
+      setOrphanBulkBusy(false);
+    }
+  };
+
   const getTargetClassName = (mapping: ClassNameMapping): string => {
     if (mapping.targetClass) {
       return `${mapping.targetClass.name} (${mapping.targetClass.format})`;
@@ -263,6 +389,16 @@ export default function ClassNameMappingManagement() {
           </p>
         </div>
         <div className="flex gap-3">
+          <a
+            href="/docs/Admin-Class-Mappings-Guide.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            title="Open the Class Mappings help guide in a new tab"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Help
+          </a>
           <button
             onClick={fetchData}
             className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
@@ -345,6 +481,278 @@ export default function ClassNameMappingManagement() {
                 </p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Orphan Results Alert — class_id points at deleted/inactive
+          class. Different from "Unmapped Classes Found" above: those
+          have NO class_id; these have one that no longer resolves.
+          Both cases are hidden from public results until fixed. */}
+      {orphanGroups.length > 0 && (
+        <div className="bg-red-600/10 border border-red-500/40 rounded-xl p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <AlertTriangle className="h-6 w-6 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-red-300 mb-1">
+                Results With Broken Class Link ({orphans.length} across {orphanGroups.length} group{orphanGroups.length === 1 ? '' : 's'})
+              </h3>
+              <p className="text-red-200/80 text-sm">
+                These results have a <code className="text-red-100 bg-red-900/40 px-1 rounded">class_id</code> that points to a class which has been deleted or set inactive AND no active class shares its name/format. They're hidden from public results, leaderboards, and standings until you link them to a live class.
+              </p>
+            </div>
+          </div>
+
+          {(() => {
+            const q = orphanSearch.trim().toLowerCase();
+            const filtered = q
+              ? orphanGroups.filter((g) => {
+                  const hay = [
+                    g.format,
+                    g.competitionClass,
+                    g.linkedClass?.name,
+                    g.linkedClass?.abbreviation,
+                    g.mappingMatch?.targetClass?.name,
+                    g.mappingMatch?.targetClass?.abbreviation,
+                    g.suggestedClass?.name,
+                    g.suggestedClass?.abbreviation,
+                  ].filter(Boolean).join(' ').toLowerCase();
+                  return hay.includes(q);
+                })
+              : orphanGroups;
+            return (
+              <>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <div className="relative flex-1 min-w-[14rem]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={orphanSearch}
+                      onChange={(e) => setOrphanSearch(e.target.value)}
+                      placeholder="Search by format, class, or mapping…"
+                      className="w-full pl-9 pr-8 py-2 bg-slate-800/80 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    {orphanSearch && (
+                      <button type="button" onClick={() => setOrphanSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-white">
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={() => setOrphanOpenGroups(new Set(filtered.map((x) => x.key)))} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-gray-200 text-xs font-medium rounded-lg">Expand all</button>
+                  <button onClick={() => setOrphanOpenGroups(new Set())} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-gray-200 text-xs font-medium rounded-lg">Collapse all</button>
+                </div>
+
+                {filtered.length === 0 && (
+                  <div className="py-6 text-center text-gray-400 text-sm">No groups match "{orphanSearch}".</div>
+                )}
+
+                <div className="space-y-3">
+                  {filtered.map((g) => {
+                    const isOpen = orphanOpenGroups.has(g.key);
+                    const groupIds = g.rows.map((r) => r.id);
+                    const allChecked = groupIds.every((id) => orphanSelectedRowIds.has(id));
+                    const someChecked = !allChecked && groupIds.some((id) => orphanSelectedRowIds.has(id));
+                    const showAll = orphanShowAll.has(g.key);
+                    const visibleRows = showAll ? g.rows : g.rows.slice(0, ORPHAN_ROW_PREVIEW);
+                    return (
+                      <div key={g.key} className="bg-slate-800/80 rounded-lg border border-slate-700 overflow-hidden">
+                        <div className={`p-3 ${isOpen ? 'border-b border-slate-700' : ''} flex flex-wrap items-center justify-between gap-3`}>
+                          <div className="min-w-0 flex-1">
+                            <button type="button" onClick={() => toggleOrphanGroupOpen(g.key)} className="flex items-center gap-2 text-left hover:opacity-80">
+                              {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />}
+                              <div className="text-white font-semibold">
+                                "{g.competitionClass || '(no class text)'}"
+                                {g.format && <span className="text-gray-400 font-normal text-sm"> · format: {g.format}</span>}
+                              </div>
+                            </button>
+                            <div className="text-xs text-gray-400 mt-0.5 ml-6">
+                              {g.rows.length} result{g.rows.length === 1 ? '' : 's'} affected
+                            </div>
+                            <div className="mt-1.5 space-y-1 text-xs ml-6">
+                              {g.linkedClass ? (
+                                <div className="flex items-start gap-2">
+                                  <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 font-medium whitespace-nowrap">class_id →</span>
+                                  <span className="text-gray-300">
+                                    <span className="text-red-300 font-medium">{g.linkedClass.name}</span>
+                                    <span className="text-gray-500"> ({g.linkedClass.abbreviation}, {g.linkedClass.format})</span>
+                                    {!g.linkedClass.isActive && <span className="text-red-400"> · INACTIVE / DELETED</span>}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-start gap-2">
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium whitespace-nowrap">class_id →</span>
+                                  <span className="text-gray-400 italic">none (NULL)</span>
+                                </div>
+                              )}
+                              {g.mappingMatch && (
+                                <div className="flex items-start gap-2">
+                                  <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 font-medium whitespace-nowrap">CSV mapping</span>
+                                  <span className="text-gray-300">
+                                    "<span className="text-blue-200">{g.mappingMatch.sourceName}</span>" →{' '}
+                                    {g.mappingMatch.targetClass ? (
+                                      <>
+                                        <span className="text-blue-200 font-medium">{g.mappingMatch.targetClass.name}</span>
+                                        <span className="text-gray-500"> ({g.mappingMatch.targetClass.abbreviation}, {g.mappingMatch.targetClass.format})</span>
+                                        {!g.mappingMatch.targetClass.isActive && <span className="text-red-400"> · INACTIVE</span>}
+                                      </>
+                                    ) : (
+                                      <span className="text-gray-500 italic">no target class</span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              {g.suggestedClass && (
+                                <div className="flex items-start gap-2">
+                                  <span className="px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 font-medium whitespace-nowrap">name match</span>
+                                  <span className="text-gray-300">
+                                    <span className="text-orange-200 font-medium">{g.suggestedClass.name}</span>
+                                    <span className="text-gray-500"> ({g.suggestedClass.abbreviation}, {g.suggestedClass.format})</span>
+                                    {!g.suggestedClass.isActive && <span className="text-red-400"> · INACTIVE</span>}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <ClassPicker
+                              classes={competitionClasses}
+                              value={orphanGroupTarget[g.key] || g.suggestedClass?.id || ''}
+                              onChange={(id) => setOrphanGroupTarget((p) => ({ ...p, [g.key]: id }))}
+                              placeholder="Link to class…"
+                              className="w-64"
+                            />
+                            <button
+                              onClick={() => handleLinkOrphanGroup(g)}
+                              disabled={orphanLinkBusy === g.key || !(orphanGroupTarget[g.key] || g.suggestedClass?.id)}
+                              className="flex items-center gap-1.5 px-3 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg"
+                            >
+                              <Link2 className="h-4 w-4" />
+                              {orphanLinkBusy === g.key ? 'Linking…' : `Link ${g.rows.length}`}
+                            </button>
+                          </div>
+                        </div>
+
+                        {isOpen && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-slate-700/40">
+                                <tr>
+                                  <th className="px-3 py-2 text-left w-10">
+                                    <button
+                                      type="button"
+                                      role="checkbox"
+                                      aria-checked={allChecked ? 'true' : someChecked ? 'mixed' : 'false'}
+                                      onClick={() => setOrphanRowsSelected(groupIds, !allChecked)}
+                                      className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                                        allChecked
+                                          ? 'bg-orange-500 border-orange-500'
+                                          : someChecked
+                                            ? 'bg-orange-500/50 border-orange-500'
+                                            : 'border-slate-400 bg-slate-700'
+                                      }`}
+                                    >
+                                      {allChecked && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
+                                      {!allChecked && someChecked && <span className="h-0.5 w-3 bg-white" />}
+                                    </button>
+                                  </th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-300">Event</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-300">Competitor</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-300">MECA ID</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-300">Score</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-300">Place</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-700/50">
+                                {visibleRows.map((r) => {
+                                  const selected = orphanSelectedRowIds.has(r.id);
+                                  return (
+                                    <tr
+                                      key={r.id}
+                                      onClick={(e) => {
+                                        const t = e.target as HTMLElement;
+                                        if (t.closest('a, button')) return;
+                                        toggleOrphanRow(r.id);
+                                      }}
+                                      className={`${selected ? 'bg-orange-500/10' : 'hover:bg-slate-700/20'} cursor-pointer`}
+                                    >
+                                      <td className="px-3 py-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); toggleOrphanRow(r.id); }}
+                                          className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                                            selected ? 'bg-orange-500 border-orange-500' : 'border-slate-400 bg-slate-700'
+                                          }`}
+                                        >
+                                          {selected && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
+                                        </button>
+                                      </td>
+                                      <td className="px-3 py-1.5 text-gray-200">
+                                        {r.eventTitle ? (
+                                          <a href={`/results?eventId=${r.eventId}`} target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 inline-flex items-center gap-1">
+                                            {r.eventTitle}
+                                            <ExternalLink className="h-3 w-3" />
+                                          </a>
+                                        ) : '—'}
+                                      </td>
+                                      <td className="px-3 py-1.5 text-gray-200">{r.competitorName || '—'}</td>
+                                      <td className="px-3 py-1.5 text-gray-300">{r.mecaId || '—'}</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-200">{r.score ?? '—'}</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-200">{r.placement ?? '—'}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                            {g.rows.length > ORPHAN_ROW_PREVIEW && (
+                              <div className="px-3 py-1.5 border-t border-slate-700/50 bg-slate-800/40 text-center">
+                                <button onClick={() => toggleOrphanShowAll(g.key)} className="text-xs text-orange-300 hover:text-orange-200 font-medium">
+                                  {showAll
+                                    ? `Collapse — hide ${g.rows.length - ORPHAN_ROW_PREVIEW} row${g.rows.length - ORPHAN_ROW_PREVIEW === 1 ? '' : 's'}`
+                                    : `Show all ${g.rows.length} rows (${g.rows.length - ORPHAN_ROW_PREVIEW} hidden)`}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Sticky bulk-link toolbar for orphan rows. Appears whenever
+          at least one row across any orphan group is checked. */}
+      {orphanSelectedRowIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-800 border-t border-slate-600 shadow-2xl">
+          <div className="mx-auto max-w-screen-2xl px-4 py-3 sm:px-6 lg:px-8 flex flex-wrap items-center gap-3">
+            <div className="text-white font-semibold">{orphanSelectedRowIds.size} selected</div>
+            <ClassPicker
+              classes={competitionClasses}
+              value={orphanBulkTarget}
+              onChange={setOrphanBulkTarget}
+              placeholder="Link selected rows to class…"
+              className="flex-1 min-w-[14rem] max-w-md"
+            />
+            <button
+              onClick={handleLinkOrphanSelected}
+              disabled={orphanBulkBusy || !orphanBulkTarget}
+              className="flex items-center gap-1.5 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg"
+            >
+              <Link2 className="h-4 w-4" />
+              {orphanBulkBusy ? 'Linking…' : `Link ${orphanSelectedRowIds.size}`}
+            </button>
+            <button
+              onClick={() => setOrphanSelectedRowIds(new Set())}
+              disabled={orphanBulkBusy}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-gray-300 text-sm font-medium rounded-lg"
+            >
+              <X className="h-4 w-4" />
+              Clear
+            </button>
           </div>
         </div>
       )}

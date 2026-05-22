@@ -57,6 +57,16 @@ export interface Ticket {
     name: string;
   } | null;
   comments_count?: number;
+  // Decorated by the backend on list responses (not present on raw
+  // single-ticket fetches). Surfaces the latest non-internal comment
+  // author so the admin ticket list can show a "Last Reply" column
+  // and the matching filter.
+  last_reply?: {
+    author_id: string | null;
+    author_name: string;
+    author_kind: 'staff' | 'customer' | 'system' | 'guest';
+    created_at: string;
+  } | null;
 }
 
 export interface TicketComment {
@@ -125,6 +135,9 @@ export interface TicketListQuery {
   assigned_to_id?: string | string[];
   event_id?: string;
   search?: string;
+  // 'staff' / 'customer' / 'none' — who posted the latest non-internal
+  // comment on each ticket.
+  last_reply_by?: 'staff' | 'customer' | 'none';
   sort_by?: 'created_at' | 'updated_at' | 'priority' | 'status';
   sort_order?: 'asc' | 'desc';
 }
@@ -254,6 +267,7 @@ export const ticketsApi = {
     appendMulti('assigned_to_id', query.assigned_to_id);
     if (query.event_id) params.append('event_id', query.event_id);
     if (query.search) params.append('search', query.search);
+    if (query.last_reply_by) params.append('last_reply_by', query.last_reply_by);
     if (query.sort_by) params.append('sort_by', query.sort_by);
     if (query.sort_order) params.append('sort_order', query.sort_order);
 

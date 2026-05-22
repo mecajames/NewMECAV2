@@ -296,7 +296,7 @@ export default function AdminDashboard() {
         {
           icon: Link2,
           title: 'Class Mappings',
-          description: 'Map imported class names to official classes',
+          description: 'Map imported class names to official classes, plus re-link results whose class was deleted',
           action: 'class-mappings',
           color: 'amber',
         },

@@ -307,6 +307,11 @@ export class CompetitionClassesService {
     formatsUpdated: number;
     created: number;
     updated: number;
+    // Existing rows in the import whose values already matched —
+    // tracked separately from `updated` so the result message can
+    // say "86 classes already up to date" instead of misleadingly
+    // claiming 86 updates when nothing actually changed.
+    unchanged: number;
     deactivated: number;
     skipped: number;
   }> {
@@ -339,17 +344,39 @@ export class CompetitionClassesService {
       });
       const existingByName = new Map(existingFormats.map(f => [f.name, f]));
 
+      const formatNorm = (v: unknown): string | null => {
+        if (v === null || v === undefined) return null;
+        const s = String(v).trim();
+        return s === '' ? null : s;
+      };
       for (const incoming of incomingFormats) {
         if (!incoming.name) continue;
         const found = existingByName.get(incoming.name);
         if (found) {
-          // Explicit assignment — CompetitionFormat has serializedName.
-          if (incoming.abbreviation !== undefined) found.abbreviation = incoming.abbreviation;
-          if (incoming.description !== undefined) found.description = incoming.description;
-          if (incoming.isActive !== undefined) found.isActive = incoming.isActive;
-          if (incoming.displayOrder !== undefined) found.displayOrder = incoming.displayOrder;
-          found.updatedAt = new Date();
-          formatsUpdated++;
+          // Only stamp the row as updated when a value actually changed,
+          // matching the per-class logic below. Avoids "5 formats
+          // updated" when the import was identical to existing data.
+          let dirty = false;
+          if (incoming.abbreviation !== undefined && formatNorm(found.abbreviation) !== formatNorm(incoming.abbreviation)) {
+            found.abbreviation = incoming.abbreviation;
+            dirty = true;
+          }
+          if (incoming.description !== undefined && formatNorm(found.description) !== formatNorm(incoming.description)) {
+            found.description = incoming.description;
+            dirty = true;
+          }
+          if (incoming.isActive !== undefined && (found.isActive ?? true) !== incoming.isActive) {
+            found.isActive = incoming.isActive;
+            dirty = true;
+          }
+          if (incoming.displayOrder !== undefined && (found.displayOrder ?? 0) !== incoming.displayOrder) {
+            found.displayOrder = incoming.displayOrder;
+            dirty = true;
+          }
+          if (dirty) {
+            found.updatedAt = new Date();
+            formatsUpdated++;
+          }
         } else {
           em.create(CompetitionFormat, {
             name: incoming.name,
@@ -370,8 +397,17 @@ export class CompetitionClassesService {
 
     let created = 0;
     let updated = 0;
+    let unchanged = 0;
     let skipped = 0;
     const importedKeys = new Set<string>();
+
+    // Normalize so a CSV's empty-string "section" compares equal to a
+    // DB null, and trimmed whitespace doesn't trigger a phantom update.
+    const norm = (v: unknown): string | null => {
+      if (v === null || v === undefined) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
 
     for (const incoming of data.classes) {
       if (!incoming.format || !incoming.abbreviation || !incoming.name) {
@@ -382,14 +418,38 @@ export class CompetitionClassesService {
       importedKeys.add(key);
       const found = existingByKey.get(key);
       if (found) {
-        // Explicit assignment — CompetitionClass has serializedName.
-        found.name = incoming.name;
-        if (incoming.section !== undefined) found.section = incoming.section ?? undefined;
-        if (incoming.displayOrder !== undefined) found.displayOrder = incoming.displayOrder;
-        if (incoming.isActive !== undefined) found.isActive = incoming.isActive;
-        if (incoming.unlimitedWattage !== undefined) found.unlimitedWattage = incoming.unlimitedWattage;
-        found.updatedAt = new Date();
-        updated++;
+        // Detect actual differences field-by-field. Only when at least
+        // one value changed do we bump `updated` (and stamp
+        // updatedAt). Rows already in sync go to `unchanged` so the
+        // import message reflects reality instead of always reporting
+        // a full row count as "updated".
+        let dirty = false;
+        if (norm(found.name) !== norm(incoming.name)) {
+          found.name = incoming.name;
+          dirty = true;
+        }
+        if (incoming.section !== undefined && norm(found.section) !== norm(incoming.section)) {
+          found.section = (incoming.section ?? undefined) as any;
+          dirty = true;
+        }
+        if (incoming.displayOrder !== undefined && (found.displayOrder ?? 0) !== incoming.displayOrder) {
+          found.displayOrder = incoming.displayOrder;
+          dirty = true;
+        }
+        if (incoming.isActive !== undefined && (found.isActive ?? true) !== incoming.isActive) {
+          found.isActive = incoming.isActive;
+          dirty = true;
+        }
+        if (incoming.unlimitedWattage !== undefined && (found.unlimitedWattage ?? false) !== incoming.unlimitedWattage) {
+          found.unlimitedWattage = incoming.unlimitedWattage;
+          dirty = true;
+        }
+        if (dirty) {
+          found.updatedAt = new Date();
+          updated++;
+        } else {
+          unchanged++;
+        }
       } else {
         em.create(CompetitionClass, {
           name: incoming.name,
@@ -429,6 +489,7 @@ export class CompetitionClassesService {
       formatsUpdated,
       created,
       updated,
+      unchanged,
       deactivated,
       skipped,
     };

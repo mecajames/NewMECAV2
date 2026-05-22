@@ -496,73 +496,274 @@
     </nav>
 
     <h1>Class Mappings</h1>
-    <p class="subtitle">Map historical class names to current classes for results normalization</p>
+    <p class="subtitle">Normalize imported class names AND re-link results whose class disappeared</p>
 
-    <p><span class="nav-path">/admin/class-mappings</span></p>
+    <p><span class="nav-path">Admin Dashboard → Competition Setup → Class Mappings</span></p>
 
     <div class="info-box">
         <h4>Audience: site administrators</h4>
-        <p>When you import results from older systems or external scoring tools, the class names may not match the current canonical classes. Class Mappings let you normalize them so historical data joins cleanly with current standings.</p>
+        <p>The Class Mappings page is the single place to fix every "this result doesn't have a real class" case in the system. It covers two distinct problems that look similar from a user's perspective (results don't show up on the public site) but have different root causes and different fixes:</p>
+        <ul>
+            <li><strong>Unmapped Classes Found</strong> — a CSV import contained a class name the system has no <code>class_name_mapping</code> rule for. The result was saved with <code>class_id = NULL</code>.</li>
+            <li><strong>Results With Broken Class Link</strong> — a result has a <code>class_id</code>, but the class it points to has since been deleted or set inactive (and no other active class shares its name/format).</li>
+        </ul>
+        <p>Both cases hide results from the public Results page, leaderboards, and standings until you resolve them. The page surfaces both at the top so nothing slips through unnoticed.</p>
     </div>
 
     <div class="toc">
         <h3>Contents</h3>
         <ul>
-        <li><a href="#add-a-mapping">1. Add a mapping</a></li>
-        <li><a href="#edit-or-remove-a-mapping">2. Edit or remove a mapping</a></li>
+            <li><a href="#concepts">1. Concepts: the three ways a result identifies its class</a></li>
+            <li><a href="#unmapped">2. Unmapped Classes Found (class_id is NULL)</a></li>
+            <li><a href="#orphan">3. Results With Broken Class Link (class_id points at a dead class)</a></li>
+            <li><a href="#diagnostic-chips">4. Reading the diagnostic chips</a></li>
+            <li><a href="#bulk-select">5. Bulk-selecting rows across groups</a></li>
+            <li><a href="#mappings-list">6. Managing the mappings list</a></li>
+            <li><a href="#troubleshooting">7. Troubleshooting</a></li>
         </ul>
     </div>
 
 
-<h2 id="add-a-mapping">1. Add a mapping</h2>
+    <h2 id="concepts">1. Concepts: the three ways a result identifies its class</h2>
+    <p>Every row in the <code>competition_results</code> table carries three pieces of class information. The public Results page tries each in turn:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>What it is</th>
+                <th>How it gets set</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>class_id</code></td>
+                <td>Foreign key to the <code>competition_classes</code> table. Authoritative.</td>
+                <td>Manual entry: picked from a dropdown. CSV import: resolved via a <code>class_name_mappings</code> rule or by exact name match.</td>
+            </tr>
+            <tr>
+                <td><code>competition_class</code></td>
+                <td>Free-text class name on the result row itself. Fallback if <code>class_id</code> doesn't resolve.</td>
+                <td>Copied from CSV import. Auto-synced from <code>class_id</code> when the result is created or edited.</td>
+            </tr>
+            <tr>
+                <td><code>format</code></td>
+                <td>Free-text format (SPL, SQL, Show &amp; Shine, etc). Used alongside <code>competition_class</code> for text fallback.</td>
+                <td>Copied from CSV import. Auto-synced from <code>class_id</code> when the result is created or edited.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>The public lookup logic:</p>
+    <ol>
+        <li>If <code>class_id</code> resolves to an active class — use it.</li>
+        <li>Otherwise, try a case-insensitive match of <code>competition_class</code> against the name/abbreviation of any active class with the same <code>format</code> — use it if found.</li>
+        <li>Otherwise, the row is hidden from public display and shows up on this page as either Unmapped or Orphan.</li>
+    </ol>
+
+    <div class="info-box warning">
+        <h4>Why two separate sections?</h4>
+        <p>A row with <code>class_id = NULL</code> is fundamentally different from a row with <code>class_id = 'abc-123'</code> that points to a deleted class. The first one needs a <em>mapping rule</em> so future imports don't have the same problem. The second one needs to be <em>repointed</em> to the new class. The page treats them differently because the fix is different.</p>
+    </div>
+
+
+    <h2 id="unmapped">2. Unmapped Classes Found (class_id is NULL)</h2>
+    <p>The yellow alert at the top lists every class name that appeared in an import but has no <code>class_name_mappings</code> rule pointing it at a canonical class. The rows behind those names were saved with <code>class_id = NULL</code> and are hidden from public results.</p>
+
     <div class="workflow-container">
         <div class="step">
             <div class="step-number">1</div>
             <div class="step-content">
-                <div class="step-title">Open the Class Mappings page.</div>
+                <div class="step-title">Click the eye icon on an unmapped class card.</div>
+                <div class="step-details">A modal opens showing every result row that came in with that exact class name. Verify the rows look like what you expect — same scoring style, similar competitor list, the format matches.</div>
             </div>
         </div>
         <div class="step">
             <div class="step-number">2</div>
             <div class="step-content">
-                <div class="step-title">Enter the source class name as it appears in the import file.</div>
+                <div class="step-title">In the modal, pick a target class from the dropdown.</div>
+                <div class="step-details">You can check individual rows to remap only a subset, or leave none checked to remap all of them.</div>
             </div>
         </div>
         <div class="step">
             <div class="step-number">3</div>
             <div class="step-content">
-                <div class="step-title">Pick the canonical class it should map to.</div>
+                <div class="step-title">Click <strong>Remap Results</strong>.</div>
+                <div class="step-details">This updates each row's <code>class_id</code> and rewrites the <code>competition_class</code> text to the target class's name. The rows immediately appear on public results.</div>
             </div>
         </div>
         <div class="step">
             <div class="step-number">4</div>
             <div class="step-content">
-                <div class="step-title">Save</div>
-                <div class="step-details">subsequent imports route results from that source name into the canonical class.</div>
+                <div class="step-title">Optional: also create a permanent mapping rule.</div>
+                <div class="step-details">Click the + (plus) icon on the unmapped card instead of the eye. This opens the Add Mapping form pre-filled with the source name. Saving the mapping means <em>future</em> imports of the same source name will be auto-routed — you won't see this card again next time.</div>
             </div>
         </div>
     </div>
-<h2 id="edit-or-remove-a-mapping">2. Edit or remove a mapping</h2>
+
+    <div class="info-box success">
+        <h4>Best practice: do both</h4>
+        <p>For most unmapped classes you'll want to both <em>remap the existing rows</em> (eye → pick class → Remap) and <em>create a mapping rule</em> (+ → fill form → Save). The first fixes history; the second prevents the same problem on the next import.</p>
+    </div>
+
+
+    <h2 id="orphan">3. Results With Broken Class Link (class_id points at a dead class)</h2>
+    <p>The red alert directly below the yellow one lists groups of results whose <code>class_id</code> points to a class that's been deleted or set inactive, AND no active class with the same name/format exists for text fallback to catch.</p>
+
+    <p>Common causes:</p>
+    <ul>
+        <li>An admin deleted a class that still had results attached to it.</li>
+        <li>A class was renamed (so the old name no longer matches anything active).</li>
+        <li>A season-rollover script created new class IDs for the new season but old rows still point to the previous season's class IDs.</li>
+    </ul>
+
     <div class="workflow-container">
         <div class="step">
             <div class="step-number">1</div>
             <div class="step-content">
-                <div class="step-title">Open any mapping row.</div>
+                <div class="step-title">Read the diagnostic chips under each group.</div>
+                <div class="step-details">They tell you exactly why this group is orphaned and what the recommended fix is. See <a href="#diagnostic-chips">section 4</a>.</div>
             </div>
         </div>
         <div class="step">
             <div class="step-number">2</div>
             <div class="step-content">
-                <div class="step-title">Edit the canonical class target if a different mapping is more accurate.</div>
+                <div class="step-title">Pick a target class in the searchable dropdown on the right of the group header.</div>
+                <div class="step-details">Type any substring of the format, class name, or abbreviation. Multi-token search works — typing <code>spl ext</code> matches "SPL Extreme" even when those words aren't adjacent.</div>
             </div>
         </div>
         <div class="step">
             <div class="step-number">3</div>
             <div class="step-content">
-                <div class="step-title">Remove the mapping if you no longer need it (already-imported results stay assigned).</div>
+                <div class="step-title">Click the orange <strong>Link N</strong> button.</div>
+                <div class="step-details">Confirm the prompt and every row in the group is repointed to the chosen class. The <code>competition_class</code> text and <code>format</code> are auto-synced from the new class.</div>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <div class="step-title">Or: expand the group with the chevron and pick specific rows.</div>
+                <div class="step-details">Useful when one group accidentally contains results that should be split across two different classes. Use the per-row checkboxes plus the sticky bottom toolbar to bulk-link selected rows — see <a href="#bulk-select">section 5</a>.</div>
             </div>
         </div>
     </div>
+
+
+    <h2 id="diagnostic-chips">4. Reading the diagnostic chips</h2>
+    <p>Each orphan group shows up to three coloured chips that explain why it's broken and what the system thinks the fix is.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Chip</th>
+                <th>Meaning</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="status-badge badge-red">class_id → X (INACTIVE / DELETED)</span></td>
+                <td>The <code>class_id</code> on these rows points to a class that exists in the DB but is no longer usable. Often the original class was renamed or replaced; the row text (e.g. "DDM") might no longer match the linked class name (e.g. "Park and Pound") because they were synced at different times.</td>
+                <td>Pick the current correct class in the dropdown and click Link.</td>
+            </tr>
+            <tr>
+                <td><span class="status-badge badge-yellow">class_id → none (NULL)</span></td>
+                <td>Edge case where the row also has no <code>class_id</code> and isn't covered by the Unmapped section (usually because the <code>competition_class</code> text is empty too).</td>
+                <td>Pick a target class. If the rows are genuinely unidentifiable, you may want to delete them through Results entry.</td>
+            </tr>
+            <tr>
+                <td><span class="status-badge badge-blue">CSV mapping "X" → Y</span></td>
+                <td>There IS an active mapping rule for this exact source text in the <code>class_name_mappings</code> table. It points at the class named "Y". This is your most likely candidate — the rule wasn't applied during import (or was added after these rows were imported).</td>
+                <td>Pick that target class in the dropdown — it's pre-suggested when you open the picker.</td>
+            </tr>
+            <tr>
+                <td><span class="status-badge badge-purple">name match: X</span></td>
+                <td>An active class with the same name or abbreviation exists somewhere in the system, but didn't catch the text fallback because the format on the row doesn't match the class's format. Could be a typo on the format field, or a class that should accept this format.</td>
+                <td>Use only if you're confident the suggested class is correct. Check the format mismatch first.</td>
+            </tr>
+        </tbody>
+    </table>
+
+
+    <h2 id="bulk-select">5. Bulk-selecting rows across groups</h2>
+    <p>When you need to move rows from <em>several</em> groups into the same target class (e.g. all "X" rows whether they're tagged SPL or SQL), use the per-row checkboxes instead of the per-group Link button:</p>
+
+    <ol>
+        <li>Expand any group with the chevron at the left of its header.</li>
+        <li>Check individual rows or use the group's "select all" checkbox at the top of the row table.</li>
+        <li>Repeat for other groups — selections persist when you collapse and expand groups.</li>
+        <li>A sticky toolbar appears at the bottom of the screen showing the running count.</li>
+        <li>Pick a target class in the toolbar's searchable dropdown and click <strong>Link N</strong>.</li>
+    </ol>
+
+    <p>The toolbar's <strong>Clear</strong> button drops the selection without linking anything.</p>
+
+
+    <h2 id="mappings-list">6. Managing the mappings list</h2>
+    <p>The bottom section of the page lists every saved mapping rule. These are the rules that get consulted on every CSV import.</p>
+
+    <div class="workflow-container">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <div class="step-title">Add a mapping</div>
+                <div class="step-details">Click <strong>+ Add Mapping</strong> in the page header. Enter the source name exactly as it appears in import files, pick the target canonical class, and Save. The next import that contains that source name will route automatically.</div>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <div class="step-title">Edit a mapping</div>
+                <div class="step-details">Click the yellow pencil icon on the row. Adjust source name or target class as needed. Editing a mapping affects future imports only — already-imported rows keep their existing <code>class_id</code>.</div>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <div class="step-title">Deactivate (don't always delete)</div>
+                <div class="step-details">Set a mapping to Inactive instead of deleting it when you want to stop matching it without losing the history. Inactive mappings don't apply to imports but remain visible in the list.</div>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <div class="step-title">Search and filter</div>
+                <div class="step-details">Use the search box for source name or target class text. The status filter narrows to All / Active / Inactive.</div>
+            </div>
+        </div>
+    </div>
+
+
+    <h2 id="troubleshooting">7. Troubleshooting</h2>
+
+    <div class="info-box danger">
+        <h4>"I linked the rows but they still don't show on public results."</h4>
+        <p>The public Results page caches results data for a few minutes. Click Refresh on the public page, or wait 5 minutes for the cache to expire. If still missing, double-check that the target class is marked <strong>Active</strong> on the Classes Management page.</p>
+    </div>
+
+    <div class="info-box warning">
+        <h4>"The group header says class_id points to 'Park and Pound' but the row text says 'DDM'."</h4>
+        <p>That's exactly the symptom this page is designed for. The row was imported with a CSV mapping that pointed "DDM" → "Park and Pound", so the <code>class_id</code> was set correctly at import time. Then the target class was deleted or made inactive. The row text wasn't updated when the class was deleted, so you see the old DDM text plus a stale <code>class_id</code>.</p>
+    </div>
+
+    <div class="info-box">
+        <h4>"I see the same source name in BOTH Unmapped Classes and Results With Broken Class Link."</h4>
+        <p>This means some rows for that name have <code>class_id = NULL</code> (Unmapped) and others have a dangling <code>class_id</code> (Orphan). Handle them as two separate fixes: remap the NULL ones via the Unmapped modal, and link the orphan ones via the orphan group's Link button. Both should resolve to the same target class.</p>
+    </div>
+
+    <div class="info-box success">
+        <h4>"My class is missing from the dropdown."</h4>
+        <p>The dropdown only shows classes that exist in the system. If you need a class that isn't there yet, open <a href="Admin-Classes-Management-Guide.html">Classes Management</a> first to create it, then come back and refresh this page.</p>
+    </div>
+
+    <hr>
+
+    <p><strong>Related guides:</strong></p>
+    <ul>
+        <li><a href="Admin-Classes-Management-Guide.html">Classes Management</a> — create, edit, and activate competition classes.</li>
+        <li><a href="Admin-Format-Management-Guide.html">Format Management</a> — manage the format list that classes belong to.</li>
+        <li><a href="Admin-Results-Entry-Guide.html">Results Entry</a> — manual result entry and CSV imports.</li>
+    </ul>
 
     <footer>
         <p>MECA Admin Documentation · For platform administrators only — members do not have access to these guides.</p>
