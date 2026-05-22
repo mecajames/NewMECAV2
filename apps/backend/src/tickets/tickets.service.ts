@@ -69,6 +69,7 @@ export class TicketsService {
       assigned_to_id,
       event_id,
       search,
+      last_reply_by,
       sort_by = 'created_at',
       sort_order = 'desc',
     } = query as TicketListQuery & { department_id?: string };
@@ -156,6 +157,22 @@ export class TicketsService {
       });
     }
 
+    // Last-reply-by filter. Resolved at the SQL level into a set of
+    // matching ticket IDs which is then folded into the where as an
+    // $in clause. Doing it as a pre-query keeps MikroORM's where
+    // composable with the other filters and avoids correlated-
+    // subquery gymnastics inside MikroORM's query builder.
+    if (last_reply_by) {
+      const eligibleIds = await this.computeTicketIdsByLastReplyKind(em, last_reply_by);
+      if (eligibleIds.length === 0) {
+        // No matches — short-circuit to an empty page rather than
+        // running the main query with an empty $in (which would still
+        // produce no results but burn the round-trip).
+        return { data: [], total: 0 };
+      }
+      andClauses.push({ id: { $in: eligibleIds } });
+    }
+
     // Compose the final where. Empty → match everything. Single clause →
     // unwrap so we don't emit a redundant 1-element $and. Multiple → $and.
     const where: any =
@@ -179,7 +196,124 @@ export class TicketsService {
       em.count(Ticket, where),
     ]);
 
-    return { data, total };
+    // Stitch on per-ticket last-reply summary. We can't put this on
+    // the Ticket entity directly (would force a relation populate on
+    // every query that returns a Ticket); instead we compute it here
+    // for just the paginated slice and merge into each row's JSON.
+    const lastReplyMap = await this.fetchLastRepliesForTickets(em, data.map((t) => t.id));
+    const dataWithLastReply = data.map((t) => {
+      const json = t.toJSON();
+      (json as any).last_reply = lastReplyMap.get(t.id) || null;
+      return json;
+    });
+
+    return { data: dataWithLastReply as any, total };
+  }
+
+  /**
+   * Returns ticket IDs whose latest non-internal comment author matches
+   * the requested kind. `staff` = admin/super_admin profile or
+   * is_staff=true; `customer` = anyone else who posted (including
+   * guests); `none` = tickets with zero non-internal comments. Run as
+   * a single SQL statement so we can apply it as a pre-filter before
+   * MikroORM builds the main query.
+   */
+  private async computeTicketIdsByLastReplyKind(
+    em: EntityManager,
+    kind: 'staff' | 'customer' | 'none',
+  ): Promise<string[]> {
+    const conn = em.getConnection();
+    if (kind === 'none') {
+      const rows = await conn.execute<any[]>(
+        `SELECT t.id FROM public.tickets t
+         WHERE NOT EXISTS (
+           SELECT 1 FROM public.ticket_comments c
+           WHERE c.ticket_id = t.id AND COALESCE(c.is_internal, false) = false
+         )`,
+      );
+      return rows.map((r: any) => r.id);
+    }
+    const staffPredicate =
+      `(COALESCE(p.is_staff, false) = true OR p.role IN ('admin', 'super_admin')) AND COALESCE(l.is_guest_comment, false) = false AND l.author_id IS NOT NULL`;
+    const customerPredicate = `NOT (${staffPredicate})`;
+    const predicate = kind === 'staff' ? staffPredicate : customerPredicate;
+    const rows = await conn.execute<any[]>(
+      `WITH latest AS (
+         SELECT DISTINCT ON (ticket_id) ticket_id, author_id, is_guest_comment
+         FROM public.ticket_comments
+         WHERE COALESCE(is_internal, false) = false
+         ORDER BY ticket_id, created_at DESC
+       )
+       SELECT l.ticket_id AS id
+       FROM latest l
+       LEFT JOIN public.profiles p ON p.id = l.author_id
+       WHERE ${predicate}`,
+    );
+    return rows.map((r: any) => r.id);
+  }
+
+  /**
+   * Batch fetch the latest non-internal comment for each ticket in
+   * `ticketIds` and return a Map keyed by ticket id. Used to decorate
+   * findAll() responses without forcing each Ticket row to populate
+   * its full comments collection.
+   */
+  private async fetchLastRepliesForTickets(
+    em: EntityManager,
+    ticketIds: string[],
+  ): Promise<Map<string, {
+    author_id: string | null;
+    author_name: string;
+    author_kind: 'staff' | 'customer' | 'system' | 'guest';
+    created_at: string;
+  }>> {
+    const map = new Map<string, any>();
+    if (ticketIds.length === 0) return map;
+    const conn = em.getConnection();
+    const rows = await conn.execute<any[]>(
+      `WITH latest AS (
+         SELECT DISTINCT ON (ticket_id)
+           ticket_id, author_id, is_guest_comment, guest_author_name, created_at
+         FROM public.ticket_comments
+         WHERE COALESCE(is_internal, false) = false
+         ORDER BY ticket_id, created_at DESC
+       )
+       SELECT
+         l.ticket_id,
+         l.author_id,
+         l.is_guest_comment,
+         l.guest_author_name,
+         l.created_at,
+         p.first_name,
+         p.last_name,
+         p.email,
+         p.role,
+         COALESCE(p.is_staff, false) AS is_staff
+       FROM latest l
+       LEFT JOIN public.profiles p ON p.id = l.author_id
+       WHERE l.ticket_id = ANY(?)`,
+      [ticketIds],
+    );
+    for (const r of rows) {
+      const isStaffRole = r.is_staff === true || r.role === 'admin' || r.role === 'super_admin';
+      let kind: 'staff' | 'customer' | 'system' | 'guest';
+      if (r.is_guest_comment) kind = 'guest';
+      else if (!r.author_id) kind = 'system';
+      else if (isStaffRole) kind = 'staff';
+      else kind = 'customer';
+
+      const name = r.is_guest_comment
+        ? r.guest_author_name || 'Guest'
+        : (`${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email || 'Unknown');
+
+      map.set(r.ticket_id, {
+        author_id: r.author_id || null,
+        author_name: name,
+        author_kind: kind,
+        created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+      });
+    }
+    return map;
   }
 
   async findById(id: string): Promise<Ticket> {

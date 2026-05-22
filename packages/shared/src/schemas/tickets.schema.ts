@@ -214,6 +214,12 @@ export const TicketListQuerySchema = z.object({
   assigned_to_id: z.string().uuid().optional(),
   event_id: z.string().uuid().optional(),
   search: z.string().optional(),
+  // Filter by who posted the latest comment: 'staff' (admin/staff),
+  // 'customer' (reporter/non-staff/guest), or 'none' (no comments
+  // yet). Lets support admins zero in on "tickets waiting for a
+  // customer reply" vs "tickets waiting for staff" without eyeballing
+  // each row.
+  last_reply_by: z.enum(['staff', 'customer', 'none']).optional(),
   sort_by: z.enum(['created_at', 'updated_at', 'priority', 'status']).default('created_at'),
   sort_order: z.enum(['asc', 'desc']).default('desc'),
 });

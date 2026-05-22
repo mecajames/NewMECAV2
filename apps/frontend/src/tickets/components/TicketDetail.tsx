@@ -1319,9 +1319,30 @@ export function TicketDetail({
                 </div>
               )}
               {ticket.event && (
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Event</span>
-                  <span className="text-orange-400">{ticket.event.name}</span>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-gray-400 flex-shrink-0">Event</span>
+                  <div className="flex flex-col items-end gap-1 min-w-0">
+                    <a
+                      href={`/events/${ticket.event.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-orange-400 hover:text-orange-300 underline-offset-2 hover:underline inline-flex items-center gap-1 text-right truncate max-w-full"
+                      title="Open event details in a new tab"
+                    >
+                      {ticket.event.name}
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                    </a>
+                    <a
+                      href={`/results?eventId=${ticket.event.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-400 hover:text-blue-300 underline-offset-2 hover:underline inline-flex items-center gap-1"
+                      title="Open results for this event in a new tab"
+                    >
+                      View results
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
               )}
             </div>

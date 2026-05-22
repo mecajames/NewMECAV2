@@ -173,6 +173,10 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   // Assignee filter — UUIDs of assigned staff, plus the sentinel
   // 'unassigned' for tickets with no assignee. Empty = no filter.
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  // "Who replied last" filter. Single-select since the three buckets
+  // (staff, customer, none) are mutually exclusive on any given
+  // ticket. Empty string = no filter.
+  const [lastReplyFilter, setLastReplyFilter] = useState<'' | 'staff' | 'customer' | 'none'>('');
   // Staff list for the Assignee dropdown — fetched once on mount.
   const [staffList, setStaffList] = useState<TicketStaffResponse[]>([]);
   // Transient feedback after Save / Reset / Apply preset actions.
@@ -231,6 +235,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       if (priorityFilter.length > 0) query.priority = priorityFilter as any;
       if (departmentFilter.length > 0) query.department = departmentFilter as any;
       if (assigneeFilter.length > 0) query.assigned_to_id = assigneeFilter;
+      if (lastReplyFilter) query.last_reply_by = lastReplyFilter;
 
       // Tab-specific filters. These pin the relevant fields regardless of
       // the filter-panel selections so e.g. the "On Hold" tab always shows
@@ -367,12 +372,13 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
 
   useEffect(() => {
     fetchTickets();
-  }, [page, activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter]);
+  }, [page, activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter, lastReplyFilter]);
 
   const handleResetFilter = () => {
     setStatusFilter(ACTIVE_STATUSES);
     setPriorityFilter([]);
     setDepartmentFilter([]);
+    setLastReplyFilter('');
     setAssigneeFilter([]);
     setSavedFilterMsg('Filter reset.');
     setTimeout(() => setSavedFilterMsg(null), 2000);
@@ -689,6 +695,23 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                 })),
               ]}
             />
+            {/* Single-select dropdown — the buckets are mutually exclusive
+                so a multi-select would be misleading. Most useful in
+                practice: "Customer replied last" (admin needs to respond)
+                vs "Staff replied last" (waiting on customer). */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Last Reply By</label>
+              <select
+                value={lastReplyFilter}
+                onChange={(e) => setLastReplyFilter(e.target.value as any)}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Anyone</option>
+                <option value="customer">Customer replied last</option>
+                <option value="staff">Staff replied last</option>
+                <option value="none">No replies yet</option>
+              </select>
+            </div>
           </div>
           {/* Footer actions: Reset (clear all back to defaults) and
               Save-as-preset (only shown here too for discoverability;
@@ -737,6 +760,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Priority</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reporter</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Assigned</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Last Reply</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Created</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Closed</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
@@ -777,6 +801,31 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                         </span>
                       ) : (
                         <span className="text-gray-500 text-sm italic">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      {ticket.last_reply ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-gray-300 text-sm truncate max-w-[10rem]" title={ticket.last_reply.author_name}>
+                            {ticket.last_reply.author_name}
+                          </span>
+                          <span
+                            className={`inline-flex w-fit items-center px-1.5 py-0.5 text-[10px] font-medium rounded uppercase tracking-wide ${
+                              ticket.last_reply.author_kind === 'staff'
+                                ? 'bg-blue-500/15 text-blue-300'
+                                : ticket.last_reply.author_kind === 'customer'
+                                  ? 'bg-amber-500/15 text-amber-300'
+                                  : ticket.last_reply.author_kind === 'guest'
+                                    ? 'bg-purple-500/15 text-purple-300'
+                                    : 'bg-slate-500/15 text-slate-300'
+                            }`}
+                            title={`Latest non-internal comment on ${formatFullDate(ticket.last_reply.created_at)}`}
+                          >
+                            {ticket.last_reply.author_kind}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-600 text-xs italic">No replies</span>
                       )}
                     </td>
                     <td className="px-4 py-4">
