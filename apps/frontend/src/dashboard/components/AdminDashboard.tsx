@@ -7,7 +7,7 @@ import {
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
   ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe,
-  Shield, ShieldAlert, Wifi, ClipboardCheck, Flame, AlertTriangle
+  Shield, ShieldAlert, Wifi, ClipboardCheck, Flame
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -296,17 +296,9 @@ export default function AdminDashboard() {
         {
           icon: Link2,
           title: 'Class Mappings',
-          description: 'Map imported class names to official classes',
+          description: 'Map imported class names to official classes, plus re-link results whose class was deleted',
           action: 'class-mappings',
           color: 'amber',
-        },
-        {
-          icon: AlertTriangle,
-          title: 'Results Needing Class',
-          description: 'Re-link results whose class was deleted or replaced (orphan class_ids)',
-          action: 'results-needing-class',
-          color: 'amber',
-          navigateTo: '/admin/results-needing-class',
         },
         {
           icon: BookOpen,
