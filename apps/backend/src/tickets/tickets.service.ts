@@ -270,6 +270,12 @@ export class TicketsService {
     const map = new Map<string, any>();
     if (ticketIds.length === 0) return map;
     const conn = em.getConnection();
+    // Build IN-clause placeholders by hand. MikroORM's raw-SQL `?` binding
+    // expands an array param into a comma list, so `ANY(?)` renders as
+    // `ANY('id1', 'id2', ...)` — a Postgres syntax error that 500s the whole
+    // list endpoint. The codebase-standard fix is one `?` per id with the ids
+    // spread as scalar params (see getStaffRatings / project memory note).
+    const inPlaceholders = ticketIds.map(() => '?').join(',');
     const rows = await conn.execute<any[]>(
       `WITH latest AS (
          SELECT DISTINCT ON (ticket_id)
@@ -291,8 +297,8 @@ export class TicketsService {
          COALESCE(p.is_staff, false) AS is_staff
        FROM latest l
        LEFT JOIN public.profiles p ON p.id = l.author_id
-       WHERE l.ticket_id = ANY(?)`,
-      [ticketIds],
+       WHERE l.ticket_id IN (${inPlaceholders})`,
+      ticketIds,
     );
     for (const r of rows) {
       const isStaffRole = r.is_staff === true || r.role === 'admin' || r.role === 'super_admin';
