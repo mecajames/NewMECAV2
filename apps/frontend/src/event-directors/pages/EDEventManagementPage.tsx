@@ -119,6 +119,12 @@ interface UserDecision {
   skip: boolean;
 }
 
+// Sentinel "send to admin for review" choices. Used in the unknown-class
+// resolver (import) and the manual-entry class dropdown so an Event Director
+// can submit a result whose class doesn't exist without ever creating one.
+const REVIEW_DECISION = 'REVIEW';
+const MANUAL_REVIEW_CLASS = '__REVIEW__';
+
 export default function EDEventManagementPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
@@ -178,15 +184,18 @@ export default function EDEventManagementPage() {
   const [userDecisions, setUserDecisions] = useState<Record<number, UserDecision>>({});
   const [showImportReviewModal, setShowImportReviewModal] = useState(false);
   const [importFileExtension, setImportFileExtension] = useState<string>('xlsx');
-  // Unknown-class resolution. When parseAndValidate finds class names in
-  // the file that don't exist yet in competition_classes, we list them
-  // here. The admin/ED picks a format for each one and clicks "Create"
-  // to persist it via the competition-classes API — the class then
-  // becomes available system-wide for every future entry. Import is
-  // disabled until this list is empty.
+  // Unknown-class resolution. When parseAndValidate finds class names in the
+  // file that don't exist in competition_classes, the ED must resolve each
+  // one WITHOUT creating a class (EDs can never add classes to the system):
+  //   1. pick the format the class belongs to, then
+  //   2. either MAP it to an existing same-format class (the file rows save
+  //      under that class), or SEND IT TO ADMIN review (rows save with no
+  //      class and appear in the admin "Pending Results" queue).
   const [unknownClasses, setUnknownClasses] = useState<string[]>([]);
   const [unknownClassFormat, setUnknownClassFormat] = useState<Record<string, string>>({});
-  const [creatingClassName, setCreatingClassName] = useState<string | null>(null);
+  // Per unknown class name: the ED's decision — an existing class id (map),
+  // or the sentinel REVIEW_DECISION (send to admin).
+  const [unknownClassDecision, setUnknownClassDecision] = useState<Record<string, string>>({});
 
   // Membership status tracking for current entry
   const [currentEntryMembershipStatus, setCurrentEntryMembershipStatus] = useState<string>('');
@@ -252,6 +261,12 @@ export default function EDEventManagementPage() {
   };
 
   const availableFormats = ['SPL', 'SQL', 'Show and Shine', 'Ride the Light'];
+  // Distinct formats that actually have classes in the system, used by the
+  // unknown-class resolver so the "same-format class" dropdown is always
+  // populated and the chosen format string matches real class rows exactly.
+  const classFormatOptions = Array.from(
+    new Set(competitionClasses.map((c) => c.format).filter(Boolean)),
+  ).sort();
   const expenseCategories = ['general', 'venue', 'equipment', 'supplies', 'travel', 'food', 'other'];
 
   useEffect(() => {
@@ -627,8 +642,22 @@ export default function EDEventManagementPage() {
   };
 
   const handleSaveResult = async () => {
-    if (!eventId || !currentEntry.format || !currentEntry.class_id || !currentEntry.score) {
+    // When the class isn't in the system the ED picks "send to admin for
+    // review" (sentinel), then types the class name. EDs can't create
+    // classes, so this path saves the result with no class_id — the backend
+    // flags it for the admin "Pending Results" queue.
+    const isReviewEntry = currentEntry.class_id === MANUAL_REVIEW_CLASS;
+
+    if (!eventId || !currentEntry.format || !currentEntry.score) {
       alert('Please fill in all required fields');
+      return;
+    }
+    if (!isReviewEntry && !currentEntry.class_id) {
+      alert('Please select a class');
+      return;
+    }
+    if (isReviewEntry && !currentEntry.competition_class.trim()) {
+      alert('Enter the class name to send to admin for review');
       return;
     }
 
@@ -658,14 +687,18 @@ export default function EDEventManagementPage() {
       // breaking SQ / DD manual entry from the ED page (admin worked
       // because the admin form passed both fields).
       const selectedClass = competitionClasses.find(c => c.id === currentEntry.class_id);
-      const competitionClassName = selectedClass?.name || currentEntry.competition_class || '';
+      const competitionClassName = isReviewEntry
+        ? currentEntry.competition_class.trim()
+        : (selectedClass?.name || currentEntry.competition_class || '');
 
       await competitionResultsApi.create({
         event_id: eventId,
         competitor_id: currentEntry.competitor_id || undefined,
         competitor_name: currentEntry.competitor_name,
         meca_id: mecaId,
-        class_id: currentEntry.class_id,
+        // Review entries carry no class_id; the backend flags them for the
+        // admin Pending Results queue (needs_class_review).
+        class_id: isReviewEntry ? undefined : currentEntry.class_id,
         competition_class: competitionClassName,
         format: currentEntry.format,
         score: parseFloat(currentEntry.score),
@@ -779,68 +812,15 @@ export default function EDEventManagementPage() {
       setUserDecisions(initialDecisions);
       setImportFileExtension(result.fileExtension);
       setUnknownClasses(result.unknownClasses || []);
-      // Reset format choices for any newly-seen unknown classes.
+      // Reset per-class format + decision for the newly-parsed file.
       setUnknownClassFormat({});
+      setUnknownClassDecision({});
       setShowImportReviewModal(true);
     } catch (error: any) {
       alert('Error parsing file: ' + error.message);
     }
 
     setUploading(false);
-  };
-
-  /**
-   * Create an unknown class on the fly so the import can proceed.
-   * Persists the class via the competition-classes API — once created
-   * it becomes part of the system for every future entry. After
-   * success we re-parse the original file so the new class gets matched
-   * and the rows are re-validated (format gets set, wattage/frequency
-   * requirement updates, etc.).
-   */
-  const handleCreateUnknownClass = async (className: string) => {
-    const format = unknownClassFormat[className];
-    if (!format) {
-      alert(`Pick a format for "${className}" first.`);
-      return;
-    }
-    if (!event?.season_id) {
-      alert('This event has no season — cannot create a class for it.');
-      return;
-    }
-    setCreatingClassName(className);
-    try {
-      await competitionClassesApi.create({
-        name: className,
-        // Abbreviation defaults to the full name; admin can polish it
-        // later in the Classes Management page.
-        abbreviation: className,
-        format,
-        season_id: event.season_id,
-        is_active: true,
-      });
-      // Refresh local class cache so the import re-match picks it up.
-      const refreshed = await competitionClassesApi.getAll();
-      setCompetitionClasses(refreshed.filter((c: CompetitionClass) => c.is_active));
-      // Re-run parse so this class drops out of unknownClasses and
-      // its rows pick up the now-correct format inference.
-      if (selectedFile && eventId) {
-        const reparsed = await competitionResultsApi.parseAndValidate(eventId, selectedFile);
-        setParsedResults(reparsed.results);
-        setUnknownClasses(reparsed.unknownClasses || []);
-        // Wipe the chosen format only for the class we just created;
-        // remaining unknowns keep their pending choices.
-        setUnknownClassFormat(prev => {
-          const next = { ...prev };
-          delete next[className];
-          return next;
-        });
-      }
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Failed to create class';
-      alert(`Could not create "${className}": ${msg}`);
-    } finally {
-      setCreatingClassName(null);
-    }
   };
 
   const handleConfirmImport = async () => {
@@ -887,6 +867,25 @@ export default function EDEventManagementPage() {
           wattage: decision?.wattage || item.data.wattage,
           frequency: decision?.frequency || item.data.frequency,
         };
+
+        // Apply the ED's unknown-class decision (only set for class names the
+        // parse flagged as not-in-system). MAP → rewrite the row to the chosen
+        // existing class so it imports linked. REVIEW → keep the entered class
+        // name but tag the ED-selected format; with no class match the backend
+        // saves it with needs_class_review = true for the admin queue.
+        const rowClass = String(item.data.class || '').trim();
+        const classDecision = unknownClassDecision[rowClass];
+        if (classDecision) {
+          if (classDecision === REVIEW_DECISION) {
+            resultData.format = unknownClassFormat[rowClass] || resultData.format;
+          } else {
+            const mapped = competitionClasses.find(c => c.id === classDecision);
+            if (mapped) {
+              resultData.class = mapped.name;
+              resultData.format = mapped.format;
+            }
+          }
+        }
 
         finalResults.push(resultData);
       }
@@ -1567,7 +1566,7 @@ export default function EDEventManagementPage() {
                           <label className="block text-sm text-gray-400 mb-1">Format *</label>
                           <select
                             value={currentEntry.format}
-                            onChange={(e) => setCurrentEntry(prev => ({ ...prev, format: e.target.value, class_id: '' }))}
+                            onChange={(e) => setCurrentEntry(prev => ({ ...prev, format: e.target.value, class_id: '', competition_class: '' }))}
                             className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white"
                           >
                             <option value="">Select</option>
@@ -1581,10 +1580,17 @@ export default function EDEventManagementPage() {
                           <select
                             value={currentEntry.class_id}
                             onChange={(e) => {
-                              const cls = competitionClasses.find(c => c.id === e.target.value);
+                              const val = e.target.value;
+                              if (val === MANUAL_REVIEW_CLASS) {
+                                // Not in the system → ED will type the name and
+                                // send it to admin review (no class created).
+                                setCurrentEntry(prev => ({ ...prev, class_id: val, competition_class: '' }));
+                                return;
+                              }
+                              const cls = competitionClasses.find(c => c.id === val);
                               setCurrentEntry(prev => ({
                                 ...prev,
-                                class_id: e.target.value,
+                                class_id: val,
                                 competition_class: cls?.name || '',
                               }));
                             }}
@@ -1595,7 +1601,17 @@ export default function EDEventManagementPage() {
                             {getClassesForFormat(currentEntry.format).map(c => (
                               <option key={c.id} value={c.id}>{c.abbreviation} - {c.name}</option>
                             ))}
+                            <option value={MANUAL_REVIEW_CLASS}>⚑ Class not listed — send to admin</option>
                           </select>
+                          {currentEntry.class_id === MANUAL_REVIEW_CLASS && (
+                            <input
+                              type="text"
+                              value={currentEntry.competition_class}
+                              onChange={(e) => setCurrentEntry(prev => ({ ...prev, competition_class: e.target.value }))}
+                              className="w-full mt-1 px-3 py-2 bg-slate-600 border border-amber-500/60 rounded text-white text-sm"
+                              placeholder="Type the class name (admin will review)"
+                            />
+                          )}
                         </div>
                         <div>
                           <label className="block text-sm text-gray-400 mb-1">Score *</label>
@@ -2169,11 +2185,13 @@ export default function EDEventManagementPage() {
             </div>
 
             <div className="p-4">
-              {/* Unknown Classes — must be created before import can run.
-                  Each row shows the class name from the file, a format
-                  picker, and a Create button that persists the class
-                  system-wide via the competition-classes API. Once
-                  created, the parsed rows re-validate against it. */}
+              {/* Unknown Classes — class names in the file that don't exist in
+                  the system. Event Directors can NOT create classes. For each
+                  one the ED picks the format, then either maps it to an
+                  existing same-format class (rows import linked) or sends it to
+                  admin review (rows import unlinked and appear in the admin
+                  "Pending Results" queue). A decision is required per class,
+                  but import is no longer blocked on creating anything. */}
               {unknownClasses.length > 0 && (
                 <div className="mb-4 p-4 bg-amber-900/30 border border-amber-500/50 rounded-lg">
                   <div className="flex items-start gap-2 mb-3">
@@ -2183,44 +2201,70 @@ export default function EDEventManagementPage() {
                         {unknownClasses.length} class{unknownClasses.length === 1 ? '' : 'es'} from this file {unknownClasses.length === 1 ? 'is' : 'are'} not in the system
                       </h3>
                       <p className="text-amber-300/80 text-xs mt-1">
-                        Pick a format and click <strong>Create</strong> for each one. They'll be saved to the system so this file (and every future entry) can use them. Import stays disabled until they're all resolved.
+                        For each one, pick the <strong>format</strong>, then either match it to an existing class or <strong>send it to admin for review</strong>. Matched results import normally; results sent for review are saved and queued for an admin to approve the class.
                       </p>
                     </div>
                   </div>
                   <div className="space-y-2">
-                    {unknownClasses.map((cls) => (
-                      <div key={cls} className="flex flex-wrap items-center gap-2 bg-slate-800 rounded p-2">
-                        <div className="flex-1 min-w-[160px]">
-                          <div className="text-white text-sm font-medium">{cls}</div>
-                          <div className="text-gray-400 text-xs">
-                            From file • will be saved to the {event?.season_id ? 'current event season' : '?'}
+                    {unknownClasses.map((cls) => {
+                      const fmt = unknownClassFormat[cls] || '';
+                      const decision = unknownClassDecision[cls] || '';
+                      const sameFormatClasses = fmt ? getClassesForFormat(fmt) : [];
+                      return (
+                        <div key={cls} className="flex flex-wrap items-center gap-2 bg-slate-800 rounded p-2">
+                          <div className="flex-1 min-w-[160px]">
+                            <div className="text-white text-sm font-medium">{cls}</div>
+                            <div className="text-gray-400 text-xs">From file</div>
+                          </div>
+                          {/* Step 1: format */}
+                          <select
+                            value={fmt}
+                            onChange={(e) => {
+                              const f = e.target.value;
+                              setUnknownClassFormat((prev) => ({ ...prev, [cls]: f }));
+                              // Format change invalidates any prior class choice.
+                              setUnknownClassDecision((prev) => {
+                                const next = { ...prev };
+                                delete next[cls];
+                                return next;
+                              });
+                            }}
+                            className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          >
+                            <option value="">Format…</option>
+                            {classFormatOptions.map((f) => (
+                              <option key={f} value={f}>{f}</option>
+                            ))}
+                          </select>
+                          {/* Step 2: map to an existing class OR send to admin */}
+                          <select
+                            value={decision}
+                            disabled={!fmt}
+                            onChange={(e) =>
+                              setUnknownClassDecision((prev) => ({ ...prev, [cls]: e.target.value }))
+                            }
+                            className="flex-1 min-w-[180px] px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-40"
+                          >
+                            <option value="">{fmt ? 'Match to class…' : 'Pick a format first'}</option>
+                            {sameFormatClasses.map((c) => (
+                              <option key={c.id} value={c.id}>{c.abbreviation} - {c.name}</option>
+                            ))}
+                            <option value={REVIEW_DECISION}>⚑ Send to admin for review</option>
+                          </select>
+                          <div className="text-xs min-w-[140px]">
+                            {!decision ? (
+                              <span className="text-amber-300/70">Choose an option</span>
+                            ) : decision === REVIEW_DECISION ? (
+                              <span className="text-amber-300">Will be sent to admin</span>
+                            ) : (
+                              <span className="text-green-400">
+                                Imports as {competitionClasses.find((c) => c.id === decision)?.name || 'selected class'}
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <select
-                          value={unknownClassFormat[cls] || ''}
-                          onChange={(e) => setUnknownClassFormat(prev => ({ ...prev, [cls]: e.target.value }))}
-                          disabled={creatingClassName === cls}
-                          className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        >
-                          <option value="">Format…</option>
-                          <option value="SPL">SPL</option>
-                          <option value="SQL">SQL</option>
-                          <option value="SSI">SSI</option>
-                          <option value="MK">MK (MECA Kids)</option>
-                          <option value="Show and Shine">Show and Shine</option>
-                          <option value="Ride the Light">Ride the Light</option>
-                          <option value="Dueling Demo">Dueling Demo</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => handleCreateUnknownClass(cls)}
-                          disabled={!unknownClassFormat[cls] || creatingClassName === cls}
-                          className="px-3 py-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded transition-colors"
-                        >
-                          {creatingClassName === cls ? 'Creating…' : 'Create'}
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2415,11 +2459,10 @@ export default function EDEventManagementPage() {
                       onClick={handleConfirmImport}
                       disabled={
                         uploading ||
-                        // Block import while any class from the file is
-                        // still unresolved — admins/EDs must create
-                        // them first so the rows can save with the
-                        // correct format.
-                        unknownClasses.length > 0 ||
+                        // Every unknown class needs a decision (map to a class
+                        // or send to admin) — but we no longer block on
+                        // creating anything, since EDs can't create classes.
+                        unknownClasses.some(c => !unknownClassDecision[c]) ||
                         parsedResults.filter(r => {
                           const d = userDecisions[r.index];
                           if (d?.skip) return false;
@@ -2430,7 +2473,7 @@ export default function EDEventManagementPage() {
                           return true;
                         }).length === 0
                       }
-                      title={unknownClasses.length > 0 ? `Resolve ${unknownClasses.length} unknown class${unknownClasses.length === 1 ? '' : 'es'} first` : undefined}
+                      title={unknownClasses.some(c => !unknownClassDecision[c]) ? `Choose a class or "send to admin" for each unmatched class first` : undefined}
                       className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Upload className="h-4 w-4" />

@@ -290,6 +290,64 @@ export const competitionResultsApi = {
   },
 
   // ==========================================
+  // PENDING CLASS REVIEW (admin queue)
+  // ==========================================
+
+  /**
+   * Admin-only — results an Event Director submitted whose class didn't match
+   * the system and that were sent for review. EDs can't create classes, so
+   * this queue is where an admin either assigns an existing class or creates
+   * the class and accepts the result.
+   */
+  getPendingClassReview: async (): Promise<Array<{
+    id: string;
+    eventId: string | null;
+    eventTitle: string | null;
+    eventDate: string | null;
+    seasonId: string | null;
+    competitorName: string | null;
+    mecaId: string | null;
+    competitionClass: string;
+    format: string | null;
+    score: number | null;
+    placement: number | null;
+    createdAt: string;
+    suggestedClass: { id: string; name: string; abbreviation: string; format: string } | null;
+  }>> => {
+    const response = await axios.get('/api/competition-results/admin/pending-class-review');
+    return response.data;
+  },
+
+  /**
+   * Admin-only — assign pending result(s) to an EXISTING class. Clears the
+   * pending flag and recalculates points for the affected events.
+   */
+  assignPendingToClass: async (resultIds: string[], classId: string): Promise<{ updated: number }> => {
+    const response = await axios.post('/api/competition-results/admin/pending/assign', {
+      resultIds,
+      classId,
+    });
+    return response.data;
+  },
+
+  /**
+   * Admin-only — create a NEW class and accept the pending result(s) into it.
+   */
+  createClassAndAcceptPending: async (params: {
+    resultIds: string[];
+    name: string;
+    abbreviation?: string;
+    format: string;
+    seasonId: string;
+  }): Promise<{ classId: string; updated: number }> => {
+    const response = await axios.post(
+      '/api/competition-results/admin/pending/create-class-and-accept',
+      params,
+    );
+    return response.data;
+  },
+
+  // ==========================================
   // STANDINGS ENDPOINTS (New optimized backend)
   // ==========================================
 

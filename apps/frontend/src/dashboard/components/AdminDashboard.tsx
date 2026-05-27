@@ -7,7 +7,7 @@ import {
   Settings, CalendarCheck, Award, Tags, Mail, Link2, Ticket, ClipboardList, QrCode,
   Store, Gavel, UserCheck, FileCheck, Briefcase, ChevronDown, ChevronUp, Star, Bell,
   ShoppingCart, Package, Megaphone, Building2, BarChart3, FileText, Vote, TrendingUp, Search, Globe,
-  Shield, ShieldAlert, Wifi, ClipboardCheck, Flame
+  Shield, ShieldAlert, Wifi, ClipboardCheck, Flame, AlertCircle
 } from 'lucide-react';
 import EventManagement from '@/events/components/EventManagement';
 import ResultsEntry from '@/competition-results/components/ResultsEntryNew';
@@ -16,6 +16,7 @@ import MediaLibrary from '@/media-files/components/MediaLibrary';
 import SiteSettings from '@/site-settings/components/SiteSettings';
 import EventHostingRequestsManagement from '@/event-hosting-requests/components/EventHostingRequestsManagement';
 import ClassNameMappingManagement from '@/class-name-mappings/components/ClassNameMappingManagement';
+import PendingResultsQueue from '@/competition-results/components/PendingResultsQueue';
 import { profilesApi } from '@/profiles';
 import { eventsApi } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
@@ -23,7 +24,7 @@ import { billingApi } from '@/api-client/billing.api-client';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
 import { qaApi } from '@/api-client/qa.api-client';
 
-type AdminView = 'overview' | 'events' | 'results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
+type AdminView = 'overview' | 'events' | 'results' | 'pending-results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
 
 interface AdminAction {
   icon: any;
@@ -165,6 +166,13 @@ export default function AdminDashboard() {
           description: 'Add and manage competition results',
           action: 'results',
           color: 'yellow',
+        },
+        {
+          icon: AlertCircle,
+          title: 'Pending Results',
+          description: 'Review ED-submitted results with unknown classes',
+          action: 'pending-results',
+          color: 'amber',
         },
         {
           icon: ClipboardList,
@@ -630,6 +638,8 @@ export default function AdminDashboard() {
         />;
       case 'results':
         return <ResultsEntry initialEventId={selectedEventId || undefined} />;
+      case 'pending-results':
+        return <PendingResultsQueue />;
       case 'rulebooks':
         return <RulebookManagement />;
       case 'media':

@@ -102,7 +102,7 @@ export class StandingsService {
     const em = this.em.fork();
 
     // Only filter by season if explicitly provided (not empty string)
-    const filter: any = {};
+    const filter: any = { needsClassReview: false };
     if (seasonId) {
       filter.season = seasonId;
     }
@@ -139,7 +139,7 @@ export class StandingsService {
     const em = this.em.fork();
 
     // Only filter by season if explicitly provided (not empty string)
-    const filter: any = { format: format.toUpperCase() };
+    const filter: any = { format: format.toUpperCase(), needsClassReview: false };
     if (seasonId) {
       filter.season = seasonId;
     }
@@ -177,6 +177,7 @@ export class StandingsService {
     const filter: any = {
       format: format.toUpperCase(),
       competitionClass: competitionClass,
+      needsClassReview: false,
     };
     if (seasonId) {
       filter.season = seasonId;
@@ -227,7 +228,7 @@ export class StandingsService {
     }
 
     // Get competition results (optionally filtered by season)
-    const resultFilter: any = {};
+    const resultFilter: any = { needsClassReview: false };
     if (seasonId) {
       resultFilter.season = seasonId;
     }
@@ -414,7 +415,7 @@ export class StandingsService {
       const em = this.em.fork();
 
       // Only filter by season if explicitly provided (not empty string)
-      const filter: any = { format };
+      const filter: any = { format, needsClassReview: false };
       if (seasonId) {
         filter.season = seasonId;
       }
@@ -453,7 +454,7 @@ export class StandingsService {
     const em = this.em.fork();
 
     // Only filter by season if explicitly provided (not empty string)
-    const filter: any = { mecaId };
+    const filter: any = { mecaId, needsClassReview: false };
     if (seasonId) {
       filter.season = seasonId;
     }
@@ -547,7 +548,7 @@ export class StandingsService {
     if (cached !== null) return cached;
 
     const em = this.em.fork();
-    const filter: any = {};
+    const filter: any = { needsClassReview: false };
     if (seasonId) {
       filter.season = seasonId;
     }
@@ -615,7 +616,7 @@ export class StandingsService {
     const em = this.em.fork();
 
     // Only filter by season if explicitly provided (not empty string)
-    const filter: any = {};
+    const filter: any = { needsClassReview: false };
     if (format) {
       filter.format = format.toUpperCase();
     }
