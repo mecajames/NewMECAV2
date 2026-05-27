@@ -112,4 +112,14 @@ export class CompetitionResult {
 
   @Property({ type: 'boolean', default: false, fieldName: 'pending_back_fill', hidden: true })
   pendingBackFill: boolean = false;
+
+  // Set when a result was entered (by an Event Director, manually or via
+  // import) with a class name that doesn't match any class in the system,
+  // AND the ED chose to send it to admin review rather than mapping it to
+  // an existing same-format class. These rows are saved but withheld from
+  // points/standings until an admin resolves the class. EDs can never
+  // create classes; the admin "Pending Results" queue is the only path to
+  // either create-class-and-accept or assign-to-existing-class.
+  @Property({ type: 'boolean', default: false, fieldName: 'needs_class_review', serializedName: 'needs_class_review' })
+  needsClassReview: boolean = false;
 }

@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, Optional, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Optional, Logger } from '@nestjs/common';
 import { EntityManager, Reference, wrap } from '@mikro-orm/core';
 import { MembershipStatus, MembershipCategory, PaymentStatus } from '@newmeca/shared';
 import { CompetitionResult } from './competition-results.entity';
@@ -452,6 +452,20 @@ export class CompetitionResultsService {
       }
     }
 
+    // PENDING CLASS REVIEW: if the row couldn't be linked to a class, it
+    // goes to the admin "Pending Results" queue. This happens when an Event
+    // Director enters/imports a result whose class name matches nothing in
+    // the system and chooses "send to admin for review" (EDs can't create
+    // classes). Withhold points until an admin resolves it — points are
+    // recomputed on approval. Admin/ED matched entries always carry a
+    // class_id and skip this entirely.
+    if (!transformedData.competitionClassEntity) {
+      transformedData.needsClassReview = true;
+      transformedData.pointsEarned = 0;
+    } else {
+      transformedData.needsClassReview = false;
+    }
+
     // If the supplied MECA ID belongs to a member whose membership is
     // currently expired (within the 45-day grace window), stamp the row
     // as 999999 + preserve the original ID for back-fill on renewal.
@@ -655,6 +669,13 @@ export class CompetitionResultsService {
       }
     }
 
+    // If this update newly links the row to a class, it's no longer pending
+    // class review. (Only act when the payload actually set a class — a
+    // plain score/notes edit must leave the flag untouched.)
+    if (transformedData.competitionClassEntity) {
+      transformedData.needsClassReview = false;
+    }
+
     // Explicit per-key assignment — CompetitionResult has serializedName.
     for (const [key, value] of Object.entries(transformedData)) {
       (result as any)[key] = value;
@@ -803,6 +824,9 @@ export class CompetitionResultsService {
       if (competitionClass) {
         filter.competitionClass = competitionClass;
       }
+      // Never surface rows still awaiting admin class review on the public
+      // leaderboard — their class (and therefore points) isn't confirmed.
+      filter.needsClassReview = false;
 
       // Fetch results using MikroORM
       const results = await em.find(CompetitionResult, filter, {
@@ -1342,6 +1366,12 @@ export class CompetitionResultsService {
     const groupedResults = new Map<string, { results: CompetitionResult[]; format: string | null; isEligible: boolean }>();
 
     for (const result of results) {
+      // Skip rows awaiting admin class review — they have no confirmed
+      // class, so they must not earn points or influence anyone else's
+      // placement until an admin resolves them. Points are recomputed for
+      // the event once the row is approved (see resolvePendingResult).
+      if ((result as any).needsClassReview) continue;
+
       // Get format from class if available, otherwise from result.format field
       let format: string | null = result.format || null;
       const competitionClass = classMap.get(result.classId || '');
@@ -1906,6 +1936,10 @@ export class CompetitionResultsService {
 
     const orphans: any[] = [];
     for (const r of results) {
+      // Rows explicitly flagged for admin class review live in the
+      // dedicated "Pending Results" queue, not this legacy orphan-cleanup
+      // list — keep the two concerns separate.
+      if ((r as any).needsClassReview) continue;
       const cid = (r as any).competitionClassEntity?.id || null;
       const linked = cid ? classById.get(cid) : undefined;
       // Resolved if linked class exists AND is active.
@@ -2011,10 +2045,176 @@ export class CompetitionResultsService {
       // text-fallback for these from now on.
       r.format = targetClass.format;
       r.competitionClass = targetClass.name;
+      // Now that the row has a confirmed class, it's no longer pending
+      // admin review.
+      (r as any).needsClassReview = false;
       updated++;
     }
     await em.flush();
     return { updated };
+  }
+
+  // ==========================================================================
+  // Pending Class Review (admin queue)
+  // ==========================================================================
+
+  /**
+   * The admin "Pending Results" queue: every result an Event Director
+   * submitted whose class didn't match the system and that was sent for
+   * review (needs_class_review = true). For each row we attach a best-effort
+   * suggested class (an active class whose name/abbreviation matches the
+   * entered text, preferring the ED-selected format) so the admin can assign
+   * in one click. EDs can never create classes — this queue is where an
+   * admin either creates the class + accepts, or assigns an existing class.
+   */
+  async findPendingClassReview(): Promise<Array<{
+    id: string;
+    eventId: string | null;
+    eventTitle: string | null;
+    eventDate: string | null;
+    seasonId: string | null;
+    competitorName: string | null;
+    mecaId: string | null;
+    competitionClass: string;
+    format: string | null;
+    score: number | null;
+    placement: number | null;
+    createdAt: string;
+    suggestedClass: { id: string; name: string; abbreviation: string; format: string } | null;
+  }>> {
+    const em = this.em.fork();
+    const activeClasses = await em.find(CompetitionClass, { isActive: true });
+    const norm = (v: unknown): string => String(v ?? '').trim().toLowerCase();
+
+    const results = await em.find(
+      CompetitionResult,
+      { needsClassReview: true },
+      // Populate event.season too — ED manual entries don't carry a direct
+      // season_id, so we fall back to the event's season for the seasonId
+      // the admin needs to create-class-and-accept.
+      { populate: ['event', 'event.season', 'season'], orderBy: { createdAt: 'DESC' } },
+    );
+
+    return results.map((r) => {
+      const n = norm(r.competitionClass);
+      const f = norm(r.format);
+      // Prefer a same-format name/abbreviation match; fall back to any
+      // name/abbreviation match regardless of format.
+      const suggested =
+        (n
+          ? activeClasses.find(
+              (c) => (norm(c.name) === n || norm(c.abbreviation) === n) && (!f || norm(c.format) === f),
+            ) || activeClasses.find((c) => norm(c.name) === n || norm(c.abbreviation) === n)
+          : undefined) || null;
+
+      return {
+        id: r.id,
+        eventId: (r as any).event?.id ?? null,
+        eventTitle: (r as any).event?.title ?? null,
+        eventDate: (r as any).event?.eventDate?.toISOString?.() ?? null,
+        seasonId: (r as any).season?.id ?? (r as any).event?.season?.id ?? null,
+        competitorName: r.competitorName,
+        mecaId: r.mecaId ?? null,
+        competitionClass: r.competitionClass,
+        format: r.format ?? null,
+        score: r.score == null ? null : Number(r.score),
+        placement: r.placement,
+        createdAt: r.createdAt.toISOString(),
+        suggestedClass: suggested
+          ? {
+              id: suggested.id,
+              name: suggested.name,
+              abbreviation: suggested.abbreviation,
+              format: suggested.format,
+            }
+          : null,
+      };
+    });
+  }
+
+  /**
+   * Admin action: assign pending result(s) to an EXISTING class. Repoints the
+   * rows (which clears needs_class_review) and recalculates points for the
+   * affected events so the now-accepted results earn their points.
+   */
+  async resolvePendingResult(resultIds: string[], classId: string): Promise<{ updated: number }> {
+    const { updated } = await this.repointResultsToClass(resultIds, classId);
+    await this.recalcEventsForResults(resultIds);
+    return { updated };
+  }
+
+  /**
+   * Admin action: create a NEW class and accept the pending result(s) into it.
+   * Idempotent on (season, format, name/abbreviation) so re-submitting reuses
+   * an existing match rather than creating a duplicate. Recalculates points
+   * for the affected events afterward.
+   */
+  async createClassAndAcceptPending(params: {
+    resultIds: string[];
+    name: string;
+    abbreviation?: string;
+    format: string;
+    seasonId: string;
+  }): Promise<{ classId: string; updated: number }> {
+    const { resultIds, name, format, seasonId } = params;
+    const abbreviation = params.abbreviation || params.name;
+    if (!name || !format || !seasonId) {
+      throw new BadRequestException('name, format and seasonId are required.');
+    }
+
+    const em = this.em.fork();
+    const season = await em.findOne(Season, { id: seasonId });
+    if (!season) {
+      throw new NotFoundException(`Season ${seasonId} not found`);
+    }
+
+    const norm = (v: unknown): string => String(v ?? '').trim().toLowerCase();
+    const existing = (await em.find(CompetitionClass, { seasonId })).find(
+      (c) =>
+        norm(c.format) === norm(format) &&
+        (norm(c.name) === norm(name) || norm(c.abbreviation) === norm(abbreviation)),
+    );
+
+    let classId: string;
+    if (existing) {
+      classId = existing.id;
+    } else {
+      const cls = em.create(CompetitionClass, {
+        name,
+        abbreviation,
+        format,
+        section: null,
+        season,
+        isActive: true,
+        displayOrder: 0,
+        unlimitedWattage: false,
+      } as any);
+      await em.persistAndFlush(cls);
+      classId = cls.id;
+    }
+
+    const { updated } = await this.repointResultsToClass(resultIds, classId);
+    await this.recalcEventsForResults(resultIds);
+    return { classId, updated };
+  }
+
+  /**
+   * Recalculate event points for every event referenced by the given result
+   * IDs. Used after a pending result is accepted so the newly-classed rows
+   * (and everyone they now share a class with) get correct placements/points.
+   */
+  private async recalcEventsForResults(resultIds: string[]): Promise<void> {
+    if (!Array.isArray(resultIds) || resultIds.length === 0) return;
+    const em = this.em.fork();
+    const rows = await em.find(CompetitionResult, { id: { $in: resultIds } }, { populate: ['event'] });
+    const eventIds = [...new Set(rows.map((r) => (r as any).event?.id).filter(Boolean))];
+    for (const eventId of eventIds) {
+      try {
+        await this.updateEventPoints(eventId);
+      } catch (e: any) {
+        this.logger.warn(`Points recalc failed for event ${eventId} after pending accept: ${e.message}`);
+      }
+    }
   }
 
   /**

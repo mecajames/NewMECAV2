@@ -21,7 +21,6 @@ import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
-import { EventDirector } from '../event-directors/event-director.entity';
 
 @Controller('api/competition-classes')
 export class CompetitionClassesController {
@@ -41,27 +40,6 @@ export class CompetitionClassesController {
     if (error || !user) throw new UnauthorizedException('Invalid authorization token');
     const profile = await this.em.fork().findOne(Profile, { id: user.id });
     if (!isAdminUser(profile)) throw new ForbiddenException('Admin access required');
-  }
-
-  /**
-   * Admin OR an active event director may create a competition class.
-   * Event directors need this so the "create unknown class on the fly"
-   * flow during result-file import works — the class then becomes a
-   * permanent part of the system for every future entry. Edits + deletes
-   * stay admin-only.
-   */
-  private async requireAdminOrEventDirector(authHeader?: string): Promise<void> {
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('No authorization token provided');
-    }
-    const token = authHeader.substring(7);
-    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
-    if (error || !user) throw new UnauthorizedException('Invalid authorization token');
-    const em = this.em.fork();
-    const profile = await em.findOne(Profile, { id: user.id });
-    if (isAdminUser(profile)) return;
-    const ed = await em.findOne(EventDirector, { user: { id: user.id }, isActive: true });
-    if (!ed) throw new ForbiddenException('Admin or active event director required');
   }
 
   @Public()
@@ -93,13 +71,19 @@ export class CompetitionClassesController {
     return this.competitionClassesService.findById(id);
   }
 
+  /**
+   * Create a competition class. ADMIN ONLY. Event directors must never be
+   * able to add a class to the system — when an ED enters a result whose
+   * class doesn't match, it goes to the admin "Pending Results" review
+   * queue instead (see CompetitionResultsService.needs_class_review).
+   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createClass(
     @Headers('authorization') authHeader: string,
     @Body() data: Partial<CompetitionClass>,
   ): Promise<CompetitionClass> {
-    await this.requireAdminOrEventDirector(authHeader);
+    await this.requireAdmin(authHeader);
     return this.competitionClassesService.create(data);
   }
 
