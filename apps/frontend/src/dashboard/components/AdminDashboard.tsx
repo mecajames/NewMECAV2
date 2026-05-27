@@ -17,6 +17,7 @@ import SiteSettings from '@/site-settings/components/SiteSettings';
 import EventHostingRequestsManagement from '@/event-hosting-requests/components/EventHostingRequestsManagement';
 import ClassNameMappingManagement from '@/class-name-mappings/components/ClassNameMappingManagement';
 import PendingResultsQueue from '@/competition-results/components/PendingResultsQueue';
+import { competitionResultsApi } from '@/competition-results/competition-results.api-client';
 import { profilesApi } from '@/profiles';
 import { eventsApi } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
@@ -63,6 +64,9 @@ export default function AdminDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [qaAssignments, setQaAssignments] = useState<any[]>([]);
+  // Count of ED-submitted results awaiting class review — drives the overview
+  // alert banner and the badge on the "Pending Results" tile.
+  const [pendingResultsCount, setPendingResultsCount] = useState(0);
   // Load expanded sections from localStorage, default to all collapsed
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('adminDashboardExpandedSections');
@@ -79,7 +83,18 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchStats();
     fetchQaAssignments();
+    fetchPendingResultsCount();
   }, []);
+
+  const fetchPendingResultsCount = async () => {
+    try {
+      const rows = await competitionResultsApi.getPendingClassReview();
+      setPendingResultsCount(rows.length);
+    } catch {
+      // Non-fatal — just hides the banner/badge if it can't load.
+      setPendingResultsCount(0);
+    }
+  };
 
   // Save expanded sections to localStorage when they change
   useEffect(() => {
@@ -665,6 +680,30 @@ export default function AdminDashboard() {
 
   const renderOverview = () => (
     <>
+      {/* Pending Results alert — only shown when results are waiting for an
+          admin to assign/create a class. Links straight to the queue. */}
+      {pendingResultsCount > 0 && (
+        <button
+          onClick={() => setCurrentView('pending-results')}
+          className="w-full mb-6 flex items-center justify-between gap-3 p-4 bg-amber-900/30 border border-amber-500/50 rounded-xl hover:bg-amber-900/40 transition-colors text-left"
+        >
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-amber-400 flex-shrink-0" />
+            <div>
+              <p className="text-amber-200 font-semibold">
+                {pendingResultsCount} result{pendingResultsCount === 1 ? '' : 's'} waiting for class review
+              </p>
+              <p className="text-amber-300/80 text-sm">
+                Event Directors submitted these with a class that isn&rsquo;t in the system. Click to assign or create the class.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 bg-amber-600 text-white text-sm font-semibold rounded-lg whitespace-nowrap">
+            Review now
+          </span>
+        </button>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
@@ -805,8 +844,15 @@ export default function AdminDashboard() {
                         className="w-full flex items-center gap-3 p-4 hover:bg-slate-700/50 transition-colors text-left border-b border-slate-700/50 last:border-b-0"
                       >
                         <ActionIcon className={`h-5 w-5 ${getIconColorClass(action.color)} flex-shrink-0`} />
-                        <div>
-                          <p className="text-white font-medium">{action.title}</p>
+                        <div className="flex-1">
+                          <p className="text-white font-medium flex items-center gap-2">
+                            {action.title}
+                            {action.action === 'pending-results' && pendingResultsCount > 0 && (
+                              <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded-full">
+                                {pendingResultsCount}
+                              </span>
+                            )}
+                          </p>
                           <p className="text-slate-400 text-sm">{action.description}</p>
                         </div>
                       </button>
