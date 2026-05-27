@@ -337,7 +337,7 @@ export class PayPalService {
     // 3. Persist the plan ID so we never re-create it
     if (this.siteSettingsService) {
       try {
-        await this.siteSettingsService.upsert(cacheKey, plan.data.id, 'string', `PayPal plan id for membership ${params.membershipTypeConfigId}`, 'system');
+        await this.siteSettingsService.upsert(cacheKey, plan.data.id, 'string', `PayPal plan id for membership ${params.membershipTypeConfigId}`, null);
         this.settingsCache.delete(cacheKey);
       } catch (err) {
         this.logger.warn(`Failed to cache PayPal plan id ${plan.data.id}: ${err}`);

@@ -310,12 +310,14 @@ export class StripeService implements OnApplicationBootstrap {
 
   private async saveHealthState(state: StripeHealthState): Promise<void> {
     if (!this.siteSettingsService) return;
+    // updated_by is a uuid FK; pass null for system-driven writes. The
+    // upsert helper coerces non-uuid strings to null defensively.
     await this.siteSettingsService.upsert(
       HEALTH_STATE_KEY,
       JSON.stringify(state),
       'json',
       'Stripe webhook health-check dedup state (config drift + delivery drift). Updated automatically by StripeService.',
-      'system',
+      null,
     );
   }
 
