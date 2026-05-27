@@ -384,6 +384,41 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     setTimeout(() => setSavedFilterMsg(null), 2000);
   };
 
+  /**
+   * Full clear from the top bar: search box, active tab, and every filter
+   * back to the default working view (active statuses, nothing else). Broader
+   * than handleResetFilter, which is scoped to the filter-panel dropdowns and
+   * leaves the search box / tab alone.
+   */
+  const handleClearAllFilters = () => {
+    setActiveTab('all');
+    setSearchQuery('');
+    setStatusFilter(ACTIVE_STATUSES);
+    setPriorityFilter([]);
+    setDepartmentFilter([]);
+    setAssigneeFilter([]);
+    setLastReplyFilter('');
+    setPage(1);
+    setSavedFilterMsg('Filters cleared.');
+    setTimeout(() => setSavedFilterMsg(null), 2000);
+  };
+
+  // True when anything deviates from the default view — gates the "Clear
+  // filters" button so it only appears when there's actually something to
+  // clear. Status counts as "filtered" only when it differs from the default
+  // active-status set.
+  const statusIsDefault =
+    statusFilter.length === ACTIVE_STATUSES.length &&
+    ACTIVE_STATUSES.every((s) => statusFilter.includes(s));
+  const hasActiveFilters =
+    searchQuery.trim() !== '' ||
+    activeTab !== 'all' ||
+    priorityFilter.length > 0 ||
+    departmentFilter.length > 0 ||
+    assigneeFilter.length > 0 ||
+    lastReplyFilter !== '' ||
+    !statusIsDefault;
+
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -573,6 +608,16 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
           Filters
           {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
+        {hasActiveFilters && (
+          <button
+            onClick={handleClearAllFilters}
+            title="Clear the search box, active tab, and all filters"
+            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* Saved filter presets — pills below the search box and above the

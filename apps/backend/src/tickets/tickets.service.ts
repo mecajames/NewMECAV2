@@ -233,8 +233,13 @@ export class TicketsService {
       );
       return rows.map((r: any) => r.id);
     }
+    // Cast role to text before comparing. profiles.role is a Postgres enum
+    // (user_role) that does NOT contain 'super_admin'; comparing the enum
+    // directly to that literal makes Postgres try to coerce it and throw
+    // "invalid input value for enum user_role: super_admin", 500ing the whole
+    // last_reply_by filter. Text comparison is safe regardless of enum values.
     const staffPredicate =
-      `(COALESCE(p.is_staff, false) = true OR p.role IN ('admin', 'super_admin')) AND COALESCE(l.is_guest_comment, false) = false AND l.author_id IS NOT NULL`;
+      `(COALESCE(p.is_staff, false) = true OR p.role::text IN ('admin', 'super_admin')) AND COALESCE(l.is_guest_comment, false) = false AND l.author_id IS NOT NULL`;
     const customerPredicate = `NOT (${staffPredicate})`;
     const predicate = kind === 'staff' ? staffPredicate : customerPredicate;
     const rows = await conn.execute<any[]>(
