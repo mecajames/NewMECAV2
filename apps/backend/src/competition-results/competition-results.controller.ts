@@ -295,6 +295,55 @@ export class CompetitionResultsController {
     return this.competitionResultsService.repointResultsToClass(body.resultIds, body.classId);
   }
 
+  /**
+   * Admin-only — the dedicated "Pending Results" queue: results an Event
+   * Director submitted whose class didn't match the system and that were
+   * sent for review. EDs can never create classes, so this is where an
+   * admin resolves each one.
+   */
+  @Get('admin/pending-class-review')
+  async getPendingClassReview(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.competitionResultsService.findPendingClassReview();
+  }
+
+  /**
+   * Admin-only — assign pending result(s) to an EXISTING class. Clears the
+   * pending flag and recalculates points for the affected events.
+   */
+  @Post('admin/pending/assign')
+  @HttpCode(HttpStatus.OK)
+  async assignPendingToClass(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { resultIds: string[]; classId: string },
+  ): Promise<{ updated: number }> {
+    await this.requireAdmin(authHeader);
+    if (!body?.resultIds?.length || !body?.classId) {
+      throw new BadRequestException('resultIds and classId are required.');
+    }
+    return this.competitionResultsService.resolvePendingResult(body.resultIds, body.classId);
+  }
+
+  /**
+   * Admin-only — create a NEW class and accept the pending result(s) into it.
+   * This is the only path by which an ED-entered unknown class becomes a real
+   * class, and it's gated to admins.
+   */
+  @Post('admin/pending/create-class-and-accept')
+  @HttpCode(HttpStatus.OK)
+  async createClassAndAcceptPending(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { resultIds: string[]; name: string; abbreviation?: string; format: string; seasonId: string },
+  ): Promise<{ classId: string; updated: number }> {
+    await this.requireAdmin(authHeader);
+    if (!body?.resultIds?.length || !body?.name || !body?.format || !body?.seasonId) {
+      throw new BadRequestException('resultIds, name, format and seasonId are required.');
+    }
+    return this.competitionResultsService.createClassAndAcceptPending(body);
+  }
+
   @Post('import/:eventId')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
