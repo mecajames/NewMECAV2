@@ -591,6 +591,108 @@ export class AdminNotificationsService {
     }
   }
 
+  /**
+   * Alert admins that Stripe fired events that never reached our backend —
+   * config is correct but events still aren't being processed (handler crash,
+   * endpoint 5xx, signature mismatch, app outage). Detected by the hourly
+   * StripeService cron reconciling Stripe's recent events against our
+   * processed_webhook_events table.
+   */
+  async notifyStripeWebhookDelivery(args: {
+    missingEvents: Array<{
+      eventId: string;
+      eventType: string;
+      createdAt: string;
+      customerEmail?: string | null;
+      objectId?: string | null;
+    }>;
+    environment: string;
+  }): Promise<void> {
+    try {
+      const count = args.missingEvents.length;
+      const byType = args.missingEvents.reduce<Record<string, number>>((acc, e) => {
+        acc[e.eventType] = (acc[e.eventType] ?? 0) + 1;
+        return acc;
+      }, {});
+      const typeBreakdown = Object.entries(byType)
+        .map(([t, n]) => `${t} (${n})`)
+        .join(', ');
+      const sampleList = args.missingEvents
+        .slice(0, 10)
+        .map((e) => `${e.eventType} · ${e.eventId} · ${e.createdAt}${e.customerEmail ? ` · ${e.customerEmail}` : ''}`)
+        .join('\n');
+
+      await this.notifyAllAdmins(
+        '[CRITICAL] Stripe webhook delivery gap',
+        `Stripe fired ${count} event(s) that never reached our backend — even though the webhook subscription is correct. Types: ${typeBreakdown}`,
+        '/admin/billing/orders',
+      );
+
+      const fields: Array<{ label: string; value: string }> = [
+        { label: 'Environment', value: args.environment },
+        { label: 'Undelivered events', value: String(count) },
+        { label: 'By event type', value: typeBreakdown },
+        { label: 'Sample (first 10)', value: sampleList || '(none)' },
+        { label: 'Likely causes', value: 'Webhook endpoint returned 5xx, app was down during retries, signature verification failed, or handler crashed mid-processing. Check backend logs around the event timestamps.' },
+        { label: 'Action required', value: 'Cross-check the Stripe Dashboard → Developers → Webhooks → endpoint → "Recent deliveries" tab. Failed deliveries can be manually replayed from there once the underlying handler issue is fixed.' },
+      ];
+
+      await this.sendAlertToAllAdmins({
+        title: `[CRITICAL] Stripe webhook delivery gap (${count} event${count !== 1 ? 's' : ''})`,
+        subtitle: `Detected on ${args.environment} — events fired in Stripe but never reached our DB`,
+        fields,
+        dashboardPath: '/admin/billing/orders',
+        dashboardLabel: 'View Billing',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send Stripe webhook delivery admin notification: ${error}`);
+    }
+  }
+
+  /**
+   * Alert admins that the live Stripe webhook subscription has drifted away
+   * from REQUIRED_STRIPE_WEBHOOK_EVENTS. Fired by StripeService when missing
+   * event types are detected so the failure mode that silently dropped
+   * 12+ months of subscription renewals can't recur unnoticed.
+   */
+  async notifyStripeWebhookDrift(args: {
+    missingEvents: string[];
+    endpoints: Array<{ id: string; url: string; status: string; subscribedCount: number }>;
+    environment: string;
+  }): Promise<void> {
+    try {
+      const missingList = args.missingEvents.join(', ');
+      const endpointSummary = args.endpoints.length
+        ? args.endpoints.map((e) => `${e.url} (${e.status}, ${e.subscribedCount} events)`).join('; ')
+        : 'NO ENABLED ENDPOINTS';
+
+      await this.notifyAllAdmins(
+        '[CRITICAL] Stripe webhook drift detected',
+        `${args.missingEvents.length} required Stripe event type(s) are not being delivered — subscription renewals and cancellations will be silently dropped. Missing: ${missingList}`,
+        '/admin/billing/orders',
+      );
+
+      const fields: Array<{ label: string; value: string }> = [
+        { label: 'Environment', value: args.environment },
+        { label: 'Missing events', value: missingList },
+        { label: 'Affected count', value: String(args.missingEvents.length) },
+        { label: 'Configured endpoints', value: endpointSummary },
+        { label: 'Action required', value: 'Open the Stripe Dashboard → Developers → Webhooks, find the endpoint above, and subscribe it to the missing event types. Alternatively POST the full enabled_events list to /v1/webhook_endpoints/{id}.' },
+        { label: 'Why this matters', value: 'Without these events the backend never records subscription renewals, cancellations, or checkout completions — customers still get Stripe receipts but the app shows nothing.' },
+      ];
+
+      await this.sendAlertToAllAdmins({
+        title: `[CRITICAL] Stripe webhook is missing ${args.missingEvents.length} required event type(s)`,
+        subtitle: `Detected at startup on ${args.environment} — subscription lifecycle events are being silently dropped`,
+        fields,
+        dashboardPath: '/admin/billing/orders',
+        dashboardLabel: 'View Billing',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send Stripe webhook drift admin notification: ${error}`);
+    }
+  }
+
   async notifyOneTimePaymentFailed(args: {
     transactionId: string;
     amountCents?: number | null;

@@ -1,10 +1,35 @@
-import { Injectable, BadRequestException, Logger, Inject, Optional } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, Inject, Optional, OnApplicationBootstrap } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
 import { CreatePaymentIntentDto, PaymentIntentResult } from '@newmeca/shared';
 import { SiteSettingsService } from '../site-settings/site-settings.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { REQUIRED_STRIPE_WEBHOOK_EVENTS } from './required-webhook-events.constant';
+import { ProcessedWebhookEvent } from './processed-webhook-event.entity';
+
+/** Health-check state persisted between cron runs so we don't re-alert on every tick. */
+interface StripeHealthState {
+  /** Sorted, joined list of currently-missing event types — drives config-drift dedup. */
+  configMissingKey?: string;
+  /** Last N stripe_event_ids we've already alerted on for delivery drift. */
+  deliveryAlertedEventIds?: string[];
+  lastConfigAlertAt?: string;
+  lastDeliveryAlertAt?: string;
+}
+
+type WebhookEndpointSummary = {
+  id: string;
+  url: string;
+  status: string;
+  subscribedCount: number;
+};
+
+const HEALTH_STATE_KEY = 'stripe_webhook_health_state';
+const MAX_ALERTED_DELIVERY_IDS = 200;
 
 @Injectable()
-export class StripeService {
+export class StripeService implements OnApplicationBootstrap {
   private readonly logger = new Logger(StripeService.name);
   private stripe: Stripe | null = null;
 
@@ -15,8 +40,283 @@ export class StripeService {
   constructor(
     @Optional() @Inject(SiteSettingsService)
     private readonly siteSettingsService?: SiteSettingsService,
+    @Optional() @Inject(AdminNotificationsService)
+    private readonly adminNotificationsService?: AdminNotificationsService,
+    @Optional() @Inject('EntityManager')
+    private readonly em?: EntityManager,
   ) {
     // Stripe client is lazily initialized when needed
+  }
+
+  // ── Stripe webhook health checks ────────────────────────────────────────────
+  //
+  // Two flavors of drift surface here:
+  //   1. CONFIG drift — Stripe webhook endpoint is subscribed to fewer events
+  //      than REQUIRED_STRIPE_WEBHOOK_EVENTS. Detected by listing the live
+  //      endpoint config and diffing against our constant.
+  //   2. DELIVERY drift — endpoint is correctly subscribed but events still
+  //      aren't reaching our DB (handler crash, endpoint 5xx, signature
+  //      mismatch). Detected by listing recent Stripe events and verifying
+  //      each has a matching processed_webhook_events row.
+  //
+  // Both run at boot AND hourly. Both dedup against state persisted in
+  // site_settings so persistent drift doesn't re-spam admins every cycle.
+
+  async onApplicationBootstrap(): Promise<void> {
+    if (!this.shouldRunHealthCheck()) return;
+    await this.runStripeHealthCheck('boot').catch((err) => {
+      this.logger.error(`Stripe health check at boot threw (continuing startup): ${err}`);
+    });
+  }
+
+  /**
+   * Hourly Stripe webhook health check. Re-runs both config + delivery
+   * verification so any drift introduced via the Stripe Dashboard (or a
+   * silent handler outage) is surfaced within ~1 hour, not at the next deploy.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async hourlyStripeHealthCheck(): Promise<void> {
+    if (!this.shouldRunHealthCheck()) return;
+    await this.runStripeHealthCheck('hourly').catch((err) => {
+      this.logger.error(`Stripe hourly health check threw: ${err}`);
+    });
+  }
+
+  private shouldRunHealthCheck(): boolean {
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) return false;
+    if (!process.env.STRIPE_SECRET_KEY) {
+      this.logger.log('Stripe health check skipped (STRIPE_SECRET_KEY not set)');
+      return false;
+    }
+    if (process.env.SKIP_STRIPE_WEBHOOK_CHECK === 'true') {
+      this.logger.log('Stripe health check skipped (SKIP_STRIPE_WEBHOOK_CHECK=true)');
+      return false;
+    }
+    return true;
+  }
+
+  private async runStripeHealthCheck(trigger: 'boot' | 'hourly'): Promise<void> {
+    const environment = process.env.APP_ENV || process.env.NODE_ENV || 'unknown';
+    const state = await this.loadHealthState();
+    const updatedState: StripeHealthState = { ...state };
+
+    // 1. Config drift.
+    try {
+      const config = await this.checkWebhookConfig();
+      const missingKey = [...config.missing].sort().join(',');
+
+      if (config.missing.length === 0) {
+        if (state.configMissingKey) {
+          this.logger.log(
+            `Stripe webhook config drift RESOLVED — all ${REQUIRED_STRIPE_WEBHOOK_EVENTS.length} required events are now subscribed (was missing: ${state.configMissingKey})`,
+          );
+        } else {
+          this.logger.log(
+            `Stripe webhook config check passed (${config.endpoints.length} enabled endpoint(s), ${REQUIRED_STRIPE_WEBHOOK_EVENTS.length} required events all covered) — trigger=${trigger}`,
+          );
+        }
+        updatedState.configMissingKey = '';
+      } else {
+        this.logger.error(
+          `[CRITICAL] Stripe webhook is missing ${config.missing.length} required event type(s) — ` +
+          `${config.missing.join(', ')} (trigger=${trigger})`,
+        );
+        for (const ep of config.endpoints) {
+          this.logger.warn(`  Endpoint ${ep.id} (${ep.url}) status=${ep.status} subscribedCount=${ep.subscribedCount}`);
+        }
+
+        const changed = missingKey !== state.configMissingKey;
+        if (changed && this.adminNotificationsService) {
+          await this.adminNotificationsService.notifyStripeWebhookDrift({
+            missingEvents: [...config.missing],
+            endpoints: config.endpoints,
+            environment,
+          }).catch((err) => {
+            this.logger.error(`Failed to dispatch config-drift notification: ${err}`);
+          });
+          updatedState.lastConfigAlertAt = new Date().toISOString();
+        } else if (!changed) {
+          this.logger.log(`Config drift unchanged since ${state.lastConfigAlertAt ?? 'unknown'} — suppressing duplicate alert`);
+        }
+        updatedState.configMissingKey = missingKey;
+      }
+    } catch (err) {
+      this.logger.error(`Stripe webhook config check failed: ${err}`);
+    }
+
+    // 2. Delivery drift. Skip when EM isn't wired (test contexts) since the
+    //    comparison requires a query against processed_webhook_events.
+    if (this.em) {
+      try {
+        const missing = await this.reconcileRecentWebhookDeliveries();
+        const alreadyAlerted = new Set(state.deliveryAlertedEventIds ?? []);
+        const newMissing = missing.filter((m) => !alreadyAlerted.has(m.eventId));
+
+        if (missing.length === 0) {
+          this.logger.log(`Stripe webhook delivery check passed — every recent event has a processed_webhook_events row (trigger=${trigger})`);
+        } else if (newMissing.length === 0) {
+          this.logger.log(`Stripe webhook delivery drift unchanged — ${missing.length} unprocessed events still pending admin attention (trigger=${trigger})`);
+        } else {
+          this.logger.error(
+            `[CRITICAL] Stripe delivered ${newMissing.length} new event(s) that never reached our backend (trigger=${trigger}): ` +
+            newMissing.map((m) => `${m.eventType}:${m.eventId}`).join(', '),
+          );
+          if (this.adminNotificationsService) {
+            await this.adminNotificationsService.notifyStripeWebhookDelivery({
+              missingEvents: newMissing,
+              environment,
+            }).catch((err) => {
+              this.logger.error(`Failed to dispatch delivery-drift notification: ${err}`);
+            });
+            updatedState.lastDeliveryAlertAt = new Date().toISOString();
+          }
+        }
+
+        // Bound the alerted-ids list so site_settings doesn't grow unbounded.
+        const merged = [...alreadyAlerted, ...missing.map((m) => m.eventId)];
+        const unique = Array.from(new Set(merged));
+        updatedState.deliveryAlertedEventIds = unique.slice(-MAX_ALERTED_DELIVERY_IDS);
+      } catch (err) {
+        this.logger.error(`Stripe webhook delivery check failed: ${err}`);
+      }
+    } else {
+      this.logger.log('Stripe webhook delivery check skipped (EntityManager not injected)');
+    }
+
+    await this.saveHealthState(updatedState).catch((err) => {
+      this.logger.warn(`Failed to persist Stripe health state: ${err}`);
+    });
+  }
+
+  /**
+   * Compare REQUIRED_STRIPE_WEBHOOK_EVENTS against the union of enabled_events
+   * across all `enabled` Stripe webhook endpoints. Multiple endpoints are
+   * treated as additive — a required event is "covered" if any enabled
+   * endpoint subscribes to it (or any endpoint uses the `*` wildcard).
+   * Returns the missing events + a compact summary of endpoints.
+   */
+  private async checkWebhookConfig(): Promise<{
+    missing: string[];
+    endpoints: WebhookEndpointSummary[];
+  }> {
+    const stripe = this.getStripeClient();
+    const result = await stripe.webhookEndpoints.list({ limit: 100 });
+    const enabled = result.data.filter((e) => e.status === 'enabled');
+    const summary: WebhookEndpointSummary[] = enabled.map((ep) => ({
+      id: ep.id,
+      url: ep.url,
+      status: ep.status,
+      subscribedCount: ep.enabled_events.length,
+    }));
+
+    if (enabled.length === 0) {
+      // Every required event is "missing" if no endpoint exists at all.
+      return { missing: [...REQUIRED_STRIPE_WEBHOOK_EVENTS], endpoints: summary };
+    }
+
+    const covered = new Set<string>();
+    for (const ep of enabled) {
+      for (const ev of ep.enabled_events) covered.add(ev);
+    }
+    const hasWildcard = covered.has('*');
+    const missing = REQUIRED_STRIPE_WEBHOOK_EVENTS.filter((ev) => !hasWildcard && !covered.has(ev));
+    return { missing, endpoints: summary };
+  }
+
+  /**
+   * Pull Stripe events from the recent past and verify each one has a
+   * matching row in processed_webhook_events. Anything in Stripe but not
+   * in our DB is a delivery gap — the webhook hit Stripe's outbound queue
+   * but never landed in our handler (endpoint 5xx, signature mismatch,
+   * handler crash, app outage).
+   *
+   * Window: events created between 70 minutes ago and 5 minutes ago. The
+   * trailing edge gives Stripe time to deliver + our handler time to write.
+   * The leading edge overlaps the previous hourly run so a late-delivered
+   * event isn't missed at the boundary.
+   */
+  private async reconcileRecentWebhookDeliveries(): Promise<Array<{
+    eventId: string;
+    eventType: string;
+    createdAt: string;
+    customerEmail?: string | null;
+    objectId?: string | null;
+  }>> {
+    if (!this.em) return [];
+    const stripe = this.getStripeClient();
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const window = {
+      gte: nowSec - 70 * 60,
+      lte: nowSec - 5 * 60,
+    };
+
+    // Pull all events in the window, paginating as needed. Stripe caps at
+    // 100 per page — for a healthy hour we expect tens at most.
+    const events: Stripe.Event[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const resp = await stripe.events.list({
+        limit: 100,
+        created: { gte: window.gte, lte: window.lte },
+        ...(cursor ? { starting_after: cursor } : {}),
+      });
+      events.push(...resp.data);
+      if (!resp.has_more) break;
+      cursor = resp.data[resp.data.length - 1]?.id;
+      if (!cursor) break;
+    }
+
+    if (events.length === 0) return [];
+
+    // Find which event ids we have in our processed_webhook_events table.
+    const eventIds = events.map((e) => e.id);
+    const em = this.em.fork();
+    const processed = await em.find(
+      ProcessedWebhookEvent,
+      { stripeEventId: { $in: eventIds } as any },
+      { fields: ['stripeEventId'] as any },
+    );
+    const processedIds = new Set(processed.map((p) => p.stripeEventId));
+
+    return events
+      .filter((e) => !processedIds.has(e.id))
+      .map((e) => {
+        const obj = e.data?.object as any;
+        return {
+          eventId: e.id,
+          eventType: e.type,
+          createdAt: new Date(e.created * 1000).toISOString(),
+          customerEmail: obj?.customer_email ?? obj?.receipt_email ?? obj?.metadata?.email ?? null,
+          objectId: obj?.id ?? null,
+        };
+      });
+  }
+
+  // Health-state persistence helpers — JSON blob in site_settings keeps the
+  // schema unchanged and avoids a dedicated migration for what's effectively
+  // a small dedup cache.
+  private async loadHealthState(): Promise<StripeHealthState> {
+    if (!this.siteSettingsService) return {};
+    try {
+      const row = await this.siteSettingsService.findByKey(HEALTH_STATE_KEY);
+      if (!row?.setting_value) return {};
+      return JSON.parse(row.setting_value) as StripeHealthState;
+    } catch (err) {
+      this.logger.warn(`Failed to parse Stripe health state, treating as empty: ${err}`);
+      return {};
+    }
+  }
+
+  private async saveHealthState(state: StripeHealthState): Promise<void> {
+    if (!this.siteSettingsService) return;
+    await this.siteSettingsService.upsert(
+      HEALTH_STATE_KEY,
+      JSON.stringify(state),
+      'json',
+      'Stripe webhook health-check dedup state (config drift + delivery drift). Updated automatically by StripeService.',
+      'system',
+    );
   }
 
   /**
