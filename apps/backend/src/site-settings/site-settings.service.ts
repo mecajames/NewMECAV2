@@ -21,8 +21,15 @@ export class SiteSettingsService {
     return em.findOne(SiteSettings, { setting_key: key });
   }
 
-  async upsert(key: string, value: string, type: string, description: string | undefined, updatedBy: string): Promise<SiteSettings> {
+  async upsert(key: string, value: string, type: string, description: string | undefined, updatedBy: string | null): Promise<SiteSettings> {
     const em = this.em.fork();
+
+    // Normalize updatedBy: the column is a uuid FK to profiles, so any
+    // non-uuid sentinel (e.g. 'system') would fail with an invalid-input
+    // error. Background tasks pass null to indicate a non-user actor.
+    const updatedByOrNull = updatedBy && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(updatedBy)
+      ? updatedBy
+      : null;
 
     // Try to find existing setting
     const existing = await em.findOne(SiteSettings, { setting_key: key });
@@ -30,7 +37,7 @@ export class SiteSettingsService {
     if (existing) {
       // Update existing
       existing.setting_value = value;
-      existing.updated_by = updatedBy;
+      existing.updated_by = updatedByOrNull ?? undefined;
       existing.updated_at = new Date();
       if (description) {
         existing.description = description;
@@ -44,7 +51,7 @@ export class SiteSettingsService {
         setting_value: value,
         setting_type: type,
         description,
-        updated_by: updatedBy,
+        updated_by: updatedByOrNull ?? undefined,
         updated_at: new Date(),
       });
       await em.persistAndFlush(setting);
