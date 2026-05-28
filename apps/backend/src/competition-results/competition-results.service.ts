@@ -172,7 +172,9 @@ export class CompetitionResultsService {
     const em = this.em.fork();
     const results = await em.find(CompetitionResult, { event: eventId }, {
       orderBy: { placement: 'ASC' },
-      populate: ['competitor'],
+      // Populate creator/updater so the UI can show who entered/edited each
+      // result without loading the entire profiles table client-side.
+      populate: ['competitor', 'creator', 'updater'],
     });
     // Mask MECA ID on held results (expired member, awaiting renewal)
     return results.map(r => {
@@ -180,8 +182,17 @@ export class CompetitionResultsService {
         r.mecaId = undefined;
         r.pointsEarned = 0;
       }
+      r.createdByName = this.formatProfileName(r.creator);
+      r.updatedByName = this.formatProfileName(r.updater);
       return r;
     });
+  }
+
+  /** Build a human-readable display name from a profile, or undefined. */
+  private formatProfileName(profile?: Profile): string | undefined {
+    if (!profile) return undefined;
+    const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
+    return name || profile.full_name || profile.email || undefined;
   }
 
   /**

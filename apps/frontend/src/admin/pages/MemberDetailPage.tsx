@@ -40,6 +40,7 @@ import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
 import { profilesApi, ActivityItem, UpcomingEvent } from '@/profiles';
+import { resolveMemberSince } from '@/profiles/profile-dates';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { membershipsApi, Membership, AdminCreateMembershipResult, AddSecondaryModal, EditSecondaryModal, SecondaryMembershipInfo, RELATIONSHIP_TYPES } from '@/memberships';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs';
@@ -1788,7 +1789,7 @@ function OverviewTab({
         <div className="bg-slate-700 rounded-lg p-4">
           <div className="text-sm text-gray-400 mb-1">Member Since</div>
           <div className="text-xl font-bold text-white">
-            {new Date(member.member_since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+            {resolveMemberSince(member).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
           </div>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">

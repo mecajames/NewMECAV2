@@ -26,6 +26,9 @@ export interface CompetitionResult {
   updatedAt?: string;
   revisionCount?: number;
   modificationReason?: string;
+  // Display names resolved server-side from created_by/updated_by
+  created_by_name?: string;
+  updated_by_name?: string;
   // Legacy snake_case aliases for backwards compatibility
   event_id?: string;
   competitor_id?: string;

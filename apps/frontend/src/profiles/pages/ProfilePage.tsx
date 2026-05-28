@@ -7,6 +7,7 @@ import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
 import { CountrySelect, StateProvinceSelect, PhoneInput } from '@/shared/fields';
 import { MecaIdSwitcher } from '@/shared/components/MecaIdSwitcher';
 import { profilesApi, Profile as ProfileType } from '../profiles.api-client';
+import { resolveMemberSince } from '../profile-dates';
 import { membershipsApi, ControlledMecaId, Membership } from '@/memberships';
 import { countries, getStatesForCountry } from '@/utils/countries';
 
@@ -970,7 +971,7 @@ export default function ProfilePage() {
                   </label>
                   <div className="bg-slate-700 px-4 py-3 rounded-lg text-white flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-400" />
-                    {new Date(profile.member_since).toLocaleDateString('en-US', {
+                    {resolveMemberSince(profile).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
