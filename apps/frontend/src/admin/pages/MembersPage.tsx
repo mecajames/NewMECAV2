@@ -13,6 +13,7 @@ import { notificationsApi } from '@/notifications/notifications.api-client';
 import { getAllEventDirectors } from '@/event-directors/event-directors.api-client';
 import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
 import SecurityAuditTab from '../components/SecurityAuditTab';
+import { resolveMemberSince } from '@/profiles/profile-dates';
 
 // Secondary membership info for nested display
 interface SecondaryMembershipInfo {
@@ -576,7 +577,7 @@ export default function MembersPage() {
         case 'meca_id':
           return (parseInt(a.meca_id || '0', 10)) - (parseInt(b.meca_id || '0', 10));
         case 'member_since':
-          return new Date(b.member_since).getTime() - new Date(a.member_since).getTime();
+          return resolveMemberSince(b).getTime() - resolveMemberSince(a).getTime();
         default:
           return 0;
       }
@@ -1538,7 +1539,7 @@ export default function MembersPage() {
                             )}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-400">
-                            {new Date(member.member_since).toLocaleDateString()}
+                            {resolveMemberSince(member).toLocaleDateString()}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-400">
                             {member.membershipInfo?.endDate

@@ -26,8 +26,10 @@ interface ResultEntry {
   frequency?: number | string;
   notes: string;
   created_by?: string;
+  created_by_name?: string;
   created_at?: string;
   updated_by?: string;
+  updated_by_name?: string;
   updated_at?: string;
   revision_count?: number;
   modification_reason?: string;
@@ -77,6 +79,18 @@ interface UserDecision {
 }
 
 type EntryMethod = 'manual' | 'excel' | 'termlab';
+
+// Derive up-to-two-character initials from a display name or email.
+// "John Smith" -> "JS", "creativecaraudio@x.com" -> "CR", "" -> "UK".
+function getInitials(name?: string): string {
+  if (!name) return 'UK';
+  const local = name.includes('@') ? name.split('@')[0] : name;
+  const parts = local.trim().split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return (parts[0] || '').substring(0, 2).toUpperCase() || 'UK';
+}
 
 
 export default function ResultsEntryNew({ initialEventId }: { initialEventId?: string } = {}) {
@@ -474,8 +488,10 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
           frequency: r.frequency || '',
           notes: r.notes || '',
           created_by: r.created_by || r.createdBy,
+          created_by_name: r.created_by_name,
           created_at: r.created_at || r.createdAt,
           updated_by: r.updated_by || r.updatedBy,
+          updated_by_name: r.updated_by_name,
           updated_at: r.updated_at || r.updatedAt,
           revision_count: r.revision_count || r.revisionCount || 0,
           modification_reason: r.modification_reason || r.modificationReason || '',
@@ -1568,7 +1584,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                   // Get first result for this format to show entry info
                   const firstResult = formatResults[0];
                   const creator = competitors.find(c => c.id === firstResult.created_by);
-                  const creatorName = creator?.first_name || creator?.email?.split('@')[0] || 'Unknown';
+                  const creatorName = firstResult.created_by_name || creator?.first_name || creator?.email?.split('@')[0] || 'Unknown';
 
                   let method = 'Manual';
                   if (firstResult.notes?.includes('Imported from tlab file')) {
@@ -1793,15 +1809,18 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                     <td className="px-3 py-2 text-orange-400 font-semibold">{result.points_earned || '0'}</td>
                     <td className="px-3 py-2 text-gray-400 text-xs">
                       {(() => {
+                        // Prefer the server-resolved name; fall back to a
+                        // client-side profile lookup for any stale data.
                         const creator = competitors.find(c => c.id === result.created_by);
-                        const initials = creator?.first_name?.substring(0, 2).toUpperCase() ||
-                                        creator?.email?.substring(0, 2).toUpperCase() ||
-                                        'UK';
+                        const name = result.created_by_name || creator?.first_name || creator?.email || '';
+                        const initials = getInitials(name);
                         const date = result.created_at ? new Date(result.created_at).toLocaleDateString('en-US', {
                           month: 'numeric',
                           day: 'numeric'
                         }) : '-';
-                        return `${initials} ${date}`;
+                        return (
+                          <span title={name || 'Unknown'}>{`${initials} ${date}`}</span>
+                        );
                       })()}
                     </td>
                     <td className="px-3 py-2">
@@ -1928,7 +1947,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                         Entered by: <span className="text-white font-medium">
                           {(() => {
                             const creator = competitors.find(c => c.id === editingResult.created_by || (c as any).auth_user_id === editingResult.created_by);
-                            return creator?.email || creator?.first_name || profile?.email || 'Unknown';
+                            return editingResult.created_by_name || creator?.email || creator?.first_name || profile?.email || 'Unknown';
                           })()}
                         </span>
                       </span>
@@ -1944,7 +1963,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                             by: <span className="text-white font-medium">
                               {(() => {
                                 const updater = competitors.find(c => c.id === editingResult.updated_by || (c as any).auth_user_id === editingResult.updated_by);
-                                return updater?.email || updater?.first_name || 'Unknown';
+                                return editingResult.updated_by_name || updater?.email || updater?.first_name || 'Unknown';
                               })()}
                             </span>
                           </span>
