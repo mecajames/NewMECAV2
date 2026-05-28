@@ -41,6 +41,9 @@ describe('StripeService', () => {
       webhooks: {
         constructEvent: jest.fn(),
       },
+      events: {
+        list: jest.fn(),
+      },
     };
 
     // Mock Stripe constructor
@@ -294,6 +297,81 @@ describe('StripeService', () => {
       mockStripeInstance.customers.list.mockRejectedValue(stripeError);
 
       await expect(service.findOrCreateCustomer(email)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('reconcileRecentWebhookDeliveries', () => {
+    // Wire a fake EntityManager whose fork().find() reports which event ids
+    // already have a processed_webhook_events row.
+    const wireEm = (processedEventIds: string[]) => {
+      const find = jest
+        .fn()
+        .mockResolvedValue(processedEventIds.map((id) => ({ stripeEventId: id })));
+      (service as any).em = { fork: () => ({ find }) };
+      return { find };
+    };
+
+    const stripeEvent = (id: string, type: string) =>
+      ({ id, type, created: 1700000000, data: { object: { id: 'obj_1' } } }) as Stripe.Event;
+
+    const callReconcile = () =>
+      (service as any).reconcileRecentWebhookDeliveries() as Promise<Array<{ eventId: string }>>;
+
+    it('flags a handled event that has no processed row', async () => {
+      wireEm([]);
+      mockStripeInstance.events.list.mockResolvedValue({
+        data: [stripeEvent('evt_handled', 'invoice.paid')],
+        has_more: false,
+      });
+
+      const missing = await callReconcile();
+
+      expect(missing.map((m) => m.eventId)).toEqual(['evt_handled']);
+    });
+
+    it('ignores account-level events we do not subscribe to (e.g. balance.available)', async () => {
+      const { find } = wireEm([]);
+      mockStripeInstance.events.list.mockResolvedValue({
+        data: [
+          stripeEvent('evt_balance', 'balance.available'),
+          stripeEvent('evt_payout', 'payout.paid'),
+        ],
+        has_more: false,
+      });
+
+      const missing = await callReconcile();
+
+      // No handled events in the window → nothing flagged, and we never even
+      // query the DB for the unhandled ids.
+      expect(missing).toEqual([]);
+      expect(find).not.toHaveBeenCalled();
+    });
+
+    it('flags only the handled event when handled + unhandled are mixed', async () => {
+      wireEm([]);
+      mockStripeInstance.events.list.mockResolvedValue({
+        data: [
+          stripeEvent('evt_balance', 'balance.available'),
+          stripeEvent('evt_handled', 'charge.succeeded'),
+        ],
+        has_more: false,
+      });
+
+      const missing = await callReconcile();
+
+      expect(missing.map((m) => m.eventId)).toEqual(['evt_handled']);
+    });
+
+    it('does not flag a handled event that already has a processed row', async () => {
+      wireEm(['evt_handled']);
+      mockStripeInstance.events.list.mockResolvedValue({
+        data: [stripeEvent('evt_handled', 'invoice.paid')],
+        has_more: false,
+      });
+
+      const missing = await callReconcile();
+
+      expect(missing).toEqual([]);
     });
   });
 
