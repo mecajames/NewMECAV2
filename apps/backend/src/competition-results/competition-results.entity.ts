@@ -76,6 +76,12 @@ export class CompetitionResult {
   @ManyToOne(() => Profile, { fieldName: 'created_by', nullable: true, hidden: true })
   creator?: Profile;
 
+  // Display name for the creator, resolved server-side (e.g. in findByEvent) so
+  // the UI doesn't have to load every profile to map created_by -> a name.
+  // Not persisted; only populated when the `creator` relation is loaded.
+  @Property({ type: 'string', persist: false, nullable: true, serializedName: 'created_by_name' })
+  createdByName?: string;
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
 
@@ -84,6 +90,10 @@ export class CompetitionResult {
 
   @ManyToOne(() => Profile, { fieldName: 'updated_by', nullable: true, hidden: true })
   updater?: Profile;
+
+  // Display name for the last editor, resolved server-side. See createdByName.
+  @Property({ type: 'string', persist: false, nullable: true, serializedName: 'updated_by_name' })
+  updatedByName?: string;
 
   @Property({ type: 'timestamptz', onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
   updatedAt?: Date;

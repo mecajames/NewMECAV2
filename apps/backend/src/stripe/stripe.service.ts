@@ -230,6 +230,15 @@ export class StripeService implements OnApplicationBootstrap {
    * but never landed in our handler (endpoint 5xx, signature mismatch,
    * handler crash, app outage).
    *
+   * Only events in REQUIRED_STRIPE_WEBHOOK_EVENTS are considered. Stripe's
+   * events.list returns ALL account activity, including account-level events
+   * we neither subscribe to nor handle (balance.available, payout.*,
+   * application_fee.*, …). Those can never produce a processed_webhook_events
+   * row, so without this filter every one of them would be flagged as a bogus
+   * [CRITICAL] delivery gap. Intersecting with the handled-events list (the
+   * same source of truth the config-drift check uses) keeps the gap check
+   * focused on events that genuinely should have landed.
+   *
    * Window: events created between 70 minutes ago and 5 minutes ago. The
    * trailing edge gives Stripe time to deliver + our handler time to write.
    * The leading edge overlaps the previous hourly run so a late-delivered
@@ -267,10 +276,15 @@ export class StripeService implements OnApplicationBootstrap {
       if (!cursor) break;
     }
 
-    if (events.length === 0) return [];
+    // Restrict to the event types we actually subscribe to + handle. Anything
+    // else (balance.available, payout.*, …) is account-level noise that never
+    // lands in processed_webhook_events and would otherwise raise a false gap.
+    const handled = new Set<string>(REQUIRED_STRIPE_WEBHOOK_EVENTS);
+    const relevant = events.filter((e) => handled.has(e.type));
+    if (relevant.length === 0) return [];
 
     // Find which event ids we have in our processed_webhook_events table.
-    const eventIds = events.map((e) => e.id);
+    const eventIds = relevant.map((e) => e.id);
     const em = this.em.fork();
     const processed = await em.find(
       ProcessedWebhookEvent,
@@ -279,7 +293,7 @@ export class StripeService implements OnApplicationBootstrap {
     );
     const processedIds = new Set(processed.map((p) => p.stripeEventId));
 
-    return events
+    return relevant
       .filter((e) => !processedIds.has(e.id))
       .map((e) => {
         const obj = e.data?.object as any;
