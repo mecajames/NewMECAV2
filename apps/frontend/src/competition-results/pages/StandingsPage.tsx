@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Medal, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, Users } from 'lucide-react';
+import { Trophy, Medal, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, ArrowDownUp } from 'lucide-react';
 import { competitionResultsApi, StandingsEntry, ClassStandingsEntry } from '@/competition-results';
 import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
 import { MecaIdActiveProvider, useMecaIdActive } from '@/competition-results/components/MecaIdActiveContext';
@@ -370,6 +370,55 @@ export default function StandingsPage() {
                 </select>
               </div>
             )}
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 text-gray-300">
+                <ArrowDownUp className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base whitespace-nowrap">Sort by:</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={sortColumn}
+                  onChange={(e) => {
+                    const next = e.target.value as SortColumn;
+                    setSortColumn(next);
+                    // Sensible defaults: numeric columns sort high→low, text columns A→Z.
+                    setSortDirection(
+                      next === 'competitor' || next === 'mecaId' || next === 'rank' ? 'asc' : 'desc'
+                    );
+                  }}
+                  className="px-3 sm:px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="rank">Rank</option>
+                  <option value="points">Points</option>
+                  <option value="events">Events</option>
+                  <option value="placements">Podiums (1st place)</option>
+                  <option value="competitor">Competitor Name</option>
+                  <option value="mecaId">MECA ID</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+                  }
+                  disabled={sortColumn === 'rank'}
+                  title={
+                    sortColumn === 'rank'
+                      ? 'Rank is always ascending'
+                      : sortDirection === 'asc'
+                        ? 'Ascending — click for descending'
+                        : 'Descending — click for ascending'
+                  }
+                  className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sortDirection === 'asc' ? (
+                    <ArrowUp className="h-4 w-4" />
+                  ) : (
+                    <ArrowDown className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
 
           <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
