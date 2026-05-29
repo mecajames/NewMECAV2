@@ -84,7 +84,6 @@ export class StaffSignaturesService {
     if (!row) {
       row = new StaffSignature();
       row.userId = userId;
-      row.user = profile;
       row.html = cleanHtml;
       row.plainText = cleanPlain;
       row.isActive = dto.is_active ?? true;
