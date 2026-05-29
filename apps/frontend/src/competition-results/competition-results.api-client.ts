@@ -521,6 +521,9 @@ export interface StandingsEntry {
   competitorName: string;
   competitorId: string | null;
   totalPoints: number;
+  // Highest single-result score this competitor achieved in the leaderboard
+  // scope (season / format / class). Null when no numeric score is available.
+  highestScore: number | null;
   eventsParticipated: number;
   firstPlace: number;
   secondPlace: number;

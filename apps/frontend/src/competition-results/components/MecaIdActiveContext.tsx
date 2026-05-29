@@ -110,3 +110,16 @@ export function useMecaIdActive(mecaId: string | number | null | undefined): boo
   const lookup = useContext(MecaIdActiveContext);
   return lookup(mecaId == null ? undefined : String(mecaId));
 }
+
+/**
+ * Returns the bulk lookup function so callers can filter / sort over many
+ * MECA IDs at once (instead of calling the per-ID hook once per row, which
+ * isn't possible inside a sort comparator or filter callback).
+ *
+ * Same semantics as `useMecaIdActive`: returns `undefined` for IDs that
+ * haven't resolved yet, `true`/`false` once the bulk fetch completes, and
+ * `false` for guest sentinels (999999/0/null).
+ */
+export function useMecaIdActiveLookup(): ActiveLookup {
+  return useContext(MecaIdActiveContext);
+}

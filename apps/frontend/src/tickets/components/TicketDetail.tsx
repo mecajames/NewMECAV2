@@ -46,6 +46,11 @@ import {
   TicketPriority,
 } from '../tickets.api-client';
 import * as ticketAdminApi from '../ticket-admin.api-client';
+import {
+  cannedResponsesApi,
+  CannedResponse,
+  resolveCannedResponse,
+} from '../ticket-support-tools.api-client';
 import { TicketStaffResponse, TicketDepartmentResponse, TICKET_STATUS_TRANSITIONS } from '@newmeca/shared';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { useDraftStorage } from '@/shared/hooks/useDraftStorage';
@@ -161,6 +166,12 @@ export function TicketDetail({
   );
   const [isInternal, setIsInternal] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+  // Canned responses (reply templates) for staff. Fetched once on
+  // mount when the viewer is a staff member. Click to expand the
+  // picker, click a row to insert the resolved body into the textarea.
+  const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([]);
+  const [cannedOpen, setCannedOpen] = useState(false);
+  const cannedRef = useRef<HTMLDivElement>(null);
   // Member-facing "close this ticket after my reply" flow. When the checkbox
   // is on we also surface an optional 1–5 star rating + short feedback. All
   // three reset after a successful submit.
@@ -270,6 +281,52 @@ export function TicketDetail({
   useEffect(() => {
     fetchTicket();
   }, [ticketId, isStaff]);
+
+  // Load canned responses once when the viewer is staff. Failures are
+  // non-fatal - the picker just stays empty and the staff can compose
+  // freehand.
+  useEffect(() => {
+    if (!isStaff) return;
+    cannedResponsesApi.list()
+      .then(setCannedResponses)
+      .catch(() => { /* non-fatal */ });
+  }, [isStaff]);
+
+  // Close the canned picker on outside click.
+  useEffect(() => {
+    if (!cannedOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (cannedRef.current && !cannedRef.current.contains(e.target as Node)) {
+        setCannedOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [cannedOpen]);
+
+  /**
+   * Build the substitution context from the current ticket and the
+   * viewing agent's name (passed in via props). Then resolve and
+   * insert the template body into the reply textarea, preserving any
+   * existing content the agent already typed.
+   */
+  const handleInsertCannedResponse = (response: CannedResponse) => {
+    if (!ticket) return;
+    const customerName = ticket.reporter
+      ? `${ticket.reporter.first_name || ''} ${ticket.reporter.last_name || ''}`.trim()
+        || ticket.reporter.email
+        || 'Customer'
+      : 'Customer';
+    const resolved = resolveCannedResponse(response.body, {
+      customerName,
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticket_number,
+      ticketSubject: ticket.title,
+      agentName: null, // resolved server-side from auth user when known; left as placeholder otherwise
+    });
+    setNewComment((prev) => prev ? `${prev}\n\n${resolved}` : resolved);
+    setCannedOpen(false);
+  };
 
   // Fetch staff list when modal opens
   const fetchStaffList = useCallback(async () => {
@@ -992,6 +1049,53 @@ export function TicketDetail({
             {/* New Comment Form */}
             {ticket.status !== 'closed' && (
               <form onSubmit={handleSubmitComment} className="space-y-3">
+                {/* Canned response picker (staff only). Click "Insert
+                    canned response" to open the dropdown; pick a row
+                    and the resolved body gets appended to the current
+                    draft. Sized as a button instead of always-visible
+                    UI so it stays out of the way when the staff is
+                    composing freehand. */}
+                {isStaff && cannedResponses.length > 0 && (
+                  <div className="relative flex items-center justify-between" ref={cannedRef}>
+                    <button
+                      type="button"
+                      onClick={() => setCannedOpen(o => !o)}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg border border-slate-600"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Insert canned response
+                      <ChevronDown className={`w-3 h-3 transition-transform ${cannedOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {cannedOpen && (
+                      <div className="absolute z-30 top-full left-0 mt-1 w-96 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-2xl">
+                        {(() => {
+                          const grouped = new Map<string, CannedResponse[]>();
+                          for (const r of cannedResponses) {
+                            const cat = r.category || 'Uncategorized';
+                            if (!grouped.has(cat)) grouped.set(cat, []);
+                            grouped.get(cat)!.push(r);
+                          }
+                          return Array.from(grouped.entries()).map(([cat, items]) => (
+                            <div key={cat}>
+                              <div className="px-3 py-1 text-xs text-gray-500 uppercase tracking-wider bg-slate-900/50">{cat}</div>
+                              {items.map(r => (
+                                <button
+                                  key={r.id}
+                                  type="button"
+                                  onClick={() => handleInsertCannedResponse(r)}
+                                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 border-b border-slate-700/50"
+                                >
+                                  <div className="font-medium">{r.title}</div>
+                                  <div className="text-xs text-gray-400 truncate">{r.body.replace(/\s+/g, ' ').slice(0, 80)}{r.body.length > 80 ? '...' : ''}</div>
+                                </button>
+                              ))}
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
