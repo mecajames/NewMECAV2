@@ -86,6 +86,7 @@ export class TicketsController {
     @Query('event_id') event_id?: string,
     @Query('search') search?: string,
     @Query('last_reply_by') last_reply_by?: string,
+    @Query('waiting_on') waiting_on?: string,
     @Query('sort_by') sort_by?: string,
     @Query('sort_order') sort_order?: string,
   ): Promise<{ data: Ticket[]; total: number; page: number; limit: number; total_pages: number }> {
@@ -102,6 +103,7 @@ export class TicketsController {
       event_id,
       search,
       last_reply_by: (last_reply_by as any) || undefined,
+      waiting_on: (waiting_on as any) || undefined,
       sort_by: (sort_by as any) || 'created_at',
       sort_order: (sort_order as any) || 'desc',
     };

@@ -134,6 +134,8 @@ const CheckInHubPage = lazy(() => import('@/event-registrations/pages/CheckInHub
 const MembersPage = lazy(() => import('@/admin/pages/MembersPage'));
 const MemberDetailPage = lazy(() => import('@/admin/pages/MemberDetailPage'));
 const AdminTicketsPage = lazy(() => import('@/admin/pages/AdminTicketsPage'));
+const StaffSignatureSettingsPage = lazy(() => import('@/tickets/pages/admin/StaffSignatureSettingsPage'));
+const CannedResponsesSettingsPage = lazy(() => import('@/tickets/pages/admin/CannedResponsesSettingsPage'));
 const EventRegistrationsPage = lazy(() => import('@/admin/pages/EventRegistrationsPage'));
 const EventRegistrationDetailPage = lazy(() => import('@/admin/pages/EventRegistrationDetailPage'));
 const BusinessListingsAdminPage = lazy(() => import('@/admin/pages/BusinessListingsAdminPage'));
@@ -361,6 +363,8 @@ function App() {
               <Route path="/admin/membership-types" element={<L><MembershipTypeManagementPage /></L>} />
               <Route path="/admin/tickets" element={<L><AdminTicketsPage /></L>} />
               <Route path="/admin/tickets/:id" element={<L><AdminTicketsPage /></L>} />
+              <Route path="/admin/settings/signature" element={<L><StaffSignatureSettingsPage /></L>} />
+              <Route path="/admin/settings/canned-responses" element={<L><CannedResponsesSettingsPage /></L>} />
               <Route path="/admin/event-registrations" element={<L><EventRegistrationsPage /></L>} />
               <Route path="/admin/event-registrations/:id" element={<L><EventRegistrationDetailPage /></L>} />
               <Route path="/admin/check-in" element={<L><CheckInHubPage /></L>} />

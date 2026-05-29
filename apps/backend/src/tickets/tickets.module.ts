@@ -8,9 +8,24 @@ import { TicketStaffService } from './ticket-staff.service';
 import { TicketRoutingService } from './ticket-routing.service';
 import { TicketSettingsService } from './ticket-settings.service';
 import { TicketGuestService } from './ticket-guest.service';
+import { StaffSignaturesService } from './staff-signatures.service';
+import { StaffSignaturesController } from './staff-signatures.controller';
+import { SavedTicketFiltersService } from './saved-ticket-filters.service';
+import { SavedTicketFiltersController } from './saved-ticket-filters.controller';
+import { TicketCannedResponsesService } from './ticket-canned-responses.service';
+import { TicketCannedResponsesController } from './ticket-canned-responses.controller';
+import { TicketSystemFiltersController } from './ticket-system-filters.controller';
 
 @Module({
-  controllers: [TicketsController, TicketAdminController, TicketGuestController],
+  controllers: [
+    TicketsController,
+    TicketAdminController,
+    TicketGuestController,
+    StaffSignaturesController,
+    SavedTicketFiltersController,
+    TicketCannedResponsesController,
+    TicketSystemFiltersController,
+  ],
   providers: [
     TicketsService,
     TicketDepartmentsService,
@@ -18,6 +33,9 @@ import { TicketGuestService } from './ticket-guest.service';
     TicketRoutingService,
     TicketSettingsService,
     TicketGuestService,
+    StaffSignaturesService,
+    SavedTicketFiltersService,
+    TicketCannedResponsesService,
   ],
   exports: [
     TicketsService,
@@ -26,6 +44,9 @@ import { TicketGuestService } from './ticket-guest.service';
     TicketRoutingService,
     TicketSettingsService,
     TicketGuestService,
+    StaffSignaturesService,
+    SavedTicketFiltersService,
+    TicketCannedResponsesService,
   ],
 })
 export class TicketsModule {}

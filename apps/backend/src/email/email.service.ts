@@ -273,6 +273,12 @@ export interface SendTicketReplyEmailDto {
   replierName: string;
   isStaffReply: boolean;
   viewTicketUrl: string;
+  // Per-agent rich-text signature (already sanitized server-side by
+  // StaffSignaturesService). Appended below the reply body and above
+  // the global MECA footer. Plain-text variant is used in the
+  // text/plain alternative part so non-HTML recipients also see it.
+  signatureHtml?: string;
+  signaturePlainText?: string;
 }
 
 export interface SendTicketStatusEmailDto {
@@ -2550,6 +2556,7 @@ ${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumb
         </span>
       </div>
       <div style="padding: 20px; color: #1e293b; font-size: 15px; line-height: 1.6; white-space: pre-wrap;">${escapedReply}</div>
+      ${dto.signatureHtml ? `<div style="padding: 16px 20px; border-top: 1px solid #e2e8f0; color: #1e293b; font-size: 14px; line-height: 1.5;">${dto.signatureHtml}</div>` : ''}
     </td></tr></table>
 
     ${this.getEmailButton(dto.isStaffReply ? 'View & Reply' : 'View Full Conversation', dto.viewTicketUrl)}
@@ -2572,7 +2579,7 @@ There is a new reply on your support ticket "${dto.ticketTitle}" (${dto.ticketNu
 FROM: ${dto.replierName} (${replyLabel})
 -----------------------------------------
 ${dto.replyContent}
------------------------------------------
+${dto.signaturePlainText ? `\n${dto.signaturePlainText}\n` : ''}-----------------------------------------
 
 View the full conversation: ${dto.viewTicketUrl}
 

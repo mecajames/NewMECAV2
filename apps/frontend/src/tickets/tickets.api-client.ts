@@ -67,6 +67,12 @@ export interface Ticket {
     author_kind: 'staff' | 'customer' | 'system' | 'guest';
     created_at: string;
   } | null;
+  // Derived "who has the ball" enum decorated by the backend on both
+  // list and detail responses. 'customer' = staff replied last (or
+  // status is awaiting_response); 'staff' = no reply yet, OR customer
+  // replied last on a non-terminal ticket; 'nobody' = resolved /
+  // closed / on_hold.
+  waiting_on?: 'customer' | 'staff' | 'nobody';
 }
 
 export interface TicketComment {
@@ -138,6 +144,9 @@ export interface TicketListQuery {
   // 'staff' / 'customer' / 'none' — who posted the latest non-internal
   // comment on each ticket.
   last_reply_by?: 'staff' | 'customer' | 'none';
+  // Derived "who has the ball" filter. See deriveWaitingOn on the
+  // backend for the rule that maps status + last_reply -> this enum.
+  waiting_on?: 'customer' | 'staff' | 'nobody';
   sort_by?: 'created_at' | 'updated_at' | 'priority' | 'status';
   sort_order?: 'asc' | 'desc';
 }
