@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, Logger, Inject, Optional, OnApplicatio
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EntityManager } from '@mikro-orm/core';
 import Stripe from 'stripe';
-import { CreatePaymentIntentDto, PaymentIntentResult } from '@newmeca/shared';
+import { CreatePaymentIntentDto, PaymentIntentResult, SubscriptionBundle } from '@newmeca/shared';
 import { SiteSettingsService } from '../site-settings/site-settings.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { REQUIRED_STRIPE_WEBHOOK_EVENTS } from './required-webhook-events.constant';
@@ -616,6 +616,81 @@ export class StripeService implements OnApplicationBootstrap {
         throw new BadRequestException(error.message);
       }
       throw new BadRequestException('Failed to retrieve subscription');
+    }
+  }
+
+  /**
+   * Retrieve a subscription plus the related objects needed to link it to a
+   * membership and write a complete billing record — customer, price/product,
+   * and the latest invoice's payment_intent/charge. Returns a normalized
+   * bundle (the "real data from Stripe") rather than the raw Stripe object so
+   * callers (admin assign flow, dedicated subscriptions page) don't each have
+   * to dig through expanded fields.
+   */
+  async getSubscriptionDetails(subscriptionId: string): Promise<SubscriptionBundle> {
+    const stripe = this.getStripeClient();
+    let sub: Stripe.Subscription;
+    try {
+      sub = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ['customer', 'latest_invoice.payment_intent', 'items.data.price.product'],
+      });
+    } catch (error) {
+      this.logger.error(`Stripe getSubscriptionDetails(${subscriptionId}) error:`, error);
+      if (error instanceof Stripe.errors.StripeError) {
+        throw new BadRequestException(error.message);
+      }
+      throw new BadRequestException('Failed to retrieve subscription');
+    }
+
+    const item = sub.items?.data?.[0];
+    const price = item?.price;
+    const product = price?.product as Stripe.Product | undefined;
+    const customer = sub.customer as Stripe.Customer | string | null;
+    const customerObj = customer && typeof customer !== 'string' && !(customer as any).deleted
+      ? (customer as Stripe.Customer)
+      : null;
+    const invoice = sub.latest_invoice as Stripe.Invoice | string | null;
+    const invoiceObj = invoice && typeof invoice !== 'string' ? (invoice as Stripe.Invoice) : null;
+    const pi = invoiceObj ? (invoiceObj as any).payment_intent : null;
+
+    return {
+      id: sub.id,
+      status: sub.status,
+      customerId: typeof customer === 'string' ? customer : (customerObj?.id ?? null),
+      customerEmail: customerObj?.email ?? null,
+      productName: product && typeof product !== 'string' ? (product.name ?? null) : null,
+      amount: typeof price?.unit_amount === 'number' ? price.unit_amount / 100 : null,
+      currency: price?.currency ? price.currency.toUpperCase() : null,
+      interval: price?.recurring?.interval ?? null,
+      currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
+      cancelAtPeriodEnd: !!sub.cancel_at_period_end,
+      latestInvoiceId: invoiceObj?.id ?? (typeof invoice === 'string' ? invoice : null),
+      paymentIntentId: pi ? (typeof pi === 'string' ? pi : pi.id) : null,
+      chargeId: invoiceObj ? ((invoiceObj as any).charge ?? null) : null,
+    };
+  }
+
+  /**
+   * Find a live (active/trialing/past_due/unpaid) subscription for a customer
+   * resolved by email. Used by the legacy-conversion job to link members who
+   * have a real Stripe subscription but whose membership was only flagged
+   * `hadLegacySubscription`. Returns the first matching subscription id, or null.
+   */
+  async findLiveSubscriptionForEmail(email: string): Promise<string | null> {
+    if (!email) return null;
+    const stripe = this.getStripeClient();
+    const live = new Set(['active', 'trialing', 'past_due', 'unpaid']);
+    try {
+      const customers = await stripe.customers.list({ email, limit: 10 });
+      for (const c of customers.data) {
+        const subs = await stripe.subscriptions.list({ customer: c.id, status: 'all', limit: 100 });
+        const match = subs.data.find((s) => live.has(s.status));
+        if (match) return match.id;
+      }
+      return null;
+    } catch (error) {
+      this.logger.warn(`findLiveSubscriptionForEmail(${email}) failed: ${error}`);
+      return null;
     }
   }
 

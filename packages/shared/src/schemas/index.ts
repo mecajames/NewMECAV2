@@ -24,6 +24,7 @@ export * from "./orders.schema.js";
 export * from "./invoices.schema.js";
 export * from "./tax.schema.js";
 export * from "./billing-stats.schema.js";
+export * from "./subscriptions.schema.js";
 
 // Judge & Event Director Schemas
 export * from "./judges.schema.js";
