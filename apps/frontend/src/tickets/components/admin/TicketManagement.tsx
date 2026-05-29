@@ -27,6 +27,9 @@ import {
   Star,
   Plus,
   X,
+  Share2,
+  Settings,
+  Bolt,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -36,7 +39,26 @@ import {
   TicketPriority,
   TicketListQuery,
 } from '../../tickets.api-client';
+import {
+  savedTicketFiltersApi,
+  systemFiltersApi,
+  resolveSystemFilterCriteria,
+  SavedTicketFilter,
+  SystemFilter,
+} from '../../ticket-support-tools.api-client';
 import { reportError } from './error-helper';
+
+// Map of icon names returned by the system-filters endpoint -> the
+// rendered React node. Only the icons we use are included so the
+// bundle stays small. Unknown icons fall back to a generic chip dot.
+const SYSTEM_FILTER_ICONS: Record<string, React.ReactNode> = {
+  MessageSquare: <MessageSquare className="w-3.5 h-3.5" />,
+  Clock: <Clock className="w-3.5 h-3.5" />,
+  Users: <Users className="w-3.5 h-3.5" />,
+  AlertCircle: <AlertCircle className="w-3.5 h-3.5" />,
+  PauseCircle: <PauseCircle className="w-3.5 h-3.5" />,
+  CheckCircle: <CheckCircle className="w-3.5 h-3.5" />,
+};
 
 // Admin-facing status pill. The pill name itself now says "who has the ball"
 // (Pending Customer vs In Progress vs Escalated, etc.) so the old separate
@@ -182,22 +204,24 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   // Transient feedback after Save / Reset / Apply preset actions.
   const [savedFilterMsg, setSavedFilterMsg] = useState<string | null>(null);
 
-  // Saved filter presets — up to 5 named combinations of
-  // status/priority/department/assignee. One can be marked default and
-  // auto-loads on mount. Stored per-admin in localStorage so two admins
-  // on the same browser don't share each other's preferred views.
-  interface FilterPreset {
-    id: string;
-    name: string;
-    status: TicketStatus[];
-    priority: TicketPriority[];
-    department: string[];
-    assignee: string[];
-  }
-  const MAX_PRESETS = 5;
-  const [presets, setPresets] = useState<FilterPreset[]>([]);
+  // Saved filter presets - server-backed via saved_ticket_filters
+  // table. Each agent gets up to 20 named filter combinations that
+  // sync across devices. Optionally shareable team-wide (other staff
+  // see them read-only). Default preset auto-loads on mount.
+  const MAX_PRESETS = 20;
+  const [presets, setPresets] = useState<SavedTicketFilter[]>([]);
   const [defaultPresetId, setDefaultPresetId] = useState<string | null>(null);
-  const PRESETS_STORAGE_KEY = `meca-ticket-admin-presets:${currentUserId}`;
+
+  // Standard system filters - hardcoded server-side, returned via
+  // /api/tickets/system-filters. Rendered as chips above the saved
+  // filters strip. Clicking one resolves '$me' placeholders to the
+  // current user's id and applies the filter to the queue.
+  const [systemFilters, setSystemFilters] = useState<SystemFilter[]>([]);
+  const [activeSystemFilterId, setActiveSystemFilterId] = useState<string | null>(null);
+  // Filter by the derived waiting_on enum ('customer'|'staff'|'nobody').
+  // Set by system filter chips that include it; can also be set
+  // explicitly via the filter panel.
+  const [waitingOnFilter, setWaitingOnFilter] = useState<'' | 'customer' | 'staff' | 'nobody'>('');
 
   const fetchStats = async () => {
     setStatsLoading(true);
@@ -236,6 +260,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       if (departmentFilter.length > 0) query.department = departmentFilter as any;
       if (assigneeFilter.length > 0) query.assigned_to_id = assigneeFilter;
       if (lastReplyFilter) query.last_reply_by = lastReplyFilter;
+      if (waitingOnFilter) query.waiting_on = waitingOnFilter;
 
       // Tab-specific filters. These pin the relevant fields regardless of
       // the filter-panel selections so e.g. the "On Hold" tab always shows
@@ -271,115 +296,155 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   }, []);
 
   // One-time on mount: load the staff list (for the Assignee filter
-  // dropdown) and restore the admin's saved presets. If a preset is
-  // marked default, apply it immediately so the queue opens to their
-  // preferred view. The fetchTicketsRequestRef token-guard above
-  // ensures the initial-render fetch and this preset-application fetch
-  // don't race — only the latest response gets written to state.
+  // dropdown), the server-backed saved presets, and the standard
+  // system filters. If a saved preset is marked default, apply it
+  // immediately so the queue opens to the agent's preferred view. The
+  // fetchTicketsRequestRef token-guard above ensures the initial-
+  // render fetch and this preset-application fetch don't race - only
+  // the latest response gets written to state.
   useEffect(() => {
     listStaff().then(setStaffList).catch(() => { /* non-fatal */ });
-    try {
-      const stored = localStorage.getItem(PRESETS_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed.presets)) {
-          setPresets(parsed.presets);
-          const defId: string | null = parsed.defaultPresetId ?? null;
-          if (defId) {
-            const def = parsed.presets.find((p: FilterPreset) => p.id === defId);
-            if (def) {
-              setDefaultPresetId(defId);
-              setStatusFilter(def.status);
-              setPriorityFilter(def.priority);
-              setDepartmentFilter(def.department);
-              setAssigneeFilter(def.assignee);
-            }
-          }
-        }
+    systemFiltersApi.list().then(setSystemFilters).catch(() => { /* non-fatal */ });
+    savedTicketFiltersApi.list().then((rows) => {
+      setPresets(rows);
+      const def = rows.find((r) => r.is_default && r.is_owner);
+      if (def) {
+        setDefaultPresetId(def.id);
+        applyPresetCriteria(def);
       }
-    } catch {
-      // Malformed entry — ignore and use defaults.
-    }
+    }).catch(() => { /* non-fatal */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
 
-  const persistPresets = (next: FilterPreset[], nextDefaultId: string | null) => {
-    try {
-      localStorage.setItem(
-        PRESETS_STORAGE_KEY,
-        JSON.stringify({ presets: next, defaultPresetId: nextDefaultId }),
-      );
-    } catch {
-      // localStorage unavailable — non-fatal
-    }
+  /**
+   * Apply a saved preset's criteria to the current filter state. The
+   * criteria shape mirrors what the ticket-list endpoint accepts, but
+   * the multi-select UI uses arrays so we coerce strings to single-
+   * element arrays where needed.
+   */
+  const applyPresetCriteria = (preset: SavedTicketFilter) => {
+    const c = preset.criteria as Record<string, unknown>;
+    const asArray = (v: unknown): string[] => {
+      if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string');
+      if (typeof v === 'string' && v) return v.split(',').map(s => s.trim()).filter(Boolean);
+      return [];
+    };
+    setStatusFilter(asArray(c.status) as TicketStatus[]);
+    setPriorityFilter(asArray(c.priority) as TicketPriority[]);
+    setDepartmentFilter(asArray(c.department));
+    setAssigneeFilter(asArray(c.assigned_to_id));
+    setLastReplyFilter((c.last_reply_by as any) || '');
+    setActiveTab('all');
+    setActiveSystemFilterId(null);
   };
 
-  const applyPreset = (preset: FilterPreset) => {
-    setStatusFilter(preset.status);
-    setPriorityFilter(preset.priority);
-    setDepartmentFilter(preset.department);
-    setAssigneeFilter(preset.assignee);
+  const applyPreset = (preset: SavedTicketFilter) => {
+    applyPresetCriteria(preset);
     setSavedFilterMsg(`Applied "${preset.name}"`);
     setTimeout(() => setSavedFilterMsg(null), 2000);
   };
 
-  const handleSavePreset = () => {
-    if (presets.length >= MAX_PRESETS) {
+  /**
+   * Apply a system filter chip. Resolves the '$me' placeholder, sets
+   * the local filter state, and tracks the active system-filter id so
+   * the chip can be highlighted.
+   */
+  const applySystemFilter = (filter: SystemFilter) => {
+    const resolved = resolveSystemFilterCriteria(filter.criteria, currentUserId);
+    setStatusFilter(resolved.status ? [resolved.status as TicketStatus] : []);
+    setPriorityFilter(resolved.priority ? [resolved.priority as TicketPriority] : []);
+    setDepartmentFilter(resolved.department ? [resolved.department] : []);
+    setAssigneeFilter(resolved.assigned_to_id ? [resolved.assigned_to_id] : []);
+    setLastReplyFilter('');
+    setWaitingOnFilter((resolved.waiting_on as any) || '');
+    setActiveTab('all');
+    setActiveSystemFilterId(filter.id);
+    setPage(1);
+    setSavedFilterMsg(`Applied "${filter.label}"`);
+    setTimeout(() => setSavedFilterMsg(null), 2000);
+  };
+
+  const handleSavePreset = async () => {
+    if (presets.filter(p => p.is_owner).length >= MAX_PRESETS) {
       alert(`You can save up to ${MAX_PRESETS} filter presets. Delete one first.`);
       return;
     }
     const name = window.prompt('Name this filter:');
     if (!name || !name.trim()) return;
-    const newPreset: FilterPreset = {
-      id: typeof crypto !== 'undefined' && (crypto as any).randomUUID
-        ? (crypto as any).randomUUID()
-        : `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: name.trim().slice(0, 40),
-      status: statusFilter,
-      priority: priorityFilter,
-      department: departmentFilter,
-      assignee: assigneeFilter,
-    };
-    const next = [...presets, newPreset];
-    setPresets(next);
-    persistPresets(next, defaultPresetId);
-    setSavedFilterMsg(`Saved "${newPreset.name}"`);
-    setTimeout(() => setSavedFilterMsg(null), 2000);
+    try {
+      const created = await savedTicketFiltersApi.create({
+        name: name.trim().slice(0, 60),
+        criteria: {
+          status: statusFilter,
+          priority: priorityFilter,
+          department: departmentFilter,
+          assigned_to_id: assigneeFilter,
+          last_reply_by: lastReplyFilter || undefined,
+        },
+      });
+      setPresets((prev) => [...prev, created]);
+      setSavedFilterMsg(`Saved "${created.name}"`);
+      setTimeout(() => setSavedFilterMsg(null), 2000);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to save preset');
+    }
   };
 
-  const handleDeletePreset = (id: string) => {
+  const handleDeletePreset = async (id: string) => {
     const preset = presets.find((p) => p.id === id);
-    if (!preset) return;
+    if (!preset || !preset.is_owner) return;
     if (!window.confirm(`Delete saved filter "${preset.name}"?`)) return;
-    const next = presets.filter((p) => p.id !== id);
-    const nextDefault = defaultPresetId === id ? null : defaultPresetId;
-    setPresets(next);
-    setDefaultPresetId(nextDefault);
-    persistPresets(next, nextDefault);
+    try {
+      await savedTicketFiltersApi.delete(id);
+      setPresets((prev) => prev.filter((p) => p.id !== id));
+      if (defaultPresetId === id) setDefaultPresetId(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to delete preset');
+    }
   };
 
-  const handleToggleDefault = (id: string) => {
-    // Click the star to set this preset as default (auto-load on next
-    // page open). Click it again to unset — no default loads anymore.
-    const nextDefault = defaultPresetId === id ? null : id;
-    setDefaultPresetId(nextDefault);
-    persistPresets(presets, nextDefault);
+  const handleToggleDefault = async (id: string) => {
+    const preset = presets.find((p) => p.id === id);
+    if (!preset || !preset.is_owner) return;
+    const next = defaultPresetId === id ? false : true;
+    try {
+      const updated = await savedTicketFiltersApi.update(id, { is_default: next });
+      setPresets((prev) => prev.map((p) =>
+        p.id === id ? updated : (next ? { ...p, is_default: false } : p)
+      ));
+      setDefaultPresetId(next ? id : null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to toggle default');
+    }
+  };
+
+  const handleToggleShare = async (id: string) => {
+    const preset = presets.find((p) => p.id === id);
+    if (!preset || !preset.is_owner) return;
+    try {
+      const updated = await savedTicketFiltersApi.update(id, { is_shared_with_team: !preset.is_shared_with_team });
+      setPresets((prev) => prev.map((p) => p.id === id ? updated : p));
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to toggle share');
+    }
   };
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter]);
+  }, [activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter, waitingOnFilter]);
 
   useEffect(() => {
     fetchTickets();
-  }, [page, activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter, lastReplyFilter]);
+  }, [page, activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter, lastReplyFilter, waitingOnFilter]);
 
   const handleResetFilter = () => {
     setStatusFilter(ACTIVE_STATUSES);
     setPriorityFilter([]);
     setDepartmentFilter([]);
     setLastReplyFilter('');
+    setWaitingOnFilter('');
     setAssigneeFilter([]);
+    setActiveSystemFilterId(null);
     setSavedFilterMsg('Filter reset.');
     setTimeout(() => setSavedFilterMsg(null), 2000);
   };
@@ -398,6 +463,8 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     setDepartmentFilter([]);
     setAssigneeFilter([]);
     setLastReplyFilter('');
+    setWaitingOnFilter('');
+    setActiveSystemFilterId(null);
     setPage(1);
     setSavedFilterMsg('Filters cleared.');
     setTimeout(() => setSavedFilterMsg(null), 2000);
@@ -417,6 +484,8 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     departmentFilter.length > 0 ||
     assigneeFilter.length > 0 ||
     lastReplyFilter !== '' ||
+    waitingOnFilter !== '' ||
+    activeSystemFilterId !== null ||
     !statusIsDefault;
 
   // Debounced search
@@ -620,58 +689,106 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         )}
       </div>
 
-      {/* Saved filter presets — pills below the search box and above the
-          filter panel. Each admin can save up to MAX_PRESETS named
-          combinations of status/priority/department/assignee. The
-          starred preset auto-loads on page mount. Click a pill to
-          apply, click its star to toggle "default", click its × to
-          delete. The "+ Save current" button on the right captures
-          the current panel selections as a new preset (prompts for a
-          name). Hidden entirely when the admin has no presets and
-          hasn't expanded the filter panel — keeps the UI clean for
-          first-time use. */}
+      {/* System filter chips - hardcoded server-side, identical for
+          every agent. Replaces the legacy localStorage button strip
+          ("My Open Requests", "New and Client Replied", etc) so the
+          labels are consistent and the criteria are guaranteed to
+          actually match the label semantics. */}
+      {systemFilters.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-400 mr-1 flex items-center gap-1">
+            <Bolt className="w-3 h-3" />
+            Quick filters:
+          </span>
+          {systemFilters.map((f) => {
+            const isActive = activeSystemFilterId === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => applySystemFilter(f)}
+                title={f.description}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors border ${
+                  isActive
+                    ? 'bg-orange-500 text-white border-orange-400'
+                    : 'bg-slate-700 hover:bg-slate-600 text-gray-200 border-slate-600'
+                }`}
+              >
+                {SYSTEM_FILTER_ICONS[f.icon] ?? <span className="w-2 h-2 rounded-full bg-current" />}
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Saved filter presets - server-backed via saved_ticket_filters.
+          Each agent gets up to MAX_PRESETS named combinations that
+          sync across devices. Owners can star a default (auto-loads
+          on mount), toggle team-share (other staff see it read-only),
+          or delete. Shared filters from other agents appear too but
+          are read-only and badged with their owner's name. */}
       {(presets.length > 0 || showFilters) && (
         <div className="flex flex-wrap items-center gap-2">
           {presets.length > 0 && (
             <span className="text-xs text-gray-400 mr-1">Saved filters:</span>
           )}
           {presets.map((preset) => {
-            const isDefault = defaultPresetId === preset.id;
+            const isDefault = preset.is_default && preset.is_owner;
+            const ownerLabel = !preset.is_owner && preset.owner
+              ? ` (by ${preset.owner.first_name || preset.owner.email || 'staff'})`
+              : '';
             return (
               <div
                 key={preset.id}
                 className="group inline-flex items-center bg-slate-700 hover:bg-slate-600 rounded-full pl-2 pr-1 py-1 text-xs text-white border border-slate-600 transition-colors"
               >
-                <button
-                  type="button"
-                  onClick={() => handleToggleDefault(preset.id)}
-                  title={isDefault ? 'Default (auto-loads on page open). Click to unset.' : 'Set as default — auto-loads next time you open this page.'}
-                  className="mr-1.5 hover:scale-110 transition-transform"
-                >
-                  <Star
-                    className={`w-3.5 h-3.5 ${isDefault ? 'text-yellow-400 fill-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}
-                  />
-                </button>
+                {preset.is_owner ? (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleDefault(preset.id)}
+                    title={isDefault ? 'Default (auto-loads on page open). Click to unset.' : 'Set as default - auto-loads next time you open this page.'}
+                    className="mr-1.5 hover:scale-110 transition-transform"
+                  >
+                    <Star
+                      className={`w-3.5 h-3.5 ${isDefault ? 'text-yellow-400 fill-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}
+                    />
+                  </button>
+                ) : (
+                  <Share2 className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
+                )}
                 <button
                   type="button"
                   onClick={() => applyPreset(preset)}
                   className="px-1 font-medium"
                   title="Apply this filter"
                 >
-                  {preset.name}
+                  {preset.name}{ownerLabel}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeletePreset(preset.id)}
-                  title="Delete saved filter"
-                  className="ml-1 p-0.5 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+                {preset.is_owner && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleShare(preset.id)}
+                      title={preset.is_shared_with_team ? 'Shared with team - click to make private' : 'Private - click to share with team'}
+                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-400 hover:text-blue-400 transition-colors"
+                    >
+                      <Share2 className={`w-3 h-3 ${preset.is_shared_with_team ? 'text-blue-400' : ''}`} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePreset(preset.id)}
+                      title="Delete saved filter"
+                      className="ml-1 p-0.5 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </>
+                )}
               </div>
             );
           })}
-          {showFilters && presets.length < MAX_PRESETS && (
+          {showFilters && presets.filter(p => p.is_owner).length < MAX_PRESETS && (
             <button
               type="button"
               onClick={handleSavePreset}
@@ -682,6 +799,24 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
               Save current as preset
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/settings/signature')}
+            className="inline-flex items-center gap-1 bg-slate-700 hover:bg-slate-600 rounded-full px-3 py-1 text-xs text-gray-300 transition-colors ml-auto"
+            title="Edit your ticket reply signature"
+          >
+            <Settings className="w-3 h-3" />
+            Signature
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/settings/canned-responses')}
+            className="inline-flex items-center gap-1 bg-slate-700 hover:bg-slate-600 rounded-full px-3 py-1 text-xs text-gray-300 transition-colors"
+            title="Manage your canned responses"
+          >
+            <Settings className="w-3 h-3" />
+            Canned responses
+          </button>
           {savedFilterMsg && (
             <span className="text-xs text-gray-400 ml-1">{savedFilterMsg}</span>
           )}

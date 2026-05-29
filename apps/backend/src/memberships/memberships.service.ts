@@ -11,6 +11,9 @@ import {
   InvoiceStatus,
   InvoiceItemType,
   ManufacturerTier,
+  SubscriptionBundle,
+  AssignSubscriptionResult,
+  LegacyConversionReport,
 } from '@newmeca/shared';
 import { Membership } from './memberships.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
@@ -2328,6 +2331,239 @@ export class MembershipsService {
     });
 
     return { success: true, membership, message: 'Membership reactivated. Auto-renewal restored.' };
+  }
+
+  /**
+   * Preview a Stripe subscription before an admin assigns it. Returns the
+   * normalized bundle pulled live from Stripe, plus — if the subscription is
+   * already linked to a membership — which member it currently belongs to, so
+   * the UI can warn "this will be moved from X".
+   */
+  async previewSubscriptionAssignment(stripeSubscriptionId: string): Promise<{
+    bundle: SubscriptionBundle;
+    currentMembership: {
+      membershipId: string;
+      mecaId: number | null;
+      memberName: string | null;
+      email: string | null;
+    } | null;
+  }> {
+    const bundle = await this.stripeService.getSubscriptionDetails(stripeSubscriptionId);
+    const em = this.em.fork();
+    const existing = await em.findOne(
+      Membership,
+      { stripeSubscriptionId },
+      { populate: ['user'] },
+    );
+    return {
+      bundle,
+      currentMembership: existing
+        ? {
+            membershipId: existing.id,
+            mecaId: existing.mecaId ?? null,
+            memberName:
+              existing.competitorName ||
+              `${existing.user?.first_name ?? ''} ${existing.user?.last_name ?? ''}`.trim() ||
+              null,
+            email: existing.user?.email ?? null,
+          }
+        : null,
+    };
+  }
+
+  /**
+   * Admin: assign (or MOVE) a Stripe subscription to a membership, pulling the
+   * real data from Stripe. Reactivates the target membership from the live
+   * period end where the subscription is active/trialing/past_due, clears the
+   * legacy flag, and — if the subscription was on another membership — clears
+   * it there first (move semantics). The enriched billing-ledger row is written
+   * by the caller (controller) via PaymentFulfillmentService.recordSubscriptionPayment.
+   */
+  async adminAssignSubscription(
+    membershipId: string,
+    stripeSubscriptionId: string,
+    adminId: string,
+  ): Promise<AssignSubscriptionResult> {
+    const bundle = await this.stripeService.getSubscriptionDetails(stripeSubscriptionId);
+    const em = this.em.fork();
+
+    const target = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+    if (!target) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+
+    // Move: clear this subscription off any other membership holding it.
+    let movedFromMembershipId: string | null = null;
+    const others = await em.find(Membership, { stripeSubscriptionId });
+    for (const other of others) {
+      if (other.id !== membershipId) {
+        other.stripeSubscriptionId = undefined;
+        movedFromMembershipId = other.id;
+        this.logger.log(
+          `Moving subscription ${stripeSubscriptionId} off membership ${other.id} onto ${membershipId}`,
+        );
+      }
+    }
+
+    const oldEnd = target.endDate ?? null;
+    const oldSub = target.stripeSubscriptionId ?? null;
+    target.stripeSubscriptionId = stripeSubscriptionId;
+    target.hadLegacySubscription = false;
+
+    // Reactivate from the real Stripe period end when the subscription is live.
+    const liveStatuses = ['active', 'trialing', 'past_due'];
+    if (liveStatuses.includes(bundle.status)) {
+      target.paymentStatus = PaymentStatus.PAID;
+      if (bundle.currentPeriodEnd) {
+        target.endDate = bundle.currentPeriodEnd;
+      }
+      target.cancelAtPeriodEnd = !!bundle.cancelAtPeriodEnd;
+      if (!bundle.cancelAtPeriodEnd) {
+        target.cancelledAt = undefined;
+        target.cancellationReason = undefined;
+        target.cancelledBy = undefined;
+      }
+    }
+    await em.flush();
+
+    this.logger.log(
+      `Admin ${adminId} assigned subscription ${stripeSubscriptionId} (status=${bundle.status}) to membership ${membershipId}` +
+        (movedFromMembershipId ? ` (moved from ${movedFromMembershipId})` : ''),
+    );
+
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_assign_subscription',
+      resourceType: 'membership',
+      resourceId: membershipId,
+      description:
+        `Assigned Stripe subscription ${stripeSubscriptionId} to ${target.user?.email || 'unknown'}` +
+        (movedFromMembershipId ? ` (moved from membership ${movedFromMembershipId})` : ''),
+      oldValues: { stripeSubscriptionId: oldSub, endDate: oldEnd },
+      newValues: {
+        stripeSubscriptionId,
+        endDate: target.endDate ?? null,
+        movedFromMembershipId,
+        subscriptionStatus: bundle.status,
+      },
+    });
+
+    return { membershipId: target.id, bundle, movedFromMembershipId };
+  }
+
+  /**
+   * Bulk-convert legacy memberships to the regular subscription level. A
+   * "legacy" membership is one flagged `hadLegacySubscription=true` (from the
+   * pmpro import) that sits in the `'legacy'` auto-renewal state. For each:
+   *   - if a live Stripe subscription exists for the member (matched by the
+   *     Stripe customer's email), link it via adminAssignSubscription (which
+   *     reactivates from the real period end and clears the legacy flag);
+   *   - otherwise just clear the `legacy` label and leave it as a regular paid
+   *     membership with auto-renew off — never silently create a billing
+   *     subscription (that would require the member's consent + a card).
+   *
+   * `dryRun` (default true) reports what WOULD happen without mutating. The
+   * enriched billing row for a freshly-linked sub is written on its next
+   * invoice.paid webhook; we don't backfill historical legacy invoices here.
+   */
+  async convertLegacyMemberships(
+    opts: { dryRun: boolean },
+    adminId: string,
+  ): Promise<LegacyConversionReport> {
+    const dryRun = opts.dryRun !== false;
+    const em = this.em.fork();
+    const legacy = await em.find(
+      Membership,
+      { hadLegacySubscription: true },
+      { populate: ['user'] },
+    );
+
+    const report: LegacyConversionReport = {
+      dryRun,
+      scanned: legacy.length,
+      linked: [],
+      reclassified: [],
+      skipped: [],
+    };
+
+    for (const m of legacy) {
+      const email = m.user?.email ?? null;
+      if (!email) {
+        report.skipped.push({
+          membershipId: m.id,
+          mecaId: m.mecaId ?? null,
+          email: null,
+          stripeSubscriptionId: null,
+          reason: 'no email on profile',
+        });
+        continue;
+      }
+
+      let subId: string | null = null;
+      try {
+        subId = await this.stripeService.findLiveSubscriptionForEmail(email);
+      } catch (err) {
+        this.logger.warn(`Legacy conversion: Stripe lookup failed for ${email}: ${err}`);
+      }
+
+      if (subId) {
+        if (!dryRun) {
+          try {
+            await this.adminAssignSubscription(m.id, subId, adminId);
+          } catch (err) {
+            this.logger.error(`Legacy conversion: failed to link ${subId} to ${m.id}: ${err}`);
+            report.skipped.push({
+              membershipId: m.id,
+              mecaId: m.mecaId ?? null,
+              email,
+              stripeSubscriptionId: subId,
+              reason: `link failed: ${(err as Error).message}`,
+            });
+            continue;
+          }
+        }
+        report.linked.push({
+          membershipId: m.id,
+          mecaId: m.mecaId ?? null,
+          email,
+          stripeSubscriptionId: subId,
+        });
+      } else {
+        if (!dryRun) {
+          m.hadLegacySubscription = false;
+        }
+        report.reclassified.push({
+          membershipId: m.id,
+          mecaId: m.mecaId ?? null,
+          email,
+          stripeSubscriptionId: null,
+          reason: 'no live Stripe subscription found; cleared legacy flag',
+        });
+      }
+    }
+
+    if (!dryRun) {
+      await em.flush();
+      this.adminAuditService.logAction({
+        adminUserId: adminId,
+        action: 'memberships_convert_legacy',
+        resourceType: 'membership',
+        resourceId: 'bulk',
+        description: `Legacy conversion: ${report.linked.length} linked, ${report.reclassified.length} reclassified, ${report.skipped.length} skipped (scanned ${report.scanned})`,
+        newValues: {
+          linked: report.linked.length,
+          reclassified: report.reclassified.length,
+          skipped: report.skipped.length,
+        },
+      });
+    }
+
+    this.logger.log(
+      `convertLegacyMemberships(dryRun=${dryRun}): scanned ${report.scanned}, linked ${report.linked.length}, reclassified ${report.reclassified.length}, skipped ${report.skipped.length}`,
+    );
+    return report;
   }
 
   /**

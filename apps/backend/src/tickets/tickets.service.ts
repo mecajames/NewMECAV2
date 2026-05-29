@@ -33,6 +33,37 @@ import { TicketStaffService } from './ticket-staff.service';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { StaffSignaturesService } from './staff-signatures.service';
+
+/**
+ * Statuses that mean nobody is actively expected to reply.
+ * - resolved/closed: ticket lifecycle ended.
+ * - on_hold: intentionally paused, neither party is on the hook.
+ */
+const TERMINAL_OR_PAUSED_STATUSES: ReadonlySet<string> = new Set([
+  'resolved', 'closed', 'on_hold',
+]);
+
+/**
+ * Single source of truth for the derived "waiting on" enum. The
+ * frontend, the system-filters service, and the server-side filter
+ * compute all converge on this rule:
+ *
+ *   - 'nobody'    : status is terminal (resolved/closed) or paused (on_hold)
+ *   - 'customer'  : staff replied last, OR status is the explicit
+ *                   awaiting_response bucket
+ *   - 'staff'     : everything else (no reply yet, or customer/guest
+ *                   replied last on a non-terminal ticket)
+ */
+export function deriveWaitingOn(
+  status: string,
+  lastReplyAuthorKind?: 'staff' | 'customer' | 'system' | 'guest' | null,
+): 'customer' | 'staff' | 'nobody' {
+  if (TERMINAL_OR_PAUSED_STATUSES.has(status)) return 'nobody';
+  if (status === 'awaiting_response') return 'customer';
+  if (lastReplyAuthorKind === 'staff') return 'customer';
+  return 'staff';
+}
 
 @Injectable()
 export class TicketsService {
@@ -49,6 +80,7 @@ export class TicketsService {
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly signaturesService: StaffSignaturesService,
   ) {}
 
   // ==========================================================================
@@ -70,9 +102,10 @@ export class TicketsService {
       event_id,
       search,
       last_reply_by,
+      waiting_on,
       sort_by = 'created_at',
       sort_order = 'desc',
-    } = query as TicketListQuery & { department_id?: string };
+    } = query as TicketListQuery & { department_id?: string; waiting_on?: 'customer' | 'staff' | 'nobody' };
 
     const offset = (page - 1) * limit;
 
@@ -165,11 +198,24 @@ export class TicketsService {
     if (last_reply_by) {
       const eligibleIds = await this.computeTicketIdsByLastReplyKind(em, last_reply_by);
       if (eligibleIds.length === 0) {
-        // No matches — short-circuit to an empty page rather than
+        // No matches - short-circuit to an empty page rather than
         // running the main query with an empty $in (which would still
         // produce no results but burn the round-trip).
         return { data: [], total: 0 };
       }
+      andClauses.push({ id: { $in: eligibleIds } });
+    }
+
+    // waiting_on filter. Derived enum: 'customer' = staff replied last
+    // (or status explicitly set to awaiting_response); 'staff' = the
+    // ball is in our court (no reply yet or customer replied last);
+    // 'nobody' = ticket is resolved / closed / on_hold so no party
+    // is actively expected to respond. Powers the standard system
+    // filters (Awaiting My Reply, Awaiting Customer) without forcing
+    // the frontend to compose status + last_reply combinations.
+    if (waiting_on) {
+      const eligibleIds = await this.computeTicketIdsByWaitingOn(em, waiting_on);
+      if (eligibleIds.length === 0) return { data: [], total: 0 };
       andClauses.push({ id: { $in: eligibleIds } });
     }
 
@@ -196,14 +242,16 @@ export class TicketsService {
       em.count(Ticket, where),
     ]);
 
-    // Stitch on per-ticket last-reply summary. We can't put this on
-    // the Ticket entity directly (would force a relation populate on
-    // every query that returns a Ticket); instead we compute it here
-    // for just the paginated slice and merge into each row's JSON.
+    // Stitch on per-ticket last-reply summary AND derived waiting_on.
+    // We compute these client-side rather than carrying them on the
+    // Ticket entity so a ticket fetch that doesn't go through findAll
+    // (e.g. detail page) isn't forced to populate comments.
     const lastReplyMap = await this.fetchLastRepliesForTickets(em, data.map((t) => t.id));
     const dataWithLastReply = data.map((t) => {
       const json = t.toJSON();
-      (json as any).last_reply = lastReplyMap.get(t.id) || null;
+      const lastReply = lastReplyMap.get(t.id) || null;
+      (json as any).last_reply = lastReply;
+      (json as any).waiting_on = deriveWaitingOn(t.status, lastReply?.author_kind);
       return json;
     });
 
@@ -254,6 +302,61 @@ export class TicketsService {
        LEFT JOIN public.profiles p ON p.id = l.author_id
        WHERE ${predicate}`,
     );
+    return rows.map((r: any) => r.id);
+  }
+
+  /**
+   * Returns ticket IDs whose derived `waiting_on` value matches the
+   * requested bucket. Single SQL statement that joins to the latest
+   * non-internal comment + the comment author's role so we can apply
+   * it as a pre-filter alongside the rest of the where-clause.
+   */
+  private async computeTicketIdsByWaitingOn(
+    em: EntityManager,
+    kind: 'customer' | 'staff' | 'nobody',
+  ): Promise<string[]> {
+    const conn = em.getConnection();
+    if (kind === 'nobody') {
+      const rows = await conn.execute<any[]>(
+        `SELECT t.id FROM public.tickets t
+         WHERE t.status IN ('resolved', 'closed', 'on_hold')`,
+      );
+      return rows.map((r: any) => r.id);
+    }
+    // Build the join once. Distinguish the latest non-internal comment
+    // per ticket; if none, the join is NULL and the author predicate
+    // evaluates conservatively (we treat 'no reply yet' as waiting on
+    // staff, matching the deriveWaitingOn helper).
+    const staffPredicate =
+      `(COALESCE(p.is_staff, false) = true OR p.role::text IN ('admin', 'super_admin'))
+       AND COALESCE(l.is_guest_comment, false) = false AND l.author_id IS NOT NULL`;
+    // 'customer' waiting_on means staff replied last OR status is
+    // awaiting_response. 'staff' waiting_on means the inverse on a
+    // non-terminal ticket.
+    const sql =
+      kind === 'customer'
+        ? `SELECT t.id FROM public.tickets t
+           LEFT JOIN LATERAL (
+             SELECT author_id, is_guest_comment
+             FROM public.ticket_comments
+             WHERE ticket_id = t.id AND COALESCE(is_internal, false) = false
+             ORDER BY created_at DESC LIMIT 1
+           ) l ON true
+           LEFT JOIN public.profiles p ON p.id = l.author_id
+           WHERE t.status NOT IN ('resolved', 'closed', 'on_hold')
+             AND (t.status = 'awaiting_response' OR ${staffPredicate})`
+        : `SELECT t.id FROM public.tickets t
+           LEFT JOIN LATERAL (
+             SELECT author_id, is_guest_comment
+             FROM public.ticket_comments
+             WHERE ticket_id = t.id AND COALESCE(is_internal, false) = false
+             ORDER BY created_at DESC LIMIT 1
+           ) l ON true
+           LEFT JOIN public.profiles p ON p.id = l.author_id
+           WHERE t.status NOT IN ('resolved', 'closed', 'on_hold')
+             AND t.status <> 'awaiting_response'
+             AND (l.author_id IS NULL OR NOT (${staffPredicate}))`;
+    const rows = await conn.execute<any[]>(sql);
     return rows.map((r: any) => r.id);
   }
 
@@ -335,6 +438,20 @@ export class TicketsService {
     if (!ticket) {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
     }
+    // Decorate with last_reply + derived waiting_on so the detail page
+    // sees the same shape as the list page. Override toJSON so existing
+    // callers (controller wraps with json automatically) get the
+    // augmented object without each call site reimplementing it.
+    const lastReplyMap = await this.fetchLastRepliesForTickets(em, [ticket.id]);
+    const lastReply = lastReplyMap.get(ticket.id) || null;
+    const waitingOn = deriveWaitingOn(ticket.status, lastReply?.author_kind);
+    const originalToJSON = ticket.toJSON.bind(ticket);
+    (ticket as any).toJSON = () => {
+      const json = originalToJSON();
+      (json as any).last_reply = lastReply;
+      (json as any).waiting_on = waitingOn;
+      return json;
+    };
     return ticket;
   }
 
@@ -1497,6 +1614,18 @@ export class TicketsService {
 
     const replierName = `${author.first_name || ''} ${author.last_name || ''}`.trim() || author.email || 'Unknown';
 
+    // Only staff replies get a signature appended. Lookup is best-
+    // effort - if it throws or returns null, the reply still goes out
+    // without a signature rather than failing the email entirely.
+    let signature: { html: string; plainText: string } | null = null;
+    if (isStaffReply) {
+      try {
+        signature = await this.signaturesService.getActiveForEmail(author.id);
+      } catch (err) {
+        this.logger.warn(`Signature lookup failed for ${author.id}: ${(err as Error).message}`);
+      }
+    }
+
     if (isStaffReply) {
       // Staff replied - notify the ticket submitter
       if (ticket.reporter?.email && ticket.reporter.id !== author.id) {
@@ -1509,6 +1638,8 @@ export class TicketsService {
           replierName,
           isStaffReply: true,
           viewTicketUrl,
+          signatureHtml: signature?.html || undefined,
+          signaturePlainText: signature?.plainText || undefined,
         });
 
         await this.notificationsService.createForUser({

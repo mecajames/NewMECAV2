@@ -1583,23 +1583,54 @@ export class StripeController {
     const metadata = subscription.metadata;
     const membershipId = metadata?.membershipId;
 
-    if (!membershipId) {
-      console.log('Subscription has no membershipId in metadata, skipping');
-      return;
+    const em = this.em.fork();
+    let membership = membershipId
+      ? await em.findOne(Membership, { id: membershipId })
+      : null;
+
+    // Fallback: no membershipId in metadata (legacy subs, admin-created members,
+    // a family member paying on someone else's behalf). Resolve via the Stripe
+    // customer's email -> Profile -> their unlinked (preferred) or most-recent
+    // membership, so the subscription still links instead of being silently
+    // dropped. Admins can re-target later via the assign-subscription tool.
+    if (!membership) {
+      const customerId = typeof subscription.customer === 'string'
+        ? subscription.customer
+        : subscription.customer?.id;
+      if (customerId) {
+        const customer = await this.stripeService.retrieveCustomer(customerId);
+        const email = customer?.email?.toLowerCase();
+        if (email) {
+          const profile = await em.findOne(Profile, { email });
+          if (profile) {
+            membership =
+              (await em.findOne(
+                Membership,
+                { user: profile.id, stripeSubscriptionId: null },
+                { orderBy: { endDate: 'DESC' } },
+              )) ||
+              (await em.findOne(
+                Membership,
+                { user: profile.id },
+                { orderBy: { endDate: 'DESC' } },
+              ));
+          }
+        }
+      }
     }
 
-    const em = this.em.fork();
-    const membership = await em.findOne(Membership, { id: membershipId });
-
     if (membership) {
-      // Update the membership with subscription ID if not already set
+      // Only link if not already set (don't clobber an existing/different sub).
       if (!membership.stripeSubscriptionId) {
         membership.stripeSubscriptionId = subscription.id;
+        membership.hadLegacySubscription = false;
         await em.flush();
-        console.log(`Membership ${membershipId} linked to subscription ${subscription.id}`);
+        console.log(`Membership ${membership.id} linked to subscription ${subscription.id}`);
       }
     } else {
-      console.error(`Membership ${membershipId} not found for subscription ${subscription.id}`);
+      console.log(
+        `Subscription ${subscription.id}: no membership matched via metadata or customer email; skipping link`,
+      );
     }
   }
 
@@ -1703,6 +1734,33 @@ export class StripeController {
     await em.flush();
 
     console.log('Extended membership ' + membership.id + ' end_date: ' + oldEndStr + ' -> ' + newEndStr + ' (subscription: ' + subscriptionId + ')');
+
+    // Persist an enriched billing-ledger row for this renewal. Previously a
+    // successful renewal only bumped the membership end_date and never wrote a
+    // Payment row, so renewals were invisible in the billing ledger and the
+    // reconciliation surfaced them as gaps. Idempotent on the Stripe invoice id.
+    try {
+      const piRaw = (invoice as any).payment_intent;
+      const chargeRaw = (invoice as any).charge;
+      await this.paymentFulfillmentService.recordSubscriptionPayment({
+        membershipId: membership.id,
+        userId: membership.user?.id ?? null,
+        invoiceId: invoice.id ?? null,
+        paymentIntentId: typeof piRaw === 'string' ? piRaw : (piRaw?.id ?? null),
+        chargeId: typeof chargeRaw === 'string' ? chargeRaw : (chargeRaw?.id ?? null),
+        customerId: typeof invoice.customer === 'string'
+          ? invoice.customer
+          : ((invoice.customer as any)?.id ?? null),
+        subscriptionId,
+        amount: typeof invoice.amount_paid === 'number' ? invoice.amount_paid / 100 : 0,
+        currency: invoice.currency ?? 'usd',
+        status: PaymentStatus.PAID,
+        billingReason: invoice.billing_reason ?? null,
+        source: 'stripe_invoice_paid_webhook',
+      });
+    } catch (err) {
+      console.error('Failed to record subscription renewal payment row (non-critical):', err);
+    }
 
     // Notify admins of subscription renewal
     await em.populate(membership, ['user', 'membershipTypeConfig']);

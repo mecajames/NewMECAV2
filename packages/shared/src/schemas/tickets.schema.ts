@@ -220,6 +220,12 @@ export const TicketListQuerySchema = z.object({
   // customer reply" vs "tickets waiting for staff" without eyeballing
   // each row.
   last_reply_by: z.enum(['staff', 'customer', 'none']).optional(),
+  // Derived "who has the ball" filter. 'customer' = staff replied
+  // last (or status is awaiting_response); 'staff' = no reply yet
+  // OR customer replied last on a non-terminal ticket; 'nobody' =
+  // ticket is resolved/closed/on_hold. Powers the standard system
+  // filters (Awaiting My Reply, Awaiting Customer).
+  waiting_on: z.enum(['customer', 'staff', 'nobody']).optional(),
   sort_by: z.enum(['created_at', 'updated_at', 'priority', 'status']).default('created_at'),
   sort_order: z.enum(['asc', 'desc']).default('desc'),
 });

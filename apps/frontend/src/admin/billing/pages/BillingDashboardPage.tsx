@@ -275,7 +275,15 @@ export default function BillingDashboardPage() {
         {/* Subscription KPIs */}
         {subStats && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-white mb-3">Subscriptions</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-white">Subscriptions</h2>
+              <button
+                onClick={() => navigate('/admin/billing/subscriptions')}
+                className="text-sm text-orange-500 hover:text-orange-400"
+              >
+                Manage subscriptions →
+              </button>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Active</p>
@@ -444,6 +452,19 @@ export default function BillingDashboardPage() {
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">Recurring Invoices</h3>
             <p className="text-gray-400 text-sm">Subscriptions & templates</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/billing/subscriptions')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left ring-1 ring-indigo-500/20 hover:ring-indigo-500/40"
+          >
+            <div className="w-12 h-12 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center mb-4">
+              <CreditCard className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Stripe Subscriptions</h3>
+            <p className="text-gray-400 text-sm">
+              {subStats?.active ?? 0} active · assign, move &amp; convert legacy
+            </p>
           </button>
         </div>
 

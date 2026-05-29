@@ -12,7 +12,14 @@ import { ShopService } from '../../shop/shop.service';
 import { MasterSecondaryService } from '../../memberships/master-secondary.service';
 import { MecaIdService } from '../../memberships/meca-id.service';
 import { MembershipSyncService } from '../../memberships/membership-sync.service';
-import { ProcessedWebhookEvent } from '../processed-webhook-event.entity';
+import { TaxService } from '../../tax/tax.service';
+import { CouponsService } from '../../coupons/coupons.service';
+import { AdminNotificationsService } from '../../admin-notifications/admin-notifications.service';
+import { EmailService } from '../../email/email.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { WorldFinalsService } from '../../world-finals/world-finals.service';
+import { PaymentFulfillmentService } from '../../payments/payment-fulfillment.service';
+import { Membership } from '../../memberships/memberships.entity';
 import { StripePaymentType } from '@newmeca/shared';
 import {
   createMockPaymentIntent,
@@ -35,6 +42,13 @@ describe('StripeController - Webhook Handler', () => {
   let mockMasterSecondaryService: any;
   let mockMecaIdService: any;
   let mockMembershipSyncService: any;
+  let mockTaxService: any;
+  let mockCouponsService: any;
+  let mockAdminNotificationsService: any;
+  let mockEmailService: any;
+  let mockNotificationsService: any;
+  let mockWorldFinalsService: any;
+  let mockPaymentFulfillmentService: any;
   let mockEm: any;
 
   beforeEach(async () => {
@@ -95,7 +109,31 @@ describe('StripeController - Webhook Handler', () => {
       syncMembershipStatus: jest.fn(),
     };
 
+    mockTaxService = { calculateTax: jest.fn() };
+    mockCouponsService = { validateCoupon: jest.fn(), redeemCoupon: jest.fn() };
+    mockAdminNotificationsService = {
+      notifySubscriptionRenewal: jest.fn().mockResolvedValue(undefined),
+      notifySubscriptionCancelled: jest.fn().mockResolvedValue(undefined),
+      notifyInvoicePaymentFailed: jest.fn().mockResolvedValue(undefined),
+    };
+    mockEmailService = {
+      sendMembershipRenewalEmail: jest.fn().mockResolvedValue(undefined),
+      sendSubscriptionCancelledEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    mockNotificationsService = { create: jest.fn() };
+    mockWorldFinalsService = { markPreRegistrationPaid: jest.fn() };
+    mockPaymentFulfillmentService = {
+      fulfillMembershipPayment: jest.fn().mockResolvedValue(undefined),
+      fulfillEventRegistrationPayment: jest.fn().mockResolvedValue(undefined),
+      fulfillInvoicePayment: jest.fn().mockResolvedValue(undefined),
+      fulfillShopPayment: jest.fn().mockResolvedValue(undefined),
+      fulfillTeamUpgradePayment: jest.fn().mockResolvedValue(undefined),
+      recordSubscriptionPayment: jest.fn().mockResolvedValue(null),
+    };
+
     mockEm = createMockEntityManager();
+    // handleInvoicePaid populates the membership after writing the ledger row.
+    (mockEm as any).populate = jest.fn().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [StripeController],
@@ -111,6 +149,13 @@ describe('StripeController - Webhook Handler', () => {
         { provide: MasterSecondaryService, useValue: mockMasterSecondaryService },
         { provide: MecaIdService, useValue: mockMecaIdService },
         { provide: MembershipSyncService, useValue: mockMembershipSyncService },
+        { provide: TaxService, useValue: mockTaxService },
+        { provide: CouponsService, useValue: mockCouponsService },
+        { provide: AdminNotificationsService, useValue: mockAdminNotificationsService },
+        { provide: EmailService, useValue: mockEmailService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: WorldFinalsService, useValue: mockWorldFinalsService },
+        { provide: PaymentFulfillmentService, useValue: mockPaymentFulfillmentService },
         { provide: 'EntityManager', useValue: mockEm },
       ],
     }).compile();
@@ -151,16 +196,15 @@ describe('StripeController - Webhook Handler', () => {
       const event = createMockWebhookEvent('payment_intent.succeeded', paymentIntent);
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
 
-      // Simulate already processed event
-      const existingProcessedEvent = new ProcessedWebhookEvent();
-      existingProcessedEvent.stripeEventId = event.id;
-      mockEm.findOne.mockResolvedValue(existingProcessedEvent);
+      // Dedup is enforced by a unique-constraint violation when inserting the
+      // ProcessedWebhookEvent (not a prior findOne), so simulate that here.
+      mockEm.persistAndFlush.mockRejectedValueOnce({ code: '23505', message: 'duplicate key value' });
 
       const req = createMockRequest(mockRawBody);
       const result = await controller.handleWebhook(req as any, mockSignature);
 
       expect(result).toEqual({ received: true, message: 'Already processed' });
-      expect(mockMembershipsService.createMembership).not.toHaveBeenCalled();
+      expect(mockPaymentFulfillmentService.fulfillMembershipPayment).not.toHaveBeenCalled();
     });
 
     it('should process payment_intent.succeeded for membership payment', async () => {
@@ -176,15 +220,20 @@ describe('StripeController - Webhook Handler', () => {
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
       mockEm.findOne.mockResolvedValue(null); // Not already processed
 
-      mockMembershipsService.createMembership.mockResolvedValue({});
-      mockOrdersService.createFromPayment.mockResolvedValue({ id: 'order_123' });
-      mockInvoicesService.createFromOrder.mockResolvedValue({ id: 'invoice_123' });
-
       const req = createMockRequest(mockRawBody);
       const result = await controller.handleWebhook(req as any, mockSignature);
 
       expect(result).toEqual({ received: true });
-      expect(mockMembershipsService.createMembership).toHaveBeenCalled();
+      // Controller delegates fulfillment to PaymentFulfillmentService.
+      expect(mockPaymentFulfillmentService.fulfillMembershipPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactionId: paymentIntent.id,
+          metadata: expect.objectContaining({
+            userId: 'user_123',
+            membershipTypeConfigId: 'config_123',
+          }),
+        }),
+      );
       expect(mockEm.persistAndFlush).toHaveBeenCalled();
     });
 
@@ -200,18 +249,15 @@ describe('StripeController - Webhook Handler', () => {
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
       mockEm.findOne.mockResolvedValue(null);
 
-      mockEventRegistrationsService.completeRegistration.mockResolvedValue({});
-
       const req = createMockRequest(mockRawBody);
       const result = await controller.handleWebhook(req as any, mockSignature);
 
       expect(result).toEqual({ received: true });
-      // Controller calls completeRegistration with registrationId, paymentIntentId, amountPaid, membershipId
-      expect(mockEventRegistrationsService.completeRegistration).toHaveBeenCalledWith(
-        'reg_123',
-        paymentIntent.id,
-        expect.any(Number), // amountPaid
-        undefined, // membershipId (no membership included)
+      expect(mockPaymentFulfillmentService.fulfillEventRegistrationPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactionId: paymentIntent.id,
+          metadata: expect.objectContaining({ registrationId: 'reg_123' }),
+        }),
       );
     });
 
@@ -228,17 +274,15 @@ describe('StripeController - Webhook Handler', () => {
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
       mockEm.findOne.mockResolvedValue(null);
 
-      mockMembershipsService.applyTeamUpgrade.mockResolvedValue({});
-      mockOrdersService.createFromPayment.mockResolvedValue({ id: 'order_123' });
-
       const req = createMockRequest(mockRawBody);
       const result = await controller.handleWebhook(req as any, mockSignature);
 
       expect(result).toEqual({ received: true });
-      expect(mockMembershipsService.applyTeamUpgrade).toHaveBeenCalledWith(
-        'membership_123',
-        'Test Team',
-        undefined, // teamDescription
+      expect(mockPaymentFulfillmentService.fulfillTeamUpgradePayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactionId: paymentIntent.id,
+          metadata: expect.objectContaining({ membershipId: 'membership_123', teamName: 'Test Team' }),
+        }),
       );
     });
 
@@ -253,18 +297,16 @@ describe('StripeController - Webhook Handler', () => {
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
       mockEm.findOne.mockResolvedValue(null);
 
-      // Mock the invoice response with order relation
-      mockInvoicesService.markAsPaid.mockResolvedValue({
-        invoiceNumber: 'INV-001',
-        order: { id: 'order_123' },
-      });
-
       const req = createMockRequest(mockRawBody);
       const result = await controller.handleWebhook(req as any, mockSignature);
 
       expect(result).toEqual({ received: true });
-      // Controller calls markAsPaid with just invoiceId
-      expect(mockInvoicesService.markAsPaid).toHaveBeenCalledWith('invoice_123');
+      expect(mockPaymentFulfillmentService.fulfillInvoicePayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactionId: paymentIntent.id,
+          metadata: expect.objectContaining({ invoiceId: 'invoice_123' }),
+        }),
+      );
     });
 
     it('should process payment_intent.succeeded for shop order', async () => {
@@ -279,19 +321,16 @@ describe('StripeController - Webhook Handler', () => {
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
       mockEm.findOne.mockResolvedValue(null);
 
-      // Mock the shop order response
-      mockShopService.processPaymentSuccess.mockResolvedValue({
-        orderNumber: 'SHOP-001',
-      });
-
       const req = createMockRequest(mockRawBody);
       const result = await controller.handleWebhook(req as any, mockSignature);
 
       expect(result).toEqual({ received: true });
-      // Controller calls processPaymentSuccess with paymentIntentId and chargeId
-      expect(mockShopService.processPaymentSuccess).toHaveBeenCalledWith(
-        paymentIntent.id,
-        'ch_test_123', // latest_charge
+      // Controller delegates to fulfillShopPayment, passing the charge id through metadata.
+      expect(mockPaymentFulfillmentService.fulfillShopPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactionId: paymentIntent.id,
+          metadata: expect.objectContaining({ orderId: 'shop_order_123', chargeId: 'ch_test_123' }),
+        }),
       );
     });
 
@@ -349,6 +388,49 @@ describe('StripeController - Webhook Handler', () => {
       expect(mockEm.persistAndFlush).toHaveBeenCalled();
     });
 
+    it('writes an enriched billing record on invoice.paid subscription renewal', async () => {
+      const invoice = {
+        id: 'in_test_1',
+        subscription: 'sub_test_1',
+        billing_reason: 'subscription_cycle',
+        amount_paid: 4000,
+        currency: 'usd',
+        customer: 'cus_test_1',
+        payment_intent: 'pi_test_1',
+        charge: 'ch_test_1',
+      };
+      const event = createMockWebhookEvent('invoice.paid', invoice);
+      mockStripeService.constructWebhookEvent.mockReturnValue(event);
+
+      const membership = {
+        id: 'mem_1',
+        endDate: new Date('2026-01-01T00:00:00Z'),
+        user: { id: 'user_1', email: 'r@example.com' },
+        mecaId: 123,
+      };
+      // ProcessedWebhookEvent dedup check → null; Membership lookup → membership.
+      mockEm.findOne.mockImplementation(async (entity: any) => {
+        if (entity === Membership) return membership;
+        return null;
+      });
+
+      const req = createMockRequest(mockRawBody);
+      const result = await controller.handleWebhook(req as any, mockSignature);
+
+      expect(result).toEqual({ received: true });
+      expect(mockPaymentFulfillmentService.recordSubscriptionPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          membershipId: 'mem_1',
+          invoiceId: 'in_test_1',
+          subscriptionId: 'sub_test_1',
+          paymentIntentId: 'pi_test_1',
+          chargeId: 'ch_test_1',
+          customerId: 'cus_test_1',
+          source: 'stripe_invoice_paid_webhook',
+        }),
+      );
+    });
+
     it('should handle unhandled event types gracefully', async () => {
       const event = createMockWebhookEvent('customer.created', { id: 'cus_test' });
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
@@ -375,9 +457,9 @@ describe('StripeController - Webhook Handler', () => {
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
       mockEm.findOne.mockResolvedValue(null);
 
-      // Simulate error in membership creation
+      // Simulate error during fulfillment
       const errorMessage = 'Database connection failed';
-      mockMembershipsService.createMembership.mockRejectedValue(new Error(errorMessage));
+      mockPaymentFulfillmentService.fulfillMembershipPayment.mockRejectedValue(new Error(errorMessage));
 
       const req = createMockRequest(mockRawBody);
       const result = await controller.handleWebhook(req as any, mockSignature);
@@ -402,13 +484,11 @@ describe('StripeController - Webhook Handler', () => {
       mockStripeService.constructWebhookEvent.mockReturnValue(event);
       mockEm.findOne.mockResolvedValue(null);
 
-      mockMembershipsService.createMembership.mockResolvedValue({});
-
       const req = createMockRequest(mockRawBody);
       await controller.handleWebhook(req as any, mockSignature);
 
-      // Should have called membership handler (default)
-      expect(mockMembershipsService.createMembership).toHaveBeenCalled();
+      // Should default to the membership fulfillment path.
+      expect(mockPaymentFulfillmentService.fulfillMembershipPayment).toHaveBeenCalled();
     });
   });
 });

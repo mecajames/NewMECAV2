@@ -14,6 +14,10 @@ export interface LeaderboardEntry {
   competitorName: string;
   competitorId: string | null;
   totalPoints: number;
+  // Highest single-result score this competitor achieved across the period
+  // covered by the leaderboard (season / format / class). Null when the
+  // competitor has no results with a numeric score.
+  highestScore: number | null;
   eventsParticipated: number;
   firstPlace: number;
   secondPlace: number;
@@ -761,6 +765,7 @@ export class StandingsService {
           competitorName: result.competitorName,
           competitorId: result.competitor?.id || null,
           totalPoints: 0,
+          highestScore: null,
           eventsParticipated: 0,
           firstPlace: 0,
           secondPlace: 0,
@@ -772,6 +777,16 @@ export class StandingsService {
 
       const entry = aggregated.get(aggregationKey)!;
       entry.totalPoints += result.pointsEarned || 0;
+
+      // CompetitionResult.score is decimal in DB → string in JS. Coerce
+      // before comparing so we don't accidentally compare strings.
+      const rawScore = result.score as unknown;
+      const score = rawScore == null ? null : Number(rawScore);
+      if (score != null && !isNaN(score)) {
+        if (entry.highestScore == null || score > entry.highestScore) {
+          entry.highestScore = score;
+        }
+      }
 
       const eventId = (result.event as any)?.id || result.event;
       if (eventId) eventIdsByKey.get(aggregationKey)!.add(String(eventId));
@@ -808,6 +823,7 @@ export class StandingsService {
           competitorName: result.competitorName,
           competitorId: result.competitor?.id || null,
           totalPoints: 0,
+          highestScore: null,
           eventsParticipated: 0,
           firstPlace: 0,
           secondPlace: 0,
@@ -821,6 +837,14 @@ export class StandingsService {
 
       const entry = aggregated.get(aggregationKey)!;
       entry.totalPoints += result.pointsEarned || 0;
+
+      const rawScore = result.score as unknown;
+      const score = rawScore == null ? null : Number(rawScore);
+      if (score != null && !isNaN(score)) {
+        if (entry.highestScore == null || score > entry.highestScore) {
+          entry.highestScore = score;
+        }
+      }
 
       const eventId = (result.event as any)?.id || result.event;
       if (eventId) eventIdsByKey.get(aggregationKey)!.add(String(eventId));

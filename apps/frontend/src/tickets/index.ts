@@ -2,6 +2,7 @@
 export * from './tickets.api-client';
 export * from './ticket-admin.api-client';
 export * from './ticket-guest.api-client';
+export * from './ticket-support-tools.api-client';
 
 // Pages
 export { TicketsPage } from './pages/TicketsPage';
@@ -10,6 +11,10 @@ export { GuestSupportPage } from './pages/GuestSupportPage';
 export { GuestTicketCreatePage } from './pages/GuestTicketCreatePage';
 export { GuestTicketViewPage } from './pages/GuestTicketViewPage';
 export { GuestTicketAccessPage } from './pages/GuestTicketAccessPage';
+
+// Admin settings pages
+export { default as StaffSignatureSettingsPage } from './pages/admin/StaffSignatureSettingsPage';
+export { default as CannedResponsesSettingsPage } from './pages/admin/CannedResponsesSettingsPage';
 
 // Components
 export { TicketList } from './components/TicketList';
