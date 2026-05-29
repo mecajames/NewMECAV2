@@ -21,6 +21,37 @@ export interface OrderItem {
   metadata?: Record<string, unknown>;
 }
 
+export interface SubscriptionListItem {
+  membershipId: string;
+  userId: string | null;
+  mecaId: number | null;
+  memberName: string | null;
+  email: string | null;
+  membershipType: string | null;
+  source: 'stripe' | 'legacy';
+  stripeSubscriptionId: string | null;
+  paymentStatus: string;
+  amountPaid: number | null;
+  endDate: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+export interface LegacyConversionEntry {
+  membershipId: string;
+  mecaId: number | null;
+  email: string | null;
+  stripeSubscriptionId: string | null;
+  reason?: string;
+}
+
+export interface LegacyConversionReport {
+  dryRun: boolean;
+  scanned: number;
+  linked: LegacyConversionEntry[];
+  reclassified: LegacyConversionEntry[];
+  skipped: LegacyConversionEntry[];
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -536,6 +567,27 @@ export const billingApi = {
     mrrFormatted: string;
   }> => {
     const response = await axios.get('/api/billing/stats/subscriptions');
+    return response.data;
+  },
+
+  /**
+   * List subscriptions (Stripe-linked + legacy) for the dedicated billing
+   * Subscriptions page. Pure DB read — no live Stripe calls.
+   */
+  getSubscriptions: async (params?: {
+    source?: 'stripe' | 'legacy';
+    search?: string;
+  }): Promise<SubscriptionListItem[]> => {
+    const response = await axios.get('/api/billing/subscriptions', { params });
+    return response.data;
+  },
+
+  /**
+   * Bulk-convert legacy memberships to the regular subscription level. Defaults
+   * to a dry run; pass dryRun=false to apply. Returns a report.
+   */
+  convertLegacy: async (dryRun: boolean): Promise<LegacyConversionReport> => {
+    const response = await axios.post('/api/memberships/admin/convert-legacy', { dryRun });
     return response.data;
   },
 

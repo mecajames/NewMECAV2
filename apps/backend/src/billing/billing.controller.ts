@@ -555,6 +555,72 @@ export class BillingController {
   }
 
   /**
+   * Dedicated subscriptions list for the billing Subscriptions page. Returns
+   * every membership that either carries a live Stripe subscription id or is
+   * still flagged legacy, joined to its member (name, MECA ID, email), with a
+   * derived `source` (stripe | legacy). Pure SQL — no Stripe API calls, so the
+   * list stays fast; live status is fetched per-row on the detail view.
+   */
+  @Get('subscriptions')
+  async getSubscriptions(
+    @Headers('authorization') authHeader: string,
+    @Query('source') source?: 'stripe' | 'legacy',
+    @Query('search') search?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const conn = this.em.getConnection();
+
+    const where: string[] = [
+      `(m.stripe_subscription_id IS NOT NULL OR m.had_legacy_subscription = true)`,
+    ];
+    const params: any[] = [];
+    if (source === 'stripe') {
+      where.push(`m.stripe_subscription_id IS NOT NULL`);
+    } else if (source === 'legacy') {
+      where.push(`m.had_legacy_subscription = true AND m.stripe_subscription_id IS NULL`);
+    }
+    const term = (search ?? '').trim().toLowerCase();
+    if (term) {
+      const like = `%${term}%`;
+      where.push(
+        `(LOWER(COALESCE(p.email,'')) LIKE ? OR LOWER(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) LIKE ? OR m.meca_id::text = ?)`,
+      );
+      params.push(like, like, term);
+    }
+
+    const rows = await conn.execute(
+      `SELECT m.id AS membership_id, m.user_id, m.meca_id, m.stripe_subscription_id,
+              m.payment_status, m.amount_paid, m.end_date, m.cancel_at_period_end,
+              m.had_legacy_subscription,
+              p.first_name, p.last_name, p.email,
+              c.name AS membership_type
+         FROM public.memberships m
+         LEFT JOIN public.profiles p ON p.id = m.user_id
+         LEFT JOIN public.membership_type_configs c ON c.id = m.membership_type_config_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY m.end_date DESC NULLS LAST
+        LIMIT 1000`,
+      params,
+    );
+
+    return rows.map((r: any) => ({
+      membershipId: r.membership_id,
+      userId: r.user_id,
+      mecaId: r.meca_id ?? null,
+      memberName:
+        [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || null,
+      email: r.email ?? null,
+      membershipType: r.membership_type ?? null,
+      source: r.stripe_subscription_id ? 'stripe' : 'legacy',
+      stripeSubscriptionId: r.stripe_subscription_id ?? null,
+      paymentStatus: r.payment_status,
+      amountPaid: r.amount_paid != null ? Number(r.amount_paid) : null,
+      endDate: r.end_date ?? null,
+      cancelAtPeriodEnd: !!r.cancel_at_period_end,
+    }));
+  }
+
+  /**
    * Unified failed-payments view. Aggregates rows from every place a Stripe
    * (or PayPal) failure leaves a trace: failed memberships (subscription
    * renewals), failed event registrations (one-time pending checkouts that

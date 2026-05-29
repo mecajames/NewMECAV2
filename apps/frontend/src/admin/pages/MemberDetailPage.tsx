@@ -45,7 +45,8 @@ import { competitionResultsApi, CompetitionResult } from '@/competition-results'
 import { membershipsApi, Membership, AdminCreateMembershipResult, AddSecondaryModal, EditSecondaryModal, SecondaryMembershipInfo, RELATIONSHIP_TYPES } from '@/memberships';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs';
 import AdminMembershipWizard from '../components/AdminMembershipWizard';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Link2 } from 'lucide-react';
+import AssignSubscriptionModal from '../components/AssignSubscriptionModal';
 import { teamsApi, Team } from '@/teams';
 import { moderationApi } from '@/api-client/moderation.api-client';
 import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
@@ -95,6 +96,7 @@ export default function MemberDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [showManualRenewal, setShowManualRenewal] = useState(false);
+  const [showAssignSubscription, setShowAssignSubscription] = useState(false);
   const [renewalRefreshKey, setRenewalRefreshKey] = useState(0);
   const [messageTitle, setMessageTitle] = useState('');
   const [messageBody, setMessageBody] = useState('');
@@ -1078,6 +1080,16 @@ export default function MemberDetailPage() {
                   Manual Renewal
                 </button>
               )}
+              {hasPermission('edit_user') && (
+                <button
+                  onClick={() => setShowAssignSubscription(true)}
+                  className="px-2.5 py-1.5 bg-slate-700 text-white rounded-md hover:bg-slate-600 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
+                  title="Link a Stripe subscription to a membership (pulls real data from Stripe)"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  Assign Subscription
+                </button>
+              )}
               {hasPermission('send_emails') && (
                 <button
                   onClick={() => setShowMessageModal(true)}
@@ -1100,6 +1112,21 @@ export default function MemberDetailPage() {
             memberName={`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || 'Member'}
             open={showManualRenewal}
             onClose={() => setShowManualRenewal(false)}
+            onSuccess={() => {
+              setRenewalRefreshKey(k => k + 1);
+              fetchMember();
+            }}
+          />
+        )}
+
+        {/* Assign Stripe Subscription modal — links/moves a subscription to a
+            membership using the real Stripe data, then refreshes the tab. */}
+        {showAssignSubscription && member && (
+          <AssignSubscriptionModal
+            memberId={member.id}
+            memberName={`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || 'Member'}
+            open={showAssignSubscription}
+            onClose={() => setShowAssignSubscription(false)}
             onSuccess={() => {
               setRenewalRefreshKey(k => k + 1);
               fetchMember();

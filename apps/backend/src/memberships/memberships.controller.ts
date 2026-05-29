@@ -1399,6 +1399,104 @@ export class MembershipsController {
   }
 
   /**
+   * Admin: Preview a Stripe subscription before assigning it. Pulls the real
+   * data from Stripe (status, product, amount, period end, customer email) and
+   * reports whether the subscription is already linked to another member.
+   */
+  @Get('admin/subscription-preview')
+  async previewSubscriptionAssignment(
+    @Query('stripeSubscriptionId') stripeSubscriptionId: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const id = (stripeSubscriptionId ?? '').trim();
+    if (!id) {
+      throw new BadRequestException('stripeSubscriptionId is required');
+    }
+    return this.membershipsService.previewSubscriptionAssignment(id);
+  }
+
+  /**
+   * Admin: Assign (or move) a Stripe subscription to a membership. Pulls the
+   * real data from Stripe, reactivates the membership from the live period end,
+   * clears the legacy flag, and writes an enriched billing-ledger row. If the
+   * subscription was linked to a different membership it is moved here.
+   */
+  @Post(':id/admin/assign-subscription')
+  @HttpCode(HttpStatus.OK)
+  async adminAssignSubscription(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: { stripeSubscriptionId?: string },
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    const subId = (data?.stripeSubscriptionId ?? '').trim();
+    if (!subId) {
+      throw new BadRequestException('stripeSubscriptionId is required');
+    }
+
+    this.logger.log(
+      `Admin ${profile?.email} assigning subscription ${subId} to membership ${membershipId}`,
+    );
+
+    const result = await this.membershipsService.adminAssignSubscription(
+      membershipId,
+      subId,
+      profile?.id || 'unknown',
+    );
+
+    // Write the enriched billing-ledger row from the real Stripe data. Done
+    // here (not in the service) to avoid a circular dependency between
+    // MembershipsService and PaymentFulfillmentService. Idempotent on invoice id.
+    const b = result.bundle;
+    if (b.latestInvoiceId || b.chargeId || b.paymentIntentId) {
+      await this.paymentFulfillmentService
+        .recordSubscriptionPayment({
+          membershipId: result.membershipId,
+          invoiceId: b.latestInvoiceId,
+          paymentIntentId: b.paymentIntentId,
+          chargeId: b.chargeId,
+          customerId: b.customerId,
+          subscriptionId: b.id,
+          amount: b.amount ?? 0,
+          currency: b.currency,
+          status: PaymentStatus.PAID,
+          billingReason: 'admin_assign',
+          productName: b.productName,
+          source: 'admin_assign_subscription',
+        })
+        .catch((err) => {
+          this.logger.error(`recordSubscriptionPayment after assign failed (non-critical): ${err}`);
+        });
+    }
+
+    return result;
+  }
+
+  /**
+   * Admin: Bulk-convert legacy memberships to the regular subscription level.
+   * Links a live Stripe subscription where one exists (matched by member
+   * email); otherwise clears the legacy flag. Defaults to a dry run — pass
+   * { dryRun: false } to apply.
+   */
+  @Post('admin/convert-legacy')
+  @HttpCode(HttpStatus.OK)
+  async convertLegacyMemberships(
+    @Headers('authorization') authHeader: string,
+    @Body() data: { dryRun?: boolean },
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    const dryRun = data?.dryRun !== false;
+    this.logger.log(
+      `Admin ${profile?.email} running legacy conversion (dryRun=${dryRun})`,
+    );
+    return this.membershipsService.convertLegacyMemberships(
+      { dryRun },
+      profile?.id || 'unknown',
+    );
+  }
+
+  /**
    * Admin: Cancel auto-renewal for a membership
    * This cancels the Stripe subscription (if exists) at period end
    */

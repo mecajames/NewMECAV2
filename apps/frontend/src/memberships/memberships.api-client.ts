@@ -376,6 +376,36 @@ export interface AdminCardsFilters {
   offset?: number;
 }
 
+/**
+ * Normalized Stripe subscription snapshot returned by the admin
+ * preview/assign endpoints (mirrors @newmeca/shared SubscriptionBundle).
+ */
+export interface SubscriptionBundle {
+  id: string;
+  status: string;
+  customerId: string | null;
+  customerEmail: string | null;
+  productName: string | null;
+  amount: number | null;
+  currency: string | null;
+  interval: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  latestInvoiceId: string | null;
+  paymentIntentId: string | null;
+  chargeId: string | null;
+}
+
+export interface SubscriptionAssignmentPreview {
+  bundle: SubscriptionBundle;
+  currentMembership: {
+    membershipId: string;
+    mecaId: number | null;
+    memberName: string | null;
+    email: string | null;
+  } | null;
+}
+
 export const membershipsApi = {
   /**
    * Get a membership by ID
@@ -977,6 +1007,38 @@ export const membershipsApi = {
     const response = await axios.post(`/api/memberships/${membershipId}/disable-auto-renewal`, {
       reason,
     });
+    return response.data;
+  },
+
+  /**
+   * Admin: Preview a Stripe subscription before assigning it. Pulls the real
+   * data from Stripe and reports whether it's already linked to another member.
+   */
+  adminPreviewSubscription: async (
+    stripeSubscriptionId: string,
+  ): Promise<SubscriptionAssignmentPreview> => {
+    const response = await axios.get('/api/memberships/admin/subscription-preview', {
+      params: { stripeSubscriptionId },
+    });
+    return response.data;
+  },
+
+  /**
+   * Admin: Assign (or move) a Stripe subscription to a membership. Reactivates
+   * the membership from the live Stripe period end and writes a billing record.
+   */
+  adminAssignSubscription: async (
+    membershipId: string,
+    stripeSubscriptionId: string,
+  ): Promise<{
+    membershipId: string;
+    bundle: SubscriptionBundle;
+    movedFromMembershipId: string | null;
+  }> => {
+    const response = await axios.post(
+      `/api/memberships/${membershipId}/admin/assign-subscription`,
+      { stripeSubscriptionId },
+    );
     return response.data;
   },
 

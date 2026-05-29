@@ -560,6 +560,98 @@ export class PaymentFulfillmentService {
     }
   }
 
+  /**
+   * Idempotently write a billing-ledger Payment row for a subscription
+   * invoice, populated with the real Stripe identifiers (payment_intent,
+   * charge, customer, invoice, subscription). Shared by the invoice.paid
+   * webhook and the admin assign-subscription flow so a subscription
+   * renewal/link always leaves a complete billing record — closing the
+   * historical gap where successful renewals extended the membership but
+   * never produced a Payment row.
+   *
+   * Keyed on the Stripe invoice id (falling back to the payment_intent) so
+   * repeated webhook deliveries / retries converge on a single row. Returns
+   * the existing or newly-created row, or null when there's nothing billable
+   * to record (e.g. a $0 trial with no invoice/charge yet).
+   */
+  async recordSubscriptionPayment(opts: {
+    membershipId: string;
+    userId?: string | null;
+    invoiceId?: string | null;
+    paymentIntentId?: string | null;
+    chargeId?: string | null;
+    customerId?: string | null;
+    subscriptionId?: string | null;
+    amount: number;
+    currency?: string | null;
+    status?: PaymentStatus;
+    billingReason?: string | null;
+    productName?: string | null;
+    paidAt?: Date | null;
+    source: string;
+  }): Promise<Payment | null> {
+    const { membershipId, invoiceId, chargeId, paymentIntentId } = opts;
+    if (!invoiceId && !chargeId && !paymentIntentId) {
+      this.logger.log(
+        `recordSubscriptionPayment: no invoice/charge/PI for membership ${membershipId}; skipping ledger row`,
+      );
+      return null;
+    }
+
+    const status = opts.status ?? PaymentStatus.PAID;
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, { populate: ['user'] });
+    if (!membership) {
+      this.logger.warn(`recordSubscriptionPayment: membership ${membershipId} not found; skipping`);
+      return null;
+    }
+    const userId = opts.userId ?? membership.user?.id ?? null;
+
+    // Idempotency: a row of this status already recorded for this invoice (or PI).
+    const key: Record<string, unknown> = invoiceId
+      ? { externalPaymentId: invoiceId }
+      : { stripePaymentIntentId: paymentIntentId };
+    const existing = await em.findOne(Payment, { ...key, paymentStatus: status } as any);
+    if (existing) {
+      this.logger.log(
+        `recordSubscriptionPayment: ${status} payment already exists (${existing.id}) for ${invoiceId ?? paymentIntentId}; skipping`,
+      );
+      return existing;
+    }
+
+    const payment = em.create(Payment, {
+      user: userId ? em.getReference(Profile, userId) : undefined,
+      membership: em.getReference(Membership, membershipId),
+      paymentType: PaymentType.MEMBERSHIP,
+      paymentMethod: PaymentMethod.STRIPE,
+      paymentStatus: status,
+      amount: opts.amount.toFixed(2),
+      currency: (opts.currency || 'USD').toUpperCase(),
+      externalPaymentId: invoiceId ?? undefined,
+      stripePaymentIntentId: paymentIntentId ?? undefined,
+      transactionId: chargeId ?? paymentIntentId ?? undefined,
+      stripeCustomerId: opts.customerId ?? undefined,
+      paidAt: status === PaymentStatus.PAID ? (opts.paidAt ?? new Date()) : undefined,
+      description:
+        opts.billingReason === 'subscription_create'
+          ? 'Membership subscription payment'
+          : 'Membership renewal (subscription)',
+      paymentMetadata: {
+        source: opts.source,
+        stripeSubscriptionId: opts.subscriptionId ?? null,
+        stripeInvoiceId: invoiceId ?? null,
+        billingReason: opts.billingReason ?? null,
+        productName: opts.productName ?? null,
+      },
+    } as any);
+    await em.persistAndFlush(payment);
+    this.logger.log(
+      `recordSubscriptionPayment: wrote ${status} payment ${payment.id} for membership ${membershipId} (invoice ${invoiceId ?? 'n/a'})`,
+    );
+    return payment;
+  }
+
   async createOrderAndInvoice(
     params: PaymentFulfillmentParams,
     amountPaid: number,
