@@ -180,11 +180,19 @@ export class CompetitionResultsService {
     // Resolve each competitor's membership status (active / expired / none) in
     // ONE batched query so the ED Overview can split entry-fee revenue between
     // members and non-members. Computed before MECA-ID masking below so held
-    // (grace-period) rows are still classified as 'expired'.
-    const statusByMecaId = await this.resolveMembershipStatuses(
-      em,
-      results.map(r => r.mecaId),
-    );
+    // (grace-period) rows are still classified as 'expired'. Best-effort: if
+    // the lookup fails for any reason it must NOT break the core results list
+    // (this endpoint feeds the public results page + admin/ED views), so we
+    // fall back to an empty map and everyone reads as 'none'.
+    let statusByMecaId = new Map<number, 'active' | 'expired'>();
+    try {
+      statusByMecaId = await this.resolveMembershipStatuses(
+        em,
+        results.map(r => r.mecaId),
+      );
+    } catch (err) {
+      this.logger.warn(`findByEvent: membership status lookup failed for event ${eventId}, continuing without it: ${(err as Error).message}`);
+    }
 
     return results.map(r => {
       const numericMecaId = r.mecaId && /^[0-9]+$/.test(r.mecaId) && r.mecaId !== '999999'
