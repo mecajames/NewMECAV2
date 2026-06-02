@@ -31,7 +31,7 @@ import { useCallback, useState } from 'react';
 export function useDraftStorage<T>(
   key: string,
   defaultValue: T,
-): [T, (value: T) => void, () => void] {
+): [T, (value: T | ((prev: T) => T)) => void, () => void] {
   const [value, setValue] = useState<T>(() => {
     try {
       const raw = sessionStorage.getItem(key);
@@ -44,9 +44,8 @@ export function useDraftStorage<T>(
     }
   });
 
-  const setAndStore = useCallback(
+  const persist = useCallback(
     (next: T) => {
-      setValue(next);
       try {
         const isEmpty =
           next === null ||
@@ -65,6 +64,22 @@ export function useDraftStorage<T>(
       }
     },
     [key, defaultValue],
+  );
+
+  // Accepts either a value or a React-style updater function so callers
+  // can append to the current draft (e.g. inserting a canned response or
+  // link) without threading the latest value through.
+  const setAndStore = useCallback(
+    (next: T | ((prev: T) => T)) => {
+      setValue((prev) => {
+        const resolved = typeof next === 'function'
+          ? (next as (p: T) => T)(prev)
+          : next;
+        persist(resolved);
+        return resolved;
+      });
+    },
+    [persist],
   );
 
   const clear = useCallback(() => {

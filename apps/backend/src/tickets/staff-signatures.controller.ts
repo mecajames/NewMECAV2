@@ -21,7 +21,7 @@ import { isAdminUser } from '../auth/is-admin.helper';
  * authoritative for self edits; the per-userId route exists so admins
  * can preview / audit other agents' signatures before they go out.
  */
-@Controller('api/tickets/signatures')
+@Controller('api/ticket-tools/signatures')
 export class StaffSignaturesController {
   constructor(
     private readonly service: StaffSignaturesService,

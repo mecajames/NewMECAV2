@@ -60,4 +60,14 @@ export const notificationsApi = {
   deleteNotification: async (id: string, userId: string): Promise<void> => {
     await axios.delete(`/api/notifications/${id}?userId=${userId}`);
   },
+
+  /**
+   * Bulk-delete the caller's own notifications. The backend re-checks
+   * ownership of every id against `userId` so a member can never
+   * delete another user's rows even if they craft the body manually.
+   */
+  bulkDelete: async (ids: string[], userId: string): Promise<{ deleted: number }> => {
+    const response = await axios.delete('/api/notifications/bulk', { data: { ids, userId } });
+    return response.data;
+  },
 };

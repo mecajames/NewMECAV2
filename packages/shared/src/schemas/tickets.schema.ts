@@ -96,6 +96,10 @@ export const CreateTicketCommentSchema = z.object({
   author_id: z.string().uuid(),
   content: z.string().min(1, 'Comment content is required'),
   is_internal: z.boolean().default(false),
+  // Per-reply, transient flag (not persisted on the comment): when true,
+  // a staff member's own signature is NOT appended to the outbound reply
+  // email. Defaults to including the signature.
+  skip_signature: z.boolean().optional(),
 });
 export type CreateTicketCommentDto = z.infer<typeof CreateTicketCommentSchema>;
 

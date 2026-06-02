@@ -914,6 +914,7 @@ export class TicketsService {
   async createComment(
     data: CreateTicketCommentDto,
     isStaffReply: boolean = false,
+    skipSignature: boolean = false,
   ): Promise<TicketComment> {
     const em = this.em.fork();
 
@@ -978,7 +979,7 @@ export class TicketsService {
 
     // Send reply notification email (only for non-internal comments)
     if (!data.is_internal && author) {
-      this.sendTicketReplyEmail(ticket, data.content, author, isStaffReply).catch(err => {
+      this.sendTicketReplyEmail(ticket, data.content, author, isStaffReply, skipSignature).catch(err => {
         this.logger.error(`Failed to send ticket reply email: ${err.message}`);
       });
     }
@@ -1605,6 +1606,7 @@ export class TicketsService {
     replyContent: string,
     author: Profile,
     isStaffReply: boolean,
+    skipSignature: boolean = false,
   ): Promise<void> {
     // When staff replies, link the recipient (member) to /tickets/:uuid.
     // When member replies, link the recipient (assigned staff) to /admin/tickets/:uuid.
@@ -1617,8 +1619,10 @@ export class TicketsService {
     // Only staff replies get a signature appended. Lookup is best-
     // effort - if it throws or returns null, the reply still goes out
     // without a signature rather than failing the email entirely.
+    // Skipped when the staff member ticked "don't include my signature" on
+    // this particular reply, even though their signature is active.
     let signature: { html: string; plainText: string } | null = null;
-    if (isStaffReply) {
+    if (isStaffReply && !skipSignature) {
       try {
         signature = await this.signaturesService.getActiveForEmail(author.id);
       } catch (err) {

@@ -20,7 +20,7 @@ import { isAdminUser } from '../auth/is-admin.helper';
  * Same security model as saved filters: any staff/admin can read
  * shared templates; only the owner (or an admin) can write.
  */
-@Controller('api/tickets/canned-responses')
+@Controller('api/ticket-tools/canned-responses')
 export class TicketCannedResponsesController {
   constructor(
     private readonly service: TicketCannedResponsesService,

@@ -23,7 +23,7 @@ import { isAdminUser } from '../auth/is-admin.helper';
  *     staff (read access). Write ops verify ownership (or admin) in
  *     the service.
  */
-@Controller('api/tickets/saved-filters')
+@Controller('api/ticket-tools/saved-filters')
 export class SavedTicketFiltersController {
   constructor(
     private readonly service: SavedTicketFiltersService,

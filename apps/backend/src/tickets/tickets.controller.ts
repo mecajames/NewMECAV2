@@ -391,6 +391,7 @@ export class TicketsController {
         ticket_id: ticketId,
       },
       isStaffReply,
+      data.skip_signature ?? false,
     );
   }
 

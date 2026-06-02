@@ -15,7 +15,7 @@ import { isAdminUser } from '../auth/is-admin.helper';
  * ticket-list endpoint. This keeps the controller stateless and the
  * filter definitions safely copy-pastable.
  */
-@Controller('api/tickets/system-filters')
+@Controller('api/ticket-tools/system-filters')
 export class TicketSystemFiltersController {
   constructor(
     private readonly supabaseAdmin: SupabaseAdminService,

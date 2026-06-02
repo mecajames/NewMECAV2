@@ -7,6 +7,7 @@ import {
   Route,
   Settings,
   ArrowLeft,
+  Wrench,
 } from 'lucide-react';
 import {
   TicketManagement,
@@ -15,14 +16,18 @@ import {
   TicketStaffArea,
   TicketRoutingRules,
   TicketSystemSettings,
+  MyTicketTools,
 } from '@/tickets';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
 
-type TabId = 'tickets' | 'staff' | 'departments' | 'routing' | 'settings';
+type TabId = 'tickets' | 'mytools' | 'staff' | 'departments' | 'routing' | 'settings';
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'tickets', label: 'Ticket Queue', icon: <Ticket className="w-4 h-4" /> },
+  // Per-tech personal settings (signature + canned responses). Available to
+  // every support tech, not just admins.
+  { id: 'mytools', label: 'My Tools', icon: <Wrench className="w-4 h-4" /> },
   { id: 'staff', label: 'Staff', icon: <Users className="w-4 h-4" />, adminOnly: true },
   { id: 'departments', label: 'Departments', icon: <Building2 className="w-4 h-4" />, adminOnly: true },
   { id: 'routing', label: 'Routing', icon: <Route className="w-4 h-4" />, adminOnly: true },
@@ -86,6 +91,8 @@ export function AdminTicketsPage() {
     switch (activeTab) {
       case 'tickets':
         return <TicketManagement currentUserId={profile.id} />;
+      case 'mytools':
+        return <MyTicketTools />;
       case 'staff':
         return <TicketStaffArea />;
       case 'departments':

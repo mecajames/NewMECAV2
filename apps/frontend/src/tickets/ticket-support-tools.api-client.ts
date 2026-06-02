@@ -115,57 +115,57 @@ export interface SystemFilter {
 
 export const staffSignaturesApi = {
   getMine: async (): Promise<StaffSignature> => {
-    const { data } = await axios.get<StaffSignature>('/api/tickets/signatures/me');
+    const { data } = await axios.get<StaffSignature>('/api/ticket-tools/signatures/me');
     return data;
   },
   upsertMine: async (dto: UpsertSignatureDto): Promise<StaffSignature> => {
-    const { data } = await axios.put<StaffSignature>('/api/tickets/signatures/me', dto);
+    const { data } = await axios.put<StaffSignature>('/api/ticket-tools/signatures/me', dto);
     return data;
   },
   deleteMine: async (): Promise<void> => {
-    await axios.delete('/api/tickets/signatures/me');
+    await axios.delete('/api/ticket-tools/signatures/me');
   },
 };
 
 export const savedTicketFiltersApi = {
   list: async (): Promise<SavedTicketFilter[]> => {
-    const { data } = await axios.get<SavedTicketFilter[]>('/api/tickets/saved-filters');
+    const { data } = await axios.get<SavedTicketFilter[]>('/api/ticket-tools/saved-filters');
     return data;
   },
   create: async (dto: CreateSavedFilterDto): Promise<SavedTicketFilter> => {
-    const { data } = await axios.post<SavedTicketFilter>('/api/tickets/saved-filters', dto);
+    const { data } = await axios.post<SavedTicketFilter>('/api/ticket-tools/saved-filters', dto);
     return data;
   },
   update: async (id: string, dto: UpdateSavedFilterDto): Promise<SavedTicketFilter> => {
-    const { data } = await axios.patch<SavedTicketFilter>(`/api/tickets/saved-filters/${id}`, dto);
+    const { data } = await axios.patch<SavedTicketFilter>(`/api/ticket-tools/saved-filters/${id}`, dto);
     return data;
   },
   delete: async (id: string): Promise<void> => {
-    await axios.delete(`/api/tickets/saved-filters/${id}`);
+    await axios.delete(`/api/ticket-tools/saved-filters/${id}`);
   },
 };
 
 export const cannedResponsesApi = {
   list: async (): Promise<CannedResponse[]> => {
-    const { data } = await axios.get<CannedResponse[]>('/api/tickets/canned-responses');
+    const { data } = await axios.get<CannedResponse[]>('/api/ticket-tools/canned-responses');
     return data;
   },
   create: async (dto: CreateCannedResponseDto): Promise<CannedResponse> => {
-    const { data } = await axios.post<CannedResponse>('/api/tickets/canned-responses', dto);
+    const { data } = await axios.post<CannedResponse>('/api/ticket-tools/canned-responses', dto);
     return data;
   },
   update: async (id: string, dto: UpdateCannedResponseDto): Promise<CannedResponse> => {
-    const { data } = await axios.patch<CannedResponse>(`/api/tickets/canned-responses/${id}`, dto);
+    const { data } = await axios.patch<CannedResponse>(`/api/ticket-tools/canned-responses/${id}`, dto);
     return data;
   },
   delete: async (id: string): Promise<void> => {
-    await axios.delete(`/api/tickets/canned-responses/${id}`);
+    await axios.delete(`/api/ticket-tools/canned-responses/${id}`);
   },
 };
 
 export const systemFiltersApi = {
   list: async (): Promise<SystemFilter[]> => {
-    const { data } = await axios.get<SystemFilter[]>('/api/tickets/system-filters');
+    const { data } = await axios.get<SystemFilter[]>('/api/ticket-tools/system-filters');
     return data;
   },
 };
