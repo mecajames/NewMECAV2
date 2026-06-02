@@ -686,7 +686,7 @@ export default function ResultsPage() {
               autoSelectCurrent={true}
             />
 
-            {/* Event Selector \u2014 type-to-search dropdown that matches the admin
+            {/* Event Selector — type-to-search dropdown that matches the admin
                 Results Entry pattern. */}
             <div ref={eventDropdownRef} className="relative">
               <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2 sm:mb-3">
@@ -712,7 +712,7 @@ export default function ResultsPage() {
                 />
               </div>
 
-              {/* Selected event chip \u2014 shown only when collapsed and a pick exists. */}
+              {/* Selected event chip — shown only when collapsed and a pick exists. */}
               {selectedEventId && !eventDropdownOpen && (() => {
                 const sel = displayEvents.find(e => e.id === selectedEventId)
                   || events.find(e => e.id === selectedEventId);
@@ -720,7 +720,7 @@ export default function ResultsPage() {
                 return (
                   <div className="mt-2 px-3 py-1.5 bg-slate-800 border border-orange-500/50 rounded-lg text-sm text-orange-300 flex items-center justify-between">
                     <span className="truncate">
-                      {sel.title} \u2014 {new Date(sel.event_date).toLocaleDateString()}
+                      {sel.title} — {new Date(sel.event_date).toLocaleDateString()}
                     </span>
                     <button
                       onClick={() => { setSelectedEventId(''); setEventSearchTerm(''); }}
@@ -733,7 +733,7 @@ export default function ResultsPage() {
                 );
               })()}
 
-              {/* Filtered dropdown \u2014 same matching rules as the previous select
+              {/* Filtered dropdown — same matching rules as the previous select
                   (filtered by season + recent), now type-to-search by title. */}
               {eventDropdownOpen && (
                 <div className="absolute z-50 w-full mt-1 max-h-72 overflow-y-auto bg-slate-800 border border-slate-600 rounded-lg shadow-lg">
