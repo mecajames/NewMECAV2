@@ -1075,13 +1075,21 @@ export class CompetitionResultsService {
   private async isInGracePeriod(mecaId: string | undefined): Promise<boolean> {
     if (!mecaId || mecaId === '999999' || mecaId === '0' || mecaId.startsWith('99')) return false;
 
+    // memberships.meca_id is an integer column. A non-numeric MECA ID (which
+    // real imported data can contain) would parse to NaN and produce a
+    // `WHERE meca_id = NaN` query that Postgres rejects with "invalid input
+    // syntax for type integer", crashing the whole points recalculation.
+    // A non-numeric ID can't match an integer membership, so bail early.
+    const mecaIdNum = parseInt(mecaId, 10);
+    if (isNaN(mecaIdNum)) return false;
+
     const em = this.em.fork();
     const now = new Date();
     const graceCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
 
     // Find most recent expired membership for this MECA ID (expired within 45 days)
     const membership = await em.findOne(Membership, {
-      mecaId: parseInt(mecaId, 10),
+      mecaId: mecaIdNum,
       paymentStatus: PaymentStatus.PAID,
       endDate: { $lt: now, $gte: graceCutoff },
     });
@@ -1430,29 +1438,40 @@ export class CompetitionResultsService {
           // Get MECA ID from result (now stored directly on competition result)
           const mecaId = result.mecaId;
 
-          // Check eligibility using the new membership-based system
-          // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
-          const isMemberEligible = await this.isMemberEligibleAsync(mecaId);
+          // Per-row safety net: a single problematic row (e.g. malformed
+          // MECA ID, eligibility lookup hiccup) must never abort the whole
+          // event's recalculation. The placement above is already applied;
+          // on error we log the offending row and leave its points at 0.
+          try {
+            // Check eligibility using the new membership-based system
+            // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
+            const isMemberEligible = await this.isMemberEligibleAsync(mecaId);
 
-          if (isMemberEligible && pointsConfig) {
-            result.pointsEarned = this.calculatePoints(
-              currentPlacement,
-              multiplier,
-              format,
-              pointsConfig
-            );
-          } else {
-            // Check if this member is in grace period — hold results for potential renewal
-            const inGracePeriod = await this.isInGracePeriod(mecaId);
-            if (inGracePeriod) {
-              result.pointsHeldForRenewal = true;
-              result.heldAt = new Date();
-              // Calculate what points WOULD be earned (stored as 0 until released)
-              result.pointsEarned = 0;
-              result.notes = (result.notes ? result.notes + ' | ' : '') + 'Held: membership expired, within grace period';
+            if (isMemberEligible && pointsConfig) {
+              result.pointsEarned = this.calculatePoints(
+                currentPlacement,
+                multiplier,
+                format,
+                pointsConfig
+              );
             } else {
-              result.pointsEarned = 0;
+              // Check if this member is in grace period — hold results for potential renewal
+              const inGracePeriod = await this.isInGracePeriod(mecaId);
+              if (inGracePeriod) {
+                result.pointsHeldForRenewal = true;
+                result.heldAt = new Date();
+                // Calculate what points WOULD be earned (stored as 0 until released)
+                result.pointsEarned = 0;
+                result.notes = (result.notes ? result.notes + ' | ' : '') + 'Held: membership expired, within grace period';
+              } else {
+                result.pointsEarned = 0;
+              }
             }
+          } catch (rowError: any) {
+            this.logger.error(
+              `[updateEventPoints] Failed to compute points for result ${result.id} (mecaId=${String(mecaId)}) in event ${eventId}: ${rowError?.message}`,
+            );
+            result.pointsEarned = 0;
           }
         } else {
           // Format not eligible for points (unknown format or non-points format)
