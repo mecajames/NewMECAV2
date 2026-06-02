@@ -176,8 +176,25 @@ export class CompetitionResultsService {
       // result without loading the entire profiles table client-side.
       populate: ['competitor', 'creator', 'updater'],
     });
-    // Mask MECA ID on held results (expired member, awaiting renewal)
+
+    // Resolve each competitor's membership status (active / expired / none) in
+    // ONE batched query so the ED Overview can split entry-fee revenue between
+    // members and non-members. Computed before MECA-ID masking below so held
+    // (grace-period) rows are still classified as 'expired'.
+    const statusByMecaId = await this.resolveMembershipStatuses(
+      em,
+      results.map(r => r.mecaId),
+    );
+
     return results.map(r => {
+      const numericMecaId = r.mecaId && /^[0-9]+$/.test(r.mecaId) && r.mecaId !== '999999'
+        ? Number(r.mecaId)
+        : null;
+      r.membershipStatus = numericMecaId !== null
+        ? (statusByMecaId.get(numericMecaId) ?? 'none')
+        : 'none';
+
+      // Mask MECA ID on held results (expired member, awaiting renewal)
       if (r.pointsHeldForRenewal) {
         r.mecaId = undefined;
         r.pointsEarned = 0;
@@ -186,6 +203,43 @@ export class CompetitionResultsService {
       r.updatedByName = this.formatProfileName(r.updater);
       return r;
     });
+  }
+
+  /**
+   * Given a list of (possibly messy) MECA IDs from competition results,
+   * return a map of numeric MECA ID -> 'active' | 'expired' based on the
+   * memberships table. A member counts as 'active' if any paid membership has
+   * no end date or an end date in the future; otherwise 'expired'. MECA IDs
+   * with no paid membership are simply absent (callers treat that as 'none').
+   * Non-numeric IDs and the 999999 guest sentinel are ignored.
+   */
+  private async resolveMembershipStatuses(
+    em: EntityManager,
+    mecaIds: (string | undefined)[],
+  ): Promise<Map<number, 'active' | 'expired'>> {
+    const ids = [...new Set(
+      mecaIds.filter((m): m is string => !!m && m !== '999999' && /^[0-9]+$/.test(m))
+        .map(Number),
+    )];
+    const statusMap = new Map<number, 'active' | 'expired'>();
+    if (ids.length === 0) return statusMap;
+
+    const memberships = await em.find(Membership, {
+      mecaId: { $in: ids },
+      paymentStatus: PaymentStatus.PAID,
+    });
+    const now = new Date();
+    for (const m of memberships) {
+      if (m.mecaId == null) continue;
+      const isActive = !m.endDate || m.endDate > now;
+      // Prefer 'active' if the member has any active paid membership.
+      if (isActive) {
+        statusMap.set(m.mecaId, 'active');
+      } else if (statusMap.get(m.mecaId) !== 'active') {
+        statusMap.set(m.mecaId, 'expired');
+      }
+    }
+    return statusMap;
   }
 
   /** Build a human-readable display name from a profile, or undefined. */

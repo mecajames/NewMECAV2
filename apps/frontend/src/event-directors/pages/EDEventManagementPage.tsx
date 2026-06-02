@@ -364,7 +364,11 @@ export default function EDEventManagementPage() {
         wattage: r.wattage || '',
         frequency: r.frequency || '',
         notes: r.notes || '',
-        membership_status: r.meca_id === '999999' ? 'none' : 'unknown',
+        // Prefer the membership status resolved server-side (active/expired/none)
+        // so the Overview revenue split between members and non-members is
+        // accurate. Fall back to the old heuristic only if the backend didn't
+        // supply it.
+        membership_status: r.membership_status ?? (r.meca_id === '999999' ? 'none' : 'unknown'),
       }));
       setResults(mappedResults);
       setStats(prev => ({ ...prev, resultsEntered: mappedResults.length }));

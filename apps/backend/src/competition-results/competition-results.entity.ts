@@ -95,6 +95,13 @@ export class CompetitionResult {
   @Property({ type: 'string', persist: false, nullable: true, serializedName: 'updated_by_name' })
   updatedByName?: string;
 
+  // Membership status of this result's competitor, resolved server-side in
+  // findByEvent from the memberships table (active / expired / none). Used by
+  // the ED Overview to split entry-fee revenue between members and
+  // non-members. Not persisted; the source of truth is the memberships table.
+  @Property({ type: 'string', persist: false, nullable: true, serializedName: 'membership_status' })
+  membershipStatus?: string;
+
   @Property({ type: 'timestamptz', onUpdate: () => new Date(), fieldName: 'updated_at', serializedName: 'updated_at', nullable: true })
   updatedAt?: Date;
 
