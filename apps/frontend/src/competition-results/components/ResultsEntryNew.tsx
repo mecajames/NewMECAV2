@@ -1007,7 +1007,10 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       fetchExistingResults();
     } catch (error: any) {
       console.error('Error recalculating points:', error);
-      alert('Failed to recalculate points: ' + error.message);
+      // Surface the backend's actual error message (sent in the 500 body)
+      // instead of axios's generic "Request failed with status code 500".
+      const message = error?.response?.data?.message || error?.message || 'Unknown error';
+      alert('Failed to recalculate points: ' + message);
     }
     setSaving(false);
   };

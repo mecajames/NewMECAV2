@@ -28,7 +28,6 @@ import {
   Plus,
   X,
   Share2,
-  Settings,
   Bolt,
 } from 'lucide-react';
 import {
@@ -799,26 +798,10 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
               Save current as preset
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => navigate('/admin/settings/signature')}
-            className="inline-flex items-center gap-1 bg-slate-700 hover:bg-slate-600 rounded-full px-3 py-1 text-xs text-gray-300 transition-colors ml-auto"
-            title="Edit your ticket reply signature"
-          >
-            <Settings className="w-3 h-3" />
-            Signature
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/admin/settings/canned-responses')}
-            className="inline-flex items-center gap-1 bg-slate-700 hover:bg-slate-600 rounded-full px-3 py-1 text-xs text-gray-300 transition-colors"
-            title="Manage your canned responses"
-          >
-            <Settings className="w-3 h-3" />
-            Canned responses
-          </button>
+          {/* Per-tech Signature and Canned Responses now live in the
+              "My Tools" tab of this page. */}
           {savedFilterMsg && (
-            <span className="text-xs text-gray-400 ml-1">{savedFilterMsg}</span>
+            <span className="text-xs text-gray-400 ml-auto">{savedFilterMsg}</span>
           )}
         </div>
       )}

@@ -13,8 +13,8 @@ export { GuestTicketViewPage } from './pages/GuestTicketViewPage';
 export { GuestTicketAccessPage } from './pages/GuestTicketAccessPage';
 
 // Admin settings pages
-export { default as StaffSignatureSettingsPage } from './pages/admin/StaffSignatureSettingsPage';
-export { default as CannedResponsesSettingsPage } from './pages/admin/CannedResponsesSettingsPage';
+export { default as StaffSignatureSettingsPage, StaffSignatureEditor } from './pages/admin/StaffSignatureSettingsPage';
+export { default as CannedResponsesSettingsPage, CannedResponsesManager } from './pages/admin/CannedResponsesSettingsPage';
 
 // Components
 export { TicketList } from './components/TicketList';
@@ -29,3 +29,4 @@ export { TicketStaffArea } from './components/admin/TicketStaffArea';
 export { TicketStaffRatings } from './components/admin/TicketStaffRatings';
 export { TicketRoutingRules } from './components/admin/TicketRoutingRules';
 export { TicketSystemSettings } from './components/admin/TicketSystemSettings';
+export { MyTicketTools } from './components/admin/MyTicketTools';

@@ -8,6 +8,7 @@ import {
 import axios from '@/lib/axios';
 import { profilesApi } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
+import Pagination from '@/shared/components/Pagination';
 
 interface NotificationItem {
   id: string;
@@ -56,6 +57,27 @@ export default function NotificationsAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [viewNotification, setViewNotification] = useState<NotificationItem | null>(null);
+
+  // Bulk-selection set for the checkbox column. Cleared on every
+  // refetch so stale ids never linger after the visible list changes.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Pagination - server-side via limit/offset params on the admin list
+  // endpoint. Reset to page 1 whenever any filter (type/read/search/
+  // season/dateRange) changes so the user doesn't land on an empty
+  // tail page after narrowing.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // Auto-purge settings. windowDays === 0 means the feature is off.
+  // `purgeNowRunning` covers the manual "Purge now" admin button.
+  const [purgeWindowDays, setPurgeWindowDays] = useState<number>(0);
+  const [purgeWindowInput, setPurgeWindowInput] = useState<string>('0');
+  const [purgeSaving, setPurgeSaving] = useState(false);
+  const [purgeNowRunning, setPurgeNowRunning] = useState(false);
+  const [purgeStatusMsg, setPurgeStatusMsg] = useState<string | null>(null);
 
   // Filters
   const [filterType, setFilterType] = useState<string>('');
@@ -121,7 +143,24 @@ export default function NotificationsAdminPage() {
   useEffect(() => {
     if (!seasonsLoaded) return; // Wait for default season to settle so we don't double-fetch
     fetchData();
-  }, [filterType, filterRead, debouncedSearch, filterSeasonId, filterDateRange, seasonsLoaded]);
+  }, [filterType, filterRead, debouncedSearch, filterSeasonId, filterDateRange, seasonsLoaded, page, pageSize]);
+
+  // Whenever a filter changes, snap back to page 1 so we don't try to
+  // show e.g. page 7 of a freshly narrowed result set that only has
+  // two pages now.
+  useEffect(() => {
+    setPage(1);
+  }, [filterType, filterRead, debouncedSearch, filterSeasonId, filterDateRange]);
+
+  // Clamp the page if a delete removed enough rows that the current
+  // page no longer exists (e.g. you were on page 3 of 3 and bulk-
+  // deleted everything on it). Letting page=3 stand would render an
+  // empty table with valid pagination controls.
+  useEffect(() => {
+    if (total > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [total, totalPages, page]);
 
   // Fetch counts when mode changes to allActive or allUsers
   useEffect(() => {
@@ -198,7 +237,8 @@ export default function NotificationsAdminPage() {
       if (debouncedSearch) params.append('search', debouncedSearch);
       if (filterSeasonId) params.append('seasonId', filterSeasonId);
       if (filterDateRange) params.append('dateRange', filterDateRange);
-      params.append('limit', '100');
+      params.append('limit', String(pageSize));
+      params.append('offset', String((page - 1) * pageSize));
 
       const [notifResponse, analyticsResponse] = await Promise.all([
         axios.get(`/api/notifications/admin/all?${params.toString()}`),
@@ -208,6 +248,10 @@ export default function NotificationsAdminPage() {
       setNotifications(notifResponse.data.notifications);
       setTotal(notifResponse.data.total);
       setAnalytics(analyticsResponse.data);
+      // Refetching invalidates the previous selection - rows may have
+      // dropped out of the visible page, and we don't want to send
+      // delete requests for ids that aren't even on screen anymore.
+      setSelectedIds(new Set());
     } catch (err: any) {
       setError(err.message || 'Failed to load data');
     } finally {
@@ -223,10 +267,114 @@ export default function NotificationsAdminPage() {
       await axios.delete(`/api/notifications/admin/${id}`);
       setNotifications(prev => prev.filter(n => n.id !== id));
       setTotal(prev => prev - 1);
+      setSelectedIds(prev => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     } catch (err: any) {
       alert(err.message || 'Failed to delete notification');
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const toggleRowSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === notifications.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(notifications.map(n => n.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} selected notification${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const response = await axios.delete('/api/notifications/admin/bulk', { data: { ids } });
+      const deleted = response.data?.deleted ?? ids.length;
+      setNotifications(prev => prev.filter(n => !selectedIds.has(n.id)));
+      setTotal(prev => Math.max(0, prev - deleted));
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to delete notifications');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  // Auto-purge: load current setting on mount, then expose save +
+  // manual-trigger handlers. The "Purge now" button refetches the
+  // notification list so the admin sees the result immediately.
+  useEffect(() => {
+    axios.get('/api/notifications/admin/purge-setting')
+      .then((res) => {
+        const days = Number(res.data?.days ?? 0);
+        setPurgeWindowDays(days);
+        setPurgeWindowInput(String(days));
+      })
+      .catch(() => { /* non-fatal */ });
+  }, []);
+
+  const handleSavePurgeSetting = async () => {
+    const parsed = parseInt(purgeWindowInput, 10);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 3650) {
+      setPurgeStatusMsg('Enter a value between 0 and 3650 days. 0 disables auto-purge.');
+      setTimeout(() => setPurgeStatusMsg(null), 3500);
+      return;
+    }
+    setPurgeSaving(true);
+    setPurgeStatusMsg(null);
+    try {
+      const response = await axios.put('/api/notifications/admin/purge-setting', { days: parsed });
+      const saved = Number(response.data?.days ?? parsed);
+      setPurgeWindowDays(saved);
+      setPurgeWindowInput(String(saved));
+      setPurgeStatusMsg(saved === 0
+        ? 'Auto-purge disabled.'
+        : `Auto-purge will remove notifications older than ${saved} day${saved === 1 ? '' : 's'} every night.`);
+      setTimeout(() => setPurgeStatusMsg(null), 3500);
+    } catch (err: any) {
+      setPurgeStatusMsg(err?.response?.data?.message || 'Failed to save purge setting');
+      setTimeout(() => setPurgeStatusMsg(null), 3500);
+    } finally {
+      setPurgeSaving(false);
+    }
+  };
+
+  const handlePurgeNow = async () => {
+    if (purgeWindowDays <= 0) {
+      if (!confirm('Auto-purge is currently disabled (0 days). Save a non-zero window first, then run Purge now. Continue anyway? (Nothing will be deleted.)')) return;
+    } else {
+      if (!confirm(`Purge all notifications older than ${purgeWindowDays} day${purgeWindowDays === 1 ? '' : 's'} right now? This cannot be undone.`)) return;
+    }
+    setPurgeNowRunning(true);
+    setPurgeStatusMsg(null);
+    try {
+      const response = await axios.post('/api/notifications/admin/purge-now');
+      const deleted = Number(response.data?.deleted ?? 0);
+      setPurgeStatusMsg(deleted === 0
+        ? 'Nothing matched - no notifications were deleted.'
+        : `Purged ${deleted} notification${deleted === 1 ? '' : 's'}.`);
+      setTimeout(() => setPurgeStatusMsg(null), 4000);
+      fetchData();
+    } catch (err: any) {
+      setPurgeStatusMsg(err?.response?.data?.message || 'Manual purge failed');
+      setTimeout(() => setPurgeStatusMsg(null), 4000);
+    } finally {
+      setPurgeNowRunning(false);
     }
   };
 
@@ -492,6 +640,112 @@ export default function NotificationsAdminPage() {
           </div>
         </div>
 
+        {/* Auto-purge settings + bulk-delete toolbar */}
+        <div className="bg-slate-800 rounded-xl p-4 mb-4 border border-slate-700">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-300 font-medium">Auto-purge older than:</span>
+              <select
+                value={(() => {
+                  const presets = ['0', '7', '30', '60', '90', '180', '365'];
+                  return presets.includes(purgeWindowInput) ? purgeWindowInput : 'custom';
+                })()}
+                onChange={(e) => {
+                  if (e.target.value !== 'custom') setPurgeWindowInput(e.target.value);
+                }}
+                className="px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="0">Off (never purge)</option>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+                <option value="60">60 days (2 months)</option>
+                <option value="90">90 days (3 months)</option>
+                <option value="180">180 days (6 months)</option>
+                <option value="365">365 days (1 year)</option>
+                <option value="custom">Custom...</option>
+              </select>
+              <input
+                type="number"
+                min={0}
+                max={3650}
+                value={purgeWindowInput}
+                onChange={(e) => setPurgeWindowInput(e.target.value)}
+                className="w-20 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-orange-500"
+                title="Days. 0 disables auto-purge."
+              />
+              <span className="text-gray-400 text-xs">days</span>
+              <button
+                onClick={handleSavePurgeSetting}
+                disabled={purgeSaving}
+                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg disabled:opacity-50 flex items-center gap-1"
+              >
+                {purgeSaving && <Loader2 className="h-3 w-3 animate-spin" />}
+                Save
+              </button>
+              <button
+                onClick={handlePurgeNow}
+                disabled={purgeNowRunning}
+                className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20 text-sm font-medium rounded-lg disabled:opacity-50 flex items-center gap-1"
+                title="Run the purge immediately using the current setting"
+              >
+                {purgeNowRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                Purge now
+              </button>
+            </div>
+            <div className="flex-1" />
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20 text-sm font-medium rounded-lg disabled:opacity-50 flex items-center gap-1"
+              >
+                {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                Delete {selectedIds.size} selected
+              </button>
+            )}
+          </div>
+          <div className="mt-2 flex items-center gap-3 text-xs">
+            <span className="text-gray-500">
+              {purgeWindowDays === 0
+                ? 'Auto-purge is currently disabled. Notifications are kept indefinitely.'
+                : `Saved: notifications older than ${purgeWindowDays} day${purgeWindowDays === 1 ? '' : 's'} are purged nightly at 03:00.`}
+            </span>
+            {purgeStatusMsg && (
+              <span className="text-orange-300">{purgeStatusMsg}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Result count - sits between the purge/filters block and the
+            table so the admin always knows what slice of the data they
+            are looking at, even on a page deep into pagination. Range
+            text reflects the actual current page slice, not just the
+            backend total. */}
+        {!loading && !error && total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl">
+            <div className="text-sm text-gray-300">
+              Showing{' '}
+              <span className="font-semibold text-white">
+                {(page - 1) * pageSize + 1}
+                {'-'}
+                {Math.min(page * pageSize, total)}
+              </span>{' '}
+              of{' '}
+              <span className="font-semibold text-orange-400">{total.toLocaleString()}</span>{' '}
+              {total === 1 ? 'notification' : 'notifications'} matching the current filters
+            </div>
+            <div className="text-xs text-gray-500">
+              Page {page} of {totalPages || 1}
+              {analytics && (
+                <span className="ml-3">
+                  {' '}- System total: <span className="text-gray-300 font-medium">{analytics.totalNotifications.toLocaleString()}</span>
+                  {' '}({analytics.unreadNotifications.toLocaleString()} unread)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         {loading ? (
           <div className="text-center py-20">
@@ -517,6 +771,18 @@ export default function NotificationsAdminPage() {
             <table className="w-full">
               <thead className="bg-slate-700">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-10">
+                    <input
+                      type="checkbox"
+                      checked={notifications.length > 0 && selectedIds.size === notifications.length}
+                      ref={(el) => {
+                        if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < notifications.length;
+                      }}
+                      onChange={toggleSelectAll}
+                      className="accent-orange-500 cursor-pointer"
+                      aria-label="Select all on this page"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Recipient</th>
@@ -528,7 +794,19 @@ export default function NotificationsAdminPage() {
               </thead>
               <tbody className="divide-y divide-slate-700">
                 {notifications.map((notification) => (
-                  <tr key={notification.id} className="hover:bg-slate-700/50">
+                  <tr
+                    key={notification.id}
+                    className={`hover:bg-slate-700/50 ${selectedIds.has(notification.id) ? 'bg-orange-500/5' : ''}`}
+                  >
+                    <td className="px-4 py-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(notification.id)}
+                        onChange={() => toggleRowSelection(notification.id)}
+                        className="accent-orange-500 cursor-pointer"
+                        aria-label={`Select notification: ${notification.title}`}
+                      />
+                    </td>
                     <td className="px-4 py-4 text-gray-300 text-sm whitespace-nowrap">
                       {formatDate(notification.createdAt)}
                     </td>
@@ -609,6 +887,15 @@ export default function NotificationsAdminPage() {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              itemsPerPage={pageSize}
+              totalItems={total}
+              onPageChange={setPage}
+              onItemsPerPageChange={(n) => { setPageSize(n); setPage(1); }}
+              itemsPerPageOptions={[25, 50, 100, 250]}
+            />
           </div>
         )}
       </div>
@@ -640,20 +927,33 @@ export default function NotificationsAdminPage() {
                 <p className="text-xs text-gray-500 uppercase mb-1">Message</p>
                 <p className="text-gray-300 whitespace-pre-wrap">{viewNotification.message}</p>
               </div>
-              {viewNotification.link && (
-                <div>
-                  <p className="text-xs text-gray-500 uppercase mb-1">Link</p>
-                  <a
-                    href={viewNotification.link.startsWith('http') ? viewNotification.link : viewNotification.link.startsWith('/') ? viewNotification.link : `https://${viewNotification.link}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    {viewNotification.link.startsWith('http') ? viewNotification.link : viewNotification.link.startsWith('/') ? viewNotification.link : `https://${viewNotification.link}`}
-                  </a>
-                </div>
-              )}
+              {viewNotification.link && (() => {
+                // See MyMecaDashboardPage notification-link logic for the
+                // rule: full URL -> open as-is, bare path -> internal SPA
+                // route, domain-looking string -> upgrade to https.
+                const raw = viewNotification.link;
+                const isHttp = /^https?:\/\//i.test(raw);
+                const looksLikeDomain = !raw.startsWith('/') && raw.includes('.') && !raw.includes(' ');
+                const href = isHttp
+                  ? raw
+                  : looksLikeDomain
+                    ? `https://${raw}`
+                    : raw.startsWith('/') ? raw : `/${raw}`;
+                return (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase mb-1">Link</p>
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {href}
+                    </a>
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-500 uppercase mb-1">Recipient</p>

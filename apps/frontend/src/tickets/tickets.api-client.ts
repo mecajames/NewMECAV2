@@ -185,6 +185,9 @@ export interface CreateCommentData {
   author_id: string;
   content: string;
   is_internal?: boolean;
+  // When true, the staff member's signature is not appended to this
+  // reply's outbound email (transient, per-reply).
+  skip_signature?: boolean;
 }
 
 export interface CreateAttachmentData {

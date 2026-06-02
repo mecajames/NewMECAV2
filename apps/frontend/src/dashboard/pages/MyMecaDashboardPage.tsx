@@ -131,6 +131,11 @@ export default function MyMecaDashboardPage() {
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [deletingNotificationId, setDeletingNotificationId] = useState<string | null>(null);
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  // Selection set for the bulk-delete checkbox column. Stored as a Set
+  // for O(1) toggles; cleared whenever the notifications list refreshes
+  // so stale ids never linger.
+  const [selectedNotificationIds, setSelectedNotificationIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Event Registrations filter state
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -449,10 +454,56 @@ export default function MyMecaDashboardPage() {
       setDeletingNotificationId(notificationId);
       await notificationsApi.deleteNotification(notificationId, profile.id);
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      setSelectedNotificationIds(prev => {
+        if (!prev.has(notificationId)) return prev;
+        const next = new Set(prev);
+        next.delete(notificationId);
+        return next;
+      });
     } catch (error) {
       console.error('Error deleting notification:', error);
     } finally {
       setDeletingNotificationId(null);
+    }
+  };
+
+  const toggleNotificationSelection = (notificationId: string) => {
+    setSelectedNotificationIds(prev => {
+      const next = new Set(prev);
+      if (next.has(notificationId)) next.delete(notificationId);
+      else next.add(notificationId);
+      return next;
+    });
+  };
+
+  /**
+   * Select-all / clear-all toggle for the header checkbox. When some
+   * but not all rows are selected, click clears the selection so the
+   * intermediate state never wedges the UI.
+   */
+  const toggleSelectAllNotifications = () => {
+    if (selectedNotificationIds.size === notifications.length) {
+      setSelectedNotificationIds(new Set());
+    } else {
+      setSelectedNotificationIds(new Set(notifications.map(n => n.id)));
+    }
+  };
+
+  const handleBulkDeleteNotifications = async () => {
+    if (!profile?.id) return;
+    const ids = Array.from(selectedNotificationIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected notification${ids.length === 1 ? '' : 's'}?`)) return;
+    try {
+      setBulkDeleting(true);
+      await notificationsApi.bulkDelete(ids, profile.id);
+      setNotifications(prev => prev.filter(n => !selectedNotificationIds.has(n.id)));
+      setSelectedNotificationIds(new Set());
+    } catch (error) {
+      console.error('Error bulk-deleting notifications:', error);
+      alert('Failed to delete the selected notifications. Please try again.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -1895,20 +1946,53 @@ export default function MyMecaDashboardPage() {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Bell className="h-5 w-5 text-orange-500" />
             My Notifications
-            {notifications.filter(n => !n.read).length > 0 && (
-              <span className="ml-2 px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded-full">
-                {notifications.filter(n => !n.read).length}
+            {notifications.length > 0 && (
+              <span
+                className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${
+                  notifications.some(n => !n.read)
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-slate-700 text-gray-300'
+                }`}
+                title={`${notifications.filter(n => !n.read).length} unread out of ${notifications.length} total`}
+              >
+                {notifications.filter(n => !n.read).length} / {notifications.length}
               </span>
             )}
           </h2>
-          {notifications.some(n => !n.read) && (
-            <button
-              onClick={handleMarkAllNotificationsRead}
-              className="text-orange-500 hover:text-orange-400 text-sm font-medium"
-            >
-              Mark all read
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {notifications.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={selectedNotificationIds.size > 0 && selectedNotificationIds.size === notifications.length}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectedNotificationIds.size > 0 && selectedNotificationIds.size < notifications.length;
+                  }}
+                  onChange={toggleSelectAllNotifications}
+                  className="accent-orange-500"
+                />
+                Select all
+              </label>
+            )}
+            {selectedNotificationIds.size > 0 && (
+              <button
+                onClick={handleBulkDeleteNotifications}
+                disabled={bulkDeleting}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                Delete {selectedNotificationIds.size} selected
+              </button>
+            )}
+            {notifications.some(n => !n.read) && (
+              <button
+                onClick={handleMarkAllNotificationsRead}
+                className="text-orange-500 hover:text-orange-400 text-sm font-medium"
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
         </div>
 
         {notificationsLoading ? (
@@ -1922,9 +2006,19 @@ export default function MyMecaDashboardPage() {
                 key={notification.id}
                 className={`rounded-lg p-4 transition-colors ${
                   notification.read ? 'bg-slate-700/50' : 'bg-slate-700 border-l-4 border-orange-500'
-                }`}
+                } ${selectedNotificationIds.has(notification.id) ? 'ring-2 ring-orange-500/60' : ''}`}
               >
                 <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedNotificationIds.has(notification.id)}
+                      onChange={() => toggleNotificationSelection(notification.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 accent-orange-500 cursor-pointer"
+                      aria-label={`Select notification: ${notification.title}`}
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h4 className={`font-medium text-sm ${notification.read ? 'text-gray-300' : 'text-white'}`}>
@@ -1938,12 +2032,24 @@ export default function MyMecaDashboardPage() {
                       {notification.message}
                     </p>
                     {notification.link && (() => {
-                      const isInternal = notification.link!.startsWith('/');
-                      const href = isInternal
-                        ? notification.link!
-                        : notification.link!.startsWith('http')
-                          ? notification.link!
-                          : `https://${notification.link}`;
+                      // Three cases:
+                      //   1. Already a full URL (http/https) -> open in new tab
+                      //   2. Starts with '/' -> internal SPA route
+                      //   3. Bare string like "admin/events?..." (legacy
+                      //      notifications written before backend was fixed
+                      //      to always emit leading '/'). If it contains a
+                      //      dot it's plausibly a domain; otherwise treat as
+                      //      a route fragment and prepend '/' so we don't
+                      //      build the malformed "https://admin/events" URL.
+                      const raw = notification.link!;
+                      const isHttp = /^https?:\/\//i.test(raw);
+                      const looksLikeDomain = !raw.startsWith('/') && raw.includes('.') && !raw.includes(' ');
+                      const href = isHttp
+                        ? raw
+                        : looksLikeDomain
+                          ? `https://${raw}`
+                          : raw.startsWith('/') ? raw : `/${raw}`;
+                      const isInternal = href.startsWith('/');
                       return (
                         <a
                           href={href}

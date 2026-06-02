@@ -176,8 +176,33 @@ export class CompetitionResultsService {
       // result without loading the entire profiles table client-side.
       populate: ['competitor', 'creator', 'updater'],
     });
-    // Mask MECA ID on held results (expired member, awaiting renewal)
+
+    // Resolve each competitor's membership status (active / expired / none) in
+    // ONE batched query so the ED Overview can split entry-fee revenue between
+    // members and non-members. Computed before MECA-ID masking below so held
+    // (grace-period) rows are still classified as 'expired'. Best-effort: if
+    // the lookup fails for any reason it must NOT break the core results list
+    // (this endpoint feeds the public results page + admin/ED views), so we
+    // fall back to an empty map and everyone reads as 'none'.
+    let statusByMecaId = new Map<number, 'active' | 'expired'>();
+    try {
+      statusByMecaId = await this.resolveMembershipStatuses(
+        em,
+        results.map(r => r.mecaId),
+      );
+    } catch (err) {
+      this.logger.warn(`findByEvent: membership status lookup failed for event ${eventId}, continuing without it: ${(err as Error).message}`);
+    }
+
     return results.map(r => {
+      const numericMecaId = r.mecaId && /^[0-9]+$/.test(r.mecaId) && r.mecaId !== '999999'
+        ? Number(r.mecaId)
+        : null;
+      r.membershipStatus = numericMecaId !== null
+        ? (statusByMecaId.get(numericMecaId) ?? 'none')
+        : 'none';
+
+      // Mask MECA ID on held results (expired member, awaiting renewal)
       if (r.pointsHeldForRenewal) {
         r.mecaId = undefined;
         r.pointsEarned = 0;
@@ -186,6 +211,43 @@ export class CompetitionResultsService {
       r.updatedByName = this.formatProfileName(r.updater);
       return r;
     });
+  }
+
+  /**
+   * Given a list of (possibly messy) MECA IDs from competition results,
+   * return a map of numeric MECA ID -> 'active' | 'expired' based on the
+   * memberships table. A member counts as 'active' if any paid membership has
+   * no end date or an end date in the future; otherwise 'expired'. MECA IDs
+   * with no paid membership are simply absent (callers treat that as 'none').
+   * Non-numeric IDs and the 999999 guest sentinel are ignored.
+   */
+  private async resolveMembershipStatuses(
+    em: EntityManager,
+    mecaIds: (string | undefined)[],
+  ): Promise<Map<number, 'active' | 'expired'>> {
+    const ids = [...new Set(
+      mecaIds.filter((m): m is string => !!m && m !== '999999' && /^[0-9]+$/.test(m))
+        .map(Number),
+    )];
+    const statusMap = new Map<number, 'active' | 'expired'>();
+    if (ids.length === 0) return statusMap;
+
+    const memberships = await em.find(Membership, {
+      mecaId: { $in: ids },
+      paymentStatus: PaymentStatus.PAID,
+    });
+    const now = new Date();
+    for (const m of memberships) {
+      if (m.mecaId == null) continue;
+      const isActive = !m.endDate || m.endDate > now;
+      // Prefer 'active' if the member has any active paid membership.
+      if (isActive) {
+        statusMap.set(m.mecaId, 'active');
+      } else if (statusMap.get(m.mecaId) !== 'active') {
+        statusMap.set(m.mecaId, 'expired');
+      }
+    }
+    return statusMap;
   }
 
   /** Build a human-readable display name from a profile, or undefined. */
@@ -1075,13 +1137,21 @@ export class CompetitionResultsService {
   private async isInGracePeriod(mecaId: string | undefined): Promise<boolean> {
     if (!mecaId || mecaId === '999999' || mecaId === '0' || mecaId.startsWith('99')) return false;
 
+    // memberships.meca_id is an integer column. A non-numeric MECA ID (which
+    // real imported data can contain) would parse to NaN and produce a
+    // `WHERE meca_id = NaN` query that Postgres rejects with "invalid input
+    // syntax for type integer", crashing the whole points recalculation.
+    // A non-numeric ID can't match an integer membership, so bail early.
+    const mecaIdNum = parseInt(mecaId, 10);
+    if (isNaN(mecaIdNum)) return false;
+
     const em = this.em.fork();
     const now = new Date();
     const graceCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
 
     // Find most recent expired membership for this MECA ID (expired within 45 days)
     const membership = await em.findOne(Membership, {
-      mecaId: parseInt(mecaId, 10),
+      mecaId: mecaIdNum,
       paymentStatus: PaymentStatus.PAID,
       endDate: { $lt: now, $gte: graceCutoff },
     });
@@ -1430,29 +1500,40 @@ export class CompetitionResultsService {
           // Get MECA ID from result (now stored directly on competition result)
           const mecaId = result.mecaId;
 
-          // Check eligibility using the new membership-based system
-          // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
-          const isMemberEligible = await this.isMemberEligibleAsync(mecaId);
+          // Per-row safety net: a single problematic row (e.g. malformed
+          // MECA ID, eligibility lookup hiccup) must never abort the whole
+          // event's recalculation. The placement above is already applied;
+          // on error we log the offending row and leave its points at 0.
+          try {
+            // Check eligibility using the new membership-based system
+            // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
+            const isMemberEligible = await this.isMemberEligibleAsync(mecaId);
 
-          if (isMemberEligible && pointsConfig) {
-            result.pointsEarned = this.calculatePoints(
-              currentPlacement,
-              multiplier,
-              format,
-              pointsConfig
-            );
-          } else {
-            // Check if this member is in grace period — hold results for potential renewal
-            const inGracePeriod = await this.isInGracePeriod(mecaId);
-            if (inGracePeriod) {
-              result.pointsHeldForRenewal = true;
-              result.heldAt = new Date();
-              // Calculate what points WOULD be earned (stored as 0 until released)
-              result.pointsEarned = 0;
-              result.notes = (result.notes ? result.notes + ' | ' : '') + 'Held: membership expired, within grace period';
+            if (isMemberEligible && pointsConfig) {
+              result.pointsEarned = this.calculatePoints(
+                currentPlacement,
+                multiplier,
+                format,
+                pointsConfig
+              );
             } else {
-              result.pointsEarned = 0;
+              // Check if this member is in grace period — hold results for potential renewal
+              const inGracePeriod = await this.isInGracePeriod(mecaId);
+              if (inGracePeriod) {
+                result.pointsHeldForRenewal = true;
+                result.heldAt = new Date();
+                // Calculate what points WOULD be earned (stored as 0 until released)
+                result.pointsEarned = 0;
+                result.notes = (result.notes ? result.notes + ' | ' : '') + 'Held: membership expired, within grace period';
+              } else {
+                result.pointsEarned = 0;
+              }
             }
+          } catch (rowError: any) {
+            this.logger.error(
+              `[updateEventPoints] Failed to compute points for result ${result.id} (mecaId=${String(mecaId)}) in event ${eventId}: ${rowError?.message}`,
+            );
+            result.pointsEarned = 0;
           }
         } else {
           // Format not eligible for points (unknown format or non-points format)

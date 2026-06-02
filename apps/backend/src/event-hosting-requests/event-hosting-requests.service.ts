@@ -347,7 +347,7 @@ export class EventHostingRequestsService {
       title: 'New Event Hosting Request Assigned',
       message: `You have been assigned to review: ${request.eventName}`,
       type: 'alert',
-      link: `dashboard?tab=hosting-requests&id=${requestId}`,
+      link: `/dashboard?tab=hosting-requests&id=${requestId}`,
     } as any);
 
     return request;
@@ -393,7 +393,7 @@ export class EventHostingRequestsService {
       title: 'New Event Hosting Request Assigned',
       message: `You have been assigned to review: ${request.eventName}`,
       type: 'alert',
-      link: `dashboard?tab=hosting-requests&id=${requestId}`,
+      link: `/dashboard?tab=hosting-requests&id=${requestId}`,
     } as any);
 
     return request;
@@ -448,7 +448,7 @@ export class EventHostingRequestsService {
       title: 'Event Request Assignment Revoked',
       message: `Your assignment to "${request.eventName}" has been revoked by admin.`,
       type: 'alert',
-      link: `dashboard?tab=hosting-requests`,
+      link: `/dashboard?tab=hosting-requests`,
     } as any);
 
     return request;
@@ -499,7 +499,7 @@ export class EventHostingRequestsService {
         title: 'Event Director Accepted Request',
         message: `Event Director has accepted to manage: ${request.eventName}`,
         type: 'info',
-        link: `admin/hosting-requests?id=${requestId}`,
+        link: `/admin/hosting-requests?id=${requestId}`,
       } as any);
     }
 
@@ -551,7 +551,7 @@ export class EventHostingRequestsService {
         title: 'Event Director Declined Request',
         message: `Event Director has declined to manage: ${request.eventName}. Reason: ${reason}`,
         type: 'alert',
-        link: `admin/hosting-requests?id=${requestId}`,
+        link: `/admin/hosting-requests?id=${requestId}`,
       } as any);
     }
 
@@ -601,7 +601,7 @@ export class EventHostingRequestsService {
           title: 'New Message on Your Event Request',
           message: `You have a new message regarding: ${request.eventName}`,
           type: 'message',
-          link: `my-hosting-requests?id=${requestId}`,
+          link: `/my-hosting-requests?id=${requestId}`,
         } as any);
       }
     }
@@ -614,7 +614,7 @@ export class EventHostingRequestsService {
         title: 'New Message on Assigned Request',
         message: `New message on: ${request.eventName}`,
         type: 'message',
-        link: `dashboard?tab=hosting-requests&id=${requestId}`,
+        link: `/dashboard?tab=hosting-requests&id=${requestId}`,
       } as any);
     }
 
@@ -629,7 +629,7 @@ export class EventHostingRequestsService {
             title: 'New Message on Hosting Request',
             message: `New ${isPrivate ? 'private ' : ''}message on: ${request.eventName}`,
             type: 'message',
-            link: `admin/hosting-requests?id=${requestId}`,
+            link: `/admin/hosting-requests?id=${requestId}`,
           } as any);
         }
       }
@@ -719,7 +719,7 @@ export class EventHostingRequestsService {
         title: 'Event Hosting Request Update',
         message: statusMessage,
         type: finalStatus === FinalApprovalStatus.APPROVED ? 'info' : 'alert',
-        link: `my-hosting-requests?id=${requestId}`,
+        link: `/my-hosting-requests?id=${requestId}`,
       } as any);
     }
 
@@ -919,7 +919,7 @@ export class EventHostingRequestsService {
         title: 'Event Created from Hosting Request',
         message: `Event "${event.title}" has been created and is pending approval.`,
         type: 'info',
-        link: `admin/events?id=${event.id}`,
+        link: `/admin/events?id=${event.id}`,
       } as any);
     }
 

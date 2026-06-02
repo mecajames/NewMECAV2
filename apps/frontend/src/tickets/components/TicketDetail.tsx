@@ -35,6 +35,10 @@ import {
   RefreshCw,
   ChevronDown,
   AlertTriangle,
+  Bookmark,
+  Link as LinkIcon,
+  Globe,
+  PenLine,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -51,6 +55,7 @@ import {
   CannedResponse,
   resolveCannedResponse,
 } from '../ticket-support-tools.api-client';
+import { TICKET_QUICK_LINKS, TicketQuickLink } from '../ticketQuickLinks';
 import { TicketStaffResponse, TicketDepartmentResponse, TICKET_STATUS_TRANSITIONS } from '@newmeca/shared';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { useDraftStorage } from '@/shared/hooks/useDraftStorage';
@@ -172,6 +177,23 @@ export function TicketDetail({
   const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([]);
   const [cannedOpen, setCannedOpen] = useState(false);
   const cannedRef = useRef<HTMLDivElement>(null);
+  // Quick links picker (staff only) — drop a known site URL into the
+  // reply. Source list is the curated TICKET_QUICK_LINKS constant.
+  const [quickLinkOpen, setQuickLinkOpen] = useState(false);
+  const quickLinkRef = useRef<HTMLDivElement>(null);
+  // "Save this reply as a canned response" flow (staff only). When the
+  // checkbox is on we surface a small panel for the template title /
+  // category / visibility flag, and on submit we POST the reply body to
+  // the canned-responses API alongside posting the comment. All reset
+  // after a successful submit. cannedShared = true → "Global" (usable by
+  // all techs); false → "Private" (only this tech).
+  const [saveAsCanned, setSaveAsCanned] = useState(false);
+  const [cannedTitle, setCannedTitle] = useState('');
+  const [cannedCategory, setCannedCategory] = useState('');
+  const [cannedShared, setCannedShared] = useState(false);
+  // Per-reply "don't append my signature" toggle (staff only). Default
+  // off → the active signature is appended to the outbound email.
+  const [skipSignature, setSkipSignature] = useState(false);
   // Member-facing "close this ticket after my reply" flow. When the checkbox
   // is on we also surface an optional 1–5 star rating + short feedback. All
   // three reset after a successful submit.
@@ -304,6 +326,18 @@ export function TicketDetail({
     return () => document.removeEventListener('mousedown', onDown);
   }, [cannedOpen]);
 
+  // Close the quick-links picker on outside click.
+  useEffect(() => {
+    if (!quickLinkOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (quickLinkRef.current && !quickLinkRef.current.contains(e.target as Node)) {
+        setQuickLinkOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [quickLinkOpen]);
+
   /**
    * Build the substitution context from the current ticket and the
    * viewing agent's name (passed in via props). Then resolve and
@@ -326,6 +360,16 @@ export function TicketDetail({
     });
     setNewComment((prev) => prev ? `${prev}\n\n${resolved}` : resolved);
     setCannedOpen(false);
+  };
+
+  /**
+   * Append a curated site link to the reply as "Label: URL". Replies are
+   * plain text, so the label keeps the bare URL readable in context.
+   */
+  const handleInsertQuickLink = (link: TicketQuickLink) => {
+    const snippet = `${link.label}: ${link.url}`;
+    setNewComment((prev) => prev ? `${prev}\n${snippet}` : snippet);
+    setQuickLinkOpen(false);
   };
 
   // Fetch staff list when modal opens
@@ -563,6 +607,8 @@ export function TicketDetail({
         author_id: currentUserId,
         content: newComment.trim() || '(screenshot attached)',
         is_internal: isInternal,
+        // Only staff replies carry a signature; honor the per-reply skip.
+        skip_signature: isStaff && skipSignature,
       });
 
       // Upload attachments and link them to the new comment. Upload errors
@@ -594,9 +640,34 @@ export function TicketDetail({
         }
       }
 
+      // Staff opted to save this reply as a reusable canned response.
+      // Done as a separate call after the comment is persisted so a
+      // failure here never blocks the reply itself. Requires a title and
+      // some body text; screenshot-only replies have nothing to template.
+      if (isStaff && saveAsCanned && cannedTitle.trim() && newComment.trim()) {
+        try {
+          const created = await cannedResponsesApi.create({
+            title: cannedTitle.trim(),
+            body: newComment.trim(),
+            category: cannedCategory.trim() || null,
+            is_shared: cannedShared,
+          });
+          // Surface it immediately in the picker without a refetch.
+          setCannedResponses((prev) => [...prev, created]);
+        } catch (cannedErr) {
+          console.error('Reply posted, but saving the canned response failed:', cannedErr);
+          alert('Reply posted, but we could not save it as a canned response. You can add it from the canned responses settings page.');
+        }
+      }
+
       clearCommentDraft();
       setIsInternal(false);
       setPendingAttachments([]);
+      setSaveAsCanned(false);
+      setCannedTitle('');
+      setCannedCategory('');
+      setCannedShared(false);
+      setSkipSignature(false);
 
       // Member opted to close + (optionally) rate after this reply. Done as
       // a second call rather than rolling it into createComment so the
@@ -1055,45 +1126,90 @@ export function TicketDetail({
                     draft. Sized as a button instead of always-visible
                     UI so it stays out of the way when the staff is
                     composing freehand. */}
-                {isStaff && cannedResponses.length > 0 && (
-                  <div className="relative flex items-center justify-between" ref={cannedRef}>
-                    <button
-                      type="button"
-                      onClick={() => setCannedOpen(o => !o)}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg border border-slate-600"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      Insert canned response
-                      <ChevronDown className={`w-3 h-3 transition-transform ${cannedOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {cannedOpen && (
-                      <div className="absolute z-30 top-full left-0 mt-1 w-96 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-2xl">
-                        {(() => {
-                          const grouped = new Map<string, CannedResponse[]>();
-                          for (const r of cannedResponses) {
-                            const cat = r.category || 'Uncategorized';
-                            if (!grouped.has(cat)) grouped.set(cat, []);
-                            grouped.get(cat)!.push(r);
-                          }
-                          return Array.from(grouped.entries()).map(([cat, items]) => (
-                            <div key={cat}>
-                              <div className="px-3 py-1 text-xs text-gray-500 uppercase tracking-wider bg-slate-900/50">{cat}</div>
-                              {items.map(r => (
-                                <button
-                                  key={r.id}
-                                  type="button"
-                                  onClick={() => handleInsertCannedResponse(r)}
-                                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 border-b border-slate-700/50"
-                                >
-                                  <div className="font-medium">{r.title}</div>
-                                  <div className="text-xs text-gray-400 truncate">{r.body.replace(/\s+/g, ' ').slice(0, 80)}{r.body.length > 80 ? '...' : ''}</div>
-                                </button>
-                              ))}
-                            </div>
-                          ));
-                        })()}
+                {isStaff && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {cannedResponses.length > 0 && (
+                      <div className="relative" ref={cannedRef}>
+                        <button
+                          type="button"
+                          onClick={() => setCannedOpen(o => !o)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg border border-slate-600"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Insert canned response
+                          <ChevronDown className={`w-3 h-3 transition-transform ${cannedOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        {cannedOpen && (
+                          <div className="absolute z-30 top-full left-0 mt-1 w-96 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-2xl">
+                            {(() => {
+                              const grouped = new Map<string, CannedResponse[]>();
+                              for (const r of cannedResponses) {
+                                const cat = r.category || 'Uncategorized';
+                                if (!grouped.has(cat)) grouped.set(cat, []);
+                                grouped.get(cat)!.push(r);
+                              }
+                              return Array.from(grouped.entries()).map(([cat, items]) => (
+                                <div key={cat}>
+                                  <div className="px-3 py-1 text-xs text-gray-500 uppercase tracking-wider bg-slate-900/50">{cat}</div>
+                                  {items.map(r => (
+                                    <button
+                                      key={r.id}
+                                      type="button"
+                                      onClick={() => handleInsertCannedResponse(r)}
+                                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 border-b border-slate-700/50"
+                                    >
+                                      <div className="font-medium">{r.title}</div>
+                                      <div className="text-xs text-gray-400 truncate">{r.body.replace(/\s+/g, ' ').slice(0, 80)}{r.body.length > 80 ? '...' : ''}</div>
+                                    </button>
+                                  ))}
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                        )}
                       </div>
                     )}
+
+                    {/* Quick links picker — drop a known site URL into the
+                        reply as "Label: URL". Source is TICKET_QUICK_LINKS. */}
+                    <div className="relative" ref={quickLinkRef}>
+                      <button
+                        type="button"
+                        onClick={() => setQuickLinkOpen(o => !o)}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg border border-slate-600"
+                      >
+                        <LinkIcon className="w-4 h-4" />
+                        Insert link
+                        <ChevronDown className={`w-3 h-3 transition-transform ${quickLinkOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {quickLinkOpen && (
+                        <div className="absolute z-30 top-full left-0 mt-1 w-80 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-2xl">
+                          {(() => {
+                            const grouped = new Map<string, TicketQuickLink[]>();
+                            for (const l of TICKET_QUICK_LINKS) {
+                              if (!grouped.has(l.group)) grouped.set(l.group, []);
+                              grouped.get(l.group)!.push(l);
+                            }
+                            return Array.from(grouped.entries()).map(([group, items]) => (
+                              <div key={group}>
+                                <div className="px-3 py-1 text-xs text-gray-500 uppercase tracking-wider bg-slate-900/50">{group}</div>
+                                {items.map(l => (
+                                  <button
+                                    key={l.url}
+                                    type="button"
+                                    onClick={() => handleInsertQuickLink(l)}
+                                    className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 border-b border-slate-700/50"
+                                  >
+                                    <div className="font-medium">{l.label}</div>
+                                    <div className="text-xs text-gray-400 truncate">{l.url}</div>
+                                  </button>
+                                ))}
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 <textarea
@@ -1170,6 +1286,42 @@ export function TicketDetail({
                         Internal note (staff only)
                       </label>
                     )}
+                    {/* Staff-only: save the composed reply as a reusable
+                        canned response. Checking it reveals the title /
+                        category / share panel below the action row. */}
+                    {isStaff && (
+                      <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={saveAsCanned}
+                          onChange={(e) => {
+                            setSaveAsCanned(e.target.checked);
+                            if (!e.target.checked) {
+                              setCannedTitle('');
+                              setCannedCategory('');
+                              setCannedShared(false);
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-slate-600 text-orange-600 focus:ring-orange-500 bg-slate-700"
+                        />
+                        <Bookmark className="w-4 h-4" />
+                        Save as canned response
+                      </label>
+                    )}
+                    {/* Staff-only: skip appending the signature on this one
+                        reply. Unchecked (default) = signature is appended. */}
+                    {isStaff && (
+                      <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={skipSignature}
+                          onChange={(e) => setSkipSignature(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-600 text-orange-600 focus:ring-orange-500 bg-slate-700"
+                        />
+                        <PenLine className="w-4 h-4" />
+                        Don't include my signature
+                      </label>
+                    )}
                     {/* Member-only: lets the reporter close their own ticket
                         as part of the reply, and optionally rate the support
                         response. Hidden from staff (admins close via the
@@ -1244,6 +1396,79 @@ export function TicketDetail({
                     </button>
                   )}
                 </div>
+
+                {/* Canned-response save panel. Shown to staff once they've
+                    ticked "Save as canned response" — collects the template
+                    title (required), an optional category, and whether to
+                    share it with the rest of the team. The reply body is
+                    taken from the textarea above at submit time. */}
+                {isStaff && saveAsCanned && (
+                  <div className="bg-slate-700/40 border border-slate-600 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-200">
+                      <Bookmark className="w-4 h-4 text-orange-400" />
+                      Save this reply as a canned response
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1">
+                          Title <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={cannedTitle}
+                          onChange={(e) => setCannedTitle(e.target.value)}
+                          maxLength={120}
+                          placeholder="e.g. Membership renewal instructions"
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1">
+                          Category <span className="text-gray-500 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={cannedCategory}
+                          onChange={(e) => setCannedCategory(e.target.value)}
+                          maxLength={60}
+                          placeholder="e.g. Memberships"
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                    </div>
+                    {/* Visibility: Private (only this tech) vs Global
+                        (usable by all techs). Maps to is_shared. */}
+                    <div>
+                      <span className="block text-xs font-medium text-gray-300 mb-1">Visibility</span>
+                      <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setCannedShared(false)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors ${!cannedShared ? 'bg-orange-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          Private
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCannedShared(true)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors ${cannedShared ? 'bg-orange-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                        >
+                          <Globe className="w-3.5 h-3.5" />
+                          Global
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {cannedShared ? 'Usable by all support techs.' : 'Only you can use this template.'}
+                      </p>
+                    </div>
+                    {!cannedTitle.trim() && (
+                      <p className="text-xs text-amber-400">
+                        Add a title to save this reply as a canned response.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Optional rating + feedback panel. Only shown to the
                     reporter once they've opted to close — keeps the form

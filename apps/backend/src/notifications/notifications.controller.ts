@@ -87,6 +87,20 @@ export class NotificationsController {
     return this.notificationsService.markAllAsRead(userId);
   }
 
+  /**
+   * Member bulk-delete. Path must come BEFORE the @Delete(':id')
+   * handler so the literal 'bulk' segment doesn't get captured as an
+   * id. The caller passes their own userId in the body; deletes are
+   * scoped server-side to that user, so a member cannot accidentally
+   * delete someone else's notifications even by guessing ids.
+   */
+  @Delete('bulk')
+  async bulkDeleteForUser(
+    @Body() body: { ids: string[]; userId: string },
+  ): Promise<{ deleted: number }> {
+    return this.notificationsService.bulkDeleteForUser(body.ids, body.userId);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteNotification(
@@ -159,6 +173,20 @@ export class NotificationsController {
     return this.notificationsService.getAdminAnalytics();
   }
 
+  /**
+   * Admin bulk-delete. Like the member bulk endpoint, the path must
+   * come BEFORE the parameterized 'admin/:id' route so the literal
+   * 'bulk' segment doesn't get matched as an id.
+   */
+  @Delete('admin/bulk')
+  async adminBulkDelete(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { ids: string[] },
+  ): Promise<{ deleted: number }> {
+    await this.requireAdmin(authHeader);
+    return this.notificationsService.adminBulkDelete(body.ids);
+  }
+
   @Delete('admin/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async adminDeleteNotification(
@@ -167,6 +195,34 @@ export class NotificationsController {
   ): Promise<void> {
     await this.requireAdmin(authHeader);
     return this.notificationsService.adminDelete(id);
+  }
+
+  // ==========================================
+  // Auto-purge admin endpoints
+  // ==========================================
+
+  @Get('admin/purge-setting')
+  async getPurgeSetting(@Headers('authorization') authHeader: string): Promise<{ days: number }> {
+    await this.requireAdmin(authHeader);
+    const days = await this.notificationsService.getPurgeWindowDays();
+    return { days };
+  }
+
+  @Put('admin/purge-setting')
+  async setPurgeSetting(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { days: number },
+  ): Promise<{ days: number }> {
+    const { user } = await this.requireAdmin(authHeader);
+    return this.notificationsService.setPurgeWindowDays(Number(body.days), user.id);
+  }
+
+  @Post('admin/purge-now')
+  async runPurgeNow(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ deleted: number; windowDays: number }> {
+    await this.requireAdmin(authHeader);
+    return this.notificationsService.runAutoPurge();
   }
 
   @Get('admin/active-member-count')

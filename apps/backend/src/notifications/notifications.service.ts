@@ -1,8 +1,17 @@
-import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Notification, NotificationType } from './notifications.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Season } from '../seasons/seasons.entity';
+import { SiteSettings } from '../site-settings/site-settings.entity';
+
+/**
+ * Key used in site_settings to store the auto-purge window (in days).
+ * Value is a stringified non-negative integer; "0" means auto-purge is
+ * disabled. Read by the daily cron and the admin settings UI.
+ */
+const PURGE_SETTING_KEY = 'notifications_auto_purge_days';
 
 @Injectable()
 export class NotificationsService {
@@ -110,6 +119,27 @@ export class NotificationsService {
       throw new NotFoundException(`Notification with ID ${id} not found`);
     }
     await em.removeAndFlush(notification);
+  }
+
+  /**
+   * Bulk-delete notifications owned by `userId`. IDs that aren't owned
+   * by the user are silently skipped - this prevents leaking the
+   * existence of other users' notifications via a 404 oracle. Returns
+   * the number actually deleted.
+   *
+   * Hard cap at 500 ids per request to keep the IN-list bounded.
+   */
+  async bulkDeleteForUser(ids: string[], userId: string): Promise<{ deleted: number }> {
+    if (!Array.isArray(ids) || ids.length === 0) return { deleted: 0 };
+    if (ids.length > 500) {
+      throw new BadRequestException('Cannot delete more than 500 notifications in one request');
+    }
+    const em = this.em.fork();
+    const deleted = await em.nativeDelete(Notification, {
+      id: { $in: ids },
+      user: { id: userId },
+    });
+    return { deleted };
   }
 
   // ==========================================
@@ -256,6 +286,106 @@ export class NotificationsService {
       throw new NotFoundException(`Notification with ID ${id} not found`);
     }
     await em.removeAndFlush(notification);
+  }
+
+  /**
+   * Admin bulk delete. Unlike bulkDeleteForUser this is not scoped to
+   * an owner, so a single admin call can clean up across the whole
+   * notifications table.
+   *
+   * Hard cap at 1000 ids per request to keep the IN-list bounded
+   * without forcing the UI to paginate deletes excessively.
+   */
+  async adminBulkDelete(ids: string[]): Promise<{ deleted: number }> {
+    if (!Array.isArray(ids) || ids.length === 0) return { deleted: 0 };
+    if (ids.length > 1000) {
+      throw new BadRequestException('Cannot delete more than 1000 notifications in one request');
+    }
+    const em = this.em.fork();
+    const deleted = await em.nativeDelete(Notification, { id: { $in: ids } });
+    return { deleted };
+  }
+
+  // ==========================================
+  // AUTO-PURGE
+  // ==========================================
+
+  /**
+   * Read the auto-purge window in days from site_settings. 0 means
+   * the feature is disabled. Defaults to 0 when the setting row
+   * doesn't exist yet (fresh install / new feature).
+   */
+  async getPurgeWindowDays(): Promise<number> {
+    const em = this.em.fork();
+    const row = await em.findOne(SiteSettings, { setting_key: PURGE_SETTING_KEY });
+    if (!row) return 0;
+    const parsed = parseInt(row.setting_value, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  }
+
+  /**
+   * Persist the auto-purge window (in days). 0 disables the feature.
+   * Hard cap at 3650 days (~10 years) - anything longer is functionally
+   * equivalent to disabled, and the UI shouldn't offer it.
+   */
+  async setPurgeWindowDays(days: number, updatedByUserId: string | null): Promise<{ days: number }> {
+    if (!Number.isFinite(days) || days < 0 || days > 3650) {
+      throw new BadRequestException('Purge window must be between 0 and 3650 days');
+    }
+    const intDays = Math.floor(days);
+    const em = this.em.fork();
+    const existing = await em.findOne(SiteSettings, { setting_key: PURGE_SETTING_KEY });
+    const isUuid = updatedByUserId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(updatedByUserId);
+    if (existing) {
+      existing.setting_value = String(intDays);
+      existing.updated_by = isUuid ? (updatedByUserId as string) : undefined;
+      existing.updated_at = new Date();
+    } else {
+      const row = em.create(SiteSettings, {
+        setting_key: PURGE_SETTING_KEY,
+        setting_value: String(intDays),
+        setting_type: 'number',
+        description: 'Auto-purge notifications older than N days. 0 = disabled.',
+        updated_by: isUuid ? (updatedByUserId as string) : undefined,
+        updated_at: new Date(),
+      });
+      em.persist(row);
+    }
+    await em.flush();
+    return { days: intDays };
+  }
+
+  /**
+   * Delete every notification with created_at older than the configured
+   * window. Returns the count actually deleted. No-op when the window
+   * is 0 (disabled). Run manually via the admin endpoint and on a
+   * daily schedule via the @Cron below.
+   */
+  async runAutoPurge(): Promise<{ deleted: number; windowDays: number }> {
+    const windowDays = await this.getPurgeWindowDays();
+    if (windowDays <= 0) {
+      return { deleted: 0, windowDays: 0 };
+    }
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - windowDays);
+    const em = this.em.fork();
+    const deleted = await em.nativeDelete(Notification, { createdAt: { $lt: cutoff } });
+    this.logger.log(`Auto-purge: removed ${deleted} notifications older than ${windowDays} days (cutoff ${cutoff.toISOString()})`);
+    return { deleted, windowDays };
+  }
+
+  /**
+   * Daily auto-purge at 03:30 server time. Catches old notifications
+   * created during the previous day's traffic. Failure is logged but
+   * non-fatal - the next day's run will retry.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async scheduledAutoPurge(): Promise<void> {
+    try {
+      await this.runAutoPurge();
+    } catch (err) {
+      this.logger.error(`Scheduled notifications auto-purge failed: ${(err as Error).message}`);
+    }
   }
 
   /**
