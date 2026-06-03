@@ -27,7 +27,7 @@ import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries as isoCountries, getStatesForCountry } from '@/utils/countries';
 import { AchievementsGallery } from '@/achievements';
 import { SocialShareButtons } from '@/shared/components';
-import { membershipsApi, Membership, MemberCancelMembershipModal, MembershipCard } from '@/memberships';
+import { membershipsApi, Membership, MemberCancelMembershipModal, MembershipCard, TeamUpgradeModal } from '@/memberships';
 import type { CardData } from '@/memberships';
 import { Vote } from 'lucide-react';
 import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
@@ -74,6 +74,8 @@ export default function MyMecaDashboardPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [teamLoading, setTeamLoading] = useState(true);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  // Pro-rated "Competitor → Competitor with Team" upgrade flow (TeamUpgradeModal).
+  const [showTeamUpgradeModal, setShowTeamUpgradeModal] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [canCreateTeam, setCanCreateTeam] = useState(false);
   const [_canCreateReason, setCanCreateReason] = useState('');
@@ -3218,7 +3220,7 @@ export default function MyMecaDashboardPage() {
               </button>
             ) : showUpgradeButton ? (
               <button
-                onClick={() => navigate('/membership/checkout/afcf450a-0beb-4575-a5d1-a8fb81105cb4')}
+                onClick={() => setShowTeamUpgradeModal(true)}
                 className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <CreditCard className="h-5 w-5" />
@@ -4999,6 +5001,22 @@ export default function MyMecaDashboardPage() {
           membershipType={activeMembership?.membershipTypeConfig?.name || 'Membership'}
           endDate={activeMembership?.endDate}
         />
+
+        {/* Pro-rated upgrade: Competitor -> Competitor with Team. Charges only
+            the prorated team add-on for the days left on the current
+            membership (handled server-side); the webhook applies the upgrade. */}
+        {showTeamUpgradeModal && activeMembership?.id && (
+          <TeamUpgradeModal
+            membershipId={activeMembership.id}
+            onClose={() => setShowTeamUpgradeModal(false)}
+            onSuccess={() => {
+              setShowTeamUpgradeModal(false);
+              // Upgrade is applied by the Stripe webhook; reload so the
+              // dashboard reflects the new team membership + eligibility.
+              window.location.reload();
+            }}
+          />
+        )}
 
         {/* Disable Auto-Renewal Modal */}
         {showDisableAutoRenewalModal && (
