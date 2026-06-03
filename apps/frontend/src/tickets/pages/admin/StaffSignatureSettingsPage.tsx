@@ -33,7 +33,9 @@ export function StaffSignatureEditor() {
   const [html, setHtml] = useState('');
   const [plainText, setPlainText] = useState('');
   const [isActive, setIsActive] = useState(true);
-  const [view, setView] = useState<'html' | 'preview'>('preview');
+  // Default to the editable view so the signature is immediately editable —
+  // landing on a read-only preview made people think they couldn't edit it.
+  const [view, setView] = useState<'html' | 'preview'>('html');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -159,18 +161,18 @@ export function StaffSignatureEditor() {
         <div className="flex items-center justify-between border-b border-slate-700 p-3">
           <div className="flex gap-2">
             <button
+              onClick={() => setView('html')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm ${view === 'html' ? 'bg-orange-500 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+            >
+              <Code className="w-3.5 h-3.5" />
+              Edit (HTML)
+            </button>
+            <button
               onClick={() => setView('preview')}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm ${view === 'preview' ? 'bg-orange-500 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
             >
               <Eye className="w-3.5 h-3.5" />
               Preview
-            </button>
-            <button
-              onClick={() => setView('html')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm ${view === 'html' ? 'bg-orange-500 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              HTML
             </button>
           </div>
           <button
