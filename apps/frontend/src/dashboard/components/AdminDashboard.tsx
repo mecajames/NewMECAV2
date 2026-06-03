@@ -198,6 +198,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/event-registrations',
         },
         {
+          icon: DollarSign,
+          title: 'Event Director Revenue',
+          description: 'Entry-fee revenue by event director and season',
+          action: 'event-director-revenue',
+          color: 'emerald',
+          navigateTo: '/admin/event-director-revenue',
+        },
+        {
           icon: QrCode,
           title: 'QR Check-In',
           description: 'Scan competitor QR codes at events',

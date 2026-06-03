@@ -48,6 +48,39 @@ export interface CompetitionResult {
   modification_reason?: string;
 }
 
+// ---- Admin revenue report ----
+export interface RevenueReportEvent {
+  event_id: string;
+  title: string;
+  event_date: string;
+  director_id: string | null;
+  director_name: string | null;
+  member_count: number;
+  non_member_count: number;
+  member_fee: number | null;
+  non_member_fee: number | null;
+  fees_set: boolean;
+  member_revenue: number;
+  non_member_revenue: number;
+  total_revenue: number;
+}
+
+export interface RevenueReportDirector {
+  director_id: string | null;
+  director_name: string;
+  event_count: number;
+  total_revenue: number;
+  events: RevenueReportEvent[];
+}
+
+export interface RevenueReport {
+  season_id: string;
+  directors: RevenueReportDirector[];
+  season_total: number;
+  event_count: number;
+  result_count: number;
+}
+
 export const competitionResultsApi = {
   getAll: async (page: number = 1, limit: number = 100): Promise<CompetitionResult[]> => {
     const response = await axios.get(`/api/competition-results?page=${page}&limit=${limit}`);
@@ -61,6 +94,12 @@ export const competitionResultsApi = {
 
   getByEvent: async (eventId: string): Promise<CompetitionResult[]> => {
     const response = await axios.get(`/api/competition-results/by-event/${eventId}`);
+    return response.data;
+  },
+
+  // Admin-only: per-event entry-fee revenue grouped by event director for a season.
+  getRevenueReport: async (seasonId: string): Promise<RevenueReport> => {
+    const response = await axios.get('/api/competition-results/revenue-report', { params: { seasonId } });
     return response.data;
   },
 

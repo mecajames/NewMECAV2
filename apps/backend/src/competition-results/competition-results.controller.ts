@@ -86,6 +86,18 @@ export class CompetitionResultsController {
     return this.competitionResultsService.getResultCountsByEvent();
   }
 
+  // Admin revenue report: per-event entry-fee revenue (member vs non-member)
+  // grouped by event director, with a season grand total.
+  @Get('revenue-report')
+  async getRevenueReport(
+    @Headers('authorization') authHeader: string,
+    @Query('seasonId') seasonId?: string,
+  ): Promise<any> {
+    await this.requireAdmin(authHeader);
+    if (!seasonId) throw new BadRequestException('seasonId is required');
+    return this.competitionResultsService.getRevenueReport(seasonId);
+  }
+
   @Public()
   @Get('by-event/:eventId')
   async getResultsByEvent(@Param('eventId') eventId: string): Promise<CompetitionResult[]> {

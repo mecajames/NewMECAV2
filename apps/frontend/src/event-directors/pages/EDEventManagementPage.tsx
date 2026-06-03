@@ -1183,12 +1183,18 @@ export default function EDEventManagementPage() {
               <div className="bg-slate-700/50 rounded-lg p-4">
                 <h3 className="text-sm font-medium text-gray-400 mb-3">Event Revenue (Based on Results Entered)</h3>
                 {(() => {
-                  const memberFee = event.member_entry_fee ?? 30;
-                  const nonMemberFee = event.non_member_entry_fee ?? 35;
-                  const memberResults = results.filter(r => r.membership_status === 'active');
-                  const nonMemberResults = results.filter(r => r.membership_status !== 'active');
-                  const memberCount = memberResults.length;
-                  const nonMemberCount = nonMemberResults.length;
+                  // Use the event's CONFIGURED entry fees. If a fee isn't set,
+                  // treat it as $0 (don't fabricate a default) and warn the ED,
+                  // so the revenue figure reflects reality instead of a guess.
+                  const memberFeeSet = event.member_entry_fee != null;
+                  const nonMemberFeeSet = event.non_member_entry_fee != null;
+                  const memberFee = memberFeeSet ? Number(event.member_entry_fee) : 0;
+                  const nonMemberFee = nonMemberFeeSet ? Number(event.non_member_entry_fee) : 0;
+                  const feesIncomplete = !memberFeeSet || !nonMemberFeeSet;
+                  // One score sheet (result row) = one paid entry. Split by the
+                  // server-resolved membership status (active member vs not).
+                  const memberCount = results.filter(r => r.membership_status === 'active').length;
+                  const nonMemberCount = results.filter(r => r.membership_status !== 'active').length;
                   const memberRevenue = memberCount * memberFee;
                   const nonMemberRevenue = nonMemberCount * nonMemberFee;
                   const totalRevenue = memberRevenue + nonMemberRevenue;
@@ -1196,11 +1202,11 @@ export default function EDEventManagementPage() {
                   return (
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-white">
-                        <span>Active Members ({memberCount} x ${memberFee.toFixed(2)})</span>
+                        <span>Active Members ({memberCount} x ${memberFee.toFixed(2)}{!memberFeeSet ? ' — fee not set' : ''})</span>
                         <span className="font-semibold">${memberRevenue.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between items-center text-white">
-                        <span>Non-Members / Expired ({nonMemberCount} x ${nonMemberFee.toFixed(2)})</span>
+                        <span>Non-Members / Expired ({nonMemberCount} x ${nonMemberFee.toFixed(2)}{!nonMemberFeeSet ? ' — fee not set' : ''})</span>
                         <span className="font-semibold">${nonMemberRevenue.toFixed(2)}</span>
                       </div>
                       <div className="border-t border-slate-600 pt-2 mt-2">
@@ -1209,6 +1215,11 @@ export default function EDEventManagementPage() {
                           <span className="text-lg font-bold text-green-400">${totalRevenue.toFixed(2)}</span>
                         </div>
                       </div>
+                      {feesIncomplete && (
+                        <p className="text-amber-400 text-xs mt-2">
+                          ⚠️ Entry fees aren't fully set for this event, so revenue may be understated. Set the member / non-member entry fees on the event to get an accurate total.
+                        </p>
+                      )}
                       <p className="text-gray-500 text-xs mt-2">
                         Based on {results.length} results entered
                       </p>
