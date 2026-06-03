@@ -250,6 +250,112 @@ export class CompetitionResultsService {
     return statusMap;
   }
 
+  /**
+   * Admin revenue report for a season: per-event entry-fee revenue (one
+   * result row = one paid score sheet) split into active members vs
+   * everyone else (expired / non-member / guest), grouped by event
+   * director, with a season grand total.
+   *
+   * Fees come from the event's configured member/non-member entry fee; an
+   * unset fee counts as $0 (we don't fabricate a default) and is flagged so
+   * the UI can warn. Membership status is resolved once across the whole
+   * season (single batched query) to avoid N+1.
+   */
+  async getRevenueReport(seasonId: string): Promise<any> {
+    const em = this.em.fork();
+    const events = await em.find(
+      Event,
+      { season: seasonId },
+      { populate: ['eventDirector'], orderBy: { eventDate: 'ASC' } },
+    );
+    if (events.length === 0) {
+      return { season_id: seasonId, directors: [], season_total: 0, event_count: 0, result_count: 0 };
+    }
+    const eventIds = events.map(e => e.id);
+
+    const results = await em.find(CompetitionResult, { event: { $in: eventIds } });
+    let statusByMecaId = new Map<number, 'active' | 'expired'>();
+    try {
+      statusByMecaId = await this.resolveMembershipStatuses(em, results.map(r => r.mecaId));
+    } catch (err) {
+      this.logger.warn(`getRevenueReport: membership lookup failed for season ${seasonId}: ${(err as Error).message}`);
+    }
+
+    const isActiveMember = (mecaId?: string): boolean => {
+      if (!mecaId || mecaId === '999999' || !/^[0-9]+$/.test(mecaId)) return false;
+      return statusByMecaId.get(Number(mecaId)) === 'active';
+    };
+
+    // Count member vs non-member score sheets per event.
+    const counts = new Map<string, { member: number; nonMember: number }>();
+    for (const id of eventIds) counts.set(id, { member: 0, nonMember: 0 });
+    for (const r of results) {
+      const eid = r.event?.id;
+      if (!eid || !counts.has(eid)) continue;
+      const bucket = counts.get(eid)!;
+      if (isActiveMember(r.mecaId)) bucket.member++;
+      else bucket.nonMember++;
+    }
+
+    const num = (v: unknown): number => (v == null ? 0 : Number(v) || 0);
+
+    const eventRows = events.map(e => {
+      const c = counts.get(e.id)!;
+      const memberFeeSet = e.memberEntryFee != null;
+      const nonMemberFeeSet = e.nonMemberEntryFee != null;
+      const memberFee = num(e.memberEntryFee);
+      const nonMemberFee = num(e.nonMemberEntryFee);
+      const memberRevenue = c.member * memberFee;
+      const nonMemberRevenue = c.nonMember * nonMemberFee;
+      return {
+        event_id: e.id,
+        title: e.title,
+        event_date: e.eventDate,
+        director_id: e.eventDirector?.id ?? null,
+        director_name: this.formatProfileName(e.eventDirector) ?? null,
+        member_count: c.member,
+        non_member_count: c.nonMember,
+        member_fee: memberFeeSet ? memberFee : null,
+        non_member_fee: nonMemberFeeSet ? nonMemberFee : null,
+        fees_set: memberFeeSet && nonMemberFeeSet,
+        member_revenue: memberRevenue,
+        non_member_revenue: nonMemberRevenue,
+        total_revenue: memberRevenue + nonMemberRevenue,
+      };
+    });
+
+    // Group by event director (null director -> "Unassigned").
+    const byDirector = new Map<string, { director_id: string | null; director_name: string; event_count: number; total_revenue: number; events: typeof eventRows }>();
+    for (const row of eventRows) {
+      const key = row.director_id ?? '__unassigned__';
+      if (!byDirector.has(key)) {
+        byDirector.set(key, {
+          director_id: row.director_id,
+          director_name: row.director_name ?? 'Unassigned',
+          event_count: 0,
+          total_revenue: 0,
+          events: [],
+        });
+      }
+      const g = byDirector.get(key)!;
+      g.events.push(row);
+      g.event_count++;
+      g.total_revenue += row.total_revenue;
+    }
+
+    const directors = Array.from(byDirector.values())
+      .sort((a, b) => a.director_name.localeCompare(b.director_name));
+    const seasonTotal = eventRows.reduce((s, r) => s + r.total_revenue, 0);
+
+    return {
+      season_id: seasonId,
+      directors,
+      season_total: seasonTotal,
+      event_count: events.length,
+      result_count: results.length,
+    };
+  }
+
   /** Build a human-readable display name from a profile, or undefined. */
   private formatProfileName(profile?: Profile): string | undefined {
     if (!profile) return undefined;

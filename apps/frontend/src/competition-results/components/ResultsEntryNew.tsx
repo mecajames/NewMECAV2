@@ -9,6 +9,7 @@ import { seasonsApi, Season } from '@/seasons';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { SeasonSelector } from '@/seasons';
 import { AuditLogModal } from '@/admin';
+import { ConfirmDialog } from '@/shared/components';
 
 interface ResultEntry {
   id?: string;
@@ -166,6 +167,12 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   // Bulk Delete
   const [selectedResultIds, setSelectedResultIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
+
+  // Delete confirmation dialog. Holds the ids pending deletion; `bulk`
+  // distinguishes the single-row delete from the multi-select delete so the
+  // copy and post-delete cleanup can differ.
+  const [deleteTarget, setDeleteTarget] = useState<{ ids: string[]; bulk: boolean } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<string>('placement');
@@ -974,26 +981,42 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     setSaving(false);
   };
 
-  const handleDeleteResult = async (resultId: string) => {
-    const reason = prompt('Please enter a reason for deleting this result:');
-    if (reason === null) return; // User cancelled
-    if (!reason.trim()) {
-      alert('A reason is required to delete a result.');
-      return;
-    }
+  const handleDeleteResult = (resultId: string) => {
+    setDeleteTarget({ ids: [resultId], bulk: false });
+  };
 
-    if (!confirm('Are you sure you want to delete this result?')) return;
+  // Runs the actual deletion once the user confirms in the dialog and supplies
+  // a reason. Handles both the single-row and bulk-select cases.
+  const performDelete = async (reason: string) => {
+    if (!deleteTarget) return;
+    const { ids, bulk } = deleteTarget;
 
+    setDeleting(true);
     try {
-      await competitionResultsApi.delete(resultId, profile?.id, reason.trim());
+      await Promise.all(
+        ids.map(id => competitionResultsApi.delete(id, profile?.id, reason))
+      );
 
       // Recalculate points after deletion
       await handleRecalculatePoints();
 
-      alert('Result deleted successfully!');
+      if (bulk) {
+        setSelectedResultIds(new Set());
+        setSelectAll(false);
+        alert(`Successfully deleted ${ids.length} result(s)`);
+      } else {
+        alert('Result deleted successfully!');
+      }
+
+      setDeleteTarget(null);
       fetchExistingResults();
     } catch (error: any) {
-      alert('Failed to delete result: ' + error.message);
+      alert(
+        (bulk ? 'Failed to delete some results: ' : 'Failed to delete result: ') +
+          error.message
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1046,50 +1069,13 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     setSelectAll(newSelected.size === filteredResults.length);
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedResultIds.size === 0) {
       alert('Please select at least one result to delete');
       return;
     }
 
-    const reason = prompt(`Please enter a reason for deleting ${selectedResultIds.size} result(s):`);
-    if (reason === null) return; // User cancelled
-    if (!reason.trim()) {
-      alert('A reason is required to delete results.');
-      return;
-    }
-
-    const confirmMessage = `Are you sure you want to delete ${selectedResultIds.size} result(s)?\n\nThis action is IRREVERSIBLE and cannot be undone.`;
-
-    if (!confirm(confirmMessage)) {
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      // Delete each selected result
-      const deletePromises = Array.from(selectedResultIds).map(id =>
-        competitionResultsApi.delete(id, profile?.id, reason.trim())
-      );
-
-      await Promise.all(deletePromises);
-
-      alert(`Successfully deleted ${selectedResultIds.size} result(s)`);
-
-      // Clear selection and refresh
-      setSelectedResultIds(new Set());
-      setSelectAll(false);
-
-      // Recalculate points after deletion
-      await handleRecalculatePoints();
-
-      fetchExistingResults();
-    } catch (error: any) {
-      alert('Failed to delete some results: ' + error.message);
-    }
-
-    setSaving(false);
+    setDeleteTarget({ ids: Array.from(selectedResultIds), bulk: true });
   };
 
   const handleSort = (column: string) => {
@@ -2498,6 +2484,27 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
         isOpen={showAuditModal}
         onClose={() => setShowAuditModal(false)}
         eventId={selectedEventId}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title={deleteTarget?.bulk ? 'Delete Results' : 'Delete Result'}
+        message={
+          deleteTarget?.bulk
+            ? `Are you sure you want to delete ${deleteTarget.ids.length} result(s)?\n\nThis action is IRREVERSIBLE and cannot be undone.`
+            : 'Are you sure you want to delete this result?\n\nThis action cannot be undone.'
+        }
+        confirmLabel={deleteTarget?.bulk ? 'Delete Results' : 'Delete Result'}
+        destructive
+        requireReason
+        reasonLabel="Reason for deletion"
+        reasonPlaceholder="Enter a reason for deleting..."
+        loading={deleting}
+        onConfirm={performDelete}
+        onClose={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
       />
     </div>
   );

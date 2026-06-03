@@ -4,6 +4,7 @@ export { default as ScrollToTop } from './ScrollToTop';
 export { default as ImpersonationBanner } from './ImpersonationBanner';
 export { MecaIdSwitcher } from './MecaIdSwitcher';
 export { default as Pagination } from './Pagination';
+export { default as ConfirmDialog } from './ConfirmDialog';
 export { StagingNoIndex } from './StagingNoIndex';
 export { default as SocialShareButtons } from './SocialShareButtons';
 export { GoogleMapsProvider, EventLocationMap } from '../maps';
