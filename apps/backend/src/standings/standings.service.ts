@@ -143,7 +143,10 @@ export class StandingsService {
     const em = this.em.fork();
 
     // Only filter by season if explicitly provided (not empty string)
-    const filter: any = { format: format.toUpperCase(), needsClassReview: false };
+    // Match the format case-insensitively: stored format names are mixed-case
+    // ("Show N Shine", "MECA Kids", "Ride the Light") while older ones are
+    // uppercase (SPL, SQL). Uppercasing the filter broke the mixed-case ones.
+    const filter: any = { format: { $ilike: format.trim() }, needsClassReview: false };
     if (seasonId) {
       filter.season = seasonId;
     }
@@ -178,8 +181,9 @@ export class StandingsService {
     const em = this.em.fork();
 
     // Only filter by season if explicitly provided (not empty string)
+    // Case-insensitive format match (see getStandingsByFormat for why).
     const filter: any = {
-      format: format.toUpperCase(),
+      format: { $ilike: format.trim() },
       competitionClass: competitionClass,
       needsClassReview: false,
     };
@@ -622,7 +626,8 @@ export class StandingsService {
     // Only filter by season if explicitly provided (not empty string)
     const filter: any = { needsClassReview: false };
     if (format) {
-      filter.format = format.toUpperCase();
+      // Case-insensitive format match (see getStandingsByFormat for why).
+      filter.format = { $ilike: format.trim() };
     }
     if (seasonId) {
       filter.season = seasonId;
