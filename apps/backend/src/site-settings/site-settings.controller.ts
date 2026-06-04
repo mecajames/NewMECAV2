@@ -52,16 +52,29 @@ export class SiteSettingsController {
     return { user, profile };
   }
 
+  // The list/get endpoints are public because the frontend reads non-secret
+  // settings (maintenance flags, hero content, social links) without auth.
+  // Secret-typed rows (e.g. auto-managed OAuth tokens) must NEVER be returned
+  // in cleartext over these unauthenticated endpoints — redact their values.
+  private redactSecret<T extends { setting_type?: string; setting_value?: string } | null>(setting: T): T {
+    if (setting && setting.setting_type === 'secret') {
+      return { ...setting, setting_value: '' };
+    }
+    return setting;
+  }
+
   @Public()
   @Get()
   async listSettings() {
-    return this.siteSettingsService.findAll();
+    const settings = await this.siteSettingsService.findAll();
+    return settings.map(s => this.redactSecret(s));
   }
 
   @Public()
   @Get(':key')
   async getSetting(@Param('key') key: string) {
-    return this.siteSettingsService.findByKey(key);
+    const setting = await this.siteSettingsService.findByKey(key);
+    return this.redactSecret(setting);
   }
 
   @Post('upsert')
