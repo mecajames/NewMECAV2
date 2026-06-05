@@ -13,6 +13,14 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import * as guestApi from '../ticket-guest.api-client';
+import { TicketAttachmentImage } from '../components/TicketAttachmentImage';
+
+const formatFileSize = (bytes: number): string => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   open: { label: 'Submitted', color: 'bg-blue-500', icon: <Clock className="w-4 h-4" /> },
@@ -203,6 +211,21 @@ export function GuestTicketViewPage() {
           <div className="bg-slate-700/50 rounded-lg p-4">
             <p className="text-gray-300 whitespace-pre-wrap">{ticket.description}</p>
           </div>
+          {ticket.attachments && ticket.attachments.length > 0 && (
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {ticket.attachments.map((att) => (
+                <TicketAttachmentImage
+                  key={att.id}
+                  ticketId={ticket.id}
+                  attachmentId={att.id}
+                  fileName={att.file_name}
+                  mimeType={att.mime_type}
+                  fileSizeLabel={formatFileSize(att.file_size)}
+                  downloadUrl={`/api/tickets/guest/view/${accessToken}/attachments/${att.id}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Comments/Conversation */}
@@ -247,6 +270,21 @@ export function GuestTicketViewPage() {
                     )}
                   </div>
                   <p className="text-gray-300 whitespace-pre-wrap pl-11">{comment.content}</p>
+                  {comment.attachments && comment.attachments.length > 0 && (
+                    <div className="pl-11 mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {comment.attachments.map((att) => (
+                        <TicketAttachmentImage
+                          key={att.id}
+                          ticketId={ticket.id}
+                          attachmentId={att.id}
+                          fileName={att.file_name}
+                          mimeType={att.mime_type}
+                          fileSizeLabel={formatFileSize(att.file_size)}
+                          downloadUrl={`/api/tickets/guest/view/${accessToken}/attachments/${att.id}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

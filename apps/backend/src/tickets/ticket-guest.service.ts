@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { TicketGuestToken, GuestTokenPurpose } from './entities/ticket-guest-token.entity';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
+import { TicketAttachment } from './ticket-attachment.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { TicketCategory, TicketPriority, TicketStatus } from '@newmeca/shared';
 import { TicketRoutingService } from './ticket-routing.service';
@@ -45,7 +46,17 @@ export interface GuestTicketResponse {
     author_name: string;
     is_staff: boolean;
     created_at: Date;
+    attachments: GuestTicketAttachmentResponse[];
   }>;
+  // Ticket-level attachments (not tied to a specific comment).
+  attachments: GuestTicketAttachmentResponse[];
+}
+
+export interface GuestTicketAttachmentResponse {
+  id: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
 }
 
 @Injectable()
@@ -343,7 +354,14 @@ export class TicketGuestService {
       },
     );
 
-    return this.formatGuestTicketResponse(ticket, comments);
+    // Get attachments so the guest can see screenshots staff (or they) sent.
+    const attachments = await em.find(
+      TicketAttachment,
+      { ticket: ticket.id },
+      { orderBy: { createdAt: 'ASC' } },
+    );
+
+    return this.formatGuestTicketResponse(ticket, comments, attachments);
   }
 
   /**
@@ -520,7 +538,30 @@ export class TicketGuestService {
   private formatGuestTicketResponse(
     ticket: Ticket,
     comments: TicketComment[],
+    attachments: TicketAttachment[] = [],
   ): GuestTicketResponse {
+    const mapAttachment = (a: TicketAttachment): GuestTicketAttachmentResponse => ({
+      id: a.id,
+      file_name: a.fileName,
+      mime_type: a.mimeType,
+      file_size: a.fileSize,
+    });
+
+    // Group attachments by the comment they belong to (comment_id). Anything
+    // with no comment is a ticket-level attachment.
+    const byComment = new Map<string, GuestTicketAttachmentResponse[]>();
+    const ticketLevel: GuestTicketAttachmentResponse[] = [];
+    for (const a of attachments) {
+      const commentId = a.comment?.id;
+      if (commentId) {
+        const list = byComment.get(commentId) ?? [];
+        list.push(mapAttachment(a));
+        byComment.set(commentId, list);
+      } else {
+        ticketLevel.push(mapAttachment(a));
+      }
+    }
+
     return {
       id: ticket.id,
       ticket_number: ticket.ticketNumber,
@@ -544,7 +585,9 @@ export class TicketGuestService {
             : 'Support Staff',
         is_staff: !c.isGuestComment,
         created_at: c.createdAt,
+        attachments: byComment.get(c.id) ?? [],
       })),
+      attachments: ticketLevel,
     };
   }
 }

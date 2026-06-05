@@ -1562,12 +1562,30 @@ export function TicketDetail({
                   <User className="w-4 h-4" />
                   Reporter
                 </span>
-                <span className="text-white">
+                <span className="text-white text-right">
                   {ticket.reporter
                     ? `${ticket.reporter.first_name || ''} ${ticket.reporter.last_name || ''}`.trim() || ticket.reporter.email
-                    : 'Unknown'}
+                    : ticket.guest_name
+                      ? `${ticket.guest_name}`
+                      : ticket.guest_email || 'Unknown'}
+                  {!ticket.reporter && (ticket.guest_name || ticket.guest_email) && (
+                    <span className="ml-2 text-xs px-1.5 py-0.5 bg-slate-600 text-gray-300 rounded align-middle">Guest</span>
+                  )}
                 </span>
               </div>
+              {/* Guest contact email — reporter is null for guest tickets, so
+                  surface the email they entered so staff can identify/contact them. */}
+              {!ticket.reporter && ticket.guest_email && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <Mail className="w-4 h-4" />
+                    Guest Email
+                  </span>
+                  <a href={`mailto:${ticket.guest_email}`} className="text-orange-400 hover:text-orange-300 text-right break-all">
+                    {ticket.guest_email}
+                  </a>
+                </div>
+              )}
               {/* Staff-only: this guest ticket was submitted by a recognised
                   member (e.g. an expired member via the guest flow). Link out
                   to their full profile for context. */}

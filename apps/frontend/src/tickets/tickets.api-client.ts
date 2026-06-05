@@ -42,6 +42,11 @@ export interface Ticket {
   // expired member who used the guest flow). Not linked as the reporter, so it
   // never grants the person dashboard access — it's purely staff context.
   linked_profile_hint?: string | null;
+  // Guest (magic-link, non-member) submitter details. Populated for tickets
+  // created via the guest flow; reporter is null in that case.
+  is_guest_ticket?: boolean;
+  guest_name?: string | null;
+  guest_email?: string | null;
   created_at: string;
   updated_at: string;
   reporter?: {

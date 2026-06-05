@@ -42,12 +42,30 @@ export class ScheduledTasksService {
     private readonly renewalTokenService: MembershipRenewalTokenService,
   ) {}
 
+  /**
+   * Member-facing lifecycle automation (renewal reminders + dunning) must run
+   * ONLY on production. Stage/clone instances hold real member data copied from
+   * prod; running these jobs there issues renewal tokens, auto-suspends
+   * memberships, and (pre-fix) emailed real members renewal links pointing at
+   * the test-mode stage site. The email layer also fail-safes non-prod sends,
+   * but we additionally stop the work from running at all so stage never mutates
+   * cloned member lifecycle state. See the 2026-06-05 stage-renewal-email incident.
+   */
+  private get isProductionEnv(): boolean {
+    const appEnv = (process.env.APP_ENV || '').toLowerCase().trim();
+    return appEnv === 'production' || appEnv === 'prod';
+  }
+
   // =============================================================================
   // DUNNING — escalating emails on failed renewal payments, auto-suspend at day 14.
   // Steps: day 1 → step 1, day 3 → step 2, day 7 → step 3, day 14 → step 4 (suspend).
   // =============================================================================
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
   async processFailedPaymentDunning() {
+    if (!this.isProductionEnv) {
+      this.logger.log(`Skipping dunning job — non-production (APP_ENV="${process.env.APP_ENV || ''}")`);
+      return;
+    }
     this.logger.log('Running dunning job...');
     const em = this.em.fork();
 
@@ -202,6 +220,10 @@ export class ScheduledTasksService {
   // After +30 we send NO further nag emails.
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async handleMembershipExpirationEmails() {
+    if (!this.isProductionEnv) {
+      this.logger.log(`Skipping membership expiration email job — non-production (APP_ENV="${process.env.APP_ENV || ''}")`);
+      return;
+    }
     this.logger.log('Running membership expiration email job...');
 
     try {

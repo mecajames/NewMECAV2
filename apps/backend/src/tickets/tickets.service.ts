@@ -1089,6 +1089,41 @@ export class TicketsService {
       }
     }
 
+    return this.downloadAttachmentBytes(attachment);
+  }
+
+  /**
+   * Guest variant of getAttachmentForDownload. Authorizes purely by the
+   * ticket's access_token (the magic-link credential) instead of a logged-in
+   * user — so a guest can view attachments (e.g. screenshots staff sent) on
+   * THEIR ticket only. Used by the @Public guest download endpoint.
+   */
+  async getAttachmentForGuestDownload(
+    accessToken: string,
+    attachmentId: string,
+  ): Promise<{ data: Buffer; mimeType: string; fileName: string }> {
+    const em = this.em.fork();
+    const attachment = await em.findOne(
+      TicketAttachment,
+      { id: attachmentId },
+      { populate: ['ticket'] },
+    );
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    // The attachment must belong to a guest ticket whose access_token matches.
+    if (!attachment.ticket?.isGuestTicket || !accessToken || attachment.ticket.accessToken !== accessToken) {
+      throw new ForbiddenException('You do not have access to this attachment.');
+    }
+
+    return this.downloadAttachmentBytes(attachment);
+  }
+
+  /** Fetch the raw bytes for an attachment from Supabase Storage. */
+  private async downloadAttachmentBytes(
+    attachment: TicketAttachment,
+  ): Promise<{ data: Buffer; mimeType: string; fileName: string }> {
     const resolved = this.resolveAttachmentStorage(attachment);
     if (!resolved) {
       throw new NotFoundException('Attachment storage location is missing.');

@@ -14,6 +14,12 @@ interface Props {
    * with the clicked image as the starting slide.
    */
   onOpen?: () => void;
+  /**
+   * Override the download URL. Used by the guest (magic-link) ticket view,
+   * which authorizes via the ticket access token instead of a Bearer token.
+   * When set, this URL is fetched instead of the authenticated proxy path.
+   */
+  downloadUrl?: string;
 }
 
 /**
@@ -36,6 +42,7 @@ export function TicketAttachmentImage({
   mimeType,
   fileSizeLabel,
   onOpen,
+  downloadUrl,
 }: Props) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +59,7 @@ export function TicketAttachmentImage({
     setError(null);
 
     axios
-      .get(`/api/tickets/${ticketId}/attachments/${attachmentId}/download`, {
+      .get(downloadUrl ?? `/api/tickets/${ticketId}/attachments/${attachmentId}/download`, {
         responseType: 'blob',
       })
       .then((resp) => {
@@ -84,7 +91,7 @@ export function TicketAttachmentImage({
         blobUrlRef.current = null;
       }
     };
-  }, [ticketId, attachmentId]);
+  }, [ticketId, attachmentId, downloadUrl]);
 
   // When the parent wires an onOpen handler, treat the thumbnail as a
   // button that launches the lightbox. Otherwise fall back to the old

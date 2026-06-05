@@ -236,13 +236,15 @@ export const achievementsApi = {
   /**
    * Get profiles eligible to receive a specific achievement (admin)
    */
-  getEligibleProfiles: async (achievementId: string, search?: string): Promise<Array<{
+  getEligibleProfiles: async (achievementId: string, search?: string, override?: boolean): Promise<Array<{
     id: string;
     meca_id: string;
     name: string;
     email: string;
   }>> => {
-    const params = search ? { search } : {};
+    const params: Record<string, string> = {};
+    if (search) params.search = search;
+    if (override) params.override = 'true';
     const response = await axios.get(`/api/achievements/admin/definitions/${achievementId}/eligible-profiles`, { params });
     return response.data;
   },
@@ -255,6 +257,7 @@ export const achievementsApi = {
     achievement_id: string;
     achieved_value: number;
     notes?: string;
+    override?: boolean;
   }): Promise<{
     success: boolean;
     recipient: {

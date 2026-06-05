@@ -871,8 +871,9 @@ export class AchievementsService {
     achievement_id: string;
     achieved_value: number;
     notes?: string;
+    override?: boolean;
   }): Promise<AchievementRecipient> {
-    const { profile_id, achievement_id, achieved_value, notes } = dto;
+    const { profile_id, achievement_id, achieved_value, notes, override } = dto;
     const em = this.em.fork();
 
     // Get the profile (only fields needed for achievements)
@@ -903,8 +904,10 @@ export class AchievementsService {
       throw new BadRequestException(`Member already has the "${achievement.name}" achievement`);
     }
 
-    // Check if member already has a higher achievement in this group
-    if (achievement.groupName) {
+    // Group-tier dedup. Skipped entirely when an admin passes override=true —
+    // they explicitly want this exact tier added regardless of higher/equal
+    // tiers the member already holds (and we leave those other tiers intact).
+    if (!override && achievement.groupName) {
       const existingInGroup = await em.findOne(AchievementRecipient, {
         profile: { id: profile_id },
         achievement: { groupName: achievement.groupName },
@@ -919,7 +922,8 @@ export class AchievementsService {
         if (existingThreshold >= newThreshold) {
           throw new BadRequestException(
             `Member already has a higher or equal achievement in the "${achievement.groupName}" group: ` +
-            `${existingInGroup.achievement.name} (${existingThreshold}+)`
+            `${existingInGroup.achievement.name} (${existingThreshold}+). ` +
+            `Use the admin override to award it anyway.`
           );
         }
 
@@ -927,6 +931,10 @@ export class AchievementsService {
         this.logger.log(`Manual award: Removing lower achievement "${existingInGroup.achievement.name}" for ${profile.email}`);
         await em.removeAndFlush(existingInGroup);
       }
+    }
+
+    if (override) {
+      this.logger.log(`Manual award OVERRIDE: awarding "${achievement.name}" to ${profile.email || profile.meca_id} despite group-tier dedup`);
     }
 
     // Create the award
@@ -1007,7 +1015,7 @@ export class AchievementsService {
    * Get profiles that can receive a specific achievement (for admin dropdown).
    * Returns active members who don't already have this achievement or a higher one in the same group.
    */
-  async getEligibleProfilesForAchievement(achievementId: string, search?: string): Promise<Array<{
+  async getEligibleProfilesForAchievement(achievementId: string, search?: string, override = false): Promise<Array<{
     id: string;
     meca_id: string;
     name: string;
@@ -1040,9 +1048,14 @@ export class AchievementsService {
       populate: ['membershipTypeConfig'],
     });
 
-    // Get profiles that already have this achievement or higher in the same group
+    // Which existing recipients to exclude from the picker:
+    //  - Normal: anyone who already has this achievement OR a higher/equal tier
+    //    in the same group (no point awarding a lower/equal tier).
+    //  - Admin override: only hide exact-duplicate holders (can't award the
+    //    same achievement twice). Members with a higher tier still show so an
+    //    admin can force-award this tier alongside what they have.
     // Only need profile.id (available as FK without populate)
-    const existingRecipients = achievement.groupName
+    const existingRecipients = (!override && achievement.groupName)
       ? await em.find(AchievementRecipient, {
           achievement: { groupName: achievement.groupName, thresholdValue: { $gte: achievement.thresholdValue } },
         })

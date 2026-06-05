@@ -476,8 +476,22 @@ export class EmailService {
     recipientEmail: string;
     reason?: string;
   }> {
-    // Check if staging mode is enabled
-    const stagingEnabled = await this.getStagingModeSetting('staging_mode_enabled');
+    // Check if staging mode is enabled.
+    //
+    // Fail-safe: `staging_mode_enabled` lives in `site_settings`, which is
+    // cloned from prod (where it is off) every time stage's database is
+    // refreshed — so the DB flag CANNOT be trusted to protect a stage/clone
+    // instance from emailing real members. Any non-production environment that
+    // delivers through a real external provider (e.g. stage on Mailgun) is
+    // therefore forced into staging mode regardless of the flag. Local dev uses
+    // the `smtp` provider (Mailpit/Mailtrap sink that never reaches real
+    // inboxes), so it is exempt and keeps showing every email to developers.
+    // See the 2026-06-05 stage-renewal-email incident.
+    const appEnv = (process.env.APP_ENV || '').toLowerCase().trim();
+    const isProduction = appEnv === 'production' || appEnv === 'prod';
+    const usesExternalDelivery = this.provider !== 'smtp';
+    const dbStagingEnabled = await this.getStagingModeSetting('staging_mode_enabled');
+    const stagingEnabled = dbStagingEnabled || (!isProduction && usesExternalDelivery);
 
     if (!stagingEnabled) {
       return { shouldSend: true, recipientEmail: originalEmail };

@@ -477,10 +477,11 @@ export class AchievementsController {
   async getEligibleProfiles(
     @Headers('authorization') authHeader: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('search') search?: string
+    @Query('search') search?: string,
+    @Query('override') override?: string,
   ) {
     await this.requireAdmin(authHeader);
-    return this.achievementsService.getEligibleProfilesForAchievement(id, search);
+    return this.achievementsService.getEligibleProfilesForAchievement(id, search, override === 'true');
   }
 
   /**
@@ -494,6 +495,7 @@ export class AchievementsController {
       achievement_id: string;
       achieved_value: number;
       notes?: string;
+      override?: boolean;
     }
   ) {
     await this.requireAdmin(authHeader);
