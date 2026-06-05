@@ -1056,33 +1056,44 @@ export class AchievementsService {
     const memberUserIds = [...new Set(activeMemberships.map(m => m.user?.id).filter(Boolean))] as string[];
     const profileMap = await this.loadProfiles(em, memberUserIds);
 
-    // Filter to eligible profiles
+    // Filter to eligible profiles. Build the display name from first/last when
+    // present, but fall back to full_name (many V1-migrated / guest-converted
+    // profiles have full_name set with first_name/last_name empty — those used
+    // to show as "Unknown" and were unfindable by name). _fullName is kept for
+    // searching so a query spanning first+last (e.g. "Jeremy Willey") matches.
     let eligibleProfiles = activeMemberships
       .filter(m => m.user?.id && !excludedProfileIds.has(m.user.id) && profileMap.has(m.user.id))
       .map(m => {
         const profile = profileMap.get(m.user.id)!;
+        const composed = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+        const fullName = profile.full_name || '';
+        // meca_id can come back as a number from the DB; coerce to string so the
+        // search filter's .toLowerCase() (and the frontend) always get a string.
         return {
           id: profile.id,
-          meca_id: profile.meca_id || '',
-          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown',
+          meca_id: profile.meca_id != null ? String(profile.meca_id) : '',
+          name: composed || fullName || 'Unknown',
           email: profile.email || '',
+          _fullName: fullName,
         };
       });
 
-    // Apply search filter if provided
+    // Apply search filter if provided — match name, full_name, MECA ID, or email.
     if (search) {
       const searchLower = search.toLowerCase();
       eligibleProfiles = eligibleProfiles.filter(p =>
         p.name.toLowerCase().includes(searchLower) ||
+        p._fullName.toLowerCase().includes(searchLower) ||
         p.meca_id.toLowerCase().includes(searchLower) ||
         p.email.toLowerCase().includes(searchLower)
       );
     }
 
-    // Sort by name and limit results
+    // Sort by name and limit results (drop the internal search-only field)
     return eligibleProfiles
       .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 50);
+      .slice(0, 50)
+      .map(({ _fullName, ...rest }) => rest);
   }
 
   // =============================================================================
