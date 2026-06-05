@@ -48,6 +48,7 @@ export class CompetitionClassesController {
     return this.competitionClassesService.findAll();
   }
 
+  @Public()
   @Get('active')
   async getActiveClasses(): Promise<CompetitionClass[]> {
     return this.competitionClassesService.findActiveClasses();

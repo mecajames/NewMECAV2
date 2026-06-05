@@ -38,6 +38,10 @@ export interface Ticket {
   closed_at: string | null;
   customer_rating: number | null;
   customer_feedback: string | null;
+  // Staff-only pointer to a recognised member behind a guest ticket (e.g. an
+  // expired member who used the guest flow). Not linked as the reporter, so it
+  // never grants the person dashboard access — it's purely staff context.
+  linked_profile_hint?: string | null;
   created_at: string;
   updated_at: string;
   reporter?: {

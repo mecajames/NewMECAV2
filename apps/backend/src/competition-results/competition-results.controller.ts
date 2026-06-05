@@ -59,11 +59,16 @@ export class CompetitionResultsController {
     if (!isAdminUser(profile)) throw new ForbiddenException('Admin access required');
   }
 
+  @Public()
   @Get()
   async getAllResults(): Promise<CompetitionResult[]> {
     return this.competitionResultsService.findAll();
   }
 
+  // NOTE: intentionally NOT @Public — the Top 10 leaderboard is member-only
+  // content. The global ActiveMembershipGuard restricts this to active members
+  // (staff/admin/ED/judge exempt). The public standings page uses the separate
+  // /api/standings/leaderboard endpoint.
   @Get('leaderboard')
   async getLeaderboard(
     @Query('seasonId') seasonId?: string,
@@ -81,6 +86,7 @@ export class CompetitionResultsController {
   }
 
   // Get result counts for all events in a single call (efficient bulk endpoint)
+  @Public()
   @Get('counts-by-event')
   async getResultCountsByEvent(): Promise<Record<string, number>> {
     return this.competitionResultsService.getResultCountsByEvent();
@@ -104,6 +110,7 @@ export class CompetitionResultsController {
     return this.competitionResultsService.findByEvent(eventId);
   }
 
+  @Public()
   @Post('counts-by-events')
   @HttpCode(HttpStatus.OK)
   async getResultCountsByEvents(
@@ -112,11 +119,15 @@ export class CompetitionResultsController {
     return this.competitionResultsService.getResultCountsByEventIds(body.eventIds || []);
   }
 
+  @Public()
   @Get('by-competitor/:competitorId')
   async getResultsByCompetitor(@Param('competitorId') competitorId: string): Promise<any[]> {
     return this.competitionResultsService.findByCompetitorWithEvent(competitorId);
   }
 
+  // MEMBER-ONLY: powers the individual competitor stats page
+  // (/results/member/:mecaId), which is member-only content. No @Public — the
+  // global ActiveMembershipGuard restricts to active members (admin/staff exempt).
   @Get('by-meca-id/:mecaId')
   async getResultsByMecaId(@Param('mecaId') mecaId: string): Promise<CompetitionResult[]> {
     return this.competitionResultsService.findByMecaId(mecaId);

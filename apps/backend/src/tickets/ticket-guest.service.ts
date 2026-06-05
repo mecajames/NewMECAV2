@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { TicketGuestToken, GuestTokenPurpose } from './entities/ticket-guest-token.entity';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
+import { Profile } from '../profiles/profiles.entity';
 import { TicketCategory, TicketPriority, TicketStatus } from '@newmeca/shared';
 import { TicketRoutingService } from './ticket-routing.service';
 import { EmailService } from '../email/email.service';
@@ -15,6 +16,14 @@ export interface CreateGuestTicketData {
   priority?: TicketPriority;
   guest_name: string;
   event_id?: string;
+}
+
+export type EmailAccountStatus = 'no_account' | 'active' | 'expired';
+
+export interface EmailClassification {
+  status: EmailAccountStatus;
+  first_name?: string;
+  login_banned?: boolean;
 }
 
 export interface GuestTicketResponse {
@@ -59,13 +68,67 @@ export class TicketGuestService {
   ) {}
 
   /**
+   * Classify an email address so the support entry flow can route the person
+   * correctly WITHOUT issuing a magic link first:
+   *  - no_account: no profile, or a profile that never held a membership
+   *      -> full guest magic-link flow (any category)
+   *  - active: has an active membership (or is staff/admin/ED/judge, or is
+   *      hard-banned) -> should log in instead of using the guest flow
+   *  - expired: had a membership that lapsed -> treated as a non-member and
+   *      sent through the guest flow, but kept isolated from My MECA
+   *
+   * The response is intentionally minimal (status + first name) so we don't
+   * leak membership details, MECA ID, or expiry dates.
+   */
+  async classifyEmail(email: string): Promise<EmailClassification> {
+    const em = this.em.fork();
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const profile = await em.findOne(Profile, { email: normalizedEmail });
+    if (!profile) {
+      return { status: 'no_account' };
+    }
+
+    // Hard-banned accounts must never be funnelled into the guest flow — send
+    // them to login (where the ban is enforced) rather than handing out a
+    // magic link that would let them sidestep it.
+    if (profile.login_banned) {
+      return { status: 'active', first_name: profile.first_name, login_banned: true };
+    }
+
+    // Staff / privileged roles are exempt from the membership-expiry gate, so
+    // for support-routing purposes they always count as "active" (log in).
+    const privilegedRoles = ['admin', 'event_director', 'judge'];
+    if (profile.is_staff || (profile.role && privilegedRoles.includes(profile.role))) {
+      return { status: 'active', first_name: profile.first_name };
+    }
+
+    if (profile.membership_status === 'active') {
+      return { status: 'active', first_name: profile.first_name };
+    }
+
+    if (profile.membership_status === 'expired') {
+      return { status: 'expired', first_name: profile.first_name };
+    }
+
+    // membership_status 'none' / null: a profile shell with no membership.
+    // Treat as a guest so they can use the full magic-link flow.
+    return { status: 'no_account' };
+  }
+
+  /**
    * Request a magic link to create a ticket.
    * Returns the token (to be sent via email in production).
+   *
+   * `purpose` defaults to 'create_ticket'. Pass 'account_help' for a
+   * locked-out account holder — the resulting ticket is forced to the Account
+   * category and linked to their profile (see createGuestTicket).
    */
   async requestAccess(
     email: string,
     ipAddress?: string,
     userAgent?: string,
+    purpose: GuestTokenPurpose = 'create_ticket',
   ): Promise<{ token: string; expiresAt: Date }> {
     const em = this.em.fork();
 
@@ -93,7 +156,7 @@ export class TicketGuestService {
     const guestToken = em.create(TicketGuestToken, {
       email: normalizedEmail,
       token,
-      purpose: 'create_ticket' as GuestTokenPurpose,
+      purpose,
       expiresAt,
       ipAddress,
       userAgent,
@@ -101,13 +164,17 @@ export class TicketGuestService {
 
     await em.persistAndFlush(guestToken);
 
-    // Send magic link email
-    const magicLinkUrl = `${this.frontendUrl}/support/guest/verify?token=${token}`;
+    // Send magic link email. Both create_ticket and account_help land on the
+    // same /verify page (the create form), which adapts based on the verified
+    // token's purpose.
+    const isAccountHelp = purpose === 'account_help';
+    const magicLinkUrl = `${this.frontendUrl}/support/guest/verify/${token}`;
     this.emailService.sendTicketGuestVerificationEmail({
       to: normalizedEmail,
       magicLinkUrl,
       expiresInHours: this.CREATE_TOKEN_EXPIRY_HOURS,
       isNewTicket: true,
+      isAccountHelp,
     }).catch(err => {
       this.logger.error(`Failed to send guest verification email: ${err.message}`);
     });
@@ -146,10 +213,10 @@ export class TicketGuestService {
   ): Promise<GuestTicketResponse> {
     const em = this.em.fork();
 
-    // Verify token
+    // Verify token. Both create_ticket and account_help tokens land here.
     const guestToken = await em.findOne(TicketGuestToken, {
       token,
-      purpose: 'create_ticket',
+      purpose: { $in: ['create_ticket', 'account_help'] },
       usedAt: null,
       expiresAt: { $gte: new Date() },
     });
@@ -161,6 +228,30 @@ export class TicketGuestService {
     // Mark token as used
     guestToken.usedAt = new Date();
 
+    const isAccountHelp = guestToken.purpose === 'account_help';
+
+    // Look up any profile behind this email so we can attach staff context.
+    const profile = await em.findOne(Profile, { email: guestToken.email });
+
+    // For account-help tickets the category is forced to ACCOUNT server-side —
+    // a tampered payload can't widen this path to general support. For normal
+    // guest tickets we honour the submitted category.
+    const effectiveCategory = isAccountHelp ? TicketCategory.ACCOUNT : data.category;
+
+    // Decide how the ticket relates to the profile:
+    //  - account_help: a known active member who can't log in. Safe to link as
+    //    reporter (they still hold no session, so no dashboard access) — gives
+    //    staff full context and continuity once login is restored.
+    //  - expired member via the normal guest flow: must stay isolated from My
+    //    MECA, so DON'T set reporter; record linked_profile_hint for staff only.
+    let reporter: Profile | undefined;
+    let linkedProfileHint: string | undefined;
+    if (isAccountHelp) {
+      reporter = profile ?? undefined;
+    } else if (profile && profile.membership_status === 'expired') {
+      linkedProfileHint = profile.id;
+    }
+
     // Generate ticket number
     const ticketNumber = await this.generateTicketNumber(em);
 
@@ -171,7 +262,7 @@ export class TicketGuestService {
     const routingResult = await this.routingService.executeRouting({
       title: data.title,
       description: data.description,
-      category: data.category,
+      category: effectiveCategory,
     });
 
     // Create the ticket
@@ -179,13 +270,15 @@ export class TicketGuestService {
       ticketNumber,
       title: data.title,
       description: data.description,
-      category: data.category,
+      category: effectiveCategory,
       priority: data.priority || TicketPriority.MEDIUM,
       status: TicketStatus.OPEN,
       guestEmail: guestToken.email,
       guestName: data.guest_name,
       accessToken,
       isGuestTicket: true,
+      reporter,
+      linkedProfileHint,
       department: routingResult.departmentId ? undefined : 'general_support',
     } as any);
 
@@ -206,7 +299,7 @@ export class TicketGuestService {
     await em.persistAndFlush([guestToken, ticket]);
 
     // Send confirmation email to guest
-    const viewTicketUrl = `${this.frontendUrl}/support/guest/ticket?access=${accessToken}`;
+    const viewTicketUrl = `${this.frontendUrl}/support/guest/ticket/${accessToken}`;
     this.emailService.sendTicketCreatedEmail({
       to: guestToken.email,
       firstName: data.guest_name.split(' ')[0] || undefined,
@@ -349,7 +442,7 @@ export class TicketGuestService {
     await em.persistAndFlush(guestToken);
 
     // Send magic link email for existing ticket access
-    const magicLinkUrl = `${this.frontendUrl}/support/guest/access?token=${token}`;
+    const magicLinkUrl = `${this.frontendUrl}/support/guest/access/${token}`;
     this.emailService.sendTicketGuestVerificationEmail({
       to: normalizedEmail,
       magicLinkUrl,

@@ -160,6 +160,7 @@ export class ProfilesController {
     return this.profilesService.getStats();
   }
 
+  @Public()
   @Get('public')
   async getPublicProfiles(
     @Query('search') search?: string,

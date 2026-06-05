@@ -5,7 +5,7 @@ import axios from '@/lib/axios';
 import { useAuth } from '../contexts/AuthContext';
 
 // Routes that must remain accessible during maintenance mode so admins can log in
-const MAINTENANCE_EXEMPT_PATHS = ['/login', '/auth/callback', '/change-password'];
+const MAINTENANCE_EXEMPT_PATHS = ['/login', '/auth/callback', '/reset-password', '/change-password'];
 
 interface MaintenanceModeGuardProps {
   children: ReactNode;

@@ -1568,6 +1568,26 @@ export function TicketDetail({
                     : 'Unknown'}
                 </span>
               </div>
+              {/* Staff-only: this guest ticket was submitted by a recognised
+                  member (e.g. an expired member via the guest flow). Link out
+                  to their full profile for context. */}
+              {isStaff && ticket.linked_profile_hint && (
+                <div className="flex items-start justify-between gap-2 p-3 -mx-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  <span className="text-amber-300 flex items-center gap-2 flex-shrink-0 text-sm">
+                    <User className="w-4 h-4" />
+                    Known member
+                  </span>
+                  <a
+                    href={`/admin/members/${ticket.linked_profile_hint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-amber-300 hover:text-amber-200 underline-offset-2 hover:underline flex items-center gap-1 text-right text-sm"
+                  >
+                    View member profile
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 flex items-center gap-2">
                   <UserPlus className="w-4 h-4" />

@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Post, HttpCode, HttpStatus, Param, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Body, Controller, Get, Post, HttpCode, HttpStatus, Param, Req, BadRequestException, UnauthorizedException, Inject, forwardRef } from '@nestjs/common';
+import { Request } from 'express';
 import { Public } from '../auth/public.decorator';
+import { PublicMember } from '../auth/public-member.decorator';
 import { MembershipRenewalTokenService } from './membership-renewal-token.service';
 import { MecaIdService } from './meca-id.service';
 import { MembershipsService } from './memberships.service';
@@ -36,6 +38,35 @@ export class MembershipRenewalController {
     @Inject(forwardRef(() => PayPalService))
     private readonly paypalService: PayPalService,
   ) {}
+
+  /**
+   * Mint a renewal link for the CURRENTLY LOGGED-IN expired member, so the
+   * post-login flow can offer self-service renewal instead of dead-ending them.
+   *
+   * Marked @PublicMember so an expired (but authenticated) member can reach it
+   * past the ActiveMembershipGuard. Only eligible when their most recent paid
+   * membership lapsed within the last 60 days; otherwise { eligible: false } and
+   * the client falls back to the contact-support landing.
+   */
+  @PublicMember()
+  @Post('me/link')
+  @HttpCode(HttpStatus.OK)
+  async myRenewalLink(
+    @Req() req: Request,
+  ): Promise<{ eligible: boolean; token?: string }> {
+    const userId = (req as any).user?.id as string | undefined;
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const membership = await this.membershipsService.findRenewableExpiredMembership(userId, 60);
+    if (!membership) {
+      return { eligible: false };
+    }
+
+    const row = await this.tokenService.issueToken(membership.id);
+    return { eligible: true, token: row.token };
+  }
 
   @Public()
   @Get('token/:token')

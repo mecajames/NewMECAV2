@@ -353,9 +353,10 @@ export const teamsApi = {
     return response.data;
   },
 
-  // Leave the current team
-  leaveTeam: async (): Promise<void> => {
-    await axios.post('/api/teams/leave');
+  // Leave a specific team (a user can be on multiple teams, so the team id
+  // is required — without it the backend can't tell which membership to remove)
+  leaveTeam: async (teamId: string): Promise<void> => {
+    await axios.post(`/api/teams/${teamId}/leave`);
   },
 
   // ============================================

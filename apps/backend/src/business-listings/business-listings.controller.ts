@@ -96,6 +96,7 @@ export class BusinessListingsController {
     return this.businessListingsService.findAllRetailers(false);
   }
 
+  @Public()
   @Get('retailers/:id')
   async getRetailerById(@Param('id') id: string): Promise<RetailerListing | null> {
     return this.businessListingsService.findRetailerById(id);
@@ -107,6 +108,7 @@ export class BusinessListingsController {
     return this.businessListingsService.findAllManufacturers(false);
   }
 
+  @Public()
   @Get('manufacturers/:id')
   async getManufacturerById(@Param('id') id: string): Promise<ManufacturerListing | null> {
     return this.businessListingsService.findManufacturerById(id);

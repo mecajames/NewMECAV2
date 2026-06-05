@@ -562,6 +562,31 @@ export class MembershipsService {
     return membership;
   }
 
+  /**
+   * Find the member's most recent renewable membership IF it expired within the
+   * last `withinDays` days. Powers the "renew at login" offer: we only surface
+   * self-service renewal to recently-lapsed members. Returns null when they
+   * have no paid membership with an end date, it's still active, or it lapsed
+   * too long ago (those go to the contact-support landing instead).
+   */
+  async findRenewableExpiredMembership(userId: string, withinDays = 60): Promise<Membership | null> {
+    const em = this.em.fork();
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - withinDays * 24 * 60 * 60 * 1000);
+
+    // Most recent paid membership that has an end_date drives the decision.
+    const membership = await em.findOne(
+      Membership,
+      { user: userId, paymentStatus: PaymentStatus.PAID, endDate: { $ne: null } },
+      { orderBy: { endDate: 'DESC' }, populate: ['membershipTypeConfig'] },
+    );
+
+    if (!membership || !membership.endDate) return null;
+    if (membership.endDate >= now) return null;   // still active — not expired
+    if (membership.endDate < cutoff) return null; // lapsed beyond the window
+    return membership;
+  }
+
   async renewMembership(userId: string, membershipTypeConfigId: string): Promise<Membership> {
     const em = this.em.fork();
 

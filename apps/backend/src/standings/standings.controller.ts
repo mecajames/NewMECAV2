@@ -16,7 +16,6 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
 import { isAdminUser } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
-import { Public } from '../auth/public.decorator';
 
 @Controller('api/standings')
 export class StandingsController {
@@ -57,8 +56,8 @@ export class StandingsController {
    * Get overall season leaderboard
    * GET /api/standings/leaderboard
    * GET /api/standings/leaderboard?seasonId=xxx&limit=100&offset=0
+   * MEMBER-ONLY: no @Public — global ActiveMembershipGuard applies.
    */
-  @Public()
   @Get('leaderboard')
   async getSeasonLeaderboard(
     @Query('seasonId') seasonId?: string,
@@ -73,8 +72,9 @@ export class StandingsController {
   /**
    * Get standings by format (SPL, SQL, SSI, MK)
    * GET /api/standings/format/:format
+   * MEMBER-ONLY: the Standings page is member-only content. No @Public, so the
+   * global ActiveMembershipGuard restricts to active members (staff/ED/judge exempt).
    */
-  @Public()
   @Get('format/:format')
   async getStandingsByFormat(
     @Param('format') format: string,
@@ -88,8 +88,8 @@ export class StandingsController {
   /**
    * Get standings by competition class within a format
    * GET /api/standings/format/:format/class/:className
+   * MEMBER-ONLY (Standings page). No @Public — see getStandingsByFormat.
    */
-  @Public()
   @Get('format/:format/class/:className')
   async getStandingsByClass(
     @Param('format') format: string,
@@ -104,8 +104,9 @@ export class StandingsController {
   /**
    * Get team standings
    * GET /api/standings/teams
+   * MEMBER-ONLY: powers both the Team Standings and Team Top 10 pages, which
+   * are member-only. No @Public — global ActiveMembershipGuard applies.
    */
-  @Public()
   @Get('teams')
   async getTeamStandings(
     @Query('seasonId') seasonId?: string,
@@ -118,8 +119,8 @@ export class StandingsController {
   /**
    * Get format summaries (all formats overview)
    * GET /api/standings/formats
+   * MEMBER-ONLY: no @Public — global ActiveMembershipGuard applies.
    */
-  @Public()
   @Get('formats')
   async getFormatSummaries(@Query('seasonId') seasonId?: string) {
     return this.standingsService.getFormatSummaries(seasonId);
@@ -130,8 +131,9 @@ export class StandingsController {
    * Powers the data-driven format chips on the Standings + Top 10 pages so
    * we don't show chips for formats with zero data (SSI/MK historically).
    * GET /api/standings/available-formats?seasonId=...
+   * MEMBER-ONLY: only used by the member-only Standings + Top 10 pages. No
+   * @Public — global ActiveMembershipGuard applies.
    */
-  @Public()
   @Get('available-formats')
   async getAvailableFormats(@Query('seasonId') seasonId?: string) {
     return this.standingsService.getFormatsWithResults(seasonId);
@@ -140,8 +142,8 @@ export class StandingsController {
   /**
    * Get competitor statistics
    * GET /api/standings/competitor/:mecaId
+   * MEMBER-ONLY: no @Public — global ActiveMembershipGuard applies.
    */
-  @Public()
   @Get('competitor/:mecaId')
   async getCompetitorStats(
     @Param('mecaId') mecaId: string,
@@ -154,8 +156,10 @@ export class StandingsController {
    * Get classes with results (for dropdown/filter options)
    * GET /api/standings/classes
    * GET /api/standings/classes?format=SPL
+   * MEMBER-ONLY: only used by the member-only Standings + Top 10 filters. No
+   * @Public — global ActiveMembershipGuard applies. (The public Results page
+   * uses /api/competition-classes, a different endpoint, for its selector.)
    */
-  @Public()
   @Get('classes')
   async getClassesWithResults(
     @Query('format') format?: string,

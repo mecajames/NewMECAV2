@@ -17,6 +17,10 @@ interface RequestAccessDto {
   email: string;
 }
 
+interface ClassifyEmailDto {
+  email: string;
+}
+
 interface CreateGuestTicketDto {
   token: string;
   title: string;
@@ -39,6 +43,54 @@ interface RequestTicketAccessDto {
 @Controller('api/tickets/guest')
 export class TicketGuestController {
   constructor(private readonly guestService: TicketGuestService) {}
+
+  /**
+   * Step 0: Classify an email before issuing any magic link, so the frontend
+   * can route account-holders to login and let guests/expired members through.
+   * POST /api/tickets/guest/classify-email
+   */
+  @Public()
+  @Post('classify-email')
+  @HttpCode(HttpStatus.OK)
+  async classifyEmail(
+    @Body() body: ClassifyEmailDto,
+  ): Promise<{ status: string; first_name?: string; login_banned?: boolean }> {
+    return this.guestService.classifyEmail(body.email);
+  }
+
+  /**
+   * Request an account-help magic link for a locked-out account holder. The
+   * resulting ticket is forced to the Account category and linked to their
+   * profile for staff context.
+   * POST /api/tickets/guest/request-account-help
+   */
+  @Public()
+  @Post('request-account-help')
+  @HttpCode(HttpStatus.OK)
+  async requestAccountHelp(
+    @Body() body: RequestAccessDto,
+    @Req() req: Request,
+  ): Promise<{ message: string; expires_at: Date }> {
+    const ipAddress = req.ip || req.headers['x-forwarded-for']?.toString();
+    const userAgent = req.headers['user-agent'];
+
+    const result = await this.guestService.requestAccess(
+      body.email,
+      ipAddress,
+      userAgent,
+      'account_help',
+    );
+
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+
+    return {
+      message: isDevelopment
+        ? `Account help link: /support/guest/verify/${result.token}`
+        : 'If this email is valid, you will receive an account help link shortly.',
+      expires_at: result.expiresAt,
+      ...(isDevelopment && { _dev_token: result.token }),
+    } as any;
+  }
 
   /**
    * Step 1: Request a magic link to create a ticket.

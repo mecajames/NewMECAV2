@@ -66,6 +66,7 @@ export class EventsController {
     return this.eventsService.findAll(page, limit);
   }
 
+  @Public()
   @Get('stats')
   async getStats(): Promise<{ totalEvents: number }> {
     return this.eventsService.getStats();
@@ -107,11 +108,13 @@ export class EventsController {
     });
   }
 
+  @Public()
   @Get('by-director/:directorId')
   async getEventsByDirector(@Param('directorId') directorId: string): Promise<Event[]> {
     return this.eventsService.findByDirector(directorId);
   }
 
+  @Public()
   @Get('multi-day-group/:groupId')
   async getEventsByMultiDayGroup(@Param('groupId') groupId: string): Promise<Event[]> {
     return this.eventsService.findByMultiDayGroup(groupId);

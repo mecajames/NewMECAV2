@@ -861,16 +861,18 @@ export class TeamsService {
     return this.transferOwnership(teamId, newCaptainId, requesterId);
   }
 
-  async leaveTeam(userId: string): Promise<void> {
+  async leaveTeam(teamId: string, userId: string): Promise<void> {
     const em = this.em.fork();
 
-    // Check if user is a member of any team
-    const membership = await em.findOne(TeamMember, { userId, status: 'active' });
+    // Find the membership for THIS specific team. A user can be an active
+    // member of multiple teams, so we MUST match on teamId — matching by
+    // userId alone removes an arbitrary (wrong) team membership.
+    const membership = await em.findOne(TeamMember, { teamId, userId, status: 'active' });
     if (!membership) {
-      throw new BadRequestException('You are not on a team');
+      throw new BadRequestException('You are not on this team');
     }
 
-    const team = await em.findOne(Team, { id: membership.teamId });
+    const team = await em.findOne(Team, { id: teamId });
     if (!team) {
       // Team doesn't exist, just remove the membership
       await em.removeAndFlush(membership);
