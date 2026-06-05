@@ -8,9 +8,11 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  Res,
 } from '@nestjs/common';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { TicketGuestService, CreateGuestTicketData, GuestTicketResponse } from './ticket-guest.service';
+import { TicketsService } from './tickets.service';
 import { Public } from '../auth/public.decorator';
 
 interface RequestAccessDto {
@@ -42,7 +44,10 @@ interface RequestTicketAccessDto {
 
 @Controller('api/tickets/guest')
 export class TicketGuestController {
-  constructor(private readonly guestService: TicketGuestService) {}
+  constructor(
+    private readonly guestService: TicketGuestService,
+    private readonly ticketsService: TicketsService,
+  ) {}
 
   /**
    * Step 0: Classify an email before issuing any magic link, so the frontend
@@ -172,6 +177,33 @@ export class TicketGuestController {
     @Param('accessToken') accessToken: string,
   ): Promise<GuestTicketResponse> {
     return this.guestService.getGuestTicket(accessToken);
+  }
+
+  /**
+   * Download/stream an attachment on a guest ticket. Authorized purely by the
+   * ticket's access token (the magic-link credential), so a guest can view
+   * screenshots staff sent on THEIR ticket. Mirrors the authenticated
+   * /api/tickets/:id/attachments/:id/download proxy.
+   * GET /api/tickets/guest/view/:accessToken/attachments/:attachmentId
+   */
+  @Public()
+  @Get('view/:accessToken/attachments/:attachmentId')
+  async downloadGuestAttachment(
+    @Param('accessToken') accessToken: string,
+    @Param('attachmentId') attachmentId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { data, mimeType, fileName } =
+      await this.ticketsService.getAttachmentForGuestDownload(accessToken, attachmentId);
+
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(data);
   }
 
   /**

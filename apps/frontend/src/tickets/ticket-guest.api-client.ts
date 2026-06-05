@@ -1,11 +1,19 @@
 import axios from '@/lib/axios';
 
+export interface GuestTicketAttachment {
+  id: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+}
+
 export interface GuestTicketComment {
   id: string;
   content: string;
   author_name: string;
   is_staff: boolean;
   created_at: string;
+  attachments: GuestTicketAttachment[];
 }
 
 export interface GuestTicket {
@@ -22,6 +30,7 @@ export interface GuestTicket {
   created_at: string;
   updated_at: string;
   comments: GuestTicketComment[];
+  attachments: GuestTicketAttachment[];
 }
 
 export interface RequestAccessResponse {
