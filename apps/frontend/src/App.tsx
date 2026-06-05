@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { lazyWithReload as lazy } from '@/shared/lazyWithReload';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard, BillingRestrictedGuard } from '@/auth';
+import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard, BillingRestrictedGuard, MemberOnlyGate } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
@@ -31,6 +31,7 @@ const MECAQuickStartGuidePage = lazy(() => import('@/pages/MECAQuickStartGuidePa
 // Lazy-loaded pages - Auth flows (rare)
 const ChangePasswordPage = lazy(() => import('@/auth/pages/ChangePasswordPage'));
 const AuthCallbackPage = lazy(() => import('@/auth/pages/AuthCallbackPage'));
+const ResetPasswordPage = lazy(() => import('@/auth/pages/ResetPasswordPage'));
 
 // Lazy-loaded pages - Event detail (heavy: maps, registration UI)
 const EventDetailPage = lazy(() => import('@/events/pages/EventDetailPage'));
@@ -255,6 +256,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/auth/callback" element={<L><AuthCallbackPage /></L>} />
+              <Route path="/reset-password" element={<L><ResetPasswordPage /></L>} />
               <Route path="/change-password" element={<L><ChangePasswordPage /></L>} />
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:eventId" element={<L><EventDetailPage /></L>} />
@@ -262,10 +264,10 @@ function App() {
               <Route path="/events/:eventId/check-in" element={<L><EventCheckInPage /></L>} />
               <Route path="/results" element={<ResultsPage />} />
               <Route path="/results/member/:mecaId" element={<L><MemberResultsPage /></L>} />
-              <Route path="/leaderboard" element={<L><LeaderboardPage /></L>} />
-              <Route path="/standings" element={<L><StandingsPage /></L>} />
-              <Route path="/team-standings" element={<L><TeamStandingsPage /></L>} />
-              <Route path="/team-leaderboard" element={<L><TeamLeaderboardPage /></L>} />
+              <Route path="/leaderboard" element={<L><MemberOnlyGate><LeaderboardPage /></MemberOnlyGate></L>} />
+              <Route path="/standings" element={<L><MemberOnlyGate><StandingsPage /></MemberOnlyGate></L>} />
+              <Route path="/team-standings" element={<L><MemberOnlyGate><TeamStandingsPage /></MemberOnlyGate></L>} />
+              <Route path="/team-leaderboard" element={<L><MemberOnlyGate><TeamLeaderboardPage /></MemberOnlyGate></L>} />
               <Route path="/rulebooks" element={<L><RulebooksPage /></L>} />
               <Route path="/rulebooks/:rulebookId" element={<L><RulebookDetailPage /></L>} />
               <Route path="/rulebooks/archive" element={<L><RulebookArchivePage /></L>} />

@@ -1127,10 +1127,11 @@ export default function MyMecaDashboardPage() {
   };
 
   const handleLeaveTeam = async () => {
-    if (!confirm('Are you sure you want to leave this team?')) return;
+    if (!team) return;
+    if (!confirm(`Are you sure you want to leave ${team.name}?`)) return;
 
     try {
-      await teamsApi.leaveTeam();
+      await teamsApi.leaveTeam(team.id);
       setTeam(null);
       fetchTeamData();
     } catch (error: any) {

@@ -9,25 +9,42 @@ import {
   Search,
   Loader2,
   HelpCircle,
+  LogIn,
+  KeyRound,
+  ShieldAlert,
 } from 'lucide-react';
 import * as guestApi from '../ticket-guest.api-client';
+import { useAuth } from '@/auth/contexts/AuthContext';
 
 type TabType = 'new' | 'existing';
+// Sub-steps within the "New Ticket" tab. We classify the email first, then
+// either route account-holders to login or send a magic link.
+type NewStep = 'email' | 'account_active';
+type SuccessContext = 'magic' | 'account_help' | 'existing';
 
 export function GuestSupportPage() {
+  const { resetPassword } = useAuth();
+
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [email, setEmail] = useState('');
   const [ticketNumber, setTicketNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [successContext, setSuccessContext] = useState<SuccessContext>('magic');
   const [error, setError] = useState<string | null>(null);
   const [devToken, setDevToken] = useState<string | null>(null);
 
-  const handleRequestAccess = async (e: React.FormEvent) => {
+  // "New ticket" gate state
+  const [newStep, setNewStep] = useState<NewStep>('email');
+  const [classification, setClassification] = useState<guestApi.EmailClassification | null>(null);
+  const [showAccountHelp, setShowAccountHelp] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  // Step 0: classify the email, then branch.
+  const handleEmailContinue = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
-    setDevToken(null);
 
     if (!email.trim()) {
       setError('Please enter your email address');
@@ -36,14 +53,53 @@ export function GuestSupportPage() {
 
     setLoading(true);
     try {
-      const result = await guestApi.requestAccess(email);
-      setSuccess(true);
-      // In development, show the token link
-      if (result._dev_token) {
-        setDevToken(result._dev_token);
+      const result = await guestApi.classifyEmail(email);
+      setClassification(result);
+
+      if (result.status === 'active') {
+        // Account-holder: don't issue a guest magic link — route to login.
+        setNewStep('account_active');
+      } else {
+        // no_account or expired: treat as a guest and send a magic link.
+        const link = await guestApi.requestAccess(email);
+        setSuccessContext('magic');
+        setDevToken(link._dev_token ?? null);
+        setSuccess(true);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send verification email');
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setResetLoading(true);
+    try {
+      const { error: resetErr } = await resetPassword(email);
+      if (resetErr) {
+        setError(resetErr.message || 'Failed to send password reset email');
+      } else {
+        setResetSent(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send password reset email');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleAccountHelp = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const link = await guestApi.requestAccountHelp(email);
+      setSuccessContext('account_help');
+      setDevToken(link._dev_token ?? null);
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send account help link');
     } finally {
       setLoading(false);
     }
@@ -52,8 +108,6 @@ export function GuestSupportPage() {
   const handleRequestTicketAccess = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
-    setDevToken(null);
 
     if (!email.trim()) {
       setError('Please enter your email address');
@@ -67,6 +121,7 @@ export function GuestSupportPage() {
     setLoading(true);
     try {
       const result = await guestApi.requestTicketAccess(email, ticketNumber);
+      setSuccessContext('existing');
       setSuccess(true);
       if ((result as any)._dev_token) {
         setDevToken((result as any)._dev_token);
@@ -84,6 +139,15 @@ export function GuestSupportPage() {
     setSuccess(false);
     setError(null);
     setDevToken(null);
+    setNewStep('email');
+    setClassification(null);
+    setShowAccountHelp(false);
+    setResetSent(false);
+  };
+
+  const switchTab = (tab: TabType) => {
+    setActiveTab(tab);
+    resetForm();
   };
 
   return (
@@ -114,10 +178,7 @@ export function GuestSupportPage() {
         {/* Tab Navigation */}
         <div className="flex mb-6 bg-slate-800 rounded-xl p-1">
           <button
-            onClick={() => {
-              setActiveTab('new');
-              resetForm();
-            }}
+            onClick={() => switchTab('new')}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-colors ${
               activeTab === 'new'
                 ? 'bg-orange-600 text-white'
@@ -128,10 +189,7 @@ export function GuestSupportPage() {
             New Ticket
           </button>
           <button
-            onClick={() => {
-              setActiveTab('existing');
-              resetForm();
-            }}
+            onClick={() => switchTab('existing')}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-colors ${
               activeTab === 'existing'
                 ? 'bg-orange-600 text-white'
@@ -155,9 +213,11 @@ export function GuestSupportPage() {
                 Check Your Email
               </h2>
               <p className="text-gray-400 mb-6">
-                {activeTab === 'new'
+                {successContext === 'magic'
                   ? "We've sent a verification link to your email. Click the link to create your support ticket."
-                  : "If a ticket exists with that email and number, we've sent you an access link."}
+                  : successContext === 'account_help'
+                    ? "We've sent an account & login help link to your email. Click the link to submit your request and we'll help you regain access."
+                    : "If a ticket exists with that email and number, we've sent you an access link."}
               </p>
               <p className="text-sm text-gray-500 mb-6">
                 The link will expire in 1 hour.
@@ -170,9 +230,9 @@ export function GuestSupportPage() {
                     Development Mode
                   </p>
                   <Link
-                    to={activeTab === 'new'
-                      ? `/support/guest/verify/${devToken}`
-                      : `/support/guest/access/${devToken}`
+                    to={successContext === 'existing'
+                      ? `/support/guest/access/${devToken}`
+                      : `/support/guest/verify/${devToken}`
                     }
                     className="text-orange-400 hover:text-orange-300 text-sm break-all"
                   >
@@ -188,10 +248,118 @@ export function GuestSupportPage() {
                 Start Over
               </button>
             </div>
+          ) : activeTab === 'new' && newStep === 'account_active' ? (
+            /* Account-holder gate: route to login (or account help) */
+            <div className="p-6 sm:p-8">
+              {error && (
+                <div className="flex items-center gap-2 p-4 mb-6 bg-red-500/10 border border-red-500 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <p className="text-red-400">{error}</p>
+                </div>
+              )}
+
+              {classification?.login_banned ? (
+                /* Hard-banned: reset/help won't help — direct to support inbox */
+                <div className="text-center">
+                  <div className="inline-flex items-center justify-center p-3 bg-red-500/10 rounded-full mb-4">
+                    <ShieldAlert className="w-8 h-8 text-red-400" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-white mb-2">
+                    There's an issue with this account
+                  </h2>
+                  <p className="text-gray-400 mb-6">
+                    We're unable to process automated support for this account. Please email{' '}
+                    <a href="mailto:support@mecacaraudio.com" className="text-orange-400 hover:text-orange-300">
+                      support@mecacaraudio.com
+                    </a>{' '}
+                    and our team will assist you.
+                  </p>
+                  <button onClick={resetForm} className="text-orange-400 hover:text-orange-300 font-medium">
+                    Use a different email
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-6">
+                    <div className="inline-flex items-center justify-center p-3 bg-orange-500/10 rounded-full mb-4">
+                      <LogIn className="w-8 h-8 text-orange-400" />
+                    </div>
+                    <h2 className="text-xl font-semibold text-white mb-2">
+                      {classification?.first_name ? `Welcome back, ${classification.first_name}!` : 'You already have an account'}
+                    </h2>
+                    <p className="text-gray-400">
+                      This email is registered to a MECA account. Please sign in to submit a
+                      ticket — it lets us see your account details for faster, more complete support.
+                    </p>
+                  </div>
+
+                  {/* Primary: sign in */}
+                  <Link
+                    to="/login"
+                    className="w-full flex items-center justify-center gap-2 py-3 mb-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" />
+                    Sign In
+                  </Link>
+
+                  {/* Secondary: forgot password (reset-first) */}
+                  {resetSent ? (
+                    <div className="flex items-center gap-2 p-4 mb-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                      <p className="text-green-400 text-sm">
+                        Password reset email sent to {email}. Check your inbox, then sign in.
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleForgotPassword}
+                      disabled={resetLoading}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {resetLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <KeyRound className="w-5 h-5" />}
+                      Forgot password? Send reset email
+                    </button>
+                  )}
+
+                  {/* Last resort: account/login help ticket */}
+                  <div className="mt-6 pt-6 border-t border-slate-700 text-center">
+                    {showAccountHelp ? (
+                      <>
+                        <p className="text-gray-400 text-sm mb-3">
+                          Tried resetting your password and still can't get in? Submit an
+                          account &amp; login help request and our team will help you regain access.
+                        </p>
+                        <button
+                          onClick={handleAccountHelp}
+                          disabled={loading}
+                          className="w-full flex items-center justify-center gap-2 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                          Get account &amp; login help
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setShowAccountHelp(true)}
+                        className="text-sm text-gray-400 hover:text-gray-300"
+                      >
+                        Still can't access your account?
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-4 text-center">
+                    <button onClick={resetForm} className="text-sm text-gray-500 hover:text-gray-400">
+                      Use a different email
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
-            /* Form State */
+            /* Email entry form (new ticket gate, or check existing ticket) */
             <form
-              onSubmit={activeTab === 'new' ? handleRequestAccess : handleRequestTicketAccess}
+              onSubmit={activeTab === 'new' ? handleEmailContinue : handleRequestTicketAccess}
               className="p-6 space-y-6"
             >
               {/* Error Message */}
@@ -210,7 +378,7 @@ export function GuestSupportPage() {
                       Create a Support Ticket
                     </h2>
                     <p className="text-gray-400 text-sm">
-                      Enter your email to receive a verification link
+                      Enter your email to get started
                     </p>
                   </>
                 ) : (
@@ -272,12 +440,12 @@ export function GuestSupportPage() {
                 {loading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Sending...
+                    {activeTab === 'new' ? 'Checking...' : 'Sending...'}
                   </>
                 ) : (
                   <>
-                    <Send className="w-5 h-5" />
-                    {activeTab === 'new' ? 'Send Verification Link' : 'Send Access Link'}
+                    {activeTab === 'new' ? <Send className="w-5 h-5" /> : <Send className="w-5 h-5" />}
+                    {activeTab === 'new' ? 'Continue' : 'Send Access Link'}
                   </>
                 )}
               </button>
@@ -285,7 +453,7 @@ export function GuestSupportPage() {
               {/* Info Text */}
               <p className="text-xs text-gray-500 text-center">
                 {activeTab === 'new'
-                  ? "We'll send you an email with a link to create your support ticket. This helps us prevent spam."
+                  ? "We'll check whether you have an account, then either sign you in or email you a link to create your ticket."
                   : "We'll send you an email with a link to view your ticket if it exists."}
               </p>
             </form>

@@ -27,8 +27,10 @@ export function ForcePasswordChangeGuard({ children }: ForcePasswordChangeGuardP
     // Skip if admin is impersonating - they don't need to change the user's password
     if (isImpersonating) return;
 
-    // If user needs to change password and not already on change-password page
-    if (forcePasswordChange && location.pathname !== '/change-password') {
+    // If user needs to change password and not already on change-password page.
+    // /reset-password is exempt — a recovery session is mid-reset and must not
+    // be bounced to the (current-password-requiring) change-password page.
+    if (forcePasswordChange && location.pathname !== '/change-password' && location.pathname !== '/reset-password') {
       navigate('/change-password?forced=true', { replace: true });
     }
   }, [user, forcePasswordChange, loading, location.pathname, navigate, isImpersonating]);
@@ -36,7 +38,7 @@ export function ForcePasswordChangeGuard({ children }: ForcePasswordChangeGuardP
   // Allow rendering change-password page even when force is set
   // For all other pages, block rendering if force is set (will redirect)
   // But skip this check entirely if admin is impersonating
-  if (!isImpersonating && !loading && user && forcePasswordChange && location.pathname !== '/change-password') {
+  if (!isImpersonating && !loading && user && forcePasswordChange && location.pathname !== '/change-password' && location.pathname !== '/reset-password') {
     // Show loading state briefly while redirecting
     return (
       <div className="min-h-[50vh] flex items-center justify-center">

@@ -69,6 +69,14 @@ export class Ticket {
   @Property({ type: 'boolean', default: false, fieldName: 'is_guest_ticket', serializedName: 'is_guest_ticket' })
   isGuestTicket: boolean = false;
 
+  // Staff-only context pointer. When a guest ticket was actually submitted by
+  // someone we recognise (e.g. an expired member routed through the guest flow,
+  // who must NOT be linked as the reporter so they never gain dashboard access),
+  // this holds their profile id purely so staff can pull up full account
+  // context. Never exposed in the guest-facing ticket response.
+  @Property({ type: 'uuid', nullable: true, fieldName: 'linked_profile_hint', serializedName: 'linked_profile_hint' })
+  linkedProfileHint?: string;
+
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'resolved_at', serializedName: 'resolved_at' })
   resolvedAt?: Date;
 
@@ -120,6 +128,7 @@ export class Ticket {
       guest_name: this.guestName || null,
       access_token: this.accessToken || null,
       is_guest_ticket: this.isGuestTicket,
+      linked_profile_hint: this.linkedProfileHint || null,
       resolved_at: this.resolvedAt?.toISOString() || null,
       closed_at: this.closedAt?.toISOString() || null,
       customer_rating: this.customerRating ?? null,

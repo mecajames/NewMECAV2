@@ -529,6 +529,17 @@ export const membershipsApi = {
   },
 
   /**
+   * Mint a self-service renewal link for the currently logged-in expired
+   * member. Returns { eligible, token } — eligible only when their membership
+   * lapsed within the last 60 days. Must be called while still authenticated
+   * (i.e. before signing the expired member out).
+   */
+  getMyRenewalLink: async (): Promise<{ eligible: boolean; token?: string }> => {
+    const response = await axios.post('/api/memberships/renew/me/link');
+    return response.data;
+  },
+
+  /**
    * Update a membership
    */
   update: async (id: string, data: Partial<Membership>): Promise<Membership> => {

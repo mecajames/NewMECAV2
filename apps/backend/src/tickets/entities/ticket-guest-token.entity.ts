@@ -1,7 +1,7 @@
 import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 
-export type GuestTokenPurpose = 'create_ticket' | 'view_ticket' | 'respond_ticket';
+export type GuestTokenPurpose = 'create_ticket' | 'view_ticket' | 'respond_ticket' | 'account_help';
 
 @Entity({ tableName: 'ticket_guest_tokens', schema: 'public' })
 export class TicketGuestToken {

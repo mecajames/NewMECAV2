@@ -1,6 +1,7 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { membershipsApi } from '@/memberships/memberships.api-client';
 
 /**
  * Hard expired-member gate. See docs/features/MEMBERSHIP_LIFECYCLE.md §4.
@@ -21,7 +22,7 @@ export function ExpiredMembershipGuard({ children }: { children: ReactNode }) {
 
   // Routes that an expired-and-logging-out user is allowed to render
   // without being redirected. Keeps the renewal flow itself reachable.
-  const expiredAllowedPrefix = ['/renew', '/login', '/auth/', '/'];
+  const expiredAllowedPrefix = ['/renew', '/login', '/auth/', '/reset-password', '/'];
   const isOnAllowedPath = expiredAllowedPrefix.some((p) =>
     p === '/' ? location.pathname === '/' : location.pathname.startsWith(p),
   );
@@ -36,20 +37,39 @@ export function ExpiredMembershipGuard({ children }: { children: ReactNode }) {
   const isExpired =
     !loading && !!user && !!profile && profile.membership_status === 'expired' && !isRoleExempt;
 
+  // Guards against the effect firing more than once (re-renders) while the
+  // async sign-out + redirect is in flight.
+  const redirectingRef = useRef(false);
+
   useEffect(() => {
     if (loading || !user || isImpersonating) return;
     if (!isExpired) return;
     if (isOnAllowedPath) return;
+    if (redirectingRef.current) return;
+    redirectingRef.current = true;
 
-    // Hard policy: expired members do not stay signed in. Sign them out,
-    // then route to the public renewal landing.
+    // Hard policy: expired members do not stay signed in. But before we sign
+    // them out, offer self-service renewal if their membership lapsed within
+    // the last 60 days — this MUST happen while they're still authenticated,
+    // since minting the renewal link is an authenticated call.
     (async () => {
+      let renewalToken: string | undefined;
+      try {
+        const res = await membershipsApi.getMyRenewalLink();
+        if (res.eligible && res.token) renewalToken = res.token;
+      } catch {
+        // ignore — fall back to the contact-support landing
+      }
+
       try {
         await signOut('membership-expired');
       } catch {
         // ignore — we still want to redirect
       }
-      navigate('/renew-expired', { replace: true });
+
+      // Recently lapsed → straight into the renewal/payment flow.
+      // Otherwise → the contact-support landing.
+      navigate(renewalToken ? `/renew/${renewalToken}` : '/renew-expired', { replace: true });
     })();
   }, [user, isExpired, isOnAllowedPath, loading, isImpersonating, signOut, navigate]);
 
@@ -57,8 +77,8 @@ export function ExpiredMembershipGuard({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Signing you out — your membership has expired.</p>
+          <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Your membership has expired — checking your renewal options…</p>
         </div>
       </div>
     );

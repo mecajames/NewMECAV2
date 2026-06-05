@@ -297,6 +297,9 @@ export interface SendTicketGuestVerificationEmailDto {
   expiresInHours: number;
   isNewTicket: boolean;
   ticketNumber?: string;
+  // When true, this magic link is for a locked-out account holder submitting
+  // an account/login help request (not a general guest ticket).
+  isAccountHelp?: boolean;
 }
 
 // =============================================================================
@@ -2658,18 +2661,28 @@ Fun, Fair, Loud and Clear!
   }
 
   private getTicketGuestVerificationEmailTemplate(dto: SendTicketGuestVerificationEmailDto): string {
-    const title = dto.isNewTicket ? 'Verify Your Email' : 'Access Your Ticket';
-    const description = dto.isNewTicket
-      ? 'Click the button below to verify your email address and submit your support request.'
-      : `Click the button below to access your support ticket ${dto.ticketNumber}.`;
+    const title = dto.isAccountHelp
+      ? 'Account & Login Help'
+      : dto.isNewTicket ? 'Verify Your Email' : 'Access Your Ticket';
+    const description = dto.isAccountHelp
+      ? "Click the button below to submit an account or login help request. We'll help you regain access to your MECA account."
+      : dto.isNewTicket
+        ? 'Click the button below to verify your email address and submit your support request.'
+        : `Click the button below to access your support ticket ${dto.ticketNumber}.`;
+    const buttonLabel = dto.isAccountHelp
+      ? 'Continue to Account Help'
+      : dto.isNewTicket ? 'Verify & Continue' : 'Access Ticket';
+    const headerSubtitle = dto.isAccountHelp
+      ? 'Get help accessing your MECA account'
+      : dto.isNewTicket ? 'Verify your email to submit your MECA support request' : `Access your MECA support ticket ${dto.ticketNumber}`;
 
     return `
-${this.getEmailHeaderHtml(title, 'MECA Support System', dto.isNewTicket ? 'Verify your email to submit your MECA support request' : `Access your MECA support ticket ${dto.ticketNumber}`)}
+${this.getEmailHeaderHtml(title, 'MECA Support System', headerSubtitle)}
     <p style="font-size: 16px;">Hello,</p>
 
     <p>${description}</p>
 
-    ${this.getEmailButton(dto.isNewTicket ? 'Verify & Continue' : 'Access Ticket', dto.magicLinkUrl)}
+    ${this.getEmailButton(buttonLabel, dto.magicLinkUrl)}
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px;">
       <p style="margin: 0; color: #92400e;"><strong>Important:</strong> This link will expire in ${dto.expiresInHours} hour${dto.expiresInHours > 1 ? 's' : ''}.</p>
@@ -2683,16 +2696,21 @@ ${this.getEmailFooterHtml()}
   }
 
   private getTicketGuestVerificationEmailText(dto: SendTicketGuestVerificationEmailDto): string {
-    const description = dto.isNewTicket
-      ? 'Click the link below to verify your email address and submit your support request.'
-      : `Click the link below to access your support ticket ${dto.ticketNumber}.`;
+    const description = dto.isAccountHelp
+      ? "Click the link below to submit an account or login help request. We'll help you regain access to your MECA account."
+      : dto.isNewTicket
+        ? 'Click the link below to verify your email address and submit your support request.'
+        : `Click the link below to access your support ticket ${dto.ticketNumber}.`;
+    const linkLabel = dto.isAccountHelp
+      ? 'Continue to Account Help'
+      : dto.isNewTicket ? 'Verify & Continue' : 'Access Ticket';
 
     return `
 Hello,
 
 ${description}
 
-${dto.isNewTicket ? 'Verify & Continue' : 'Access Ticket'}: ${dto.magicLinkUrl}
+${linkLabel}: ${dto.magicLinkUrl}
 
 IMPORTANT: This link will expire in ${dto.expiresInHours} hour${dto.expiresInHours > 1 ? 's' : ''}.
 

@@ -40,7 +40,10 @@ export function GuestTicketCreatePage() {
   const [verifying, setVerifying] = useState(true);
   const [_verified, setVerified] = useState(false);
   const [email, setEmail] = useState('');
+  const [purpose, setPurpose] = useState<string>('create_ticket');
   const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  const isAccountHelp = purpose === 'account_help';
 
   const [formData, setFormData] = useState({
     guest_name: '',
@@ -65,8 +68,13 @@ export function GuestTicketCreatePage() {
 
       try {
         const result = await guestApi.verifyToken(token);
-        if (result.valid && result.purpose === 'create_ticket') {
+        if (result.valid && (result.purpose === 'create_ticket' || result.purpose === 'account_help')) {
           setEmail(result.email);
+          setPurpose(result.purpose);
+          // Account-help links are forced to the Account category.
+          if (result.purpose === 'account_help') {
+            setFormData((prev) => ({ ...prev, category: 'account' }));
+          }
           setVerified(true);
         } else {
           setVerifyError('This link is not valid for creating a ticket');
@@ -222,11 +230,18 @@ export function GuestTicketCreatePage() {
             <Ticket className="w-8 h-8 text-orange-400" />
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">
-            Create Support Ticket
+            {isAccountHelp ? 'Account & Login Help' : 'Create Support Ticket'}
           </h1>
           <p className="text-gray-400">
             Submitting as: <span className="text-orange-400">{email}</span>
           </p>
+          {isAccountHelp && (
+            <p className="text-gray-400 text-sm mt-3 max-w-lg mx-auto">
+              Tell us what's preventing you from logging in (forgot password, no reset
+              email, account locked, etc.). Our team will help you regain access — then
+              you can sign in and submit other tickets as normal.
+            </p>
+          )}
         </div>
 
         {/* Form */}
@@ -278,20 +293,33 @@ export function GuestTicketCreatePage() {
                 <Tag className="w-4 h-4 inline mr-1" />
                 Category
               </label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value as TicketCategory })}
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                {categoryOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                {categoryOptions.find((c) => c.value === formData.category)?.description}
-              </p>
+              {isAccountHelp ? (
+                <>
+                  <div className="w-full px-4 py-3 bg-slate-700/60 border border-slate-600 rounded-lg text-gray-300">
+                    Account / Login Issue
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This request is for account access and login problems only.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value as TicketCategory })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  >
+                    {categoryOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {categoryOptions.find((c) => c.value === formData.category)?.description}
+                  </p>
+                </>
+              )}
             </div>
 
             <div>

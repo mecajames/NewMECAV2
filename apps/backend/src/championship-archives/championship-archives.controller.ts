@@ -58,6 +58,7 @@ export class ChampionshipArchivesController {
   /**
    * Get archive by ID
    */
+  @Public()
   @Get(':id')
   async getArchive(@Param('id') id: string): Promise<ChampionshipArchive> {
     return this.archivesService.findById(id);
@@ -66,6 +67,7 @@ export class ChampionshipArchivesController {
   /**
    * Get competition results for a year
    */
+  @Public()
   @Get('year/:year/results')
   async getResultsForYear(@Param('year') year: number): Promise<any> {
     return this.archivesService.getResultsForYear(Number(year));
@@ -74,6 +76,7 @@ export class ChampionshipArchivesController {
   /**
    * Get state champions for a year
    */
+  @Public()
   @Get('year/:year/state-champions')
   async getStateChampionsForYear(@Param('year') year: number): Promise<any> {
     return this.archivesService.getStateChampionsForYear(Number(year));
@@ -124,6 +127,7 @@ export class ChampionshipArchivesController {
   /**
    * Get all awards for an archive
    */
+  @Public()
   @Get(':archiveId/awards')
   async getAwards(
     @Param('archiveId') archiveId: string,

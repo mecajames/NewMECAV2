@@ -46,11 +46,38 @@ export interface CreateGuestTicketData {
   event_id?: string;
 }
 
+export type EmailAccountStatus = 'no_account' | 'active' | 'expired';
+
+export interface EmailClassification {
+  status: EmailAccountStatus;
+  first_name?: string;
+  login_banned?: boolean;
+}
+
+/**
+ * Classify an email before issuing a magic link, so the UI can route
+ * account-holders to login and send guests/expired members through the
+ * magic-link flow.
+ */
+export async function classifyEmail(email: string): Promise<EmailClassification> {
+  const response = await axios.post('/api/tickets/guest/classify-email', { email });
+  return response.data;
+}
+
 /**
  * Request a magic link to create a new support ticket.
  */
 export async function requestAccess(email: string): Promise<RequestAccessResponse> {
   const response = await axios.post('/api/tickets/guest/request-access', { email });
+  return response.data;
+}
+
+/**
+ * Request an account-help magic link for a locked-out account holder. The
+ * resulting ticket is forced to the Account/Login category.
+ */
+export async function requestAccountHelp(email: string): Promise<RequestAccessResponse> {
+  const response = await axios.post('/api/tickets/guest/request-account-help', { email });
   return response.data;
 }
 

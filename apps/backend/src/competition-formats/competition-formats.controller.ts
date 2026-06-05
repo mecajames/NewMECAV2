@@ -23,6 +23,7 @@ export class CompetitionFormatsController {
     return this.competitionFormatsService.findAll();
   }
 
+  @Public()
   @Get('active')
   async getActiveFormats(): Promise<CompetitionFormat[]> {
     return this.competitionFormatsService.findActive();

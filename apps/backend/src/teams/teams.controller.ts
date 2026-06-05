@@ -339,11 +339,14 @@ export class TeamsController {
     return this.teamsService.transferCaptaincy(teamId, data.new_captain_id, userId);
   }
 
-  @Post('leave')
+  @Post(':id/leave')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async leaveTeam(@Headers('authorization') authHeader: string): Promise<void> {
+  async leaveTeam(
+    @Param('id') teamId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<void> {
     const userId = await this.requireAuth(authHeader);
-    return this.teamsService.leaveTeam(userId);
+    return this.teamsService.leaveTeam(teamId, userId);
   }
 
   // ============================================

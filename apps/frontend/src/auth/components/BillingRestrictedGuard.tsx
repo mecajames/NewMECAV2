@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 const ALLOWED_PREFIXES = [
   '/billing',
   '/change-password',
+  '/reset-password',
   '/login',
   '/auth',
   '/logout',
