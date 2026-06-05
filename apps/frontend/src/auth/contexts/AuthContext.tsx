@@ -156,6 +156,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        // Without this, the confirmation email link falls back to the project's
+        // Site URL (the homepage), so verifying just dumps users on '/' and the
+        // session/profile handoff never runs. Point it at the callback route,
+        // matching signInWithOAuth and resetPasswordForEmail below.
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
 
     if (error || !data.user) {
