@@ -120,6 +120,9 @@ export default function AchievementsAdminPage() {
     email: string;
   }>>([]);
   const [profileSearch, setProfileSearch] = useState('');
+  // Admin override: bypass the group-tier dedup so a member who already holds a
+  // higher/equal tier can still be awarded this one.
+  const [manualAwardOverride, setManualAwardOverride] = useState(false);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [awardingManual, setAwardingManual] = useState(false);
 
@@ -629,6 +632,7 @@ export default function AchievementsAdminPage() {
     setManualAwardData({ achievement_id: '', profile_id: '', achieved_value: '', notes: '' });
     setEligibleProfiles([]);
     setProfileSearch('');
+    setManualAwardOverride(false);
     setShowManualAwardModal(true);
   };
 
@@ -647,7 +651,7 @@ export default function AchievementsAdminPage() {
       // Load eligible profiles
       setLoadingProfiles(true);
       try {
-        const profiles = await achievementsApi.getEligibleProfiles(achievementId);
+        const profiles = await achievementsApi.getEligibleProfiles(achievementId, undefined, manualAwardOverride);
         setEligibleProfiles(profiles);
       } catch (err) {
         console.error('Failed to load eligible profiles:', err);
@@ -663,10 +667,31 @@ export default function AchievementsAdminPage() {
 
     setLoadingProfiles(true);
     try {
-      const profiles = await achievementsApi.getEligibleProfiles(manualAwardData.achievement_id, search);
+      const profiles = await achievementsApi.getEligibleProfiles(manualAwardData.achievement_id, search, manualAwardOverride);
       setEligibleProfiles(profiles);
     } catch (err) {
       console.error('Failed to search profiles:', err);
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
+
+  // Toggle the admin override and reload the candidate list (the eligible set
+  // changes, so any selected member is cleared).
+  const handleToggleOverride = async (checked: boolean) => {
+    setManualAwardOverride(checked);
+    if (!manualAwardData.achievement_id) return;
+    setManualAwardData(prev => ({ ...prev, profile_id: '' }));
+    setLoadingProfiles(true);
+    try {
+      const profiles = await achievementsApi.getEligibleProfiles(
+        manualAwardData.achievement_id,
+        profileSearch || undefined,
+        checked,
+      );
+      setEligibleProfiles(profiles);
+    } catch (err) {
+      console.error('Failed to reload eligible profiles:', err);
     } finally {
       setLoadingProfiles(false);
     }
@@ -685,6 +710,7 @@ export default function AchievementsAdminPage() {
         achievement_id: manualAwardData.achievement_id,
         achieved_value: parseFloat(manualAwardData.achieved_value),
         notes: manualAwardData.notes || undefined,
+        override: manualAwardOverride,
       });
 
       alert(`Successfully awarded "${result.recipient.achievement_name}" to ${result.recipient.profile_name}`);
@@ -1802,6 +1828,22 @@ export default function AchievementsAdminPage() {
                     ))}
                   </select>
                 </div>
+
+                {/* Admin override toggle */}
+                {manualAwardData.achievement_id && (
+                  <label className="flex items-start gap-2 p-3 mb-1 bg-amber-500/10 border border-amber-500/30 rounded-lg cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={manualAwardOverride}
+                      onChange={(e) => handleToggleOverride(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-amber-500"
+                    />
+                    <span className="text-sm text-amber-200">
+                      <span className="font-medium">Admin override</span> — allow awarding this even if the member
+                      already holds a higher or equal tier in the same group. Their existing achievements are kept.
+                    </span>
+                  </label>
+                )}
 
                 {/* Profile Selection */}
                 {manualAwardData.achievement_id && (
