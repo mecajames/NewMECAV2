@@ -488,10 +488,11 @@ export default function MembersPage() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter((member) => {
-        const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
+        const composedName = `${member.first_name || ''} ${member.last_name || ''}`.trim().toLowerCase();
         const mecaId = String(member.meca_id || '');
         return (
-          fullName.includes(term) ||
+          composedName.includes(term) ||
+          member.full_name?.toLowerCase().includes(term) ||
           member.first_name?.toLowerCase().includes(term) ||
           member.last_name?.toLowerCase().includes(term) ||
           member.email?.toLowerCase().includes(term) ||
