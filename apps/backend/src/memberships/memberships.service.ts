@@ -143,6 +143,14 @@ export interface CreateMembershipDto {
   billingState?: string;
   billingPostalCode?: string;
   billingCountry?: string;
+  /**
+   * Skip the interactive-only vehicle-info requirement for competitor
+   * memberships. Set ONLY by non-interactive fulfillment (Stripe/PayPal
+   * webhooks), where vehicle data is never collected at checkout. The
+   * interactive POST /api/memberships path leaves this false so the form
+   * validation is preserved.
+   */
+  skipVehicleValidation?: boolean;
 }
 
 @Injectable()
@@ -398,8 +406,10 @@ export class MembershipsService {
       throw new NotFoundException('Membership type not found');
     }
 
-    // Validate required fields for competitor memberships
-    if (config.category === MembershipCategory.COMPETITOR) {
+    // Validate required fields for competitor memberships.
+    // Skipped for non-interactive fulfillment (webhooks), where vehicle info is
+    // not part of the checkout payload — see CreateMembershipDto.skipVehicleValidation.
+    if (config.category === MembershipCategory.COMPETITOR && !data.skipVehicleValidation) {
       if (!data.vehicleLicensePlate || !data.vehicleColor || !data.vehicleMake || !data.vehicleModel) {
         throw new BadRequestException('Vehicle information (license plate, color, make, model) is required for competitor memberships');
       }

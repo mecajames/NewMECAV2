@@ -62,6 +62,7 @@ describe('PaymentFulfillmentService.fulfillMembershipPayment — renewal token b
       {} as any,                           // worldFinalsService
       adminNotificationsService,           // adminNotificationsService
       renewalTokenService,                 // renewalTokenService
+      { findUserByEmail: jest.fn(), createUserWithPassword: jest.fn() }, // supabaseAdmin (unused: userId present)
       em,                                  // EntityManager
     );
     // Side-effect helpers we don't care about for this test

@@ -25,6 +25,8 @@ import { Payment } from './payments.entity';
 import { Order } from '../orders/orders.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { generateSecurePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 
 /**
  * Payment-method-agnostic params for fulfillment.
@@ -54,6 +56,7 @@ export class PaymentFulfillmentService {
     private readonly worldFinalsService: WorldFinalsService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly renewalTokenService: MembershipRenewalTokenService,
+    private readonly supabaseAdmin: SupabaseAdminService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -66,18 +69,30 @@ export class PaymentFulfillmentService {
     const { transactionId, amountCents, metadata } = params;
     const email = metadata.email;
     const membershipTypeConfigId = metadata.membershipTypeConfigId;
-    const userId = metadata.userId;
+    let userId = metadata.userId;
 
-    if (!email || !membershipTypeConfigId || !userId) {
-      this.logger.error(`Missing required metadata for membership payment: ${transactionId} — email: ${email}, configId: ${membershipTypeConfigId}, userId: ${userId}`);
-      if (!userId) {
-        this.logger.error('userId is required for membership fulfillment. Ensure account is created before payment.');
-      }
-      return;
+    // membershipTypeConfigId is non-negotiable — without it we cannot create anything.
+    if (!membershipTypeConfigId) {
+      throw new Error(`Cannot fulfill membership payment ${transactionId}: missing membershipTypeConfigId in metadata`);
     }
 
     try {
       const amountPaid = amountCents / 100;
+
+      // Resolve the buyer. Guest checkout (not logged in) arrives with NO userId
+      // in the payment-intent metadata. The historical bug silently dropped these
+      // *paid* memberships (no membership, no account, money kept). Instead we now
+      // provision (or relink) an account from the checkout email so a paid member
+      // ALWAYS gets what they paid for. If there is no email either, we cannot
+      // provision — throw so the webhook records an error and admins are alerted
+      // (never a silent success).
+      if (!userId) {
+        if (!email) {
+          throw new Error(`Cannot fulfill membership payment ${transactionId}: no userId and no email in metadata`);
+        }
+        userId = await this.resolveOrProvisionUserId(email, metadata);
+        this.logger.log(`Provisioned/linked account ${userId} for guest membership payment ${transactionId} (${email})`);
+      }
 
       // Idempotency guard: if a membership already exists for this transaction,
       // do NOT recreate it. This covers three cases:
@@ -134,6 +149,10 @@ export class PaymentFulfillmentService {
         billingState: metadata.billingState,
         billingPostalCode: metadata.billingPostalCode,
         billingCountry: metadata.billingCountry || 'USA',
+        // Vehicle info is never collected at the membership checkout (see the
+        // payment-intent DTO) — don't let the interactive-only validation block
+        // a paid fulfillment.
+        skipVehicleValidation: true,
       });
 
       this.logger.log(`Membership created successfully for: ${email}`);
@@ -193,8 +212,94 @@ export class PaymentFulfillmentService {
         this.logger.error(`QuickBooks sales receipt creation failed (non-critical): ${qbError}`);
       });
     } catch (error) {
-      this.logger.error(`Error creating membership after payment: ${error}`);
+      // CRITICAL: a *paid* membership that cannot be fulfilled must never fail
+      // silently (that is the exact bug that lost 15 paid signups). Alert admins
+      // and rethrow so the Stripe/PayPal webhook records processingResult='error'
+      // with the message instead of marking the event 'success'.
+      this.logger.error(`Error fulfilling membership payment ${transactionId}: ${error}`);
+      try {
+        await this.adminNotificationsService.notifyOneTimePaymentFailed({
+          transactionId,
+          amountCents,
+          paymentMethod: params.paymentMethod === PaymentMethod.STRIPE ? 'stripe' : 'paypal',
+          paymentType: 'membership_fulfillment_failed',
+          customerUserId: userId || metadata.userId || null,
+          customerEmail: email || null,
+          failureMessage: error instanceof Error ? error.message : String(error),
+        });
+      } catch (alertErr) {
+        this.logger.error(`Failed to alert admins of membership fulfillment failure: ${alertErr}`);
+      }
+      throw error instanceof Error ? error : new Error(String(error));
     }
+  }
+
+  /**
+   * Resolve the buyer's profile id from a checkout email, provisioning the
+   * account when needed. Used by membership fulfillment for guest checkouts
+   * (no userId in the payment metadata). Cascade:
+   *   1. existing profile with this email  → use it
+   *   2. existing auth user, no profile     → create the profile (relink)
+   *   3. brand new                          → create auth user (random password,
+   *      member sets it via "Forgot Password") + profile
+   */
+  private async resolveOrProvisionUserId(
+    email: string,
+    metadata: Record<string, string>,
+  ): Promise<string> {
+    const normEmail = email.trim().toLowerCase();
+    const lookupEm = this.em.fork();
+
+    const existingProfile = await lookupEm.findOne(Profile, { email: normEmail });
+    if (existingProfile) return existingProfile.id;
+
+    const firstName =
+      metadata.billingFirstName || metadata.competitorName?.split(' ')[0] || undefined;
+    const lastName =
+      metadata.billingLastName ||
+      (metadata.competitorName ? metadata.competitorName.split(' ').slice(1).join(' ') : undefined) ||
+      undefined;
+
+    let userId: string;
+    const found = await this.supabaseAdmin.findUserByEmail(normEmail);
+    if (found.userId) {
+      userId = found.userId;
+    } else {
+      const created = await this.supabaseAdmin.createUserWithPassword({
+        email: normEmail,
+        password: generateSecurePassword(20, MIN_PASSWORD_STRENGTH),
+        firstName,
+        lastName,
+        forcePasswordChange: true,
+      });
+      if (!created.success || !created.userId) {
+        throw new Error(`Failed to provision account for ${normEmail}: ${created.error || 'unknown error'}`);
+      }
+      userId = created.userId;
+    }
+
+    // Ensure a profile row exists for this auth user.
+    const writeEm = this.em.fork();
+    const prof = await writeEm.findOne(Profile, { id: userId });
+    if (!prof) {
+      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || normEmail;
+      const profile = writeEm.create(Profile, {
+        id: userId,
+        email: normEmail,
+        first_name: firstName || 'Member',
+        last_name: lastName || '',
+        full_name: fullName,
+        phone: metadata.billingPhone,
+        role: 'competitor',
+        address: metadata.billingAddress,
+        city: metadata.billingCity,
+        state: metadata.billingState,
+        postal_code: metadata.billingPostalCode,
+        country: metadata.billingCountry || 'US',
+      } as any);
+      await writeEm.persistAndFlush(profile);
+    }
+    return userId;
   }
 
   /**
