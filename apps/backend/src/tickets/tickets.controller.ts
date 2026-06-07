@@ -326,8 +326,11 @@ export class TicketsController {
     @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ): Promise<Ticket> {
-    await this.requireAuth(authHeader);
-    return this.ticketsService.reopenTicket(id);
+    const user = await this.requireAuth(authHeader);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    const isAdmin = isAdminUser(profile);
+    return this.ticketsService.reopenTicket(id, user.id, isAdmin);
   }
 
   /**

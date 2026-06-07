@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Calendar,
   Send,
+  Paperclip,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -16,7 +17,11 @@ import {
   TicketPriority,
   CreateTicketData,
 } from '../tickets.api-client';
+import { uploadFile } from '@/api-client/uploads.api-client';
 import { eventsApi } from '@/events';
+
+const TICKET_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const TICKET_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 interface Event {
   id: string;
@@ -93,6 +98,25 @@ export function CreateTicketForm({
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || []);
+    const valid: File[] = [];
+    for (const f of picked) {
+      if (!TICKET_IMAGE_MIME.includes(f.type)) {
+        setError(`${f.name}: only images (JPG, PNG, GIF, WebP) are allowed`);
+        continue;
+      }
+      if (f.size > TICKET_IMAGE_MAX_BYTES) {
+        setError(`${f.name}: file too large (max 10MB)`);
+        continue;
+      }
+      valid.push(f);
+    }
+    if (valid.length) setFiles((prev) => [...prev, ...valid]);
+    e.target.value = '';
+  };
 
   // Fetch events for dropdown
   useEffect(() => {
@@ -125,6 +149,7 @@ export function CreateTicketForm({
         event_id: preselectedEventId || null,
       });
       setError(null);
+      setFiles([]);
     }
   }, [isOpen, reporterId, preselectedEventId]);
 
@@ -154,6 +179,23 @@ export function CreateTicketForm({
     setSubmitting(true);
     try {
       const ticket = await ticketsApi.create(formData);
+      // Upload any screenshots and link them to the new ticket.
+      for (const file of files) {
+        try {
+          const uploaded = await uploadFile(file, 'ticket-attachments', ticket.id);
+          await ticketsApi.createAttachment(ticket.id, {
+            uploader_id: reporterId,
+            file_name: file.name,
+            file_path: uploaded.publicUrl,
+            bucket: uploaded.bucket,
+            storage_path: uploaded.storagePath,
+            file_size: uploaded.fileSize,
+            mime_type: uploaded.mimeType,
+          });
+        } catch (upErr) {
+          console.error(`Failed to upload attachment ${file.name}:`, upErr);
+        }
+      }
       onSuccess(ticket);
       onClose();
     } catch (err) {
@@ -317,6 +359,37 @@ export function CreateTicketForm({
             <p className="text-xs text-gray-500 mt-1">
               The more details you provide, the faster we can help you.
             </p>
+          </div>
+
+          {/* Screenshots */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              <Paperclip className="w-4 h-4 inline mr-1" />
+              Screenshots (optional)
+            </label>
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg border border-slate-600 cursor-pointer">
+                <Paperclip className="w-4 h-4" />
+                Attach screenshot
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={handleFilesChange}
+                  className="hidden"
+                />
+              </label>
+              {files.map((f, i) => (
+                <span key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-xs text-gray-200">
+                  <Paperclip className="w-3 h-3" />
+                  <span className="truncate max-w-[12rem]">{f.name}</span>
+                  <button type="button" onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">JPG, PNG, GIF, or WebP — up to 10MB each.</p>
           </div>
 
           {/* Actions */}

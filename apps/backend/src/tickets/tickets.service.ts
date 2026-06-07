@@ -830,12 +830,19 @@ export class TicketsService {
     return this.update(id, { status: TicketStatus.ON_HOLD });
   }
 
-  async reopenTicket(id: string): Promise<Ticket> {
+  async reopenTicket(id: string, requesterId?: string, isAdmin = false): Promise<Ticket> {
     const em = this.em.fork();
-    const ticket = await em.findOne(Ticket, { id });
+    const ticket = await em.findOne(Ticket, { id }, { populate: ['reporter'] });
 
     if (!ticket) {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
+    }
+
+    // Authorization: only the ticket's reporter or an admin may reopen it.
+    // (Previously this endpoint was unguarded — any authenticated user could
+    // reopen any ticket.)
+    if (!isAdmin && requesterId && ticket.reporter?.id !== requesterId) {
+      throw new ForbiddenException('Only the ticket reporter or an admin can reopen this ticket.');
     }
 
     // Reopened is its own status so admins can see recidivism at a glance

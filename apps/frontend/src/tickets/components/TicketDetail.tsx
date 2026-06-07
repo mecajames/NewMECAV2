@@ -758,6 +758,22 @@ export function TicketDetail({
     }
   };
 
+  // Member-facing reopen: the reporter can reopen their own resolved/closed
+  // ticket. Backend authorizes reporter-or-admin.
+  const handleReopen = async () => {
+    if (!ticketId || !ticket) return;
+    setActionLoading(true);
+    try {
+      const updated = await ticketsApi.reopen(ticketId);
+      setTicket(updated);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to reopen ticket';
+      alert(msg);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Close the status pill menu on outside click. Uses mousedown so clicks
   // inside the menu still register before the menu disappears.
   useEffect(() => {
@@ -1116,6 +1132,27 @@ export function TicketDetail({
                 ))
               )}
             </div>
+
+            {/* Member reopen: the reporter still needs help on a resolved/closed
+                ticket. The reply form is hidden once closed, so this is their
+                way back in. (Replying to a resolved ticket does NOT auto-reopen.) */}
+            {!isStaff && ticket.reporter_id === currentUserId &&
+              (ticket.status === 'resolved' || ticket.status === 'closed') && (
+              <div className="mb-4 p-4 bg-slate-800 border border-slate-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-gray-300 text-sm">
+                  This ticket is {ticket.status === 'closed' ? 'closed' : 'resolved'}. Still need help?
+                </p>
+                <button
+                  type="button"
+                  onClick={handleReopen}
+                  disabled={actionLoading}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Reopen Ticket
+                </button>
+              </div>
+            )}
 
             {/* New Comment Form */}
             {ticket.status !== 'closed' && (

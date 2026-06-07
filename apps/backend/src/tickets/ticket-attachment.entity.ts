@@ -15,8 +15,9 @@ export class TicketAttachment {
   @ManyToOne(() => TicketComment, { nullable: true, fieldName: 'comment_id', serializedName: 'comment_id' })
   comment?: TicketComment;
 
-  @ManyToOne(() => Profile, { fieldName: 'uploader_id', serializedName: 'uploader_id' })
-  uploader!: Profile;
+  // Nullable: guest (magic-link, non-member) uploads have no profile.
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'uploader_id', serializedName: 'uploader_id' })
+  uploader?: Profile;
 
   @Property({ type: 'text', fieldName: 'file_name', serializedName: 'file_name' })
   fileName!: string;

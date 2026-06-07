@@ -9,6 +9,8 @@ import {
   CheckCircle,
   XCircle,
   User,
+  Paperclip,
+  X,
 } from 'lucide-react';
 import * as guestApi from '../ticket-guest.api-client';
 
@@ -56,6 +58,19 @@ export function GuestTicketCreatePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [createdTicket, setCreatedTicket] = useState<guestApi.GuestTicket | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || []);
+    const valid: File[] = [];
+    for (const f of picked) {
+      const err = guestApi.validateTicketImage(f);
+      if (err) { setSubmitError(err); continue; }
+      valid.push(f);
+    }
+    if (valid.length) setFiles((prev) => [...prev, ...valid]);
+    e.target.value = '';
+  };
 
   // Verify token on mount
   useEffect(() => {
@@ -116,6 +131,14 @@ export function GuestTicketCreatePage() {
         category: formData.category,
         priority: formData.priority,
       });
+      // Upload any screenshots now that the ticket (and its access token) exists.
+      for (const file of files) {
+        try {
+          await guestApi.uploadGuestAttachment(ticket.access_token, file);
+        } catch (upErr) {
+          console.error('Failed to upload attachment:', upErr);
+        }
+      }
       setCreatedTicket(ticket);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to create ticket');
@@ -361,6 +384,36 @@ export function GuestTicketCreatePage() {
             <p className="text-xs text-gray-500 mt-1">
               The more details you provide, the faster we can help you.
             </p>
+          </div>
+
+          {/* Screenshots */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Screenshots (optional)
+            </label>
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg border border-slate-600 cursor-pointer">
+                <Paperclip className="w-4 h-4" />
+                Attach screenshot
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={handleFilesChange}
+                  className="hidden"
+                />
+              </label>
+              {files.map((f, i) => (
+                <span key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-xs text-gray-200">
+                  <Paperclip className="w-3 h-3" />
+                  <span className="truncate max-w-[12rem]">{f.name}</span>
+                  <button type="button" onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">JPG, PNG, GIF, or WebP — up to 10MB each.</p>
           </div>
 
           {/* Submit */}

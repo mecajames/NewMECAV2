@@ -143,3 +143,37 @@ export async function getAccessFromToken(token: string): Promise<{ access_token:
   const response = await axios.get(`/api/tickets/guest/access/${token}`);
   return response.data;
 }
+
+/**
+ * Upload a screenshot on a guest ticket. Optionally link it to a comment.
+ * Authorized by the ticket's access token (no login required).
+ */
+export async function uploadGuestAttachment(
+  accessToken: string,
+  file: File,
+  commentId?: string,
+): Promise<GuestTicketAttachment> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (commentId) formData.append('comment_id', commentId);
+  const response = await axios.post(
+    `/api/tickets/guest/view/${accessToken}/attachments`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data;
+}
+
+/** Allowed screenshot types + size for ticket attachments (matches backend). */
+export const TICKET_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+export const TICKET_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+export function validateTicketImage(file: File): string | null {
+  if (!TICKET_IMAGE_MIME.includes(file.type)) {
+    return `${file.name}: only images (JPG, PNG, GIF, WebP) are allowed`;
+  }
+  if (file.size > TICKET_IMAGE_MAX_BYTES) {
+    return `${file.name}: file too large (max 10MB)`;
+  }
+  return null;
+}

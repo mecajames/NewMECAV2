@@ -231,3 +231,4 @@ deploy/.env.staging.example
 /apps/backend/scripts
 /.playwright-mcp
 tmp_build.err
+AGENTS.md
