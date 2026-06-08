@@ -43,7 +43,12 @@ export interface IndexingStatus {
 export class SearchConsoleService {
   private readonly logger = new Logger(SearchConsoleService.name);
   private webmasters: webmasters_v3.Webmasters | null = null;
-  private readonly siteUrl = 'https://mecacaraudio.com';
+  // The Search Console property to query. MUST match the property type exactly:
+  //   - Domain property:     sc-domain:mecacaraudio.com   (recommended; covers
+  //                          http/https + www + all subdomains)
+  //   - URL-prefix property: https://mecacaraudio.com
+  // Override via SEARCH_CONSOLE_SITE_URL; defaults to the domain property.
+  private readonly siteUrl = process.env.SEARCH_CONSOLE_SITE_URL || 'sc-domain:mecacaraudio.com';
 
   constructor() {
     const credentialsJson = process.env.GA4_CREDENTIALS_JSON;

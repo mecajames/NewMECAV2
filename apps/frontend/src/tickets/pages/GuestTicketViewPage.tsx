@@ -11,6 +11,8 @@ import {
   User,
   Headphones,
   ArrowLeft,
+  Paperclip,
+  X,
 } from 'lucide-react';
 import * as guestApi from '../ticket-guest.api-client';
 import { TicketAttachmentImage } from '../components/TicketAttachmentImage';
@@ -51,6 +53,19 @@ export function GuestTicketViewPage() {
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+
+  const handleReplyFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || []);
+    const valid: File[] = [];
+    for (const f of picked) {
+      const err = guestApi.validateTicketImage(f);
+      if (err) { setCommentError(err); continue; }
+      valid.push(f);
+    }
+    if (valid.length) setReplyFiles((prev) => [...prev, ...valid]);
+    e.target.value = '';
+  };
 
   // Fetch ticket
   const fetchTicket = async () => {
@@ -79,15 +94,28 @@ export function GuestTicketViewPage() {
     e.preventDefault();
     setCommentError(null);
 
-    if (!newComment.trim()) {
-      setCommentError('Please enter a message');
+    if (!newComment.trim() && replyFiles.length === 0) {
+      setCommentError('Please enter a message or attach a screenshot');
       return;
     }
 
     setSubmittingComment(true);
     try {
-      await guestApi.addGuestComment(accessToken!, newComment);
+      const created = await guestApi.addGuestComment(
+        accessToken!,
+        newComment.trim() || '(screenshot attached)',
+      );
+      // Link any screenshots to the new comment.
+      for (const file of replyFiles) {
+        try {
+          await guestApi.uploadGuestAttachment(accessToken!, file, created.id);
+        } catch (upErr) {
+          console.error('Failed to upload attachment:', upErr);
+          setCommentError(`Reply sent, but ${file.name} failed to upload. You can re-attach it on a follow-up reply.`);
+        }
+      }
       setNewComment('');
+      setReplyFiles([]);
       // Refresh ticket to show new comment
       await fetchTicket();
     } catch (err) {
@@ -311,7 +339,33 @@ export function GuestTicketViewPage() {
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none mb-4"
             />
 
-            <div className="flex justify-end">
+            {/* Chosen screenshots */}
+            {replyFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {replyFiles.map((f, i) => (
+                  <span key={i} className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-xs text-gray-200">
+                    <Paperclip className="w-3 h-3" />
+                    <span className="truncate max-w-[12rem]">{f.name}</span>
+                    <button type="button" onClick={() => setReplyFiles((prev) => prev.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-white">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3">
+              <label className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg border border-slate-600 cursor-pointer">
+                <Paperclip className="w-4 h-4" />
+                Attach screenshot
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={handleReplyFilesChange}
+                  className="hidden"
+                />
+              </label>
               <button
                 type="submit"
                 disabled={submittingComment}

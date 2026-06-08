@@ -4621,12 +4621,18 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [loading, setLoading] = useState(true);
   const [showMembershipWizard, setShowMembershipWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  // Apply Manual Payment modal — opened from a pending membership row
+  const [repairingTeamId, setRepairingTeamId] = useState<string | null>(null);
+  const [reconcilingTeams, setReconcilingTeams] = useState(false);
+  // Record Payment & Reactivate modal — opened from any not-yet-paid membership
+  // row. Covers cash/check AND recording a Stripe payment (pi_/sub_) whose
+  // webhook never landed, then re-syncs the profile to active.
   const [applyPaymentMembership, setApplyPaymentMembership] = useState<Membership | null>(null);
-  const [applyPaymentMethod, setApplyPaymentMethod] = useState<'cash' | 'check'>('cash');
+  const [applyPaymentMethod, setApplyPaymentMethod] = useState<'cash' | 'check' | 'stripe'>('cash');
   const [applyPaymentReference, setApplyPaymentReference] = useState('');
   const [applyPaymentAmount, setApplyPaymentAmount] = useState<string>('');
   const [applyPaymentNotes, setApplyPaymentNotes] = useState('');
+  const [applyPaymentStripePi, setApplyPaymentStripePi] = useState('');
+  const [applyPaymentStripeSub, setApplyPaymentStripeSub] = useState('');
   const [applyingPayment, setApplyingPayment] = useState(false);
   const [applyPaymentError, setApplyPaymentError] = useState<string | null>(null);
   // Team name editing state
@@ -4846,6 +4852,41 @@ function MembershipsTab({ member }: { member: Profile }) {
       alert('Failed to delete membership');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleRepairTeam = async (membershipId: string) => {
+    if (!confirm('Create/repair the team for this membership? This will enable the team add-on if needed and create the team so the member can manage it in My MECA.')) {
+      return;
+    }
+    setRepairingTeamId(membershipId);
+    try {
+      const result = await membershipsApi.adminRepairTeam(membershipId);
+      const verb = result.status === 'already_exists' ? 'was already set up' : 'created/linked';
+      alert(`Team "${result.team_name}" ${verb}.${result.enabled_team_addon ? ' (Team add-on was enabled on this membership.)' : ''}`);
+      fetchMemberships();
+    } catch (error: any) {
+      console.error('Error repairing team:', error);
+      alert(error?.response?.data?.message || 'Failed to repair team for this membership');
+    } finally {
+      setRepairingTeamId(null);
+    }
+  };
+
+  const handleReconcileTeams = async () => {
+    if (!confirm('Scan ALL active team-enabled memberships and create any missing teams? This is safe to run and only fixes memberships that are missing their team.')) {
+      return;
+    }
+    setReconcilingTeams(true);
+    try {
+      const result = await membershipsApi.adminReconcileTeams();
+      alert(`Scanned ${result.scanned} team-enabled membership(s); repaired ${result.repaired} missing team(s).`);
+      fetchMemberships();
+    } catch (error: any) {
+      console.error('Error reconciling teams:', error);
+      alert(error?.response?.data?.message || 'Failed to reconcile teams');
+    } finally {
+      setReconcilingTeams(false);
     }
   };
 
@@ -5174,13 +5215,28 @@ function MembershipsTab({ member }: { member: Profile }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-white">Memberships & Subscriptions</h2>
         {canEdit && (
-          <button
-            onClick={() => setShowMembershipWizard(true)}
-            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2 self-start sm:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            Assign Membership
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={handleReconcileTeams}
+              disabled={reconcilingTeams}
+              className="px-3 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+              title="Scan all active team-enabled memberships and create any missing teams"
+            >
+              {reconcilingTeams ? (
+                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+              ) : (
+                <UsersIcon className="h-4 w-4" />
+              )}
+              Repair Teams
+            </button>
+            <button
+              onClick={() => setShowMembershipWizard(true)}
+              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Assign Membership
+            </button>
+          </div>
         )}
       </div>
 
@@ -5481,18 +5537,25 @@ function MembershipsTab({ member }: { member: Profile }) {
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-2 sm:ml-4 self-end sm:self-start">
-                    {/* Apply Manual Payment — only meaningful for PENDING memberships.
-                        Members typically pay via Stripe; this is the path for cash/
-                        check handed to an event director, an offline bank deposit
-                        against an outstanding renewal, etc. */}
-                    {membership.paymentStatus === 'pending' && !isExpired(membership.endDate || '') && (
+                    {/* Record Payment & Reactivate — for any membership that
+                        isn't PAID. Covers cash/check handed to an ED, an offline
+                        deposit, AND recording a Stripe payment (pi_/sub_) whose
+                        webhook never processed so the row stuck unpaid. Marks the
+                        row PAID and re-syncs the profile to active. */}
+                    {membership.paymentStatus !== 'paid' && (
                       <button
-                        onClick={() => setApplyPaymentMembership(membership)}
+                        onClick={() => {
+                          setApplyPaymentMembership(membership);
+                          setApplyPaymentMethod('cash');
+                          setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+                          setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
+                          setApplyPaymentError(null);
+                        }}
                         className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors inline-flex items-center gap-1.5"
-                        title="Mark this pending membership PAID with cash or check"
+                        title="Record a cash, check, or Stripe payment and reactivate the account"
                       >
                         <DollarSign className="h-4 w-4" />
-                        Apply Payment
+                        Record Payment
                       </button>
                     )}
                     {/* Add Secondary button - only for non-secondary memberships with paid status */}
@@ -5505,6 +5568,18 @@ function MembershipsTab({ member }: { member: Profile }) {
                         <UserPlus className="h-4 w-4" />
                       </button>
                     )}
+                    <button
+                      onClick={() => handleRepairTeam(membership.id)}
+                      disabled={repairingTeamId === membership.id}
+                      className="p-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors disabled:opacity-50"
+                      title="Create/repair team for this membership"
+                    >
+                      {repairingTeamId === membership.id ? (
+                        <div className="animate-spin h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full" />
+                      ) : (
+                        <UsersIcon className="h-4 w-4" />
+                      )}
+                    </button>
                     <button
                       onClick={() => handleOpenEditModal(membership)}
                       className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
@@ -6220,15 +6295,16 @@ function MembershipsTab({ member }: { member: Profile }) {
       {applyPaymentMembership && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
-            <h3 className="text-white font-bold text-lg mb-1">Apply Manual Payment</h3>
+            <h3 className="text-white font-bold text-lg mb-1">Record Payment &amp; Reactivate</h3>
             <p className="text-slate-400 text-sm mb-4">
-              Mark <span className="text-white">{applyPaymentMembership.membershipTypeConfig?.name || 'this membership'}</span> as paid by
-              recording cash or a check. An order and invoice will be generated and the membership status will flip to Active.
+              Mark <span className="text-white">{applyPaymentMembership.membershipTypeConfig?.name || 'this membership'}</span> as
+              paid and reactivate the account. Use this when a payment landed outside the new system — cash/check, or a Stripe
+              charge whose webhook never processed. An order &amp; invoice are generated and the membership status flips to Active.
             </p>
             <div className="space-y-4">
               <div>
                 <label className="text-slate-300 text-sm font-medium block mb-1">Payment method *</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() => setApplyPaymentMethod('cash')}
                     className={`px-3 py-2 rounded-lg text-sm font-medium ${applyPaymentMethod === 'cash'
@@ -6241,22 +6317,63 @@ function MembershipsTab({ member }: { member: Profile }) {
                       ? 'bg-orange-600 text-white'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
                   >Check</button>
+                  <button
+                    onClick={() => setApplyPaymentMethod('stripe')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${applyPaymentMethod === 'stripe'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                  >Stripe (CC)</button>
                 </div>
               </div>
+
+              {applyPaymentMethod === 'stripe' ? (
+                <>
+                  <div className="rounded-lg bg-indigo-950/40 border border-indigo-800/50 p-3 text-xs text-indigo-200">
+                    Enter the Stripe payment that already succeeded (from the Stripe dashboard). We pull the real amount —
+                    and, for a subscription, the period end — directly from Stripe and link it to this membership. Provide a
+                    payment-intent, a subscription, or both.
+                  </div>
+                  <div>
+                    <label className="text-slate-300 text-sm font-medium block mb-1">Stripe payment intent (pi_…)</label>
+                    <input
+                      type="text"
+                      value={applyPaymentStripePi}
+                      onChange={(e) => setApplyPaymentStripePi(e.target.value)}
+                      placeholder="pi_3T75LlCyGPNwWbdQ0nQFysE9"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 text-sm font-medium block mb-1">Stripe subscription (sub_…) — optional</label>
+                    <input
+                      type="text"
+                      value={applyPaymentStripeSub}
+                      onChange={(e) => setApplyPaymentStripeSub(e.target.value)}
+                      placeholder="sub_1OsawMCyGPNwWbdQLbgclans"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    <p className="text-slate-500 text-xs mt-1">If this is a recurring membership, add the subscription so the end date is set from Stripe&apos;s billing period.</p>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="text-slate-300 text-sm font-medium block mb-1">
+                    {applyPaymentMethod === 'check' ? 'Check number *' : 'Cash receipt number (optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={applyPaymentReference}
+                    onChange={(e) => setApplyPaymentReference(e.target.value)}
+                    placeholder={applyPaymentMethod === 'check' ? '1234' : 'leave blank for auto-generated'}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="text-slate-300 text-sm font-medium block mb-1">
-                  {applyPaymentMethod === 'check' ? 'Check number *' : 'Cash receipt number (optional)'}
+                  Amount override (optional){applyPaymentMethod === 'stripe' ? ' — leave blank to use the Stripe amount' : ''}
                 </label>
-                <input
-                  type="text"
-                  value={applyPaymentReference}
-                  onChange={(e) => setApplyPaymentReference(e.target.value)}
-                  placeholder={applyPaymentMethod === 'check' ? '1234' : 'leave blank for auto-generated'}
-                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-slate-300 text-sm font-medium block mb-1">Amount override (optional)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -6272,7 +6389,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                   value={applyPaymentNotes}
                   onChange={(e) => setApplyPaymentNotes(e.target.value)}
                   rows={2}
-                  placeholder="e.g. Paid at March 15th event to ED Smith"
+                  placeholder="e.g. Paid renewal in old system / Stripe; webhook never processed"
                   className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-y"
                 />
               </div>
@@ -6285,6 +6402,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                 onClick={() => {
                   setApplyPaymentMembership(null);
                   setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+                  setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
                   setApplyPaymentError(null);
                 }}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors"
@@ -6295,31 +6413,39 @@ function MembershipsTab({ member }: { member: Profile }) {
                     setApplyPaymentError('Check number is required for check payments.');
                     return;
                   }
+                  if (applyPaymentMethod === 'stripe' && !applyPaymentStripePi.trim() && !applyPaymentStripeSub.trim()) {
+                    setApplyPaymentError('Enter a Stripe payment intent (pi_…) or subscription (sub_…).');
+                    return;
+                  }
                   setApplyingPayment(true);
                   setApplyPaymentError(null);
                   try {
-                    await membershipsApi.adminApplyManualPayment(applyPaymentMembership.id, {
+                    const result = await membershipsApi.adminRecordPayment(applyPaymentMembership.id, {
                       paymentMethod: applyPaymentMethod,
                       checkNumber: applyPaymentMethod === 'check' ? applyPaymentReference.trim() : undefined,
                       cashReceiptNumber: applyPaymentMethod === 'cash' ? applyPaymentReference.trim() || undefined : undefined,
+                      stripePaymentIntentId: applyPaymentMethod === 'stripe' ? applyPaymentStripePi.trim() || undefined : undefined,
+                      stripeSubscriptionId: applyPaymentMethod === 'stripe' ? applyPaymentStripeSub.trim() || undefined : undefined,
                       amountOverride: applyPaymentAmount ? parseFloat(applyPaymentAmount) : undefined,
                       notes: applyPaymentNotes.trim() || undefined,
                     });
                     setApplyPaymentMembership(null);
                     setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+                    setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
                     // Refresh the membership list. The top-level member
                     // banner will update on next page load — we don't have a
                     // refresh callback in scope here.
                     await fetchMemberships();
+                    alert(result?.message || 'Payment recorded and account reactivated.');
                   } catch (err: any) {
-                    setApplyPaymentError(err.response?.data?.message || err.message || 'Failed to apply payment');
+                    setApplyPaymentError(err.response?.data?.message || err.message || 'Failed to record payment');
                   } finally {
                     setApplyingPayment(false);
                   }
                 }}
                 disabled={applyingPayment}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-              >{applyingPayment ? 'Saving…' : 'Apply Payment'}</button>
+              >{applyingPayment ? 'Saving…' : 'Record Payment'}</button>
             </div>
           </div>
         </div>

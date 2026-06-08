@@ -434,4 +434,48 @@ export const ticketsApi = {
     const response = await axios.get(`/api/tickets/${ticketId}/reporter-context`);
     return response.data;
   },
+
+  getUserReport: async (ticketId: string): Promise<TicketUserReport> => {
+    const response = await axios.get(`/api/tickets/${ticketId}/user-report`);
+    return response.data;
+  },
 };
+
+export interface TicketUserReport {
+  submitter_type:
+    | 'member_active'
+    | 'member'
+    | 'guest_active_member'
+    | 'guest_expired_member'
+    | 'guest_known'
+    | 'guest_no_account';
+  name: string | null;
+  email: string | null;
+  is_guest_ticket: boolean;
+  submission: {
+    ip_address: string | null;
+    user_agent: string | null;
+    created_at: string | null;
+  };
+  known_account: {
+    profile_id: string;
+    full_name: string | null;
+    email: string | null;
+    meca_id: string | null;
+    account_type: string | null;
+    membership_status: string;
+    membership_expiry: string | null;
+    member_since: string | null;
+    login_banned: boolean;
+    last_seen_at: string | null;
+    last_login_at: string | null;
+    last_login_ip: string | null;
+    last_login_user_agent: string | null;
+    latest_membership: {
+      type_name: string | null;
+      category: string | null;
+      payment_status: string;
+      end_date: string | null;
+    } | null;
+  } | null;
+}

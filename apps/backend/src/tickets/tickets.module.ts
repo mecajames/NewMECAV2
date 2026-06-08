@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { UploadsModule } from '../uploads/uploads.module';
 import { TicketsController } from './tickets.controller';
 import { TicketsService } from './tickets.service';
 import { TicketAdminController } from './ticket-admin.controller';
@@ -17,6 +18,7 @@ import { TicketCannedResponsesController } from './ticket-canned-responses.contr
 import { TicketSystemFiltersController } from './ticket-system-filters.controller';
 
 @Module({
+  imports: [UploadsModule],
   controllers: [
     TicketsController,
     TicketAdminController,

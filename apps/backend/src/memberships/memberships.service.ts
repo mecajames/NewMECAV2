@@ -522,6 +522,15 @@ export class MembershipsService {
       (config.category === MembershipCategory.COMPETITOR && data.hasTeamAddon);
 
     if (shouldCreateTeam) {
+      // Prevention: persist hasTeamAddon on the membership row whenever it's a
+      // team-enabled competitor membership (e.g. config.includesTeam) so EVERY
+      // downstream check (My MECA eligibility, "w/Team" naming, renewals) sees
+      // it consistently — not just the ones that read config.includesTeam. This
+      // closes the gap where a team-enabled purchase left hasTeamAddon=false.
+      if (config.category === MembershipCategory.COMPETITOR && !membership.hasTeamAddon) {
+        membership.hasTeamAddon = true;
+        await em.persistAndFlush(membership);
+      }
       try {
         // createTeamForMembership will generate a default name if none is provided
         const team = await this.teamsService.createTeamForMembership(membership);
@@ -595,6 +604,103 @@ export class MembershipsService {
     if (membership.endDate >= now) return null;   // still active — not expired
     if (membership.endDate < cutoff) return null; // lapsed beyond the window
     return membership;
+  }
+
+  /**
+   * Admin repair: ensure this membership has a manageable team. Idempotent.
+   * If the membership type isn't team-enabled, enables the team add-on
+   * (competitor only) so the system recognises it everywhere going forward,
+   * then creates or links the Team (+ owner member) via the idempotent
+   * createTeamForMembership. The team belongs to the membership's OWN user, so
+   * this works correctly for master/secondary memberships too.
+   *
+   * Built for the launch-window case where a member bought "Competitor w/Team"
+   * but the team add-on flag never persisted (e.g. purchased before logging in),
+   * so no team was created and My MECA showed no team to manage.
+   */
+  async repairTeamForMembership(membershipId: string): Promise<{
+    status: 'created' | 'already_exists' | 'enabled_and_created';
+    team_id: string;
+    team_name: string;
+    enabled_team_addon: boolean;
+  }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, { populate: ['user', 'membershipTypeConfig'] });
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+    if (!membership.user) {
+      throw new BadRequestException('This membership has no user to own a team.');
+    }
+    const config = membership.membershipTypeConfig;
+    const teamEligible =
+      config.category === MembershipCategory.RETAIL ||
+      config.category === MembershipCategory.MANUFACTURER ||
+      config.category === MembershipCategory.TEAM ||
+      config.includesTeam ||
+      membership.hasTeamAddon === true;
+
+    let enabledAddon = false;
+    if (!teamEligible) {
+      if (config.category !== MembershipCategory.COMPETITOR) {
+        throw new BadRequestException(`A "${config.name}" (${config.category}) membership cannot have a team.`);
+      }
+      // Admin override — the member paid for a team-enabled competitor membership
+      // but the add-on flag didn't stick. Enable it so the team is recognised by
+      // My MECA, eligibility checks, and future renewals.
+      membership.hasTeamAddon = true;
+      await em.persistAndFlush(membership);
+      enabledAddon = true;
+    }
+
+    const existing = await this.teamsService.getTeamByMembership(membership.id);
+    const team = await this.teamsService.createTeamForMembership(membership); // idempotent: returns/links/creates
+    const status = enabledAddon ? 'enabled_and_created' : existing ? 'already_exists' : 'created';
+    return { status, team_id: team.id, team_name: team.name, enabled_team_addon: enabledAddon };
+  }
+
+  /**
+   * Admin batch reconcile: find active, team-enabled memberships that have no
+   * Team row and create/link one for each. Catches members whose team silently
+   * failed to create during the launch window. Idempotent and safe to re-run.
+   */
+  async reconcileMissingTeams(): Promise<{
+    scanned: number;
+    repaired: number;
+    details: Array<{ membership_id: string; user_id?: string; team_id?: string; error?: string }>;
+  }> {
+    const em = this.em.fork();
+    const now = new Date();
+    const candidates = await em.find(Membership, {
+      paymentStatus: PaymentStatus.PAID,
+      $and: [
+        { startDate: { $lte: now } },
+        { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+        {
+          $or: [
+            { membershipTypeConfig: { category: { $in: [MembershipCategory.RETAIL, MembershipCategory.MANUFACTURER, MembershipCategory.TEAM] } } },
+            { membershipTypeConfig: { includesTeam: true } },
+            { hasTeamAddon: true },
+          ],
+        },
+      ],
+    }, { populate: ['user', 'membershipTypeConfig'] });
+
+    let repaired = 0;
+    const details: Array<{ membership_id: string; user_id?: string; team_id?: string; error?: string }> = [];
+    for (const m of candidates) {
+      if (!m.user) continue;
+      const existing = await this.teamsService.getTeamByMembership(m.id);
+      if (existing) continue;
+      try {
+        const team = await this.teamsService.createTeamForMembership(m);
+        repaired++;
+        details.push({ membership_id: m.id, user_id: m.user.id, team_id: team.id });
+      } catch (e: any) {
+        details.push({ membership_id: m.id, user_id: m.user.id, error: e?.message || 'unknown' });
+      }
+    }
+    return { scanned: candidates.length, repaired, details };
   }
 
   async renewMembership(userId: string, membershipTypeConfigId: string): Promise<Membership> {
@@ -2120,6 +2226,282 @@ export class MembershipsService {
       orderId: order.id,
       invoiceId: invoice.id,
       message: `Recorded ${data.paymentMethod.toUpperCase()} payment of $${totalAmount.toFixed(2)}.`,
+    };
+  }
+
+  /**
+   * Unified "Record Payment & Reactivate" used by admins to recover a member
+   * whose payment succeeded OUTSIDE the new system (cash, check, or a Stripe
+   * payment whose webhook never landed) so their membership row exists but is
+   * not marked PAID and their profile sits at membership_status='none'.
+   *
+   * Unlike applyManualPaymentToMembership this:
+   *  - supports a `stripe` method: enter the Stripe payment-intent (pi_...) and/or
+   *    subscription (sub_...) that already succeeded; we pull the real amount /
+   *    period-end from Stripe and link the ids onto the membership;
+   *  - does NOT hard-reject an already-PAID membership (it re-syncs the profile,
+   *    which is the whole point when the row is paid but the profile never synced),
+   *    and only writes an Order/Invoice the first time it flips PENDING→PAID so we
+   *    don't create duplicate billing records.
+   *
+   * Returns the Stripe ids/amount so the controller can write the Payment ledger
+   * row via PaymentFulfillmentService.recordSubscriptionPayment (kept in the
+   * controller to avoid a circular dependency on payment-fulfillment).
+   */
+  async recordMembershipPayment(
+    membershipId: string,
+    data: {
+      paymentMethod: 'cash' | 'check' | 'stripe';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      stripePaymentIntentId?: string;
+      stripeSubscriptionId?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+    adminId: string,
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    orderId: string | null;
+    invoiceId: string | null;
+    message: string;
+    stripe?: {
+      paymentIntentId?: string | null;
+      subscriptionId?: string | null;
+      invoiceId?: string | null;
+      chargeId?: string | null;
+      customerId?: string | null;
+      amount: number;
+      paidAt?: Date | null;
+      productName?: string | null;
+    };
+  }> {
+    const em = this.em.fork();
+
+    const membership = await em.findOne(Membership, { id: membershipId }, {
+      populate: ['user', 'membershipTypeConfig'],
+    });
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+    if (membership.cancelledAt) {
+      throw new BadRequestException('Cannot record a payment on a cancelled membership. Restore/recreate it first.');
+    }
+
+    const user = membership.user;
+    if (!user) throw new BadRequestException('Membership has no associated user');
+
+    const alreadyPaid = membership.paymentStatus === PaymentStatus.PAID;
+    const configPrice = Number(membership.membershipTypeConfig?.price ?? 0);
+    const teamAddonPrice = membership.hasTeamAddon
+      ? Number(membership.membershipTypeConfig?.teamAddonPrice ?? 0)
+      : 0;
+    const fallbackAmount = configPrice + teamAddonPrice;
+
+    let amount: number;
+    let transactionId: string;
+    let stripePaymentIntentId: string | undefined;
+    let stripeSubscriptionId: string | undefined;
+    let stripeCustomerId: string | undefined;
+    let stripeInvoiceId: string | undefined;
+    let stripeChargeId: string | undefined;
+    let stripeProductName: string | undefined;
+    let paidAt: Date = new Date();
+
+    if (data.paymentMethod === 'stripe') {
+      const pi = (data.stripePaymentIntentId ?? '').trim();
+      const sub = (data.stripeSubscriptionId ?? '').trim();
+      if (!pi && !sub) {
+        throw new BadRequestException(
+          'Enter the Stripe payment-intent id (pi_...) or subscription id (sub_...) that already succeeded.',
+        );
+      }
+      if (pi && !pi.startsWith('pi_')) {
+        throw new BadRequestException('Stripe payment-intent id must start with "pi_".');
+      }
+      if (sub && !sub.startsWith('sub_')) {
+        throw new BadRequestException('Stripe subscription id must start with "sub_".');
+      }
+
+      let stripeAmount: number | null = null;
+
+      // Subscription first: gives us the real period end so we can reactivate
+      // the membership to the date Stripe will actually bill through.
+      if (sub) {
+        const bundle = await this.stripeService.getSubscriptionDetails(sub);
+        stripeSubscriptionId = bundle.id;
+        stripeCustomerId = bundle.customerId ?? undefined;
+        stripeInvoiceId = bundle.latestInvoiceId ?? undefined;
+        stripeChargeId = bundle.chargeId ?? undefined;
+        stripeProductName = bundle.productName ?? undefined;
+        if (!pi && bundle.paymentIntentId) stripePaymentIntentId = bundle.paymentIntentId;
+        if (bundle.amount != null) stripeAmount = bundle.amount;
+
+        const liveStatuses = ['active', 'trialing', 'past_due'];
+        if (liveStatuses.includes(bundle.status) && bundle.currentPeriodEnd) {
+          membership.endDate = bundle.currentPeriodEnd;
+          membership.cancelAtPeriodEnd = !!bundle.cancelAtPeriodEnd;
+          if (!bundle.cancelAtPeriodEnd) {
+            membership.cancelledAt = undefined;
+            membership.cancellationReason = undefined;
+            membership.cancelledBy = undefined;
+          }
+        }
+        membership.hadLegacySubscription = false;
+      }
+
+      // Payment intent: authoritative amount + paid timestamp for a one-off /
+      // the specific charge the admin is recording.
+      if (pi) {
+        const intent = await this.stripeService.getPaymentIntent(pi);
+        if (intent.status !== 'succeeded') {
+          throw new BadRequestException(
+            `Stripe payment intent ${pi} is "${intent.status}", not "succeeded". Only a successful payment can be recorded.`,
+          );
+        }
+        stripePaymentIntentId = intent.id;
+        if (typeof intent.customer === 'string' && !stripeCustomerId) {
+          stripeCustomerId = intent.customer;
+        }
+        const received = (intent.amount_received ?? intent.amount ?? 0) / 100;
+        if (received > 0) stripeAmount = received;
+        if (intent.created) paidAt = new Date(intent.created * 1000);
+      }
+
+      amount = data.amountOverride ?? stripeAmount ?? fallbackAmount;
+      transactionId = stripePaymentIntentId ?? stripeSubscriptionId ?? `STRIPE-${Date.now()}`;
+    } else {
+      if (data.paymentMethod === 'check' && !data.checkNumber) {
+        throw new BadRequestException('Check number is required for check payments');
+      }
+      amount = data.amountOverride ?? fallbackAmount;
+      transactionId = data.paymentMethod === 'check'
+        ? `CHECK-${data.checkNumber}`
+        : (data.cashReceiptNumber ? `CASH-${data.cashReceiptNumber}` : `CASH-${Date.now()}`);
+    }
+
+    const oldStatus = membership.paymentStatus;
+    const oldAmount = membership.amountPaid;
+
+    membership.paymentStatus = PaymentStatus.PAID;
+    membership.amountPaid = amount;
+    membership.transactionId = transactionId;
+    if (stripePaymentIntentId) membership.stripePaymentIntentId = stripePaymentIntentId;
+    if (stripeSubscriptionId) membership.stripeSubscriptionId = stripeSubscriptionId;
+
+    // Only mint billing docs the first time we flip the row PAID — re-running
+    // this on an already-paid row is a pure profile re-sync, not a new sale.
+    let orderId: string | null = null;
+    let invoiceId: string | null = null;
+    if (!alreadyPaid) {
+      const methodLabel =
+        data.paymentMethod === 'stripe' ? 'Stripe' : data.paymentMethod === 'check' ? 'Check' : 'Cash';
+      const orderNumber = `ORD-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
+      const order = em.create(Order, {
+        orderNumber,
+        member: user,
+        status: OrderStatus.COMPLETED,
+        orderType: OrderType.MEMBERSHIP,
+        subtotal: amount.toFixed(2),
+        tax: '0.00',
+        discount: '0.00',
+        total: amount.toFixed(2),
+        currency: 'USD',
+        notes: data.notes ?? `Recorded ${methodLabel} payment (admin recovery)`,
+      });
+      em.create(OrderItem, {
+        order,
+        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} payment)`,
+        quantity: 1,
+        unitPrice: amount.toFixed(2),
+        total: amount.toFixed(2),
+        itemType: OrderItemType.MEMBERSHIP,
+        referenceId: membership.id,
+      });
+
+      const invoiceNumber = `INV-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
+      const invoice = em.create(Invoice, {
+        invoiceNumber,
+        user,
+        order,
+        status: InvoiceStatus.PAID,
+        subtotal: amount.toFixed(2),
+        tax: '0.00',
+        discount: '0.00',
+        total: amount.toFixed(2),
+        currency: 'USD',
+        dueDate: new Date(),
+        paidAt,
+        notes: data.notes ?? `Recorded ${methodLabel} payment (admin recovery)`,
+        companyInfo: {
+          name: 'Mobile Electronics Competition Association',
+          email: 'billing@mecacaraudio.com',
+        },
+      } as any);
+      em.create(InvoiceItem, {
+        invoice,
+        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} payment)`,
+        quantity: 1,
+        unitPrice: amount.toFixed(2),
+        total: amount.toFixed(2),
+        itemType: InvoiceItemType.MEMBERSHIP,
+        referenceId: membership.id,
+      });
+
+      orderId = order.id;
+      invoiceId = invoice.id;
+    }
+
+    await em.flush();
+
+    // Reactivate: recompute profile.membership_status from the now-paid row.
+    await this.membershipSyncService.syncProfileMembershipStatus(user.id);
+
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_record_payment',
+      resourceType: 'membership',
+      resourceId: membership.id,
+      description:
+        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} for ${user.email || membership.id}` +
+        (alreadyPaid ? ' (row already PAID — re-synced profile)' : '') +
+        (stripeSubscriptionId ? ` [sub ${stripeSubscriptionId}]` : '') +
+        (stripePaymentIntentId ? ` [pi ${stripePaymentIntentId}]` : ''),
+      oldValues: { paymentStatus: oldStatus, amountPaid: oldAmount },
+      newValues: {
+        paymentStatus: PaymentStatus.PAID,
+        amountPaid: amount,
+        transactionId,
+        stripePaymentIntentId: stripePaymentIntentId ?? null,
+        stripeSubscriptionId: stripeSubscriptionId ?? null,
+        endDate: membership.endDate ?? null,
+      },
+    });
+
+    const stripeResult =
+      data.paymentMethod === 'stripe'
+        ? {
+            paymentIntentId: stripePaymentIntentId ?? null,
+            subscriptionId: stripeSubscriptionId ?? null,
+            invoiceId: stripeInvoiceId ?? null,
+            chargeId: stripeChargeId ?? null,
+            customerId: stripeCustomerId ?? null,
+            amount,
+            paidAt,
+            productName: stripeProductName ?? null,
+          }
+        : undefined;
+
+    return {
+      success: true,
+      membership,
+      orderId,
+      invoiceId,
+      message:
+        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} and reactivated the account.` +
+        (alreadyPaid ? ' (Membership was already marked PAID; profile status re-synced.)' : ''),
+      stripe: stripeResult,
     };
   }
 

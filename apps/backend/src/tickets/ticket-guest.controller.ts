@@ -9,7 +9,10 @@ import {
   HttpStatus,
   Req,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Request, Response } from 'express';
 import { TicketGuestService, CreateGuestTicketData, GuestTicketResponse } from './ticket-guest.service';
 import { TicketsService } from './tickets.service';
@@ -156,7 +159,10 @@ export class TicketGuestController {
   @HttpCode(HttpStatus.CREATED)
   async createTicket(
     @Body() body: CreateGuestTicketDto,
+    @Req() req: Request,
   ): Promise<GuestTicketResponse> {
+    const ipAddress = req.ip || req.headers['x-forwarded-for']?.toString();
+    const userAgent = req.headers['user-agent'];
     return this.guestService.createGuestTicket(body.token, {
       title: body.title,
       description: body.description,
@@ -164,7 +170,7 @@ export class TicketGuestController {
       priority: body.priority as any,
       guest_name: body.guest_name,
       event_id: body.event_id,
-    });
+    }, { ipAddress, userAgent });
   }
 
   /**
@@ -204,6 +210,25 @@ export class TicketGuestController {
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.end(data);
+  }
+
+  /**
+   * Upload a screenshot on a guest ticket (create-time ticket-level, or linked
+   * to a comment via comment_id). Authorized by the ticket's access token.
+   * POST /api/tickets/guest/view/:accessToken/attachments  (multipart/form-data)
+   */
+  @Public()
+  @Post('view/:accessToken/attachments')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 15 * 1024 * 1024 }, // hard cap; service enforces the 10MB image limit
+  }))
+  async uploadGuestAttachment(
+    @Param('accessToken') accessToken: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('comment_id') commentId?: string,
+  ): Promise<{ id: string; file_name: string; mime_type: string; file_size: number }> {
+    return this.guestService.addGuestAttachment(accessToken, file, commentId);
   }
 
   /**

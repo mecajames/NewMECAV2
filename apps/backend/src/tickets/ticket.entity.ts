@@ -77,6 +77,15 @@ export class Ticket {
   @Property({ type: 'uuid', nullable: true, fieldName: 'linked_profile_hint', serializedName: 'linked_profile_hint' })
   linkedProfileHint?: string;
 
+  // Submitter network fingerprint captured at ticket creation. Staff-only —
+  // intentionally NOT included in toJSON(); surfaced only via the admin
+  // user-report endpoint.
+  @Property({ type: 'text', nullable: true, fieldName: 'submitter_ip' })
+  submitterIp?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'submitter_user_agent' })
+  submitterUserAgent?: string;
+
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'resolved_at', serializedName: 'resolved_at' })
   resolvedAt?: Date;
 

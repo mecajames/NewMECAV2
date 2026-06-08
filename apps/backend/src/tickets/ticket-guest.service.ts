@@ -9,6 +9,7 @@ import { Profile } from '../profiles/profiles.entity';
 import { TicketCategory, TicketPriority, TicketStatus } from '@newmeca/shared';
 import { TicketRoutingService } from './ticket-routing.service';
 import { EmailService } from '../email/email.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 export interface CreateGuestTicketData {
   title: string;
@@ -76,7 +77,66 @@ export class TicketGuestService {
     private readonly em: EntityManager,
     private readonly routingService: TicketRoutingService,
     private readonly emailService: EmailService,
+    private readonly uploadsService: UploadsService,
   ) {}
+
+  /**
+   * Upload a screenshot on a guest ticket, authorized purely by the ticket's
+   * access token. Optionally links it to a comment. Reuses UploadsService
+   * (image-only, 10MB validation) and stores the attachment with a null
+   * uploader (guests have no profile).
+   */
+  async addGuestAttachment(
+    accessToken: string,
+    file: Express.Multer.File,
+    commentId?: string,
+  ): Promise<GuestTicketAttachmentResponse> {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    const em = this.em.fork();
+    const ticket = await em.findOne(Ticket, { accessToken, isGuestTicket: true });
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    // Validates image mime + size and scopes the storage path to this ticket.
+    const result = await this.uploadsService.uploadFile(
+      file,
+      'ticket-attachments',
+      'guest',
+      false,
+      ticket.id,
+    );
+
+    // Only honour comment_id when the comment actually belongs to this ticket.
+    let commentRef: TicketComment | undefined;
+    if (commentId) {
+      const c = await em.findOne(TicketComment, { id: commentId, ticket: ticket.id });
+      if (c) commentRef = em.getReference(TicketComment, c.id);
+    }
+
+    const attachment = em.create(TicketAttachment, {
+      ticket: em.getReference(Ticket, ticket.id),
+      comment: commentRef,
+      uploader: undefined,
+      fileName: file.originalname,
+      filePath: result.publicUrl,
+      bucket: result.bucket,
+      storagePath: result.storagePath,
+      fileSize: result.fileSize,
+      mimeType: result.mimeType,
+    } as any);
+    await em.persistAndFlush(attachment);
+
+    return {
+      id: attachment.id,
+      file_name: attachment.fileName,
+      mime_type: attachment.mimeType,
+      file_size: attachment.fileSize,
+    };
+  }
 
   /**
    * Classify an email address so the support entry flow can route the person
@@ -221,8 +281,15 @@ export class TicketGuestService {
   async createGuestTicket(
     token: string,
     data: CreateGuestTicketData,
+    meta?: { ipAddress?: string; userAgent?: string },
   ): Promise<GuestTicketResponse> {
     const em = this.em.fork();
+
+    // Name is required (email comes from the verified token). The frontend
+    // enforces this too, but guard server-side so no ticket lands nameless.
+    if (!data.guest_name || !data.guest_name.trim()) {
+      throw new BadRequestException('Your name is required.');
+    }
 
     // Verify token. Both create_ticket and account_help tokens land here.
     const guestToken = await em.findOne(TicketGuestToken, {
@@ -285,11 +352,13 @@ export class TicketGuestService {
       priority: data.priority || TicketPriority.MEDIUM,
       status: TicketStatus.OPEN,
       guestEmail: guestToken.email,
-      guestName: data.guest_name,
+      guestName: data.guest_name.trim(),
       accessToken,
       isGuestTicket: true,
       reporter,
       linkedProfileHint,
+      submitterIp: meta?.ipAddress,
+      submitterUserAgent: meta?.userAgent,
       department: routingResult.departmentId ? undefined : 'general_support',
     } as any);
 

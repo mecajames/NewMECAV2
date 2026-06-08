@@ -500,6 +500,31 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: create/repair the team for a specific membership (idempotent).
+   */
+  adminRepairTeam: async (membershipId: string): Promise<{
+    status: 'created' | 'already_exists' | 'enabled_and_created';
+    team_id: string;
+    team_name: string;
+    enabled_team_addon: boolean;
+  }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/repair-team`);
+    return response.data;
+  },
+
+  /**
+   * Admin: scan all active team-enabled memberships and create any missing teams.
+   */
+  adminReconcileTeams: async (): Promise<{
+    scanned: number;
+    repaired: number;
+    details: Array<{ membership_id: string; user_id?: string; team_id?: string; error?: string }>;
+  }> => {
+    const response = await axios.post('/api/memberships/admin/reconcile-teams');
+    return response.data;
+  },
+
+  /**
    * Update team name for a membership (subject to 30-day edit window)
    */
   updateTeamName: async (id: string, teamName: string, isAdmin?: boolean): Promise<Membership> => {
@@ -832,6 +857,39 @@ export const membershipsApi = {
   }> => {
     const response = await axios.post(
       `/api/memberships/${membershipId}/admin/apply-manual-payment`,
+      data,
+    );
+    return response.data;
+  },
+
+  /**
+   * Admin: "Record Payment & Reactivate". For a member who paid outside the new
+   * system (cash, check, or a Stripe payment whose webhook never landed) so the
+   * membership exists but isn't PAID and the account reads "No Membership".
+   * Marks the row PAID, links any Stripe ids (pulling real amount/period-end
+   * from Stripe), writes Order/Invoice + ledger, and re-syncs the profile to
+   * active. Works regardless of the current payment status.
+   */
+  adminRecordPayment: async (
+    membershipId: string,
+    data: {
+      paymentMethod: 'cash' | 'check' | 'stripe';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      stripePaymentIntentId?: string;
+      stripeSubscriptionId?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    orderId: string | null;
+    invoiceId: string | null;
+    message: string;
+  }> => {
+    const response = await axios.post(
+      `/api/memberships/${membershipId}/admin/record-payment`,
       data,
     );
     return response.data;

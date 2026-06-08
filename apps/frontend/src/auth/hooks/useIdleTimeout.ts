@@ -33,6 +33,15 @@ export function useIdleTimeout() {
   const resetTimerRef = useRef<() => void>(() => {});
 
   const handleTimeout = useCallback(() => {
+    // Never sign out mid password-reset / forced-change: these pages hold a
+    // short-lived recovery session and being kicked destroys the flow.
+    if (
+      window.location.pathname === '/reset-password' ||
+      window.location.pathname === '/change-password'
+    ) {
+      return;
+    }
+
     // M5 fix: Store full path including hash fragment
     const currentPath = window.location.pathname + window.location.search + window.location.hash;
     if (currentPath !== '/login' && currentPath !== '/') {
@@ -60,6 +69,14 @@ export function useIdleTimeout() {
   }, [signOut]);
 
   const handleRemoteLogout = useCallback(() => {
+    // Don't let another tab's idle timeout sign us out mid password-reset.
+    if (
+      window.location.pathname === '/reset-password' ||
+      window.location.pathname === '/change-password'
+    ) {
+      return;
+    }
+
     // Another tab timed out — sign out locally too
     try {
       localStorage.removeItem(ACTIVITY_STORAGE_KEY);

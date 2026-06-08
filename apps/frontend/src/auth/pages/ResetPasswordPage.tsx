@@ -25,17 +25,31 @@ export default function ResetPasswordPage() {
   const [confirm, setConfirm] = useState('');
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invalidReason, setInvalidReason] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const settledRef = useRef(false);
 
   // Detect the recovery session Supabase creates from the email link.
   useEffect(() => {
-    const settle = (p: Phase) => {
+    const settle = (p: Phase, reason?: string) => {
       if (!settledRef.current) {
         settledRef.current = true;
+        if (reason) setInvalidReason(reason);
         setPhase(p);
       }
     };
+
+    // Supabase reports expired/used links via the URL hash, e.g.
+    //   #error=access_denied&error_code=otp_expired&error_description=...
+    const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    const hashError = hashParams.get('error_description') || hashParams.get('error');
+    const hasRecoveryToken =
+      hashParams.has('access_token') || hashParams.get('type') === 'recovery';
+
+    if (hashError) {
+      settle('invalid', hashError.replace(/\+/g, ' '));
+      return;
+    }
 
     // The token may already have been processed before this effect runs.
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -50,8 +64,10 @@ export default function ResetPasswordPage() {
       }
     });
 
-    // No recovery session appeared → link is invalid or expired.
-    const timer = setTimeout(() => settle('invalid'), 8000);
+    // Wait generously when a recovery token is present (slow networks must not
+    // produce a false "invalid link"); fail fast only when there's no token at
+    // all (the page was opened without a real reset link).
+    const timer = setTimeout(() => settle('invalid'), hasRecoveryToken ? 20000 : 6000);
 
     return () => {
       subscription.unsubscribe();
@@ -117,8 +133,11 @@ export default function ResetPasswordPage() {
         </div>
         <h2 className="text-xl font-semibold text-white mb-2">Reset link invalid or expired</h2>
         <p className="text-gray-400 mb-6">
-          This password reset link is no longer valid. Reset links expire after a short time and can
-          only be used once. Please request a new one.
+          {invalidReason
+            ? `${invalidReason}. `
+            : 'This password reset link is no longer valid. '}
+          Reset links expire after a short time and can only be used once. Please request a new one
+          from the “Forgot password?” link on the sign-in page.
         </p>
         <Link
           to="/login"

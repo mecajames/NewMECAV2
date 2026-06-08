@@ -11,12 +11,13 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Req,
   Res,
   UnauthorizedException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { UserRole } from '@newmeca/shared';
 import { TicketsService } from './tickets.service';
@@ -224,10 +225,28 @@ export class TicketsController {
   async createTicket(
     @Headers('authorization') authHeader: string,
     @Body() data: CreateTicketDto & { user_membership_status?: string },
+    @Req() req: Request,
   ): Promise<Ticket> {
     await this.requireAuth(authHeader);
     const { user_membership_status, ...ticketData } = data;
-    return this.ticketsService.create(ticketData, user_membership_status);
+    const ipAddress = req.ip || req.headers['x-forwarded-for']?.toString();
+    const userAgent = req.headers['user-agent'];
+    return this.ticketsService.create(ticketData, user_membership_status, { ipAddress, userAgent });
+  }
+
+  /**
+   * Admin-only "User Report": everything we know about whoever filed this
+   * ticket — works for guests (matched by guest_email) and members alike.
+   * Includes linked account + membership status/expiry, last login, and the
+   * IP/user-agent captured at ticket submission.
+   */
+  @Get(':id/user-report')
+  async getUserReport(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.ticketsService.getTicketUserReport(id);
   }
 
   @Put(':id')
@@ -326,8 +345,11 @@ export class TicketsController {
     @Headers('authorization') authHeader: string,
     @Param('id') id: string,
   ): Promise<Ticket> {
-    await this.requireAuth(authHeader);
-    return this.ticketsService.reopenTicket(id);
+    const user = await this.requireAuth(authHeader);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    const isAdmin = isAdminUser(profile);
+    return this.ticketsService.reopenTicket(id, user.id, isAdmin);
   }
 
   /**
