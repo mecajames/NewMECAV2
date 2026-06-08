@@ -46,6 +46,12 @@ supabase-export-complete/
 apps/backend/.env
 apps/frontend/.env
 
+# Local AI / dev-tool configs — may contain API keys/tokens, never commit
+.codex/
+.cursor/
+.mcp.json
+.claude/settings.local.json
+
 # Deploy secrets (never commit real values)
 deploy/.env.staging
 deploy/.env.backend
@@ -232,3 +238,6 @@ deploy/.env.staging.example
 /.playwright-mcp
 tmp_build.err
 AGENTS.md
+apps/backend/.env.example
+apps/frontend/.env.example
+apps/frontend/.env.example

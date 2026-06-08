@@ -159,7 +159,10 @@ export class TicketGuestController {
   @HttpCode(HttpStatus.CREATED)
   async createTicket(
     @Body() body: CreateGuestTicketDto,
+    @Req() req: Request,
   ): Promise<GuestTicketResponse> {
+    const ipAddress = req.ip || req.headers['x-forwarded-for']?.toString();
+    const userAgent = req.headers['user-agent'];
     return this.guestService.createGuestTicket(body.token, {
       title: body.title,
       description: body.description,
@@ -167,7 +170,7 @@ export class TicketGuestController {
       priority: body.priority as any,
       guest_name: body.guest_name,
       event_id: body.event_id,
-    });
+    }, { ipAddress, userAgent });
   }
 
   /**

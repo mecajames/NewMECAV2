@@ -92,29 +92,34 @@ export class AnalyticsService {
     const cached = this.getCached<SummaryStats>(cacheKey);
     if (cached) return cached;
 
-    const [response] = await this.client!.runReport({
-      property: `properties/${this.propertyId}`,
-      dateRanges: [{ startDate, endDate }],
-      metrics: [
-        { name: 'screenPageViews' },
-        { name: 'activeUsers' },
-        { name: 'sessions' },
-        { name: 'averageSessionDuration' },
-        { name: 'bounceRate' },
-      ],
-    });
+    try {
+      const [response] = await this.client!.runReport({
+        property: `properties/${this.propertyId}`,
+        dateRanges: [{ startDate, endDate }],
+        metrics: [
+          { name: 'screenPageViews' },
+          { name: 'activeUsers' },
+          { name: 'sessions' },
+          { name: 'averageSessionDuration' },
+          { name: 'bounceRate' },
+        ],
+      });
 
-    const row = response.rows?.[0];
-    const result: SummaryStats = {
-      pageViews: Number(row?.metricValues?.[0]?.value ?? 0),
-      activeUsers: Number(row?.metricValues?.[1]?.value ?? 0),
-      sessions: Number(row?.metricValues?.[2]?.value ?? 0),
-      avgSessionDuration: Number(row?.metricValues?.[3]?.value ?? 0),
-      bounceRate: Number(row?.metricValues?.[4]?.value ?? 0),
-    };
+      const row = response.rows?.[0];
+      const result: SummaryStats = {
+        pageViews: Number(row?.metricValues?.[0]?.value ?? 0),
+        activeUsers: Number(row?.metricValues?.[1]?.value ?? 0),
+        sessions: Number(row?.metricValues?.[2]?.value ?? 0),
+        avgSessionDuration: Number(row?.metricValues?.[3]?.value ?? 0),
+        bounceRate: Number(row?.metricValues?.[4]?.value ?? 0),
+      };
 
-    this.setCache(cacheKey, result);
-    return result;
+      this.setCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      this.logger.error(`GA getSummaryStats failed: ${(error as Error).message}`);
+      return { pageViews: 0, activeUsers: 0, sessions: 0, avgSessionDuration: 0, bounceRate: 0 };
+    }
   }
 
   async getPageViewsOverTime(startDate: string, endDate: string): Promise<TimeSeriesPoint[]> {
@@ -122,21 +127,26 @@ export class AnalyticsService {
     const cached = this.getCached<TimeSeriesPoint[]>(cacheKey);
     if (cached) return cached;
 
-    const [response] = await this.client!.runReport({
-      property: `properties/${this.propertyId}`,
-      dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: 'date' }],
-      metrics: [{ name: 'screenPageViews' }],
-      orderBys: [{ dimension: { dimensionName: 'date' } }],
-    });
+    try {
+      const [response] = await this.client!.runReport({
+        property: `properties/${this.propertyId}`,
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: 'date' }],
+        metrics: [{ name: 'screenPageViews' }],
+        orderBys: [{ dimension: { dimensionName: 'date' } }],
+      });
 
-    const result: TimeSeriesPoint[] = (response.rows ?? []).map((row) => ({
-      date: row.dimensionValues?.[0]?.value ?? '',
-      value: Number(row.metricValues?.[0]?.value ?? 0),
-    }));
+      const result: TimeSeriesPoint[] = (response.rows ?? []).map((row) => ({
+        date: row.dimensionValues?.[0]?.value ?? '',
+        value: Number(row.metricValues?.[0]?.value ?? 0),
+      }));
 
-    this.setCache(cacheKey, result);
-    return result;
+      this.setCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      this.logger.error(`GA getPageViewsOverTime failed: ${(error as Error).message}`);
+      return [];
+    }
   }
 
   async getActiveUsersOverTime(startDate: string, endDate: string): Promise<TimeSeriesPoint[]> {
@@ -144,21 +154,26 @@ export class AnalyticsService {
     const cached = this.getCached<TimeSeriesPoint[]>(cacheKey);
     if (cached) return cached;
 
-    const [response] = await this.client!.runReport({
-      property: `properties/${this.propertyId}`,
-      dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: 'date' }],
-      metrics: [{ name: 'activeUsers' }],
-      orderBys: [{ dimension: { dimensionName: 'date' } }],
-    });
+    try {
+      const [response] = await this.client!.runReport({
+        property: `properties/${this.propertyId}`,
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: 'date' }],
+        metrics: [{ name: 'activeUsers' }],
+        orderBys: [{ dimension: { dimensionName: 'date' } }],
+      });
 
-    const result: TimeSeriesPoint[] = (response.rows ?? []).map((row) => ({
-      date: row.dimensionValues?.[0]?.value ?? '',
-      value: Number(row.metricValues?.[0]?.value ?? 0),
-    }));
+      const result: TimeSeriesPoint[] = (response.rows ?? []).map((row) => ({
+        date: row.dimensionValues?.[0]?.value ?? '',
+        value: Number(row.metricValues?.[0]?.value ?? 0),
+      }));
 
-    this.setCache(cacheKey, result);
-    return result;
+      this.setCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      this.logger.error(`GA getActiveUsersOverTime failed: ${(error as Error).message}`);
+      return [];
+    }
   }
 
   async getTopPages(startDate: string, endDate: string, limit = 10): Promise<TopPage[]> {
@@ -166,26 +181,31 @@ export class AnalyticsService {
     const cached = this.getCached<TopPage[]>(cacheKey);
     if (cached) return cached;
 
-    const [response] = await this.client!.runReport({
-      property: `properties/${this.propertyId}`,
-      dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: 'pagePath' }],
-      metrics: [
-        { name: 'screenPageViews' },
-        { name: 'activeUsers' },
-      ],
-      orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-      limit,
-    });
+    try {
+      const [response] = await this.client!.runReport({
+        property: `properties/${this.propertyId}`,
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: 'pagePath' }],
+        metrics: [
+          { name: 'screenPageViews' },
+          { name: 'activeUsers' },
+        ],
+        orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+        limit,
+      });
 
-    const result: TopPage[] = (response.rows ?? []).map((row) => ({
-      pagePath: row.dimensionValues?.[0]?.value ?? '',
-      pageViews: Number(row.metricValues?.[0]?.value ?? 0),
-      activeUsers: Number(row.metricValues?.[1]?.value ?? 0),
-    }));
+      const result: TopPage[] = (response.rows ?? []).map((row) => ({
+        pagePath: row.dimensionValues?.[0]?.value ?? '',
+        pageViews: Number(row.metricValues?.[0]?.value ?? 0),
+        activeUsers: Number(row.metricValues?.[1]?.value ?? 0),
+      }));
 
-    this.setCache(cacheKey, result);
-    return result;
+      this.setCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      this.logger.error(`GA getTopPages failed: ${(error as Error).message}`);
+      return [];
+    }
   }
 
   async getTrafficSources(startDate: string, endDate: string): Promise<TrafficSource[]> {
@@ -193,25 +213,30 @@ export class AnalyticsService {
     const cached = this.getCached<TrafficSource[]>(cacheKey);
     if (cached) return cached;
 
-    const [response] = await this.client!.runReport({
-      property: `properties/${this.propertyId}`,
-      dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: 'sessionDefaultChannelGroup' }],
-      metrics: [
-        { name: 'sessions' },
-        { name: 'activeUsers' },
-      ],
-      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-    });
+    try {
+      const [response] = await this.client!.runReport({
+        property: `properties/${this.propertyId}`,
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+        metrics: [
+          { name: 'sessions' },
+          { name: 'activeUsers' },
+        ],
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      });
 
-    const result: TrafficSource[] = (response.rows ?? []).map((row) => ({
-      channel: row.dimensionValues?.[0]?.value ?? '',
-      sessions: Number(row.metricValues?.[0]?.value ?? 0),
-      activeUsers: Number(row.metricValues?.[1]?.value ?? 0),
-    }));
+      const result: TrafficSource[] = (response.rows ?? []).map((row) => ({
+        channel: row.dimensionValues?.[0]?.value ?? '',
+        sessions: Number(row.metricValues?.[0]?.value ?? 0),
+        activeUsers: Number(row.metricValues?.[1]?.value ?? 0),
+      }));
 
-    this.setCache(cacheKey, result);
-    return result;
+      this.setCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      this.logger.error(`GA getTrafficSources failed: ${(error as Error).message}`);
+      return [];
+    }
   }
 
   async getDeviceCategories(startDate: string, endDate: string): Promise<DeviceCategory[]> {
@@ -219,21 +244,26 @@ export class AnalyticsService {
     const cached = this.getCached<DeviceCategory[]>(cacheKey);
     if (cached) return cached;
 
-    const [response] = await this.client!.runReport({
-      property: `properties/${this.propertyId}`,
-      dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: 'deviceCategory' }],
-      metrics: [{ name: 'activeUsers' }],
-      orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
-    });
+    try {
+      const [response] = await this.client!.runReport({
+        property: `properties/${this.propertyId}`,
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: 'deviceCategory' }],
+        metrics: [{ name: 'activeUsers' }],
+        orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
+      });
 
-    const result: DeviceCategory[] = (response.rows ?? []).map((row) => ({
-      device: row.dimensionValues?.[0]?.value ?? '',
-      users: Number(row.metricValues?.[0]?.value ?? 0),
-    }));
+      const result: DeviceCategory[] = (response.rows ?? []).map((row) => ({
+        device: row.dimensionValues?.[0]?.value ?? '',
+        users: Number(row.metricValues?.[0]?.value ?? 0),
+      }));
 
-    this.setCache(cacheKey, result);
-    return result;
+      this.setCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      this.logger.error(`GA getDeviceCategories failed: ${(error as Error).message}`);
+      return [];
+    }
   }
 
   async getDashboard(startDate: string, endDate: string): Promise<AnalyticsDashboard> {

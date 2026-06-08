@@ -46,6 +46,7 @@ import {
   TicketComment,
   TicketAttachment,
   TicketReporterContext,
+  TicketUserReport,
   TicketStatus,
   TicketPriority,
 } from '../tickets.api-client';
@@ -156,6 +157,7 @@ export function TicketDetail({
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [attachments, setAttachments] = useState<TicketAttachment[]>([]);
   const [reporterContext, setReporterContext] = useState<TicketReporterContext | null>(null);
+  const [userReport, setUserReport] = useState<TicketUserReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -296,6 +298,12 @@ export function TicketDetail({
         setReporterContext(ctx);
       } catch (err) {
         console.error('Failed to load reporter context (non-critical):', err);
+      }
+      try {
+        const report = await ticketsApi.getUserReport(ticketId);
+        setUserReport(report);
+      } catch (err) {
+        console.error('Failed to load user report (non-critical):', err);
       }
     }
   };
@@ -1135,24 +1143,36 @@ export function TicketDetail({
 
             {/* Member reopen: the reporter still needs help on a resolved/closed
                 ticket. The reply form is hidden once closed, so this is their
-                way back in. (Replying to a resolved ticket does NOT auto-reopen.) */}
+                way back in. (Replying to a resolved ticket does NOT auto-reopen.)
+                Members can only reopen within 7 days of close/resolve; after
+                that they're directed to open a new ticket. */}
             {!isStaff && ticket.reporter_id === currentUserId &&
-              (ticket.status === 'resolved' || ticket.status === 'closed') && (
-              <div className="mb-4 p-4 bg-slate-800 border border-slate-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <p className="text-gray-300 text-sm">
-                  This ticket is {ticket.status === 'closed' ? 'closed' : 'resolved'}. Still need help?
-                </p>
-                <button
-                  type="button"
-                  onClick={handleReopen}
-                  disabled={actionLoading}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Reopen Ticket
-                </button>
-              </div>
-            )}
+              (ticket.status === 'resolved' || ticket.status === 'closed') && (() => {
+                const endedAt = ticket.closed_at || ticket.resolved_at;
+                const canReopen = !endedAt
+                  || (Date.now() - new Date(endedAt).getTime()) <= 7 * 24 * 60 * 60 * 1000;
+                const stateWord = ticket.status === 'closed' ? 'closed' : 'resolved';
+                return (
+                  <div className="mb-4 p-4 bg-slate-800 border border-slate-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-gray-300 text-sm">
+                      {canReopen
+                        ? `This ticket is ${stateWord}. Still need help?`
+                        : `This ticket was ${stateWord} more than 7 days ago. Please open a new ticket if you still need help.`}
+                    </p>
+                    {canReopen && (
+                      <button
+                        type="button"
+                        onClick={handleReopen}
+                        disabled={actionLoading}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Reopen Ticket
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
 
             {/* New Comment Form */}
             {ticket.status !== 'closed' && (
@@ -1937,6 +1957,131 @@ export function TicketDetail({
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* User Report — everything we know about whoever filed this ticket
+              (works for guests + members): linked account, membership status/
+              expiry, last login, and the IP/browser captured at submission. */}
+          {isStaff && userReport && (
+            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <User className="w-5 h-5" />
+                User Report
+              </h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Submitter</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-gray-200">
+                    {userReport.submitter_type === 'member_active' ? 'Active member'
+                      : userReport.submitter_type === 'member' ? 'Member'
+                      : userReport.submitter_type === 'guest_active_member' ? 'Guest · has active account'
+                      : userReport.submitter_type === 'guest_expired_member' ? 'Guest · expired member'
+                      : userReport.submitter_type === 'guest_known' ? 'Guest · known account'
+                      : 'Guest · no account'}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-gray-400 flex-shrink-0">Name</span>
+                  <span className="text-white text-right">{userReport.name || '—'}</span>
+                </div>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-gray-400 flex-shrink-0">Email</span>
+                  {userReport.email ? (
+                    <a href={`mailto:${userReport.email}`} className="text-orange-400 hover:text-orange-300 text-right break-all">{userReport.email}</a>
+                  ) : <span className="text-white">—</span>}
+                </div>
+
+                {userReport.known_account ? (
+                  <div className="mt-1 pt-3 border-t border-slate-700 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-gray-400 flex-shrink-0">MECA account</span>
+                      <a
+                        href={`/admin/members/${userReport.known_account.profile_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-orange-400 hover:text-orange-300 text-right break-all flex items-center gap-1 justify-end"
+                      >
+                        {userReport.known_account.full_name || userReport.known_account.email || 'View profile'}
+                        <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                      </a>
+                    </div>
+                    {userReport.known_account.meca_id && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400">MECA ID</span>
+                        <span className="text-white font-mono">{userReport.known_account.meca_id}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Membership</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
+                        userReport.known_account.membership_status === 'active' ? 'bg-green-500/10 text-green-400'
+                          : userReport.known_account.membership_status === 'expired' ? 'bg-red-500/10 text-red-400'
+                          : 'bg-slate-700 text-gray-300'
+                      }`}>
+                        {userReport.known_account.membership_status}
+                      </span>
+                    </div>
+                    {userReport.known_account.membership_expiry && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400">{userReport.known_account.membership_status === 'expired' ? 'Expired' : 'Expires'}</span>
+                        <span className="text-white">{formatDate(userReport.known_account.membership_expiry)}</span>
+                      </div>
+                    )}
+                    {userReport.known_account.member_since && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400">Member since</span>
+                        <span className="text-white">{formatDate(userReport.known_account.member_since)}</span>
+                      </div>
+                    )}
+                    {userReport.known_account.login_banned && (
+                      <div className="text-xs px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-red-300">⚠ Login banned</div>
+                    )}
+                    {userReport.known_account.last_login_at && (
+                      <div className="pt-2 border-t border-slate-700/60 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400">Last login</span>
+                          <span className="text-white">{formatDate(userReport.known_account.last_login_at)}</span>
+                        </div>
+                        {userReport.known_account.last_login_ip && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400">Login IP</span>
+                            <span className="text-white font-mono">{userReport.known_account.last_login_ip}</span>
+                          </div>
+                        )}
+                        {userReport.known_account.last_login_user_agent && (
+                          <div>
+                            <span className="text-gray-400 block mb-0.5">Login device</span>
+                            <span className="text-gray-300 text-xs break-words">{userReport.known_account.last_login_user_agent}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-1 pt-3 border-t border-slate-700 text-gray-400 text-xs">
+                    No MECA account is associated with this email.
+                  </div>
+                )}
+
+                <div className="mt-1 pt-3 border-t border-slate-700 space-y-1">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-500">This ticket submission</p>
+                  {userReport.submission.created_at && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Submitted</span>
+                      <span className="text-white">{formatDate(userReport.submission.created_at)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">IP address</span>
+                    <span className="text-white font-mono">{userReport.submission.ip_address || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-0.5">Browser / device</span>
+                    <span className="text-gray-300 text-xs break-words">{userReport.submission.user_agent || '—'}</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}

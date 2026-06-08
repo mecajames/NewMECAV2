@@ -8,6 +8,7 @@ import { TicketStaffDepartment } from './entities/ticket-staff-department.entity
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
 import { Membership } from '../memberships/memberships.entity';
+import { LoginAuditLog } from '../user-activity/login-audit-log.entity';
 import { Judge } from '../judges/judge.entity';
 import { EventDirector } from '../event-directors/event-director.entity';
 import { RetailerListing } from '../business-listings/retailer-listing.entity';
@@ -542,6 +543,110 @@ export class TicketsService {
     };
   }
 
+  /**
+   * Unified "User Report" for the admin ticket detail. Works for any submitter:
+   * a logged-in member (reporter), an account-help linked member, an expired
+   * member who used the guest flow (linked_profile_hint), or a true guest with
+   * no account. Surfaces account/membership context, last login, and the
+   * IP/user-agent captured when the ticket was submitted (staff-only).
+   */
+  async getTicketUserReport(ticketId: string): Promise<any> {
+    const em = this.em.fork();
+    const ticket = await em.findOne(Ticket, { id: ticketId }, { populate: ['reporter'] });
+    if (!ticket) {
+      throw new NotFoundException(`Ticket with ID ${ticketId} not found`);
+    }
+
+    const reporter = ticket.reporter;
+    const name = reporter
+      ? (`${reporter.first_name || ''} ${reporter.last_name || ''}`.trim() || (reporter as any).full_name || reporter.email || null)
+      : (ticket.guestName || null);
+    const email = reporter ? (reporter.email || null) : (ticket.guestEmail || null);
+
+    // Resolve the best-known profile: linked reporter → profile matching the
+    // guest email → the staff-only linked_profile_hint (expired-member guests).
+    let profile = reporter ?? null;
+    if (!profile && ticket.guestEmail) {
+      profile = await em.findOne(Profile, { email: ticket.guestEmail });
+    }
+    if (!profile && ticket.linkedProfileHint) {
+      profile = await em.findOne(Profile, { id: ticket.linkedProfileHint });
+    }
+
+    let knownAccount: any = null;
+    if (profile) {
+      const memberships = await em.find(
+        Membership,
+        { user: profile.id },
+        { populate: ['membershipTypeConfig'], orderBy: { endDate: 'DESC' } },
+      );
+      const latest = memberships[0] || null;
+
+      // Most recent successful login (for IP/UA + timestamp).
+      let lastLogin = await em.findOne(
+        LoginAuditLog,
+        { user: profile.id, action: 'login' },
+        { orderBy: { created_at: 'DESC' } },
+      );
+      if (!lastLogin && profile.email) {
+        lastLogin = await em.findOne(
+          LoginAuditLog,
+          { email: profile.email, action: 'login' },
+          { orderBy: { created_at: 'DESC' } },
+        );
+      }
+
+      knownAccount = {
+        profile_id: profile.id,
+        full_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || (profile as any).full_name || null,
+        email: profile.email || null,
+        meca_id: profile.meca_id || null,
+        account_type: (profile as any).account_type || null,
+        membership_status: profile.membership_status || 'none',
+        membership_expiry: latest?.endDate
+          ? latest.endDate.toISOString()
+          : (profile.membership_expiry ? profile.membership_expiry.toISOString() : null),
+        member_since: (profile as any).member_since ? (profile as any).member_since.toISOString() : null,
+        login_banned: (profile as any).login_banned === true,
+        last_seen_at: (profile as any).last_seen_at ? (profile as any).last_seen_at.toISOString() : null,
+        last_login_at: lastLogin?.created_at ? lastLogin.created_at.toISOString() : null,
+        last_login_ip: lastLogin?.ip_address || null,
+        last_login_user_agent: lastLogin?.user_agent || null,
+        latest_membership: latest ? {
+          type_name: latest.membershipTypeConfig?.name || null,
+          category: (latest.membershipTypeConfig as any)?.category || null,
+          payment_status: latest.paymentStatus,
+          end_date: latest.endDate ? latest.endDate.toISOString() : null,
+        } : null,
+      };
+    }
+
+    // Classify the submitter for the panel header.
+    let submitterType: string;
+    if (reporter) {
+      submitterType = profile?.membership_status === 'active' ? 'member_active' : 'member';
+    } else if (knownAccount) {
+      submitterType = knownAccount.membership_status === 'expired' ? 'guest_expired_member'
+        : knownAccount.membership_status === 'active' ? 'guest_active_member'
+        : 'guest_known';
+    } else {
+      submitterType = 'guest_no_account';
+    }
+
+    return {
+      submitter_type: submitterType,
+      name,
+      email,
+      is_guest_ticket: ticket.isGuestTicket === true,
+      submission: {
+        ip_address: ticket.submitterIp || null,
+        user_agent: ticket.submitterUserAgent || null,
+        created_at: ticket.createdAt ? ticket.createdAt.toISOString() : null,
+      },
+      known_account: knownAccount,
+    };
+  }
+
   async findByTicketNumber(ticketNumber: string): Promise<Ticket> {
     const em = this.em.fork();
     const ticket = await em.findOne(Ticket, { ticketNumber }, {
@@ -553,7 +658,11 @@ export class TicketsService {
     return ticket;
   }
 
-  async create(data: CreateTicketDto, userMembershipStatus?: string): Promise<Ticket> {
+  async create(
+    data: CreateTicketDto,
+    userMembershipStatus?: string,
+    meta?: { ipAddress?: string; userAgent?: string },
+  ): Promise<Ticket> {
     const em = this.em.fork();
 
     // Generate ticket number (format: MECA-YYYYMMDD-XXXX)
@@ -578,6 +687,8 @@ export class TicketsService {
       priority: routingResult.priority || data.priority || TicketPriority.MEDIUM,
       status: TicketStatus.OPEN,
       reporter: Reference.createFromPK(Profile, data.reporter_id),
+      submitterIp: meta?.ipAddress,
+      submitterUserAgent: meta?.userAgent,
     };
 
     // Set department entity from routing if available
@@ -843,6 +954,17 @@ export class TicketsService {
     // reopen any ticket.)
     if (!isAdmin && requesterId && ticket.reporter?.id !== requesterId) {
       throw new ForbiddenException('Only the ticket reporter or an admin can reopen this ticket.');
+    }
+
+    // Members can only reopen within 7 days of the ticket being closed/resolved.
+    // Admins are not time-limited. Use closedAt, falling back to resolvedAt.
+    if (!isAdmin) {
+      const endedAt = ticket.closedAt ?? ticket.resolvedAt;
+      if (endedAt && Date.now() - endedAt.getTime() > 7 * 24 * 60 * 60 * 1000) {
+        throw new BadRequestException(
+          'This ticket was closed more than 7 days ago and can no longer be reopened. Please open a new ticket.',
+        );
+      }
     }
 
     // Reopened is its own status so admins can see recidivism at a glance

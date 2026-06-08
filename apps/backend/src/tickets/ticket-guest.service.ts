@@ -281,8 +281,15 @@ export class TicketGuestService {
   async createGuestTicket(
     token: string,
     data: CreateGuestTicketData,
+    meta?: { ipAddress?: string; userAgent?: string },
   ): Promise<GuestTicketResponse> {
     const em = this.em.fork();
+
+    // Name is required (email comes from the verified token). The frontend
+    // enforces this too, but guard server-side so no ticket lands nameless.
+    if (!data.guest_name || !data.guest_name.trim()) {
+      throw new BadRequestException('Your name is required.');
+    }
 
     // Verify token. Both create_ticket and account_help tokens land here.
     const guestToken = await em.findOne(TicketGuestToken, {
@@ -345,11 +352,13 @@ export class TicketGuestService {
       priority: data.priority || TicketPriority.MEDIUM,
       status: TicketStatus.OPEN,
       guestEmail: guestToken.email,
-      guestName: data.guest_name,
+      guestName: data.guest_name.trim(),
       accessToken,
       isGuestTicket: true,
       reporter,
       linkedProfileHint,
+      submitterIp: meta?.ipAddress,
+      submitterUserAgent: meta?.userAgent,
       department: routingResult.departmentId ? undefined : 'general_support',
     } as any);
 

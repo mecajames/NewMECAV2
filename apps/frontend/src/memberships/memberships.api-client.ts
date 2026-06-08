@@ -500,6 +500,31 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: create/repair the team for a specific membership (idempotent).
+   */
+  adminRepairTeam: async (membershipId: string): Promise<{
+    status: 'created' | 'already_exists' | 'enabled_and_created';
+    team_id: string;
+    team_name: string;
+    enabled_team_addon: boolean;
+  }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/repair-team`);
+    return response.data;
+  },
+
+  /**
+   * Admin: scan all active team-enabled memberships and create any missing teams.
+   */
+  adminReconcileTeams: async (): Promise<{
+    scanned: number;
+    repaired: number;
+    details: Array<{ membership_id: string; user_id?: string; team_id?: string; error?: string }>;
+  }> => {
+    const response = await axios.post('/api/memberships/admin/reconcile-teams');
+    return response.data;
+  },
+
+  /**
    * Update team name for a membership (subject to 30-day edit window)
    */
   updateTeamName: async (id: string, teamName: string, isAdmin?: boolean): Promise<Membership> => {

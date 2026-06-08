@@ -522,6 +522,15 @@ export class MembershipsService {
       (config.category === MembershipCategory.COMPETITOR && data.hasTeamAddon);
 
     if (shouldCreateTeam) {
+      // Prevention: persist hasTeamAddon on the membership row whenever it's a
+      // team-enabled competitor membership (e.g. config.includesTeam) so EVERY
+      // downstream check (My MECA eligibility, "w/Team" naming, renewals) sees
+      // it consistently — not just the ones that read config.includesTeam. This
+      // closes the gap where a team-enabled purchase left hasTeamAddon=false.
+      if (config.category === MembershipCategory.COMPETITOR && !membership.hasTeamAddon) {
+        membership.hasTeamAddon = true;
+        await em.persistAndFlush(membership);
+      }
       try {
         // createTeamForMembership will generate a default name if none is provided
         const team = await this.teamsService.createTeamForMembership(membership);
@@ -595,6 +604,103 @@ export class MembershipsService {
     if (membership.endDate >= now) return null;   // still active — not expired
     if (membership.endDate < cutoff) return null; // lapsed beyond the window
     return membership;
+  }
+
+  /**
+   * Admin repair: ensure this membership has a manageable team. Idempotent.
+   * If the membership type isn't team-enabled, enables the team add-on
+   * (competitor only) so the system recognises it everywhere going forward,
+   * then creates or links the Team (+ owner member) via the idempotent
+   * createTeamForMembership. The team belongs to the membership's OWN user, so
+   * this works correctly for master/secondary memberships too.
+   *
+   * Built for the launch-window case where a member bought "Competitor w/Team"
+   * but the team add-on flag never persisted (e.g. purchased before logging in),
+   * so no team was created and My MECA showed no team to manage.
+   */
+  async repairTeamForMembership(membershipId: string): Promise<{
+    status: 'created' | 'already_exists' | 'enabled_and_created';
+    team_id: string;
+    team_name: string;
+    enabled_team_addon: boolean;
+  }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, { populate: ['user', 'membershipTypeConfig'] });
+    if (!membership) {
+      throw new NotFoundException(`Membership ${membershipId} not found`);
+    }
+    if (!membership.user) {
+      throw new BadRequestException('This membership has no user to own a team.');
+    }
+    const config = membership.membershipTypeConfig;
+    const teamEligible =
+      config.category === MembershipCategory.RETAIL ||
+      config.category === MembershipCategory.MANUFACTURER ||
+      config.category === MembershipCategory.TEAM ||
+      config.includesTeam ||
+      membership.hasTeamAddon === true;
+
+    let enabledAddon = false;
+    if (!teamEligible) {
+      if (config.category !== MembershipCategory.COMPETITOR) {
+        throw new BadRequestException(`A "${config.name}" (${config.category}) membership cannot have a team.`);
+      }
+      // Admin override — the member paid for a team-enabled competitor membership
+      // but the add-on flag didn't stick. Enable it so the team is recognised by
+      // My MECA, eligibility checks, and future renewals.
+      membership.hasTeamAddon = true;
+      await em.persistAndFlush(membership);
+      enabledAddon = true;
+    }
+
+    const existing = await this.teamsService.getTeamByMembership(membership.id);
+    const team = await this.teamsService.createTeamForMembership(membership); // idempotent: returns/links/creates
+    const status = enabledAddon ? 'enabled_and_created' : existing ? 'already_exists' : 'created';
+    return { status, team_id: team.id, team_name: team.name, enabled_team_addon: enabledAddon };
+  }
+
+  /**
+   * Admin batch reconcile: find active, team-enabled memberships that have no
+   * Team row and create/link one for each. Catches members whose team silently
+   * failed to create during the launch window. Idempotent and safe to re-run.
+   */
+  async reconcileMissingTeams(): Promise<{
+    scanned: number;
+    repaired: number;
+    details: Array<{ membership_id: string; user_id?: string; team_id?: string; error?: string }>;
+  }> {
+    const em = this.em.fork();
+    const now = new Date();
+    const candidates = await em.find(Membership, {
+      paymentStatus: PaymentStatus.PAID,
+      $and: [
+        { startDate: { $lte: now } },
+        { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+        {
+          $or: [
+            { membershipTypeConfig: { category: { $in: [MembershipCategory.RETAIL, MembershipCategory.MANUFACTURER, MembershipCategory.TEAM] } } },
+            { membershipTypeConfig: { includesTeam: true } },
+            { hasTeamAddon: true },
+          ],
+        },
+      ],
+    }, { populate: ['user', 'membershipTypeConfig'] });
+
+    let repaired = 0;
+    const details: Array<{ membership_id: string; user_id?: string; team_id?: string; error?: string }> = [];
+    for (const m of candidates) {
+      if (!m.user) continue;
+      const existing = await this.teamsService.getTeamByMembership(m.id);
+      if (existing) continue;
+      try {
+        const team = await this.teamsService.createTeamForMembership(m);
+        repaired++;
+        details.push({ membership_id: m.id, user_id: m.user.id, team_id: team.id });
+      } catch (e: any) {
+        details.push({ membership_id: m.id, user_id: m.user.id, error: e?.message || 'unknown' });
+      }
+    }
+    return { scanned: candidates.length, repaired, details };
   }
 
   async renewMembership(userId: string, membershipTypeConfigId: string): Promise<Membership> {

@@ -184,6 +184,33 @@ export class MembershipsController {
     return { revoked };
   }
 
+  /**
+   * Admin: create/repair the team for a specific membership (idempotent).
+   * Used when a member bought a team-enabled membership but no team was created.
+   */
+  @Post(':id/admin/repair-team')
+  @HttpCode(HttpStatus.OK)
+  async adminRepairTeam(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.repairTeamForMembership(id);
+  }
+
+  /**
+   * Admin: scan all active team-enabled memberships and create any missing
+   * teams (idempotent batch repair).
+   */
+  @Post('admin/reconcile-teams')
+  @HttpCode(HttpStatus.OK)
+  async adminReconcileTeams(
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.reconcileMissingTeams();
+  }
+
   @Post('admin/meca-id/reassign')
   @HttpCode(HttpStatus.NO_CONTENT)
   async adminReassignMecaId(

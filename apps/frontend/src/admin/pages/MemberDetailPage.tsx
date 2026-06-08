@@ -4621,6 +4621,8 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [loading, setLoading] = useState(true);
   const [showMembershipWizard, setShowMembershipWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [repairingTeamId, setRepairingTeamId] = useState<string | null>(null);
+  const [reconcilingTeams, setReconcilingTeams] = useState(false);
   // Apply Manual Payment modal — opened from a pending membership row
   const [applyPaymentMembership, setApplyPaymentMembership] = useState<Membership | null>(null);
   const [applyPaymentMethod, setApplyPaymentMethod] = useState<'cash' | 'check'>('cash');
@@ -4846,6 +4848,41 @@ function MembershipsTab({ member }: { member: Profile }) {
       alert('Failed to delete membership');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleRepairTeam = async (membershipId: string) => {
+    if (!confirm('Create/repair the team for this membership? This will enable the team add-on if needed and create the team so the member can manage it in My MECA.')) {
+      return;
+    }
+    setRepairingTeamId(membershipId);
+    try {
+      const result = await membershipsApi.adminRepairTeam(membershipId);
+      const verb = result.status === 'already_exists' ? 'was already set up' : 'created/linked';
+      alert(`Team "${result.team_name}" ${verb}.${result.enabled_team_addon ? ' (Team add-on was enabled on this membership.)' : ''}`);
+      fetchMemberships();
+    } catch (error: any) {
+      console.error('Error repairing team:', error);
+      alert(error?.response?.data?.message || 'Failed to repair team for this membership');
+    } finally {
+      setRepairingTeamId(null);
+    }
+  };
+
+  const handleReconcileTeams = async () => {
+    if (!confirm('Scan ALL active team-enabled memberships and create any missing teams? This is safe to run and only fixes memberships that are missing their team.')) {
+      return;
+    }
+    setReconcilingTeams(true);
+    try {
+      const result = await membershipsApi.adminReconcileTeams();
+      alert(`Scanned ${result.scanned} team-enabled membership(s); repaired ${result.repaired} missing team(s).`);
+      fetchMemberships();
+    } catch (error: any) {
+      console.error('Error reconciling teams:', error);
+      alert(error?.response?.data?.message || 'Failed to reconcile teams');
+    } finally {
+      setReconcilingTeams(false);
     }
   };
 
@@ -5174,13 +5211,28 @@ function MembershipsTab({ member }: { member: Profile }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-white">Memberships & Subscriptions</h2>
         {canEdit && (
-          <button
-            onClick={() => setShowMembershipWizard(true)}
-            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2 self-start sm:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            Assign Membership
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={handleReconcileTeams}
+              disabled={reconcilingTeams}
+              className="px-3 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+              title="Scan all active team-enabled memberships and create any missing teams"
+            >
+              {reconcilingTeams ? (
+                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+              ) : (
+                <UsersIcon className="h-4 w-4" />
+              )}
+              Repair Teams
+            </button>
+            <button
+              onClick={() => setShowMembershipWizard(true)}
+              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Assign Membership
+            </button>
+          </div>
         )}
       </div>
 
@@ -5505,6 +5557,18 @@ function MembershipsTab({ member }: { member: Profile }) {
                         <UserPlus className="h-4 w-4" />
                       </button>
                     )}
+                    <button
+                      onClick={() => handleRepairTeam(membership.id)}
+                      disabled={repairingTeamId === membership.id}
+                      className="p-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors disabled:opacity-50"
+                      title="Create/repair team for this membership"
+                    >
+                      {repairingTeamId === membership.id ? (
+                        <div className="animate-spin h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full" />
+                      ) : (
+                        <UsersIcon className="h-4 w-4" />
+                      )}
+                    </button>
                     <button
                       onClick={() => handleOpenEditModal(membership)}
                       className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
