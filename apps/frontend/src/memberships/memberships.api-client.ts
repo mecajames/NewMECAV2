@@ -862,6 +862,39 @@ export const membershipsApi = {
     return response.data;
   },
 
+  /**
+   * Admin: "Record Payment & Reactivate". For a member who paid outside the new
+   * system (cash, check, or a Stripe payment whose webhook never landed) so the
+   * membership exists but isn't PAID and the account reads "No Membership".
+   * Marks the row PAID, links any Stripe ids (pulling real amount/period-end
+   * from Stripe), writes Order/Invoice + ledger, and re-syncs the profile to
+   * active. Works regardless of the current payment status.
+   */
+  adminRecordPayment: async (
+    membershipId: string,
+    data: {
+      paymentMethod: 'cash' | 'check' | 'stripe';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      stripePaymentIntentId?: string;
+      stripeSubscriptionId?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+  ): Promise<{
+    success: boolean;
+    membership: Membership;
+    orderId: string | null;
+    invoiceId: string | null;
+    message: string;
+  }> => {
+    const response = await axios.post(
+      `/api/memberships/${membershipId}/admin/record-payment`,
+      data,
+    );
+    return response.data;
+  },
+
   adminCancelImmediately: async (
     membershipId: string,
     reason: string,

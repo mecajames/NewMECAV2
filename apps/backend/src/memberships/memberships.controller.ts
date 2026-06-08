@@ -1100,6 +1100,77 @@ export class MembershipsController {
     );
   }
 
+  /**
+   * Admin: "Record Payment & Reactivate". Recovers a member whose payment
+   * landed outside the new system (cash, check, or a Stripe payment whose
+   * webhook never processed) so their membership exists but is not PAID and
+   * their account reads membership_status='none'. Supports cash/check OR
+   * entering the Stripe payment-intent (pi_) and/or subscription (sub_) that
+   * already succeeded; marks the row PAID, links the Stripe ids, and re-syncs
+   * the profile to active. Works even if the row is already PAID (pure re-sync).
+   */
+  @Post(':id/admin/record-payment')
+  @HttpCode(HttpStatus.OK)
+  async recordMembershipPayment(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Body() data: {
+      paymentMethod: 'cash' | 'check' | 'stripe';
+      checkNumber?: string;
+      cashReceiptNumber?: string;
+      stripePaymentIntentId?: string;
+      stripeSubscriptionId?: string;
+      amountOverride?: number;
+      notes?: string;
+    },
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (
+      !data.paymentMethod ||
+      !['cash', 'check', 'stripe'].includes(data.paymentMethod)
+    ) {
+      throw new BadRequestException('paymentMethod must be "cash", "check", or "stripe"');
+    }
+
+    this.logger.log(
+      `Admin ${profile?.email} recording ${data.paymentMethod} payment on membership ${membershipId}`,
+    );
+
+    const result = await this.membershipsService.recordMembershipPayment(
+      membershipId,
+      data,
+      profile?.id || 'unknown',
+    );
+
+    // Write the Stripe billing-ledger row from the real Stripe data. Done here
+    // (not in the service) to avoid a circular dependency between
+    // MembershipsService and PaymentFulfillmentService. Idempotent on invoice/PI.
+    const s = result.stripe;
+    if (s && (s.invoiceId || s.chargeId || s.paymentIntentId)) {
+      await this.paymentFulfillmentService
+        .recordSubscriptionPayment({
+          membershipId,
+          invoiceId: s.invoiceId,
+          paymentIntentId: s.paymentIntentId,
+          chargeId: s.chargeId,
+          customerId: s.customerId,
+          subscriptionId: s.subscriptionId,
+          amount: s.amount ?? 0,
+          currency: 'USD',
+          status: PaymentStatus.PAID,
+          billingReason: 'admin_record_payment',
+          productName: s.productName,
+          paidAt: s.paidAt,
+          source: 'admin_record_payment',
+        })
+        .catch((err) => {
+          this.logger.error(`recordSubscriptionPayment after record-payment failed (non-critical): ${err}`);
+        });
+    }
+
+    return result;
+  }
+
   @Post(':id/admin/cancel-immediately')
   @HttpCode(HttpStatus.OK)
   async cancelMembershipImmediately(
