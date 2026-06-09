@@ -99,6 +99,41 @@ export class CompetitionResultsService {
     return rows.length;
   }
 
+  /**
+   * Count competition-result rows currently stamped with a given MECA ID.
+   * Used by the admin MECA ID override/reassign flow to tell the admin how
+   * many results will move before they confirm.
+   */
+  async countResultsForMecaId(mecaId: string): Promise<number> {
+    const em = this.em.fork();
+    return em.count(CompetitionResult, { mecaId: String(mecaId) });
+  }
+
+  /**
+   * Reassign every competition result from one MECA ID to another. Used when a
+   * member's membership MECA ID is corrected/reverted (e.g. a renewal was given
+   * a fresh ID but should keep the member's original): the results earned under
+   * the id being freed must follow the member to the id they're keeping, so
+   * their competition history and standings stay consolidated under one ID.
+   *
+   * Returns the number of rows moved. Caller is responsible for confirming this
+   * is safe (i.e. `fromMecaId` belongs to the same member).
+   */
+  async reassignMecaId(fromMecaId: string, toMecaId: string): Promise<number> {
+    const from = String(fromMecaId);
+    const to = String(toMecaId);
+    if (!from || !to || from === to) return 0;
+    const em = this.em.fork();
+    const rows = await em.find(CompetitionResult, { mecaId: from });
+    if (rows.length === 0) return 0;
+    for (const row of rows) {
+      row.mecaId = to;
+    }
+    await em.flush();
+    this.logger.warn(`Reassigned ${rows.length} competition result row(s) from MECA ID ${from} → ${to}`);
+    return rows.length;
+  }
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,

@@ -358,6 +358,52 @@ export class SupabaseAdminService {
   }
 
   /**
+   * Generate a password-recovery action link WITHOUT sending an email.
+   * Supabase's own resetPasswordForEmail is throttled by the project email
+   * rate limit (and uses the built-in mailer); generateLink has no such limit,
+   * so we generate the link here and deliver it via our own (SendGrid) mailer.
+   *
+   * The returned link points at GoTrue's /auth/v1/verify?...type=recovery and,
+   * when clicked, redirects to `redirectTo` (our /reset-password) with the
+   * recovery session in the URL hash (implicit flow). `redirectTo` must still
+   * be in the Supabase Dashboard Redirect URLs allowlist.
+   *
+   * `notFound` is returned (instead of an error) when the email has no auth
+   * user, so callers can respond generically and avoid account enumeration.
+   */
+  async generatePasswordRecoveryLink(
+    email: string,
+    redirectTo: string,
+  ): Promise<{ success: boolean; link?: string; error?: string; notFound?: boolean }> {
+    try {
+      const { data, error } = await this.supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+        options: { redirectTo },
+      });
+
+      if (error) {
+        const notFound = /not\s*found|no\s*user|user.*does.*not.*exist/i.test(error.message || '');
+        if (!notFound) {
+          this.logger.error(`Failed to generate recovery link: ${error.message}`);
+        }
+        return { success: false, error: error.message, notFound };
+      }
+
+      return {
+        success: true,
+        link: normalizeAuthActionLink(data.properties?.action_link),
+      };
+    } catch (error) {
+      this.logger.error(`Error generating recovery link: ${error}`);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
    * Generates an impersonation link for admin to sign in as another user.
    * This creates a magic link that allows the admin to view the app as the target user.
    */

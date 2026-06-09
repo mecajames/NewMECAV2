@@ -5008,6 +5008,37 @@ function MembershipsTab({ member }: { member: Profile }) {
         overridePassword.trim(),
         overrideReason.trim()
       );
+
+      // Same-user reassignment (e.g. reverting a renewal to the member's
+      // original MECA ID): the backend asks for explicit confirmation and
+      // reports how many competition results will move with the change.
+      if (result.requiresConfirmation && result.confirmation) {
+        const c = result.confirmation;
+        const endStr = c.sourceEndDate ? new Date(c.sourceEndDate).toLocaleDateString() : 'unknown';
+        const confirmMsg =
+          `MECA ID ${newMecaId} is assigned to this same member, on ${c.sourceExpired ? `an EXPIRED membership (ended ${endStr})` : 'another of their memberships'}.\n\n` +
+          `Reassign ${newMecaId} to this membership?\n\n` +
+          (c.resultsToMove > 0
+            ? `This will also MOVE ${c.resultsToMove} competition result(s) from the freed ID ${c.freeingMecaId} onto ${newMecaId}, and free up ${c.freeingMecaId}.`
+            : `No competition results need to move. ID ${c.freeingMecaId} will be freed up.`);
+        if (!window.confirm(confirmMsg)) {
+          setOverrideLoading(false);
+          return;
+        }
+        const confirmed = await membershipsApi.superAdminOverrideMecaId(
+          overrideMembership.id,
+          newMecaId,
+          overridePassword.trim(),
+          overrideReason.trim(),
+          true,
+        );
+        alert(confirmed.message || 'MECA ID reassigned successfully!');
+        setShowMecaIdOverrideModal(false);
+        setOverrideMembership(null);
+        fetchMemberships();
+        return;
+      }
+
       alert(result.message || 'MECA ID updated successfully!');
       setShowMecaIdOverrideModal(false);
       setOverrideMembership(null);
