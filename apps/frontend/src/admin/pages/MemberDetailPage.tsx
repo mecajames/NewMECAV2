@@ -4627,6 +4627,7 @@ function MembershipsTab({ member }: { member: Profile }) {
   // row. Covers cash/check AND recording a Stripe payment (pi_/sub_) whose
   // webhook never landed, then re-syncs the profile to active.
   const [applyPaymentMembership, setApplyPaymentMembership] = useState<Membership | null>(null);
+  const [applyPaymentMode, setApplyPaymentMode] = useState<'reactivate' | 'renew' | 'payment_only'>('reactivate');
   const [applyPaymentMethod, setApplyPaymentMethod] = useState<'cash' | 'check' | 'stripe'>('cash');
   const [applyPaymentReference, setApplyPaymentReference] = useState('');
   const [applyPaymentAmount, setApplyPaymentAmount] = useState<string>('');
@@ -5577,6 +5578,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                       <button
                         onClick={() => {
                           setApplyPaymentMembership(membership);
+                          setApplyPaymentMode(isExpired(membership.endDate || '') ? 'renew' : 'reactivate');
                           setApplyPaymentMethod('cash');
                           setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
                           setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
@@ -6326,13 +6328,34 @@ function MembershipsTab({ member }: { member: Profile }) {
       {applyPaymentMembership && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
-            <h3 className="text-white font-bold text-lg mb-1">Record Payment &amp; Reactivate</h3>
+            <h3 className="text-white font-bold text-lg mb-1">Record Payment</h3>
             <p className="text-slate-400 text-sm mb-4">
-              Mark <span className="text-white">{applyPaymentMembership.membershipTypeConfig?.name || 'this membership'}</span> as
-              paid and reactivate the account. Use this when a payment landed outside the new system — cash/check, or a Stripe
-              charge whose webhook never processed. An order &amp; invoice are generated and the membership status flips to Active.
+              Record a payment on <span className="text-white">{applyPaymentMembership.membershipTypeConfig?.name || 'this membership'}</span> via
+              cash, check, or a Stripe charge whose webhook never processed. An order &amp; invoice are generated. Choose what the payment does below.
             </p>
             <div className="space-y-4">
+              <div>
+                <label className="text-slate-300 text-sm font-medium block mb-1">What is this payment for? *</label>
+                <div className="space-y-1.5">
+                  {([
+                    { v: 'reactivate', t: 'Reactivate', d: 'Payment was made but not recorded — mark paid & make active again (keeps the existing term, or extends it if lapsed). Keeps their MECA ID and reinstates points for events during the lapse.' },
+                    { v: 'renew', t: 'Renew', d: 'A renewal payment — mark paid & advance the end date a full new term. Keeps their MECA ID and reinstates any points earned during a lapse.' },
+                    { v: 'payment_only', t: 'Payment only (past-due balance)', d: 'Record the payment without changing the membership end date, MECA ID, or points.' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setApplyPaymentMode(opt.v)}
+                      className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${applyPaymentMode === opt.v
+                        ? 'bg-emerald-600/20 border-emerald-500 text-white'
+                        : 'bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-700'}`}
+                    >
+                      <span className="font-medium">{opt.t}</span>
+                      <span className="block text-xs text-slate-400 mt-0.5">{opt.d}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
                 <label className="text-slate-300 text-sm font-medium block mb-1">Payment method *</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -6362,7 +6385,8 @@ function MembershipsTab({ member }: { member: Profile }) {
                   <div className="rounded-lg bg-indigo-950/40 border border-indigo-800/50 p-3 text-xs text-indigo-200">
                     Enter the Stripe payment that already succeeded (from the Stripe dashboard). We pull the real amount —
                     and, for a subscription, the period end — directly from Stripe and link it to this membership. Provide a
-                    payment-intent, a subscription, or both.
+                    payment-intent, a subscription, or both. <span className="text-indigo-100 font-medium">Each id is verified
+                    against Stripe in real time and must belong to this member</span> before the payment is recorded.
                   </div>
                   <div>
                     <label className="text-slate-300 text-sm font-medium block mb-1">Stripe payment intent (pi_…)</label>
@@ -6452,6 +6476,7 @@ function MembershipsTab({ member }: { member: Profile }) {
                   setApplyPaymentError(null);
                   try {
                     const result = await membershipsApi.adminRecordPayment(applyPaymentMembership.id, {
+                      mode: applyPaymentMode,
                       paymentMethod: applyPaymentMethod,
                       checkNumber: applyPaymentMethod === 'check' ? applyPaymentReference.trim() : undefined,
                       cashReceiptNumber: applyPaymentMethod === 'cash' ? applyPaymentReference.trim() || undefined : undefined,

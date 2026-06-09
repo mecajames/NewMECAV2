@@ -134,6 +134,54 @@ export class CompetitionResultsService {
     return rows.length;
   }
 
+  /**
+   * Reinstate every competition result a member earned while their membership
+   * was lapsed, when an admin reactivates/renews them. Covers BOTH hold
+   * mechanisms:
+   *   - rows held in-place (`points_held_for_renewal=true`, meca_id kept/masked)
+   *   - rows stamped `999999` with the real id stashed on `original_meca_id`
+   *     (`pending_back_fill=true`)
+   * Un-holds/restores them, then recalculates points + placements for the
+   * affected events so the reinstated rows get their REAL points back (not left
+   * at 0). Returns the number of results reinstated.
+   */
+  async reinstatePointsForMecaId(mecaId: string | number): Promise<number> {
+    const id = String(mecaId ?? '').trim();
+    if (!id) return 0;
+    const em = this.em.fork();
+
+    const held = await em.find(CompetitionResult, { mecaId: id, pointsHeldForRenewal: true });
+    const stamped = await em.find(CompetitionResult, { originalMecaId: id, pendingBackFill: true });
+
+    const affected = [...held, ...stamped];
+    if (affected.length === 0) return 0;
+
+    for (const r of held) {
+      r.pointsHeldForRenewal = false;
+      r.releasedAt = new Date();
+      r.notes = (r.notes || '').replace(/\s*\|\s*Held:.*$/, '') + ' | Released: membership reactivated';
+    }
+    for (const r of stamped) {
+      r.mecaId = id;
+      r.originalMecaId = undefined;
+      r.pendingBackFill = false;
+      r.pointsHeldForRenewal = false;
+      r.releasedAt = new Date();
+    }
+    await em.flush();
+
+    // Recalculate points/placements for the affected events so the reinstated
+    // rows are scored correctly (and so anyone they now share a class with is
+    // re-placed against them).
+    await this.recalcEventsForResults(affected.map((r) => r.id));
+
+    this.logger.warn(
+      `Reinstated ${affected.length} competition result(s) for MECA ID ${id} ` +
+        `(held: ${held.length}, back-filled: ${stamped.length})`,
+    );
+    return affected.length;
+  }
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,

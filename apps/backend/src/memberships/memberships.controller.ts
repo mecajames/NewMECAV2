@@ -1141,6 +1141,7 @@ export class MembershipsController {
     @Param('id') membershipId: string,
     @Headers('authorization') authHeader: string,
     @Body() data: {
+      mode?: 'reactivate' | 'renew' | 'payment_only';
       paymentMethod: 'cash' | 'check' | 'stripe';
       checkNumber?: string;
       cashReceiptNumber?: string;
@@ -1156,6 +1157,9 @@ export class MembershipsController {
       !['cash', 'check', 'stripe'].includes(data.paymentMethod)
     ) {
       throw new BadRequestException('paymentMethod must be "cash", "check", or "stripe"');
+    }
+    if (data.mode && !['reactivate', 'renew', 'payment_only'].includes(data.mode)) {
+      throw new BadRequestException('mode must be "reactivate", "renew", or "payment_only"');
     }
 
     this.logger.log(

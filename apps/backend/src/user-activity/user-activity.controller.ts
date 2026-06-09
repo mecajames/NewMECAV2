@@ -10,7 +10,10 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Public } from '../auth/public.decorator';
+import { Profile } from '../profiles/profiles.entity';
+import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
 import { UserActivityService } from './user-activity.service';
 import { AdminAuditService } from './admin-audit.service';
 
@@ -19,6 +22,7 @@ export class UserActivityController {
   constructor(
     private readonly userActivityService: UserActivityService,
     private readonly adminAuditService: AdminAuditService,
+    private readonly em: EntityManager,
   ) {}
 
   /** Extract the real client IP (first entry in x-forwarded-for chain) */
@@ -89,7 +93,7 @@ export class UserActivityController {
    */
   @Get('online-count')
   async getOnlineCount(@Req() req: Request): Promise<{ count: number }> {
-    this.requireAdmin(req);
+    await this.requireAdmin(req);
     const count = await this.userActivityService.getOnlineCount();
     return { count };
   }
@@ -99,7 +103,7 @@ export class UserActivityController {
    */
   @Get('online-users')
   async getOnlineUsers(@Req() req: Request): Promise<{ userIds: string[] }> {
-    this.requireAdmin(req);
+    await this.requireAdmin(req);
     const userIds = await this.userActivityService.getOnlineUserIds();
     return { userIds };
   }
@@ -117,7 +121,7 @@ export class UserActivityController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    this.requireAdmin(req);
+    await this.requireAdmin(req);
     return this.userActivityService.getAuditLog({
       action,
       search,
@@ -140,7 +144,7 @@ export class UserActivityController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    this.requireAdmin(req);
+    await this.requireAdmin(req);
     return this.userActivityService.getSessionsView({
       search,
       startDate,
@@ -155,12 +159,14 @@ export class UserActivityController {
    */
   @Get('session-stats')
   async getSessionStats(@Req() req: Request) {
-    this.requireAdmin(req);
+    await this.requireAdmin(req);
     return this.userActivityService.getSessionStats();
   }
 
   /**
-   * Get paginated admin audit log. Admin only.
+   * Get paginated admin audit log. SUPER ADMIN only (James / Mick) — this is the
+   * full record of every admin action on members/memberships/billing, so it's
+   * locked tighter than the rest of the admin dashboards.
    */
   @Get('admin-audit-log')
   async getAdminAuditLog(
@@ -174,7 +180,7 @@ export class UserActivityController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    this.requireAdmin(req);
+    await this.requireSuperAdmin(req);
     return this.adminAuditService.getAuditLog({
       action,
       resourceType,
@@ -188,13 +194,31 @@ export class UserActivityController {
   }
 
   /**
-   * Simple admin check using x-user-role header or database lookup.
-   * Relies on existing auth patterns in the project.
+   * Resolve the acting profile from the TOKEN-validated user that GlobalAuthGuard
+   * attached to the request (req.user). We deliberately do NOT trust the
+   * client-supplied `x-user-id` header for authorization — it's spoofable.
    */
-  private requireAdmin(req: Request): void {
-    const userId = req.headers['x-user-id'] as string;
+  private async loadActor(req: Request): Promise<Profile | null> {
+    const userId = (req as any).user?.id as string | undefined;
     if (!userId) {
       throw new ForbiddenException('Authentication required');
+    }
+    return this.em.fork().findOne(Profile, { id: userId });
+  }
+
+  /** Require any admin/staff (real role check, not just header presence). */
+  private async requireAdmin(req: Request): Promise<void> {
+    const profile = await this.loadActor(req);
+    if (!isAdminUser(profile)) {
+      throw new ForbiddenException('Admin access required');
+    }
+  }
+
+  /** Require super admin (James 202401 / Mick 700947). */
+  private async requireSuperAdmin(req: Request): Promise<void> {
+    const profile = await this.loadActor(req);
+    if (!isSuperAdmin(profile)) {
+      throw new ForbiddenException('Super admin access required');
     }
   }
 }
