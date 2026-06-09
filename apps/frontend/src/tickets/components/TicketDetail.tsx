@@ -270,6 +270,9 @@ export function TicketDetail({
   const [selectedStaff, setSelectedStaff] = useState<TicketStaffResponse | null>(null);
   const staffSearchRef = useRef<HTMLDivElement>(null);
 
+  // "Assign to me" quick-action on the Details sidebar (staff only).
+  const [assigningSelf, setAssigningSelf] = useState(false);
+
   const fetchTicket = async () => {
     if (!ticketId) return;
     setLoading(true);
@@ -450,6 +453,24 @@ export function TicketDetail({
   const clearSelectedStaff = () => {
     setSelectedStaff(null);
     setAssigneeId('');
+  };
+
+  // Grab the ticket for yourself straight from the Details sidebar, without
+  // opening the reply/assign modal. currentUserId is the viewer's profile id
+  // (same id the assign endpoint expects for assigned_to_id).
+  const handleAssignToMe = async () => {
+    if (!ticketId || !currentUserId || assigningSelf) return;
+    setAssigningSelf(true);
+    try {
+      const updated = await ticketsApi.assign(ticketId, currentUserId);
+      setTicket(updated);
+    } catch (err: any) {
+      console.error('Failed to assign ticket to self:', err);
+      const msg = err?.response?.data?.message || err?.message;
+      alert(`Failed to assign this ticket to you${msg ? `: ${msg}` : '.'}`);
+    } finally {
+      setAssigningSelf(false);
+    }
   };
 
   const handleBack = () => {
@@ -1668,10 +1689,32 @@ export function TicketDetail({
                   <UserPlus className="w-4 h-4" />
                   Assigned To
                 </span>
-                <span className={ticket.assigned_to ? 'text-white' : 'text-gray-500 italic'}>
-                  {ticket.assigned_to
-                    ? `${ticket.assigned_to.first_name || ''} ${ticket.assigned_to.last_name || ''}`.trim() || ticket.assigned_to.email
-                    : 'Unassigned'}
+                <span className="flex items-center gap-2 text-right">
+                  <span className={ticket.assigned_to ? 'text-white' : 'text-gray-500 italic'}>
+                    {ticket.assigned_to
+                      ? `${ticket.assigned_to.first_name || ''} ${ticket.assigned_to.last_name || ''}`.trim() || ticket.assigned_to.email
+                      : 'Unassigned'}
+                    {ticket.assigned_to && ticket.assigned_to.id === currentUserId && (
+                      <span className="ml-1 text-xs text-gray-400">(you)</span>
+                    )}
+                  </span>
+                  {/* Staff quick-action: claim the ticket without opening the
+                      assign modal. Hidden once it's already assigned to you. */}
+                  {isStaff && ticket.assigned_to?.id !== currentUserId && (
+                    <button
+                      type="button"
+                      onClick={handleAssignToMe}
+                      disabled={assigningSelf}
+                      className="text-xs px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/40 hover:bg-orange-500/20 disabled:opacity-50 flex items-center gap-1 flex-shrink-0"
+                    >
+                      {assigningSelf ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-3 h-3" />
+                      )}
+                      Assign to me
+                    </button>
+                  )}
                 </span>
               </div>
               <div className="flex items-center justify-between">
