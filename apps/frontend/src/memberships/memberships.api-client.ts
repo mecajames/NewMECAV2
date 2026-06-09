@@ -765,11 +765,27 @@ export const membershipsApi = {
     newMecaId: number,
     superAdminPassword: string,
     reason: string,
-  ): Promise<{ success: boolean; membership: Membership; message: string }> => {
+    confirmReassign: boolean = false,
+  ): Promise<{
+    success: boolean;
+    requiresConfirmation?: boolean;
+    confirmation?: {
+      conflictType: 'same_user';
+      sourceMembershipId: string;
+      sourceExpired: boolean;
+      sourceEndDate: string | null;
+      holderEmail: string | null;
+      resultsToMove: number;
+      freeingMecaId: string | null;
+    };
+    membership?: Membership;
+    message: string;
+  }> => {
     const response = await axios.put(`/api/memberships/${membershipId}/admin/override-meca-id`, {
       newMecaId,
       superAdminPassword,
       reason,
+      confirmReassign,
     });
     return response.data;
   },

@@ -682,6 +682,47 @@ export class EmailService {
   }
 
   /**
+   * Self-service password reset: deliver the Supabase recovery link via our own
+   * mailer (bypasses Supabase's built-in email rate limit). The link lands on
+   * /reset-password where the user sets a new password.
+   */
+  async sendPasswordResetLinkEmail(dto: {
+    to: string;
+    resetUrl: string;
+    firstName?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const greeting = dto.firstName ? `Hi ${dto.firstName},` : 'Hi,';
+    const html = `
+      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937;">
+        <div style="background:#0f172a; padding:20px 24px; border-radius:8px 8px 0 0;">
+          <h1 style="color:#f97316; margin:0; font-size:20px;">MECA</h1>
+        </div>
+        <div style="border:1px solid #e5e7eb; border-top:none; padding:24px; border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 12px;">${greeting}</p>
+          <p style="margin:0 0 16px;">We received a request to reset the password for your MECA account. Click the button below to choose a new password. This link will expire in 1 hour.</p>
+          <p style="text-align:center; margin:24px 0;">
+            <a href="${dto.resetUrl}" style="background:#f97316; color:#ffffff; text-decoration:none; padding:12px 28px; border-radius:8px; font-weight:bold; display:inline-block;">Reset Password</a>
+          </p>
+          <p style="margin:0 0 8px; font-size:13px; color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
+          <p style="margin:0 0 16px; font-size:12px; word-break:break-all;"><a href="${dto.resetUrl}" style="color:#2563eb;">${dto.resetUrl}</a></p>
+          <p style="margin:0; font-size:13px; color:#6b7280;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
+        </div>
+      </div>`;
+    const text =
+      `${greeting}\n\nWe received a request to reset the password for your MECA account. ` +
+      `Open the link below to choose a new password (expires in 1 hour):\n\n${dto.resetUrl}\n\n` +
+      `If you didn't request this, you can safely ignore this email.`;
+
+    return this.sendEmail({
+      to: dto.to,
+      subject: 'Reset your MECA password',
+      html,
+      text,
+      from: this.fromAddresses.noreply,
+    });
+  }
+
+  /**
    * Send reference verification email
    */
   async sendReferenceVerificationEmail(dto: SendReferenceVerificationEmailDto): Promise<{ success: boolean; error?: string }> {

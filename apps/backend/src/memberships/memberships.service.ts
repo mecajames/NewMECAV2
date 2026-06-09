@@ -1656,7 +1656,22 @@ export class MembershipsService {
     newMecaId: number,
     adminUserId: string,
     reason: string,
-  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+    confirmReassign: boolean = false,
+  ): Promise<{
+    success: boolean;
+    requiresConfirmation?: boolean;
+    confirmation?: {
+      conflictType: 'same_user';
+      sourceMembershipId: string;
+      sourceExpired: boolean;
+      sourceEndDate: string | null;
+      holderEmail: string | null;
+      resultsToMove: number;
+      freeingMecaId: string | null;
+    };
+    membership?: Membership;
+    message: string;
+  }> {
     const em = this.em.fork();
 
     // Find the membership
@@ -1669,21 +1684,81 @@ export class MembershipsService {
     }
 
     const oldMecaId = membership.mecaId;
+    const userId = membership.user?.id;
 
-    // Check if the new MECA ID is already in use by another membership
-    const existingMembership = await em.findOne(Membership, {
-      mecaId: newMecaId,
-      id: { $ne: membershipId },
-    });
-
-    if (existingMembership) {
-      throw new BadRequestException(`MECA ID ${newMecaId} is already assigned to another membership (${existingMembership.id})`);
+    // No-op: already on this ID.
+    if (oldMecaId != null && Number(oldMecaId) === Number(newMecaId)) {
+      return { success: true, membership, message: `This membership already has MECA ID ${newMecaId}.` };
     }
 
-    // Update the MECA ID
-    membership.mecaId = newMecaId;
+    // --- Conflict detection ---------------------------------------------------
+    // A MECA ID can belong to (a) another PROFILE (profiles.meca_id is UNIQUE),
+    // or (b) one or more other MEMBERSHIPS. We treat "another USER holds it" as
+    // a hard block, but "the SAME user holds it on another (usually expired)
+    // membership" as a reassignment/revert that the admin can confirm — that's
+    // the common case of restoring a member's original ID after a renewal
+    // mistakenly minted a new one.
 
-    // Also update the profile's meca_id if this is the user's primary membership
+    // (a) PROFILE held by a DIFFERENT user → hard block.
+    if (userId) {
+      const conflictingProfile = await em.findOne(Profile, {
+        meca_id: String(newMecaId),
+        id: { $ne: userId },
+      });
+      if (conflictingProfile) {
+        const who = conflictingProfile.email
+          || [conflictingProfile.first_name, conflictingProfile.last_name].filter(Boolean).join(' ').trim()
+          || conflictingProfile.id;
+        throw new BadRequestException(
+          `MECA ID ${newMecaId} is assigned to another user (${who}) and cannot be used.`,
+        );
+      }
+    }
+
+    // (b) MEMBERSHIP(s) holding the ID.
+    const otherMemberships = await em.find(
+      Membership,
+      { mecaId: newMecaId, id: { $ne: membershipId } },
+      { populate: ['user'] },
+    );
+    const differentUserMembership = otherMemberships.find(m => m.user?.id && m.user.id !== userId);
+    if (differentUserMembership) {
+      const who = differentUserMembership.user?.email || differentUserMembership.user?.id || differentUserMembership.id;
+      throw new BadRequestException(
+        `MECA ID ${newMecaId} is assigned to another user (${who}) and cannot be used.`,
+      );
+    }
+    const sameUserSource = otherMemberships.find(m => m.user?.id && m.user.id === userId);
+
+    // Same-user reassignment → require explicit confirmation, and report how
+    // many competition results will move from the id being freed to the id the
+    // member is keeping.
+    if (sameUserSource && !confirmReassign) {
+      const sourceExpired =
+        (!!sameUserSource.endDate && sameUserSource.endDate < new Date()) ||
+        sameUserSource.paymentStatus !== PaymentStatus.PAID;
+      const resultsToMove = oldMecaId != null
+        ? await this.competitionResultsService.countResultsForMecaId(String(oldMecaId))
+        : 0;
+      return {
+        success: false,
+        requiresConfirmation: true,
+        confirmation: {
+          conflictType: 'same_user',
+          sourceMembershipId: sameUserSource.id,
+          sourceExpired,
+          sourceEndDate: sameUserSource.endDate ? sameUserSource.endDate.toISOString() : null,
+          holderEmail: membership.user?.email ?? null,
+          resultsToMove,
+          freeingMecaId: oldMecaId != null ? String(oldMecaId) : null,
+        },
+        message:
+          `MECA ID ${newMecaId} belongs to this member's ${sourceExpired ? 'expired' : 'other'} membership.`,
+      };
+    }
+
+    // --- Apply ----------------------------------------------------------------
+    membership.mecaId = newMecaId;
     if (membership.user) {
       membership.user.meca_id = String(newMecaId);
     }
@@ -1696,21 +1771,53 @@ export class MembershipsService {
       historyRecord.membership = membership;
       historyRecord.profile = membership.user;
       historyRecord.assignedAt = new Date();
-      historyRecord.notes = `SUPER ADMIN OVERRIDE by ${adminUserId}: Changed from ${oldMecaId || 'none'} to ${newMecaId}. Reason: ${reason}`;
+      historyRecord.notes = `SUPER ADMIN OVERRIDE by ${adminUserId}: Changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
+        (sameUserSource ? ` Reverted to member's own ID (source membership ${sameUserSource.id}).` : '') +
+        ` Reason: ${reason}`;
       em.persist(historyRecord);
     } catch (historyError) {
       this.logger.error('Failed to create MECA ID history record:', historyError);
       // Don't fail the override if history creation fails
     }
 
-    await em.flush();
+    try {
+      await em.flush();
+    } catch (err: any) {
+      // Defensive net in case a concurrent write or an unmapped uniqueness rule
+      // slips past the pre-checks above. Convert the Postgres unique violation
+      // into a clean 400 rather than a generic 500.
+      const code = err?.code || err?.cause?.code;
+      if (code === '23505') {
+        throw new BadRequestException(
+          `MECA ID ${newMecaId} is already in use (unique constraint). It must be cleared from its current holder before it can be reassigned.`,
+        );
+      }
+      throw err;
+    }
 
-    this.logger.warn(`MECA ID OVERRIDE COMPLETE: Membership ${membershipId} changed from ${oldMecaId} to ${newMecaId}`);
+    // On a same-user reassignment, move the competition results that were
+    // earned under the id we just freed (oldMecaId) onto the id the member is
+    // keeping (newMecaId), so their history/standings stay under one ID.
+    let movedResults = 0;
+    if (sameUserSource && oldMecaId != null) {
+      try {
+        movedResults = await this.competitionResultsService.reassignMecaId(String(oldMecaId), String(newMecaId));
+      } catch (err) {
+        this.logger.error('Result reassignment after MECA ID override failed (non-fatal):', err);
+      }
+    }
+
+    this.logger.warn(
+      `MECA ID OVERRIDE COMPLETE: Membership ${membershipId} changed from ${oldMecaId} to ${newMecaId}` +
+        (movedResults ? ` (moved ${movedResults} result row(s) ${oldMecaId} → ${newMecaId})` : ''),
+    );
 
     return {
       success: true,
       membership,
-      message: `MECA ID successfully changed from ${oldMecaId || 'none'} to ${newMecaId}`,
+      message:
+        `MECA ID successfully changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
+        (movedResults ? ` Moved ${movedResults} competition result(s) from ${oldMecaId} to ${newMecaId}.` : ''),
     };
   }
 

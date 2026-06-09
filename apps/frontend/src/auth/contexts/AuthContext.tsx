@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session, Provider } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/lib/supabase';
-import { setAxiosUserId } from '@/lib/axios';
+import axios, { setAxiosUserId } from '@/lib/axios';
 import { profilesApi } from '@/profiles';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
 
@@ -261,11 +261,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-
-    return { error };
+    // Route through our own backend (which generates the recovery link via the
+    // Supabase admin API and emails it through SendGrid) instead of
+    // supabase.auth.resetPasswordForEmail — the latter uses Supabase's built-in
+    // mailer, which is rate-limited to a few emails/hour project-wide and was
+    // silently dropping reset emails in production.
+    try {
+      await axios.post('/api/auth/forgot-password', {
+        email,
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      // The endpoint always responds generically (no account enumeration), so
+      // there's nothing to surface as an error to the user here.
+      return { error: null };
+    } catch (err: any) {
+      return { error: { message: err?.response?.data?.message || err?.message || 'Failed to send reset email' } };
+    }
   };
 
   const clearForcePasswordChange = async () => {

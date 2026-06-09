@@ -24,6 +24,7 @@ import { AdminCreateMembershipDto, AdminCreateMembershipSchema, UserRole, Member
 import { PaymentFulfillmentService } from '../payments/payment-fulfillment.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
+import { SiteSettings } from '../site-settings/site-settings.entity';
 import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
 import { ZodError } from 'zod';
 import { MembershipsService, AdminAssignMembershipDto, CreateMembershipDto, AdminCreateMembershipResult } from './memberships.service';
@@ -940,8 +941,23 @@ export class MembershipsController {
     return this.membershipSyncService.triggerDailySync();
   }
 
-  // Super Admin password for protected MECA ID operations
-  private readonly SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || '';
+  // Super Admin password for protected MECA ID operations.
+  // Resolves from the `site_settings` table (key 'super_admin_password') first
+  // so it can be set/rotated via SQL or an admin tool WITHOUT a redeploy or
+  // server-env change, then falls back to the SUPER_ADMIN_PASSWORD env var.
+  // Returns '' if neither is configured — in which case the override is locked
+  // (the comparison below rejects everything, including an empty input).
+  private async resolveSuperAdminPassword(): Promise<string> {
+    try {
+      const em = this.em.fork();
+      const row = await em.findOne(SiteSettings, { setting_key: 'super_admin_password' });
+      const dbVal = row?.setting_value?.trim();
+      if (dbVal) return dbVal;
+    } catch (err) {
+      this.logger.warn(`Could not read super_admin_password from site_settings: ${err}`);
+    }
+    return process.env.SUPER_ADMIN_PASSWORD || '';
+  }
 
   /**
    * Super Admin: Override MECA ID on a membership
@@ -959,13 +975,21 @@ export class MembershipsController {
       newMecaId: number;
       superAdminPassword: string;
       reason: string;
+      confirmReassign?: boolean;
     },
-  ): Promise<{ success: boolean; membership: Membership; message: string }> {
+  ): Promise<{
+    success: boolean;
+    requiresConfirmation?: boolean;
+    confirmation?: unknown;
+    membership?: Membership;
+    message: string;
+  }> {
     // Require admin role
     const { profile } = await this.requireAdmin(authHeader);
 
     // Validate super admin password
-    if (data.superAdminPassword !== this.SUPER_ADMIN_PASSWORD) {
+    const superAdminPassword = await this.resolveSuperAdminPassword();
+    if (!superAdminPassword || data.superAdminPassword !== superAdminPassword) {
       throw new ForbiddenException('Invalid super admin password');
     }
 
@@ -977,13 +1001,14 @@ export class MembershipsController {
       throw new BadRequestException('A reason (at least 10 characters) is required for MECA ID override');
     }
 
-    this.logger.warn(`SUPER ADMIN OVERRIDE: Admin ${profile?.email} overriding MECA ID for membership ${membershipId} to ${data.newMecaId}. Reason: ${data.reason}`);
+    this.logger.warn(`SUPER ADMIN OVERRIDE: Admin ${profile?.email} overriding MECA ID for membership ${membershipId} to ${data.newMecaId}. Reason: ${data.reason}${data.confirmReassign ? ' [confirmed reassign]' : ''}`);
 
     const result = await this.membershipsService.superAdminOverrideMecaId(
       membershipId,
       data.newMecaId,
       profile?.id || 'unknown',
       data.reason,
+      data.confirmReassign === true,
     );
 
     return result;
@@ -1010,7 +1035,8 @@ export class MembershipsController {
     const { profile } = await this.requireAdmin(authHeader);
 
     // Validate super admin password
-    if (data.superAdminPassword !== this.SUPER_ADMIN_PASSWORD) {
+    const superAdminPassword = await this.resolveSuperAdminPassword();
+    if (!superAdminPassword || data.superAdminPassword !== superAdminPassword) {
       throw new ForbiddenException('Invalid super admin password');
     }
 
