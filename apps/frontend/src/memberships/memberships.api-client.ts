@@ -889,6 +889,7 @@ export const membershipsApi = {
   adminRecordPayment: async (
     membershipId: string,
     data: {
+      mode?: 'reactivate' | 'renew' | 'payment_only';
       paymentMethod: 'cash' | 'check' | 'stripe';
       checkNumber?: string;
       cashReceiptNumber?: string;

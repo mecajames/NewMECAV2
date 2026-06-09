@@ -2337,19 +2337,21 @@ export class MembershipsService {
   }
 
   /**
-   * Unified "Record Payment & Reactivate" used by admins to recover a member
-   * whose payment succeeded OUTSIDE the new system (cash, check, or a Stripe
-   * payment whose webhook never landed) so their membership row exists but is
-   * not marked PAID and their profile sits at membership_status='none'.
+   * Admin "Record Payment" for a membership. Records a real payment (cash /
+   * check / Stripe) and applies it with one of three MODES — works whatever the
+   * current state (pending, paid, expired, or cancelled):
    *
-   * Unlike applyManualPaymentToMembership this:
-   *  - supports a `stripe` method: enter the Stripe payment-intent (pi_...) and/or
-   *    subscription (sub_...) that already succeeded; we pull the real amount /
-   *    period-end from Stripe and link the ids onto the membership;
-   *  - does NOT hard-reject an already-PAID membership (it re-syncs the profile,
-   *    which is the whole point when the row is paid but the profile never synced),
-   *    and only writes an Order/Invoice the first time it flips PENDING→PAID so we
-   *    don't create duplicate billing records.
+   *   - 'reactivate'   : the payment was actually made but never recorded (e.g. a
+   *                      Stripe webhook never landed) so the membership lapsed.
+   *                      Mark PAID, clear any cancellation, and make the term
+   *                      active again — use the Stripe period end if a sub is
+   *                      given, else keep the existing end date, or extend to a
+   *                      fresh term if it has already passed.
+   *   - 'renew'        : a renewal payment buying a NEW term. Mark PAID, clear
+   *                      cancellation, advance the end date a full term (or to the
+   *                      Stripe period end if given).
+   *   - 'payment_only' : record a payment (e.g. a past-due balance) WITHOUT
+   *                      changing the end date or cancellation state.
    *
    * Returns the Stripe ids/amount so the controller can write the Payment ledger
    * row via PaymentFulfillmentService.recordSubscriptionPayment (kept in the
@@ -2358,6 +2360,7 @@ export class MembershipsService {
   async recordMembershipPayment(
     membershipId: string,
     data: {
+      mode?: 'reactivate' | 'renew' | 'payment_only';
       paymentMethod: 'cash' | 'check' | 'stripe';
       checkNumber?: string;
       cashReceiptNumber?: string;
@@ -2392,14 +2395,12 @@ export class MembershipsService {
     if (!membership) {
       throw new NotFoundException(`Membership ${membershipId} not found`);
     }
-    if (membership.cancelledAt) {
-      throw new BadRequestException('Cannot record a payment on a cancelled membership. Restore/recreate it first.');
-    }
 
     const user = membership.user;
     if (!user) throw new BadRequestException('Membership has no associated user');
 
-    const alreadyPaid = membership.paymentStatus === PaymentStatus.PAID;
+    const mode = data.mode ?? 'reactivate';
+    const now = new Date();
     const configPrice = Number(membership.membershipTypeConfig?.price ?? 0);
     const teamAddonPrice = membership.hasTeamAddon
       ? Number(membership.membershipTypeConfig?.teamAddonPrice ?? 0)
@@ -2411,10 +2412,15 @@ export class MembershipsService {
     let stripePaymentIntentId: string | undefined;
     let stripeSubscriptionId: string | undefined;
     let stripeCustomerId: string | undefined;
+    let stripeCustomerEmail: string | undefined;
     let stripeInvoiceId: string | undefined;
     let stripeChargeId: string | undefined;
     let stripeProductName: string | undefined;
     let paidAt: Date = new Date();
+    // Captured from a Stripe subscription; applied to the end date per-mode below
+    // (NOT mutated inline, so 'payment_only' can leave the term untouched).
+    let stripePeriodEnd: Date | null = null;
+    let stripeCancelAtPeriodEnd = false;
 
     if (data.paymentMethod === 'stripe') {
       const pi = (data.stripePaymentIntentId ?? '').trim();
@@ -2439,6 +2445,7 @@ export class MembershipsService {
         const bundle = await this.stripeService.getSubscriptionDetails(sub);
         stripeSubscriptionId = bundle.id;
         stripeCustomerId = bundle.customerId ?? undefined;
+        stripeCustomerEmail = bundle.customerEmail ?? undefined;
         stripeInvoiceId = bundle.latestInvoiceId ?? undefined;
         stripeChargeId = bundle.chargeId ?? undefined;
         stripeProductName = bundle.productName ?? undefined;
@@ -2447,13 +2454,8 @@ export class MembershipsService {
 
         const liveStatuses = ['active', 'trialing', 'past_due'];
         if (liveStatuses.includes(bundle.status) && bundle.currentPeriodEnd) {
-          membership.endDate = bundle.currentPeriodEnd;
-          membership.cancelAtPeriodEnd = !!bundle.cancelAtPeriodEnd;
-          if (!bundle.cancelAtPeriodEnd) {
-            membership.cancelledAt = undefined;
-            membership.cancellationReason = undefined;
-            membership.cancelledBy = undefined;
-          }
+          stripePeriodEnd = bundle.currentPeriodEnd;
+          stripeCancelAtPeriodEnd = !!bundle.cancelAtPeriodEnd;
         }
         membership.hadLegacySubscription = false;
       }
@@ -2478,6 +2480,33 @@ export class MembershipsService {
 
       amount = data.amountOverride ?? stripeAmount ?? fallbackAmount;
       transactionId = stripePaymentIntentId ?? stripeSubscriptionId ?? `STRIPE-${Date.now()}`;
+
+      // Resolve the Stripe customer email for ownership validation (the PI-only
+      // path doesn't expand the customer like the subscription bundle does).
+      if (!stripeCustomerEmail && stripeCustomerId) {
+        const cust = await this.stripeService.retrieveCustomer(stripeCustomerId);
+        stripeCustomerEmail = cust?.email ?? undefined;
+      }
+
+      // OWNERSHIP CHECK: the entered Stripe id(s) MUST belong to this member, so
+      // an admin can't attach an arbitrary or another member's payment. We've
+      // already validated the ids exist in Stripe (the fetches above throw on a
+      // bad/format-invalid id, and a PI must be 'succeeded'); this confirms they
+      // are the RIGHT member's, matched by the Stripe customer email or a stored
+      // customer id on the profile.
+      const memberEmail = (user.email || '').trim().toLowerCase();
+      const memberCustomerId = ((user as any).stripeCustomerId as string | undefined)?.trim() || undefined;
+      const custEmail = (stripeCustomerEmail || '').trim().toLowerCase();
+      const emailMatches = !!custEmail && !!memberEmail && custEmail === memberEmail;
+      const idMatches = !!stripeCustomerId && !!memberCustomerId && stripeCustomerId === memberCustomerId;
+      if (!emailMatches && !idMatches) {
+        throw new BadRequestException(
+          `That Stripe ${stripeSubscriptionId ? 'subscription' : 'payment'} is linked to ` +
+            `${custEmail ? `"${custEmail}"` : 'a different Stripe customer'}` +
+            `${stripeCustomerId ? ` (${stripeCustomerId})` : ''}, which does not match this member ` +
+            `(${memberEmail || 'no email on file'}). Enter the Stripe id that belongs to this member.`,
+        );
+      }
     } else {
       if (data.paymentMethod === 'check' && !data.checkNumber) {
         throw new BadRequestException('Check number is required for check payments');
@@ -2490,20 +2519,54 @@ export class MembershipsService {
 
     const oldStatus = membership.paymentStatus;
     const oldAmount = membership.amountPaid;
+    const oldEnd = membership.endDate ?? null;
 
+    // Always record the money + link the transaction.
     membership.paymentStatus = PaymentStatus.PAID;
     membership.amountPaid = amount;
     membership.transactionId = transactionId;
     if (stripePaymentIntentId) membership.stripePaymentIntentId = stripePaymentIntentId;
     if (stripeSubscriptionId) membership.stripeSubscriptionId = stripeSubscriptionId;
 
-    // Only mint billing docs the first time we flip the row PAID — re-running
-    // this on an already-paid row is a pure profile re-sync, not a new sale.
+    // Mode-specific term + cancellation handling.
+    if (mode === 'reactivate' || mode === 'renew') {
+      // Restore from any prior cancellation so the row is a live membership again.
+      membership.cancelledAt = undefined;
+      membership.cancellationReason = undefined;
+      membership.cancelledBy = undefined;
+      membership.cancelAtPeriodEnd = stripePeriodEnd ? stripeCancelAtPeriodEnd : false;
+
+      if (stripePeriodEnd) {
+        // Authoritative date straight from Stripe's billing period.
+        membership.endDate = stripePeriodEnd;
+      } else if (mode === 'renew') {
+        // Buy a full new term (extends from current end within grace, else fresh).
+        membership.endDate = this.mecaIdService.computeRenewalEndDate(membership);
+      } else {
+        // reactivate: only extend if the current term has lapsed; otherwise keep
+        // the existing end date (the payment simply wasn't recorded before).
+        if (!membership.endDate || membership.endDate < now) {
+          membership.endDate = this.mecaIdService.computeRenewalEndDate(membership);
+        }
+      }
+
+      // KEEP THE MEMBER'S MECA ID: reactivation/renewal must never mint a new
+      // ID. The membership row keeps its existing mecaId (we don't touch it);
+      // make sure the profile points at that same ID too.
+      if (membership.mecaId != null) {
+        user.meca_id = String(membership.mecaId);
+      }
+    }
+    // payment_only: leave endDate + cancellation untouched — just record money.
+
+    // Mint billing docs for the recorded payment (a real transaction). Skipped
+    // only for a $0 record (e.g. comp), which has no money to invoice.
     let orderId: string | null = null;
     let invoiceId: string | null = null;
-    if (!alreadyPaid) {
+    if (amount > 0) {
       const methodLabel =
         data.paymentMethod === 'stripe' ? 'Stripe' : data.paymentMethod === 'check' ? 'Check' : 'Cash';
+      const modeLabel = mode === 'renew' ? 'renewal' : mode === 'payment_only' ? 'balance' : 'reactivation';
       const orderNumber = `ORD-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
       const order = em.create(Order, {
         orderNumber,
@@ -2515,11 +2578,11 @@ export class MembershipsService {
         discount: '0.00',
         total: amount.toFixed(2),
         currency: 'USD',
-        notes: data.notes ?? `Recorded ${methodLabel} payment (admin recovery)`,
+        notes: data.notes ?? `Recorded ${methodLabel} payment (${modeLabel})`,
       });
       em.create(OrderItem, {
         order,
-        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} payment)`,
+        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} ${modeLabel})`,
         quantity: 1,
         unitPrice: amount.toFixed(2),
         total: amount.toFixed(2),
@@ -2540,7 +2603,7 @@ export class MembershipsService {
         currency: 'USD',
         dueDate: new Date(),
         paidAt,
-        notes: data.notes ?? `Recorded ${methodLabel} payment (admin recovery)`,
+        notes: data.notes ?? `Recorded ${methodLabel} payment (${modeLabel})`,
         companyInfo: {
           name: 'Mobile Electronics Competition Association',
           email: 'billing@mecacaraudio.com',
@@ -2548,7 +2611,7 @@ export class MembershipsService {
       } as any);
       em.create(InvoiceItem, {
         invoice,
-        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} payment)`,
+        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} ${modeLabel})`,
         quantity: 1,
         unitPrice: amount.toFixed(2),
         total: amount.toFixed(2),
@@ -2565,24 +2628,37 @@ export class MembershipsService {
     // Reactivate: recompute profile.membership_status from the now-paid row.
     await this.membershipSyncService.syncProfileMembershipStatus(user.id);
 
+    // Reinstate any competition results earned while the membership was lapsed
+    // (reactivate/renew only). Keeps the member's points/standings whole. Uses
+    // the membership's existing MECA ID (which we never changed).
+    let reinstatedResults = 0;
+    if ((mode === 'reactivate' || mode === 'renew') && membership.mecaId != null) {
+      try {
+        reinstatedResults = await this.competitionResultsService.reinstatePointsForMecaId(membership.mecaId);
+      } catch (err) {
+        this.logger.error('Points reinstatement after record-payment failed (non-fatal):', err);
+      }
+    }
+
     this.adminAuditService.logAction({
       adminUserId: adminId,
       action: 'membership_record_payment',
       resourceType: 'membership',
       resourceId: membership.id,
       description:
-        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} for ${user.email || membership.id}` +
-        (alreadyPaid ? ' (row already PAID — re-synced profile)' : '') +
+        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} (${mode}) for ${user.email || membership.id}` +
         (stripeSubscriptionId ? ` [sub ${stripeSubscriptionId}]` : '') +
         (stripePaymentIntentId ? ` [pi ${stripePaymentIntentId}]` : ''),
-      oldValues: { paymentStatus: oldStatus, amountPaid: oldAmount },
+      oldValues: { paymentStatus: oldStatus, amountPaid: oldAmount, endDate: oldEnd },
       newValues: {
         paymentStatus: PaymentStatus.PAID,
         amountPaid: amount,
         transactionId,
+        mode,
         stripePaymentIntentId: stripePaymentIntentId ?? null,
         stripeSubscriptionId: stripeSubscriptionId ?? null,
         endDate: membership.endDate ?? null,
+        reinstatedResults,
       },
     });
 
@@ -2600,14 +2676,24 @@ export class MembershipsService {
           }
         : undefined;
 
+    const endStr = membership.endDate ? membership.endDate.toLocaleDateString('en-US') : null;
+    const outcome =
+      mode === 'renew'
+        ? `Membership renewed${endStr ? `, active through ${endStr}` : ''}.`
+        : mode === 'payment_only'
+          ? 'Payment recorded against the membership.'
+          : `Membership reactivated${endStr ? `, active through ${endStr}` : ''}.`;
+
+    const pointsNote = reinstatedResults > 0
+      ? ` Reinstated ${reinstatedResults} competition result(s) earned during the lapse.`
+      : '';
+
     return {
       success: true,
       membership,
       orderId,
       invoiceId,
-      message:
-        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} and reactivated the account.` +
-        (alreadyPaid ? ' (Membership was already marked PAID; profile status re-synced.)' : ''),
+      message: `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)}. ${outcome}${pointsNote}`,
       stripe: stripeResult,
     };
   }

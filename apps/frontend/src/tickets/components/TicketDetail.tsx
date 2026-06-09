@@ -141,6 +141,13 @@ interface TicketDetailProps {
   currentUserId: string;
   isStaff?: boolean;
   onBack?: () => void;
+  /**
+   * Called after a staff member successfully submits a reply (plain reply or
+   * reply + resolve/close/reassign). The admin view uses this to return to the
+   * main ticket queue. Only fires when isStaff is true; the member-facing view
+   * doesn't pass it, so members stay on their ticket.
+   */
+  onReplied?: () => void;
 }
 
 export function TicketDetail({
@@ -148,6 +155,7 @@ export function TicketDetail({
   currentUserId,
   isStaff = false,
   onBack,
+  onReplied,
 }: TicketDetailProps) {
   const navigate = useNavigate();
   const { id: paramTicketId } = useParams<{ id: string }>();
@@ -727,6 +735,15 @@ export function TicketDetail({
             `Reply posted, but the follow-up action failed${msg ? `: ${msg}` : '.'} Please retry from the status pill.`,
           );
         }
+      }
+
+      // Staff reply: hop back to the main ticket queue after ANY successful
+      // reply (plain reply, or reply + resolve/close/reassign/department). The
+      // member view doesn't pass onReplied, so it stays on the ticket and just
+      // refreshes below.
+      if (isStaff && onReplied) {
+        onReplied();
+        return;
       }
 
       // Refresh comments + attachments so the new entries appear.

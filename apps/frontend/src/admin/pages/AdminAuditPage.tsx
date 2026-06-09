@@ -3,9 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search, ShieldCheck, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { userActivityApi, AdminAuditEntry } from '@/user-activity/user-activity.api-client';
 import { scrollToTop } from '@/shared/utils/scrollToTop';
+import { useAuth } from '@/auth/contexts/AuthContext';
+import { isSuperAdmin } from '@/auth/permissions';
 
 export default function AdminAuditPage() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  // Super-admin only (James / Mick). Backend enforces this too; this is
+  // defense-in-depth so a non-super-admin who reaches the URL sees nothing.
+  const allowed = isSuperAdmin(profile as any);
   const [entries, setEntries] = useState<AdminAuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,6 +25,7 @@ export default function AdminAuditPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchLog = useCallback(async () => {
+    if (!allowed) { setLoading(false); return; }
     setLoading(true);
     try {
       const result = await userActivityApi.getAdminAuditLog({
@@ -38,7 +45,7 @@ export default function AdminAuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [actionFilter, resourceTypeFilter, searchTerm, startDate, endDate, page]);
+  }, [actionFilter, resourceTypeFilter, searchTerm, startDate, endDate, page, allowed]);
 
   useEffect(() => {
     fetchLog();
@@ -109,6 +116,26 @@ export default function AdminAuditPage() {
       </div>
     );
   };
+
+  if (!allowed) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center p-6">
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 max-w-md text-center">
+          <ShieldCheck className="h-10 w-10 text-rose-400 mx-auto mb-3" />
+          <h1 className="text-white text-xl font-bold mb-2">Restricted</h1>
+          <p className="text-slate-400 text-sm mb-5">
+            The Admin Action Log is limited to super administrators.
+          </p>
+          <button
+            onClick={() => navigate('/admin')}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
