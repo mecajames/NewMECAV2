@@ -34,6 +34,7 @@ import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } fro
 import { PaymentMethodSelector, SelectedPaymentMethod } from '@/shared/components/PaymentMethodSelector';
 import { PayPalPaymentButton } from '@/shared/components/PayPalPaymentButton';
 import { paypalApi } from '@/paypal/paypal.api-client';
+import { checkAccountExists } from '@/auth/auth.api-client';
 
 import { isStripeConfigured } from '@/lib/stripe';
 
@@ -154,6 +155,9 @@ export default function MembershipCheckoutPage() {
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  // True when the entered guest email already has a login account — we stop the
+  // signup and point them to log in / reset instead of letting them pay twice.
+  const [accountExists, setAccountExists] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -230,6 +234,8 @@ export default function MembershipCheckoutPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+    // Editing the email invalidates any prior "account already exists" notice.
+    if (name === 'email' && accountExists) setAccountExists(false);
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -300,6 +306,17 @@ export default function MembershipCheckoutPage() {
 
   const handleContinueToPayment = async () => {
     if (!validateInfoStep() || !membership) return;
+
+    // Guests only: stop here if a login account already exists for this email.
+    // Otherwise a returning member who forgot their account would pay first and
+    // only then fail account creation (their auth user already exists).
+    if (!user) {
+      const { exists } = await checkAccountExists(formData.email);
+      if (exists) {
+        setAccountExists(true);
+        return;
+      }
+    }
 
     // If Stripe is not configured or PayPal is selected, go directly to payment step
     if (!isStripeConfigured || selectedPaymentMethod === 'paypal') {
@@ -679,6 +696,26 @@ export default function MembershipCheckoutPage() {
                   {error && (
                     <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
                       <p className="text-red-500 text-sm">{error}</p>
+                    </div>
+                  )}
+
+                  {accountExists && (
+                    <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500 rounded-lg">
+                      <p className="text-orange-300 text-sm font-medium mb-1">
+                        You already have a MECA account
+                      </p>
+                      <p className="text-orange-200/90 text-sm">
+                        An account for <span className="font-semibold">{formData.email}</span> already
+                        exists. Please{' '}
+                        <Link to="/login" className="underline font-semibold hover:text-white">
+                          log in
+                        </Link>{' '}
+                        to purchase or renew your membership. Forgot your password? Use{' '}
+                        <Link to="/login" className="underline font-semibold hover:text-white">
+                          Forgot password
+                        </Link>{' '}
+                        on the login page to set a new one.
+                      </p>
                     </div>
                   )}
 
