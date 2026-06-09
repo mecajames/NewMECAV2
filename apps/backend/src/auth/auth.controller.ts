@@ -5,7 +5,12 @@ import { Public } from './public.decorator';
 import { SupabaseAdminService } from './supabase-admin.service';
 import { EmailService } from '../email/email.service';
 
-@Controller('auth')
+// NOTE: must be 'api/auth', not 'auth'. nginx only proxies /api/* to the
+// backend (the SPA owns /auth/*), and there is no global 'api' prefix — every
+// proxied controller carries the api/ prefix itself (cf. @Controller('api/user-activity')).
+// Without it these routes are unreachable in production (nginx 405s /auth/*,
+// and /api/auth/* reaches the backend but matches no route → 404).
+@Controller('api/auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
