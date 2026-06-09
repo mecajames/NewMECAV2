@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Mail, Lock, Clock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { requestLoginRecovery } from '../auth.api-client';
 import { REDIRECT_STORAGE_KEY } from '../idle-timeout.constants';
 
 // Google OAuth icon
@@ -55,7 +56,19 @@ export default function LoginPage() {
     const { error } = await signIn(email, password);
 
     if (error) {
-      setError(error.message);
+      // A member migrated from the old site may have an account they never set a
+      // password for — a password login can never succeed for them. Detect that
+      // and auto-send a set-password link instead of a dead-end error.
+      const passwordSetupRequired = await requestLoginRecovery(email);
+      if (passwordSetupRequired) {
+        setError('');
+        setSuccess(
+          "Welcome back! It looks like you haven't set a password since our website upgrade. " +
+            "We've emailed you a link to set your password — please check your inbox (and spam folder).",
+        );
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
     } else {
       // Clean up timeout redirect storage
