@@ -157,6 +157,69 @@ export interface OwnsTeamResponse {
   ownsTeam: boolean;
 }
 
+export interface TeamAnalyticsMember {
+  userId: string;
+  name: string;
+  mecaId?: string;
+  points: number;
+  competitions: number;
+  first: number;
+  second: number;
+  third: number;
+  bestSpl: number | null;
+  avgSpl: number | null;
+  bestSq: number | null;
+  avgSq: number | null;
+}
+
+export interface TeamAnalyticsRecordHolder {
+  score?: number;
+  value?: number;
+  points?: number;
+  name: string;
+  mecaId?: string;
+  eventName?: string;
+  date?: string;
+  className?: string;
+}
+
+export interface TeamAnalytics {
+  memberLeaderboard: TeamAnalyticsMember[];
+  pointsOverTime: Array<{ date: string; eventName: string; points: number; cumulative: number }>;
+  formatBreakdown: Array<{ format: string; competitions: number; points: number; wins: number; podiums: number; winRate: number; avgScore: number; bestScore: number }>;
+  classLeaders: Array<{
+    className: string;
+    format: string | null;
+    isSpl: boolean;
+    entries: number;
+    members: number;
+    avgScore: number;
+    pointsLeader: { name: string; mecaId?: string; points: number } | null;
+    scoreLeader: { name: string; mecaId?: string; score: number } | null;
+  }>;
+  wattageFrequency: {
+    avgWattage: number | null;
+    maxWattage: { value?: number; name: string; eventName?: string } | null;
+    topWattageByMember: Array<{ name: string; mecaId?: string; wattage: number }>;
+    avgFrequency: number | null;
+    minFrequency: number | null;
+    maxFrequency: number | null;
+  };
+  records: {
+    bestSpl: TeamAnalyticsRecordHolder | null;
+    bestSq: TeamAnalyticsRecordHolder | null;
+    maxWattage: TeamAnalyticsRecordHolder | null;
+    biggestEventPoints: TeamAnalyticsRecordHolder | null;
+  };
+  seasonComparison: {
+    current: { seasonName: string; points: number; competitions: number; podiums: number; events: number };
+    previous: { seasonName: string; points: number; competitions: number; podiums: number; events: number } | null;
+  } | null;
+  states: Array<{ state: string; events: number }>;
+  upcomingEvents: Array<{ id: string; name: string; date: string; location?: string; membersRegistered: number }>;
+  teamRank: { rank: number; totalTeams: number; points: number } | null;
+}
+
 export interface TeamPublicStats {
   topSplScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
   topSqScores: Array<{ competitorName: string; score: number; eventName?: string; date?: string; placement: number }>;
@@ -197,6 +260,13 @@ export const teamsApi = {
   getTeamPublicStats: async (id: string, seasonId?: string): Promise<TeamPublicStats> => {
     const params = seasonId ? `?seasonId=${seasonId}` : '';
     const response = await axios.get(`/api/teams/public/${id}/stats${params}`);
+    return response.data;
+  },
+
+  // Get full team analytics (leaderboard, charts, class leaders, records)
+  getTeamAnalytics: async (id: string, seasonId?: string): Promise<TeamAnalytics> => {
+    const params = seasonId ? `?seasonId=${seasonId}` : '';
+    const response = await axios.get(`/api/teams/public/${id}/analytics${params}`);
     return response.data;
   },
 
@@ -428,4 +498,93 @@ export const teamsApi = {
   rejectJoinRequest: async (teamId: string, userId: string): Promise<void> => {
     await axios.delete(`/api/teams/${teamId}/reject-request/${userId}`);
   },
+
+  // ============================================
+  // ADMIN TEAM MANAGEMENT
+  // ============================================
+
+  // Admin: search teams by name (includes inactive/non-public)
+  adminSearchTeams: async (q: string): Promise<AdminTeamSummary[]> => {
+    const response = await axios.get('/api/teams/admin/search', { params: { q } });
+    return response.data;
+  },
+
+  // Admin: search members by name/email/MECA ID with team counts
+  adminSearchMembers: async (q: string): Promise<AdminMemberSearchResult[]> => {
+    const response = await axios.get('/api/teams/admin/member-search', { params: { q } });
+    return response.data;
+  },
+
+  // Admin: every team association for a user
+  adminGetUserTeams: async (userId: string): Promise<AdminUserTeams> => {
+    const response = await axios.get(`/api/teams/admin/user/${userId}`);
+    return response.data;
+  },
+
+  // Admin: activate/deactivate a team
+  adminSetTeamActive: async (teamId: string, isActive: boolean): Promise<Team> => {
+    const response = await axios.patch(`/api/teams/admin/${teamId}/active`, { is_active: isActive });
+    return response.data;
+  },
+
+  // Admin: reassign a team to a new owner by MECA ID (one step — adds them
+  // to the roster if needed; optionally removes the previous owner)
+  adminReassignOwner: async (teamId: string, mecaId: string, removePrevious: boolean): Promise<Team> => {
+    const response = await axios.put(`/api/teams/admin/${teamId}/reassign-owner`, {
+      meca_id: mecaId,
+      remove_previous: removePrevious,
+    });
+    return response.data;
+  },
 };
+
+// ============================================
+// ADMIN TYPES
+// ============================================
+
+export interface AdminTeamOwner {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  meca_id?: string;
+  email?: string;
+  membership_status?: string;
+}
+
+export interface AdminTeamSummary {
+  id: string;
+  name: string;
+  teamType: string;
+  location?: string;
+  isActive: boolean;
+  isPublic: boolean;
+  createdAt?: string;
+  membershipId?: string | null;
+  activeMemberCount: number;
+  pendingCount: number;
+  owner: AdminTeamOwner;
+}
+
+export interface AdminMemberSearchResult {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  meca_id?: string;
+  membership_status?: string;
+  ownedTeamCount: number;
+  teamMemberRows: number;
+}
+
+export interface AdminUserTeams {
+  profile: AdminMemberSearchResult;
+  ownedTeams: AdminTeamSummary[];
+  memberRows: Array<{
+    teamId: string;
+    role: TeamMemberRole;
+    status: TeamMemberStatus;
+    joinedAt?: string;
+    requestedAt?: string;
+    team: AdminTeamSummary | null;
+  }>;
+}

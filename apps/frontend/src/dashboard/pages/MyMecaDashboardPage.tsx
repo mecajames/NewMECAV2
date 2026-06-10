@@ -12,7 +12,7 @@ import axios from '@/lib/axios';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
 import { competitionFormatsApi } from '@/competition-formats';
-import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse } from '@/teams';
+import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse, TeamPublicStats } from '@/teams';
 import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink, ShoppingBag } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
@@ -73,6 +73,20 @@ export default function MyMecaDashboardPage() {
   const [expandedRatingEventId, setExpandedRatingEventId] = useState<string | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [teamLoading, setTeamLoading] = useState(true);
+  const [teamStats, setTeamStats] = useState<TeamPublicStats | null>(null);
+
+  // Team performance stats for whichever team is being viewed
+  useEffect(() => {
+    if (!team?.id) {
+      setTeamStats(null);
+      return;
+    }
+    let cancelled = false;
+    teamsApi.getTeamPublicStats(team.id)
+      .then(stats => { if (!cancelled) setTeamStats(stats); })
+      .catch(() => { if (!cancelled) setTeamStats(null); });
+    return () => { cancelled = true; };
+  }, [team?.id]);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   // Pro-rated "Competitor → Competitor with Team" upgrade flow (TeamUpgradeModal).
   const [showTeamUpgradeModal, setShowTeamUpgradeModal] = useState(false);
@@ -548,7 +562,6 @@ export default function MyMecaDashboardPage() {
         teamsApi.getMyTeams(),
         teamsApi.ownsTeam(),
       ]);
-      setTeam(userTeam);
       setCanCreateTeam(eligibility.canCreate);
       setCanCreateReason(eligibility.reason || '');
       setUpgradeEligibility(upgradeElig);
@@ -556,12 +569,22 @@ export default function MyMecaDashboardPage() {
       setMyPendingJoinRequests(pendingRequests);
       setAllTeams(myTeams);
       setOwnsTeam(ownsTeamResult.ownsTeam);
-      // Set selectedTeamId to owned team first, or first member team
-      if (!selectedTeamId) {
-        const firstOwnedTeam = myTeams.ownedTeams[0];
-        const firstMemberTeam = myTeams.memberTeams[0];
-        setSelectedTeamId(firstOwnedTeam?.id || firstMemberTeam?.id || userTeam?.id || null);
-      }
+      // Pick the team to display: keep the current selection if there is one,
+      // otherwise prefer the first owned team, then first member team. The
+      // displayed card MUST match this selection — userTeam (an arbitrary
+      // first team_members row from the backend) previously overrode it,
+      // showing a team different from the one in the switcher.
+      const teamList = [...myTeams.ownedTeams, ...myTeams.memberTeams];
+      const displayId = (selectedTeamId && teamList.some(t => t.id === selectedTeamId))
+        ? selectedTeamId
+        : (myTeams.ownedTeams[0]?.id || myTeams.memberTeams[0]?.id || userTeam?.id || null);
+      // Prefer the userTeam object when it matches (it carries pending
+      // requests/invites that the list versions don't include).
+      const displayTeam = (userTeam && userTeam.id === displayId)
+        ? userTeam
+        : (teamList.find(t => t.id === displayId) as Team | undefined) || userTeam;
+      setTeam(displayTeam ?? null);
+      setSelectedTeamId(displayId);
     } catch (error) {
       console.error('Error fetching team:', error);
     } finally {
@@ -2246,12 +2269,17 @@ export default function MyMecaDashboardPage() {
         return role as TeamMemberRole;
       };
 
-      // Determine user's role: from membership, from being captainId, or default to member
+      // Determine user's role. The team's captainId is the single source of
+      // truth for ownership — a team_members row with role 'owner' on a team
+      // someone ELSE captains is bad data (legit transfers demote to
+      // co_owner, never leave 'owner'), so it confers NO privileges: plain
+      // member. Real co_owner/moderator rows keep their powers.
       let myRole: TeamMemberRole = 'member';
-      if (myMembership) {
-        myRole = normalizeRole(myMembership.role);
-      } else if (team.captainId === profile?.id) {
+      if (team.captainId === profile?.id) {
         myRole = 'owner';
+      } else if (myMembership) {
+        const rowRole = normalizeRole(myMembership.role);
+        myRole = rowRole === 'owner' ? 'member' : rowRole;
       }
 
       const isOwner = myRole === 'owner';
@@ -2296,11 +2324,17 @@ export default function MyMecaDashboardPage() {
                   <select
                     value={selectedTeamId || team.id}
                     onChange={(e) => {
-                      setSelectedTeamId(e.target.value);
-                      const selectedTeam = allTeamsList.find(t => t.id === e.target.value);
+                      const newId = e.target.value;
+                      setSelectedTeamId(newId);
+                      const selectedTeam = allTeamsList.find(t => t.id === newId);
                       if (selectedTeam) {
                         setTeam(selectedTeam as Team);
                       }
+                      // The list version lacks pending requests/invites —
+                      // fetch the full team so owner controls stay complete.
+                      teamsApi.getTeam(newId)
+                        .then(full => setTeam(curr => (curr?.id === newId ? full : curr)))
+                        .catch(() => { /* keep list version */ });
                     }}
                     className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   >
@@ -2446,11 +2480,18 @@ export default function MyMecaDashboardPage() {
               </div>
               <div className="space-y-3">
                 {team.members?.map((member) => {
-                  const memberRole = ((member.role as string) === 'captain' ? 'owner' : member.role) as TeamMemberRole;
+                  // Only the actual captain renders (and is protected) as
+                  // Owner — an owner-ROLE row on someone else's team is bad
+                  // data and displays as a plain member so it carries no
+                  // implied authority and stays manageable/removable.
+                  const isMemberOwner = member.userId === team.captainId;
+                  const rawRole = ((member.role as string) === 'captain' ? 'owner' : member.role) as TeamMemberRole;
+                  const memberRole: TeamMemberRole = isMemberOwner
+                    ? 'owner'
+                    : (rawRole === 'owner' ? 'member' : rawRole);
                   const roleInfo = getRoleInfo(memberRole);
                   const RoleIcon = roleInfo.icon;
                   const isMe = member.userId === profile?.id;
-                  const isMemberOwner = memberRole === 'owner';
 
                   // Role hierarchy for permission checks
                   const roleLevel = { owner: 4, co_owner: 3, moderator: 2, member: 1 };
@@ -2650,6 +2691,74 @@ export default function MyMecaDashboardPage() {
                   ))}
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Team Analytics Section */}
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-orange-500" />
+                Team Analytics
+              </h3>
+              <button
+                onClick={() => navigate(`/teams/${team.id}`)}
+                className="text-sm text-orange-400 hover:text-orange-300"
+              >
+                View Public Team Page →
+              </button>
+            </div>
+            {teamStats ? (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-white">{teamStats.totalCompetitions}</p>
+                    <p className="text-gray-400 text-sm">Competitions</p>
+                  </div>
+                  <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-cyan-400">{teamStats.totalEventsAttended}</p>
+                    <p className="text-gray-400 text-sm">Events Attended</p>
+                  </div>
+                  <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-orange-400">{Math.round(teamStats.totalPoints)}</p>
+                    <p className="text-gray-400 text-sm">Total Points</p>
+                  </div>
+                  <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-yellow-400">
+                      {teamStats.totalFirstPlace} / {teamStats.totalSecondPlace} / {teamStats.totalThirdPlace}
+                    </p>
+                    <p className="text-gray-400 text-sm">1st / 2nd / 3rd</p>
+                  </div>
+                </div>
+                {(teamStats.topSplScores.length > 0 || teamStats.topSqScores.length > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {teamStats.topSplScores.length > 0 && (
+                      <div className="bg-slate-700/30 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-gray-300 mb-2">Top SPL Scores</h4>
+                        {teamStats.topSplScores.map((s, i) => (
+                          <div key={i} className="flex justify-between text-sm py-1 border-b border-slate-700/50 last:border-0">
+                            <span className="text-gray-300">{s.competitorName}</span>
+                            <span className="text-orange-400 font-semibold">{s.score.toFixed(1)} dB</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {teamStats.topSqScores.length > 0 && (
+                      <div className="bg-slate-700/30 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-gray-300 mb-2">Top SQ Scores</h4>
+                        {teamStats.topSqScores.map((s, i) => (
+                          <div key={i} className="flex justify-between text-sm py-1 border-b border-slate-700/50 last:border-0">
+                            <span className="text-gray-300">{s.competitorName}</span>
+                            <span className="text-cyan-400 font-semibold">{s.score.toFixed(1)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-gray-500 text-sm">Team analytics will appear once team members have competition results.</p>
             )}
           </div>
 

@@ -134,6 +134,7 @@ const CheckInHubPage = lazy(() => import('@/event-registrations/pages/CheckInHub
 // Lazy-loaded pages - Admin (only admins access these)
 const MembersPage = lazy(() => import('@/admin/pages/MembersPage'));
 const MemberDetailPage = lazy(() => import('@/admin/pages/MemberDetailPage'));
+const TeamManagementPage = lazy(() => import('@/admin/pages/TeamManagementPage'));
 const AdminTicketsPage = lazy(() => import('@/admin/pages/AdminTicketsPage'));
 const EventDirectorRevenuePage = lazy(() => import('@/admin/pages/EventDirectorRevenuePage'));
 const StaffSignatureSettingsPage = lazy(() => import('@/tickets/pages/admin/StaffSignatureSettingsPage'));
@@ -362,6 +363,7 @@ function App() {
               <Route path="/admin/members" element={<L><MembersPage /></L>} />
               <Route path="/admin/event-director-revenue" element={<L><EventDirectorRevenuePage /></L>} />
               <Route path="/admin/members/:memberId" element={<L><MemberDetailPage /></L>} />
+              <Route path="/admin/teams" element={<L><TeamManagementPage /></L>} />
               <Route path="/admin/seasons" element={<L><SeasonManagementPage /></L>} />
               <Route path="/admin/classes" element={<L><ClassesManagementPage /></L>} />
               <Route path="/admin/formats" element={<L><FormatManagementPage /></L>} />
