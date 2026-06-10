@@ -9,6 +9,7 @@ import { Membership } from '../memberships/memberships.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
 import { Event } from '../events/events.entity';
+import { Season } from '../seasons/seasons.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
 
 interface MemberWithUser extends TeamMember {
@@ -389,10 +390,21 @@ export class TeamsService {
     return result;
   }
 
-  // Helper to get a user's role in a team
+  // Helper to get a user's EFFECTIVE role in a team. The team's captainId is
+  // the source of truth for ownership: the captain is always 'owner', and a
+  // team_members row claiming 'owner' for anyone else is bad data (legit
+  // ownership transfers demote the old owner to co_owner, never leave
+  // 'owner') — such rows confer NO privileges and count as plain members.
+  // This feeds every permission check, so it locks down team edits, image
+  // uploads, invites, and role management against corrupted owner rows.
   private async getUserTeamRole(em: EntityManager, teamId: string, userId: string): Promise<TeamMemberRole | null> {
+    const team = await em.findOne(Team, { id: teamId });
+    if (team && team.captainId === userId) {
+      return 'owner';
+    }
     const membership = await em.findOne(TeamMember, { teamId, userId });
-    return membership?.role || null;
+    if (!membership?.role) return null;
+    return membership.role === 'owner' ? 'member' : membership.role;
   }
 
   // Helper to check if user has permission for an action
@@ -748,10 +760,15 @@ export class TeamsService {
       member: 1,
     };
 
-    // If not admin and not self, check role hierarchy
+    // If not admin and not self, check role hierarchy. The actual captain
+    // outranks everyone — including stray owner-role rows held by members
+    // who are not the captain (bad data the captain must be able to remove).
     if (!isAdmin && !isSelf && requesterRole) {
-      const requesterLevel = roleHierarchy[requesterRole];
-      const targetLevel = roleHierarchy[targetMember.role];
+      const requesterLevel = requesterId === team.captainId ? 5 : roleHierarchy[requesterRole];
+      // A non-captain row claiming 'owner' is bad data — rank it as a plain
+      // member so legitimate managers can remove it.
+      const targetEffectiveRole = targetMember.role === 'owner' ? 'member' : targetMember.role;
+      const targetLevel = userId === team.captainId ? 5 : roleHierarchy[targetEffectiveRole];
       if (targetLevel >= requesterLevel) {
         throw new ForbiddenException('You cannot remove a member with the same or higher role than yours');
       }
@@ -794,8 +811,10 @@ export class TeamsService {
       throw new NotFoundException('Member not found on this team');
     }
 
-    // Cannot change the owner's role
-    if (targetMember.role === 'owner') {
+    // Cannot change the actual owner's role (keyed on captainId, NOT the
+    // row's role — stray owner-role rows on teams captained by someone else
+    // are bad data and must stay demotable)
+    if (userId === team.captainId) {
       throw new BadRequestException('Cannot change the owner\'s role. Transfer ownership first.');
     }
 
@@ -1540,6 +1559,351 @@ export class TeamsService {
   }
 
   /**
+   * Full team analytics — the team-level counterpart of the personal
+   * analytics tab in My MECA. All season-scoped sections honor the optional
+   * seasonId filter; the records board is always all-time.
+   */
+  async getTeamAnalytics(teamId: string, seasonId?: string): Promise<any> {
+    const em = this.em.fork();
+
+    // Resolve member user IDs (mirrors getTeamPublicStats: legacy team rows
+    // first, then membership-based synthetic teams)
+    let memberUserIds: string[] = [];
+    const team = await em.findOne(Team, { id: teamId });
+    if (team) {
+      const members = await em.find(TeamMember, { teamId, status: 'active' });
+      memberUserIds = members.map(m => m.userId);
+    } else {
+      try {
+        const membershipResult = await em.getConnection().execute(
+          `SELECT user_id FROM memberships WHERE id = ? AND payment_status = 'paid'`,
+          [teamId],
+        );
+        if (membershipResult && membershipResult.length > 0) {
+          memberUserIds = [membershipResult[0].user_id];
+        }
+      } catch (sqlError: any) {
+        this.logger.warn(`Membership-based team lookup failed for ${teamId}: ${sqlError.message}`);
+      }
+    }
+    if (memberUserIds.length === 0) {
+      throw new NotFoundException(`Team with ID ${teamId} not found`);
+    }
+
+    const profileMap = await this.loadProfileMap(em, memberUserIds);
+    const nameOf = (uid: string): string => {
+      const p = profileMap.get(uid);
+      return p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown' : 'Unknown';
+    };
+    const mecaOf = (uid: string): string | undefined => {
+      const p = profileMap.get(uid);
+      return p?.meca_id != null ? String(p.meca_id) : undefined;
+    };
+
+    // One query for ALL results (every season) — records come from the full
+    // set, everything else from the season-filtered subset.
+    let allResults: CompetitionResult[] = [];
+    try {
+      allResults = await em.find(CompetitionResult, {
+        competitorId: { $in: memberUserIds },
+        needsClassReview: false,
+      }, { populate: ['event'] });
+    } catch (queryErr: any) {
+      this.logger.warn(`Failed to query results for team analytics ${teamId}: ${queryErr.message}`);
+    }
+    const seasonResults = seasonId ? allResults.filter(r => r.seasonId === seasonId) : allResults;
+
+    // SPL vs SQ classification — same heuristic as getTeamPublicStats
+    const isSpl = (r: CompetitionResult): boolean => {
+      const cls = (r.competitionClass || '').toLowerCase();
+      const fmt = (r.format || '').toLowerCase();
+      const score = Number(r.score) || 0;
+      return cls.includes('spl') || cls.includes('db') || cls.includes('bass')
+        || fmt.includes('spl') || fmt.includes('bass') || score > 100;
+    };
+    const avg = (nums: number[]): number => (nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0);
+    const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+    // ---- Member contribution leaderboard (season-scoped, full roster) ----
+    const memberLeaderboard = memberUserIds.map(uid => {
+      const mine = seasonResults.filter(r => r.competitorId === uid);
+      const splScores = mine.filter(isSpl).map(r => Number(r.score) || 0);
+      const sqScores = mine.filter(r => !isSpl(r)).map(r => Number(r.score) || 0);
+      return {
+        userId: uid,
+        name: nameOf(uid),
+        mecaId: mecaOf(uid),
+        points: mine.reduce((s, r) => s + (Number(r.pointsEarned) || 0), 0),
+        competitions: mine.length,
+        first: mine.filter(r => r.placement === 1).length,
+        second: mine.filter(r => r.placement === 2).length,
+        third: mine.filter(r => r.placement === 3).length,
+        bestSpl: splScores.length ? round1(Math.max(...splScores)) : null,
+        avgSpl: splScores.length ? round1(avg(splScores)) : null,
+        bestSq: sqScores.length ? round1(Math.max(...sqScores)) : null,
+        avgSq: sqScores.length ? round1(avg(sqScores)) : null,
+      };
+    }).sort((a, b) => b.points - a.points || b.competitions - a.competitions);
+
+    // ---- Cumulative points over time (season-scoped) ----
+    const byEvent = new Map<string, { date: string; eventName: string; points: number }>();
+    for (const r of seasonResults) {
+      const eventDate = r.event?.eventDate ? new Date(r.event.eventDate).toISOString().split('T')[0] : null;
+      if (!eventDate) continue;
+      const key = r.event!.id;
+      const entry = byEvent.get(key) || { date: eventDate, eventName: r.event!.title, points: 0 };
+      entry.points += Number(r.pointsEarned) || 0;
+      byEvent.set(key, entry);
+    }
+    let running = 0;
+    const pointsOverTime = Array.from(byEvent.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(e => {
+        running += e.points;
+        return { ...e, cumulative: running };
+      });
+
+    // ---- Format breakdown (season-scoped) ----
+    const byFormat = new Map<string, CompetitionResult[]>();
+    for (const r of seasonResults) {
+      const fmt = (r.format || 'Other').trim() || 'Other';
+      const list = byFormat.get(fmt) || [];
+      list.push(r);
+      byFormat.set(fmt, list);
+    }
+    const formatBreakdown = Array.from(byFormat.entries()).map(([format, rs]) => {
+      const scores = rs.map(r => Number(r.score) || 0);
+      const wins = rs.filter(r => r.placement === 1).length;
+      return {
+        format,
+        competitions: rs.length,
+        points: rs.reduce((s, r) => s + (Number(r.pointsEarned) || 0), 0),
+        wins,
+        podiums: rs.filter(r => r.placement >= 1 && r.placement <= 3).length,
+        winRate: rs.length ? Math.round((wins / rs.length) * 100) : 0,
+        avgScore: round1(avg(scores)),
+        bestScore: scores.length ? round1(Math.max(...scores)) : 0,
+      };
+    }).sort((a, b) => b.competitions - a.competitions);
+
+    // ---- Per-class leaders within the team (season-scoped) ----
+    const byClass = new Map<string, CompetitionResult[]>();
+    for (const r of seasonResults) {
+      const cls = (r.competitionClass || 'Unknown').trim() || 'Unknown';
+      const list = byClass.get(cls) || [];
+      list.push(r);
+      byClass.set(cls, list);
+    }
+    const classLeaders = Array.from(byClass.entries()).map(([className, rs]) => {
+      const scores = rs.map(r => Number(r.score) || 0);
+      // points leader: member with most points in this class
+      const pointsByMember = new Map<string, number>();
+      for (const r of rs) {
+        if (!r.competitorId) continue;
+        pointsByMember.set(r.competitorId, (pointsByMember.get(r.competitorId) || 0) + (Number(r.pointsEarned) || 0));
+      }
+      const pointsLeaderEntry = Array.from(pointsByMember.entries()).sort((a, b) => b[1] - a[1])[0];
+      // score leader: member holding the highest score in this class
+      const bestResult = rs.reduce((best, r) => (Number(r.score) || 0) > (Number(best.score) || 0) ? r : best, rs[0]);
+      return {
+        className,
+        format: bestResult.format || null,
+        isSpl: isSpl(bestResult),
+        entries: rs.length,
+        members: new Set(rs.map(r => r.competitorId).filter(Boolean)).size,
+        avgScore: round1(avg(scores)),
+        pointsLeader: pointsLeaderEntry ? {
+          name: nameOf(pointsLeaderEntry[0]),
+          mecaId: mecaOf(pointsLeaderEntry[0]),
+          points: pointsLeaderEntry[1],
+        } : null,
+        scoreLeader: bestResult.competitorId ? {
+          name: nameOf(bestResult.competitorId),
+          mecaId: mecaOf(bestResult.competitorId),
+          score: round1(Number(bestResult.score) || 0),
+        } : null,
+      };
+    }).sort((a, b) => b.entries - a.entries);
+
+    // ---- Wattage & frequency (season-scoped) ----
+    const wattResults = seasonResults.filter(r => (r.wattage || 0) > 0);
+    const freqResults = seasonResults.filter(r => (r.frequency || 0) > 0);
+    const maxWattResult = wattResults.reduce<CompetitionResult | null>(
+      (best, r) => (!best || (r.wattage || 0) > (best.wattage || 0)) ? r : best, null);
+    // top wattage per member
+    const wattByMember = new Map<string, number>();
+    for (const r of wattResults) {
+      if (!r.competitorId) continue;
+      wattByMember.set(r.competitorId, Math.max(wattByMember.get(r.competitorId) || 0, r.wattage || 0));
+    }
+    const wattageFrequency = {
+      avgWattage: wattResults.length ? Math.round(avg(wattResults.map(r => r.wattage || 0))) : null,
+      maxWattage: maxWattResult ? {
+        value: maxWattResult.wattage,
+        name: maxWattResult.competitorId ? nameOf(maxWattResult.competitorId) : maxWattResult.competitorName,
+        eventName: maxWattResult.event?.title,
+      } : null,
+      topWattageByMember: Array.from(wattByMember.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([uid, watts]) => ({ name: nameOf(uid), mecaId: mecaOf(uid), wattage: watts })),
+      avgFrequency: freqResults.length ? Math.round(avg(freqResults.map(r => r.frequency || 0))) : null,
+      minFrequency: freqResults.length ? Math.min(...freqResults.map(r => r.frequency || 0)) : null,
+      maxFrequency: freqResults.length ? Math.max(...freqResults.map(r => r.frequency || 0)) : null,
+    };
+
+    // ---- All-time team records board ----
+    const describe = (r: CompetitionResult) => ({
+      score: round1(Number(r.score) || 0),
+      name: r.competitorId ? nameOf(r.competitorId) : r.competitorName,
+      mecaId: r.competitorId ? mecaOf(r.competitorId) : undefined,
+      eventName: r.event?.title,
+      date: r.event?.eventDate ? new Date(r.event.eventDate).toISOString().split('T')[0] : undefined,
+      className: r.competitionClass,
+    });
+    const allSpl = allResults.filter(isSpl);
+    const allSq = allResults.filter(r => !isSpl(r));
+    const bestSplEver = allSpl.length ? allSpl.reduce((b, r) => (Number(r.score) || 0) > (Number(b.score) || 0) ? r : b) : null;
+    const bestSqEver = allSq.length ? allSq.reduce((b, r) => (Number(r.score) || 0) > (Number(b.score) || 0) ? r : b) : null;
+    const maxWattEver = allResults.filter(r => (r.wattage || 0) > 0)
+      .reduce<CompetitionResult | null>((b, r) => (!b || (r.wattage || 0) > (b.wattage || 0)) ? r : b, null);
+    // biggest single-event points haul by one member
+    const haulMap = new Map<string, { uid: string; eventName?: string; date?: string; points: number }>();
+    for (const r of allResults) {
+      if (!r.competitorId || !r.event) continue;
+      const key = `${r.competitorId}|${r.event.id}`;
+      const entry = haulMap.get(key) || {
+        uid: r.competitorId,
+        eventName: r.event.title,
+        date: r.event.eventDate ? new Date(r.event.eventDate).toISOString().split('T')[0] : undefined,
+        points: 0,
+      };
+      entry.points += Number(r.pointsEarned) || 0;
+      haulMap.set(key, entry);
+    }
+    const biggestHaul = Array.from(haulMap.values()).sort((a, b) => b.points - a.points)[0] || null;
+    const records = {
+      bestSpl: bestSplEver ? describe(bestSplEver) : null,
+      bestSq: bestSqEver ? describe(bestSqEver) : null,
+      maxWattage: maxWattEver ? {
+        value: maxWattEver.wattage,
+        name: maxWattEver.competitorId ? nameOf(maxWattEver.competitorId) : maxWattEver.competitorName,
+        eventName: maxWattEver.event?.title,
+        date: maxWattEver.event?.eventDate ? new Date(maxWattEver.event.eventDate).toISOString().split('T')[0] : undefined,
+      } : null,
+      biggestEventPoints: biggestHaul ? {
+        points: biggestHaul.points,
+        name: nameOf(biggestHaul.uid),
+        mecaId: mecaOf(biggestHaul.uid),
+        eventName: biggestHaul.eventName,
+        date: biggestHaul.date,
+      } : null,
+    };
+
+    // ---- Season vs previous season comparison ----
+    let seasonComparison: any = null;
+    if (seasonId) {
+      const season = await em.findOne(Season, { id: seasonId });
+      if (season) {
+        const previous = await em.findOne(Season, {
+          startDate: { $lt: season.startDate },
+        }, { orderBy: { startDate: 'DESC' } });
+        const totalsFor = (sid: string) => {
+          const rs = allResults.filter(r => r.seasonId === sid);
+          return {
+            points: rs.reduce((s, r) => s + (Number(r.pointsEarned) || 0), 0),
+            competitions: rs.length,
+            podiums: rs.filter(r => r.placement >= 1 && r.placement <= 3).length,
+            events: new Set(rs.map(r => r.event?.id).filter(Boolean)).size,
+          };
+        };
+        seasonComparison = {
+          current: { seasonName: season.name, ...totalsFor(season.id) },
+          previous: previous ? { seasonName: previous.name, ...totalsFor(previous.id) } : null,
+        };
+      }
+    }
+
+    // ---- Geographic footprint (season-scoped, distinct events per state) ----
+    const stateEvents = new Map<string, Set<string>>();
+    for (const r of seasonResults) {
+      const state = r.event?.venueState || r.stateCode;
+      if (!state || !r.event?.id) continue;
+      const set = stateEvents.get(state) || new Set<string>();
+      set.add(r.event.id);
+      stateEvents.set(state, set);
+    }
+    const states = Array.from(stateEvents.entries())
+      .map(([state, evts]) => ({ state, events: evts.size }))
+      .sort((a, b) => b.events - a.events);
+
+    // ---- Upcoming events members are registered for ----
+    let upcomingEvents: Array<{ id: string; name: string; date: string; location?: string; membersRegistered: number }> = [];
+    try {
+      const registrations = await em.find(EventRegistration, {
+        user: { $in: memberUserIds },
+        paymentStatus: PaymentStatus.PAID,
+      }, { populate: ['event'] });
+      const now = new Date();
+      const upcoming = new Map<string, { event: Event; count: number }>();
+      for (const reg of registrations) {
+        const evt = reg.event;
+        if (!evt?.eventDate || new Date(evt.eventDate) < now) continue;
+        const entry = upcoming.get(evt.id) || { event: evt, count: 0 };
+        entry.count++;
+        upcoming.set(evt.id, entry);
+      }
+      upcomingEvents = Array.from(upcoming.values())
+        .sort((a, b) => new Date(a.event.eventDate!).getTime() - new Date(b.event.eventDate!).getTime())
+        .slice(0, 5)
+        .map(e => ({
+          id: e.event.id,
+          name: e.event.title,
+          date: new Date(e.event.eventDate!).toISOString().split('T')[0],
+          location: e.event.venueCity && e.event.venueState ? `${e.event.venueCity}, ${e.event.venueState}` : undefined,
+          membersRegistered: e.count,
+        }));
+    } catch (regErr: any) {
+      this.logger.warn(`Failed to fetch upcoming registrations for team ${teamId}: ${regErr.message}`);
+    }
+
+    // ---- Team rank among all teams by member points (season-scoped) ----
+    let teamRank: { rank: number; totalTeams: number; points: number } | null = null;
+    try {
+      const rankSql = `
+        SELECT t.id, COALESCE(SUM(cr.points_earned), 0) AS pts
+        FROM teams t
+        JOIN team_members tm ON tm.team_id = t.id AND tm.status = 'active'
+        JOIN competition_results cr ON cr.competitor_id = tm.user_id
+          AND cr.needs_class_review = false
+          ${seasonId ? 'AND cr.season_id = ?' : ''}
+        WHERE t.is_active = true
+        GROUP BY t.id
+        ORDER BY pts DESC`;
+      const rows = await em.getConnection().execute(rankSql, seasonId ? [seasonId] : []);
+      const idx = rows.findIndex((row: any) => row.id === teamId);
+      if (idx >= 0) {
+        teamRank = { rank: idx + 1, totalTeams: rows.length, points: Number(rows[idx].pts) || 0 };
+      }
+    } catch (rankErr: any) {
+      this.logger.warn(`Failed to compute team rank for ${teamId}: ${rankErr.message}`);
+    }
+
+    return {
+      memberLeaderboard,
+      pointsOverTime,
+      formatBreakdown,
+      classLeaders,
+      wattageFrequency,
+      records,
+      seasonComparison,
+      states,
+      upcomingEvents,
+      teamRank,
+    };
+  }
+
+  /**
    * Get all teams from active memberships (retailers, manufacturers, competitor teams)
    * This is the primary source of teams in the system.
    */
@@ -1995,5 +2359,239 @@ export class TeamsService {
     const em = this.em.fork();
     const ownedTeam = await em.findOne(Team, { captainId: userId, isActive: true });
     return !!ownedTeam;
+  }
+
+  // ============================================
+  // ADMIN TEAM MANAGEMENT
+  // ============================================
+
+  async assertAdmin(userId: string): Promise<void> {
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: userId });
+    if (!isAdminUser(profile)) {
+      throw new ForbiddenException('Admin access required');
+    }
+  }
+
+  private buildAdminTeamSummary(
+    team: Team,
+    allMembers: TeamMember[],
+    profileMap: Map<string, Profile>,
+  ) {
+    const teamMembers = allMembers.filter(m => m.teamId === team.id);
+    const owner = profileMap.get(team.captainId);
+    return {
+      id: team.id,
+      name: team.name,
+      teamType: team.teamType,
+      location: team.location,
+      isActive: team.isActive,
+      isPublic: team.isPublic,
+      createdAt: team.createdAt,
+      membershipId: (team as any).membership?.id || (team as any).membership || null,
+      activeMemberCount: teamMembers.filter(m => m.status === 'active').length,
+      pendingCount: teamMembers.filter(m => m.status === 'pending_approval' || m.status === 'pending_invite').length,
+      owner: owner ? {
+        id: owner.id,
+        first_name: owner.first_name,
+        last_name: owner.last_name,
+        meca_id: owner.meca_id != null ? String(owner.meca_id) : undefined,
+        email: owner.email,
+        membership_status: owner.membership_status,
+      } : { id: team.captainId },
+    };
+  }
+
+  /**
+   * Admin: search teams by name (or list all when query is empty).
+   * Includes inactive and non-public teams so admins can find anything.
+   */
+  async adminSearchTeams(query?: string): Promise<any[]> {
+    const em = this.em.fork();
+
+    const where: Record<string, unknown> = {};
+    const trimmed = query?.trim();
+    if (trimmed) {
+      where.name = { $ilike: `%${trimmed}%` };
+    }
+
+    const teams = await em.find(Team, where, { orderBy: { name: 'ASC' }, limit: 1000 });
+    if (teams.length === 0) return [];
+
+    const teamIds = teams.map(t => t.id);
+    const allMembers = await em.find(TeamMember, { teamId: { $in: teamIds } });
+    const profileMap = await this.loadProfileMap(em, teams.map(t => t.captainId));
+
+    return teams.map(t => this.buildAdminTeamSummary(t, allMembers, profileMap));
+  }
+
+  /**
+   * Admin: search members (profiles) by name, email, or MECA ID, with the
+   * count of team associations each has — so admins can jump from a person
+   * to their teams.
+   */
+  async adminSearchMembers(query: string): Promise<any[]> {
+    const em = this.em.fork();
+    const trimmed = query?.trim();
+    if (!trimmed) return [];
+
+    const term = `%${trimmed}%`;
+    const rows = await em.getConnection().execute(
+      `SELECT p.id, p.first_name, p.last_name, p.email, p.meca_id, p.membership_status,
+              (SELECT COUNT(*) FROM teams t WHERE t.captain_id = p.id) AS owned_team_count,
+              (SELECT COUNT(*) FROM team_members tm WHERE tm.user_id = p.id) AS team_member_rows
+       FROM profiles p
+       WHERE p.first_name ILIKE ? OR p.last_name ILIKE ?
+          OR (p.first_name || ' ' || p.last_name) ILIKE ?
+          OR p.email ILIKE ? OR p.meca_id::text ILIKE ?
+       ORDER BY p.last_name, p.first_name
+       LIMIT 25`,
+      [term, term, term, term, term],
+    );
+
+    return rows.map((r: any) => ({
+      id: r.id,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email,
+      meca_id: r.meca_id != null ? String(r.meca_id) : undefined,
+      membership_status: r.membership_status,
+      ownedTeamCount: Number(r.owned_team_count) || 0,
+      teamMemberRows: Number(r.team_member_rows) || 0,
+    }));
+  }
+
+  /**
+   * Admin: every team association for a user — teams they captain (including
+   * inactive ones) and every team_members row regardless of status. This is
+   * the forensic view for cleaning up bad data.
+   */
+  async adminGetUserTeams(userId: string): Promise<{
+    profile: any;
+    ownedTeams: any[];
+    memberRows: any[];
+  }> {
+    const em = this.em.fork();
+
+    const profile = await em.findOne(Profile, { id: userId });
+    if (!profile) {
+      throw new NotFoundException('User not found');
+    }
+
+    const ownedTeams = await em.find(Team, { captainId: userId }, { orderBy: { name: 'ASC' } });
+    const memberRows = await em.find(TeamMember, { userId });
+
+    const memberTeamIds = memberRows.map(m => m.teamId);
+    const memberTeams = memberTeamIds.length > 0
+      ? await em.find(Team, { id: { $in: memberTeamIds } })
+      : [];
+    const teamMap = new Map(memberTeams.map(t => [t.id, t]));
+
+    const allTeams = [...ownedTeams, ...memberTeams];
+    const allMembers = allTeams.length > 0
+      ? await em.find(TeamMember, { teamId: { $in: allTeams.map(t => t.id) } })
+      : [];
+    const profileMap = await this.loadProfileMap(em, allTeams.map(t => t.captainId));
+
+    return {
+      profile: {
+        id: profile.id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        email: profile.email,
+        meca_id: profile.meca_id != null ? String(profile.meca_id) : undefined,
+        membership_status: profile.membership_status,
+      },
+      ownedTeams: ownedTeams.map(t => this.buildAdminTeamSummary(t, allMembers, profileMap)),
+      memberRows: memberRows.map(m => {
+        const team = teamMap.get(m.teamId);
+        return {
+          teamId: m.teamId,
+          role: m.role,
+          status: m.status,
+          joinedAt: m.joinedAt,
+          requestedAt: m.requestedAt,
+          team: team ? this.buildAdminTeamSummary(team, allMembers, profileMap) : null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Admin: reassign a team to a different owner by MECA ID, in one step.
+   * Unlike transferOwnership, the new owner does NOT need to already be on
+   * the roster — a member row is created if missing. The previous owner's
+   * row is demoted to member, or removed entirely when removePrevious is set
+   * (for fixing teams that were assigned to the wrong person).
+   */
+  async adminReassignOwner(teamId: string, mecaId: string, removePrevious: boolean): Promise<Team> {
+    const em = this.em.fork();
+
+    const team = await em.findOne(Team, { id: teamId });
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${teamId} not found`);
+    }
+
+    const trimmedMecaId = String(mecaId ?? '').trim();
+    if (!trimmedMecaId) {
+      throw new BadRequestException('MECA ID is required');
+    }
+    const newOwner = await em.findOne(Profile, { meca_id: trimmedMecaId });
+    if (!newOwner) {
+      throw new NotFoundException(`No member found with MECA ID ${trimmedMecaId}`);
+    }
+    if (newOwner.id === team.captainId) {
+      throw new BadRequestException('That member already owns this team');
+    }
+
+    const previousCaptainId = team.captainId;
+
+    // Ensure the new owner has an active owner-role row on this team
+    const existingRow = await em.findOne(TeamMember, { teamId, userId: newOwner.id });
+    if (existingRow) {
+      existingRow.role = 'owner';
+      existingRow.status = 'active';
+      if (!existingRow.joinedAt) existingRow.joinedAt = new Date();
+    } else {
+      em.persist(em.create(TeamMember, {
+        teamId,
+        userId: newOwner.id,
+        role: 'owner',
+        status: 'active',
+        joinedAt: new Date(),
+      }));
+    }
+
+    // Demote or remove the previous owner's roster row
+    const previousRow = await em.findOne(TeamMember, { teamId, userId: previousCaptainId });
+    if (previousRow) {
+      if (removePrevious) {
+        em.remove(previousRow);
+      } else {
+        previousRow.role = 'member';
+      }
+    }
+
+    team.captainId = newOwner.id;
+    team.updatedAt = new Date();
+    await em.flush();
+
+    this.logger.log(`Admin reassigned team ${team.id} (${team.name}) from ${previousCaptainId} to ${newOwner.id} (MECA ${trimmedMecaId})${removePrevious ? ', previous owner removed' : ''}`);
+    return team;
+  }
+
+  /**
+   * Admin: activate or deactivate a team without deleting it.
+   */
+  async adminSetTeamActive(teamId: string, isActive: boolean): Promise<Team> {
+    const em = this.em.fork();
+    const team = await em.findOne(Team, { id: teamId });
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${teamId} not found`);
+    }
+    team.isActive = isActive;
+    team.updatedAt = new Date();
+    await em.flush();
+    return team;
   }
 }

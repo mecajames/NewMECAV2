@@ -23,7 +23,9 @@ import {
   UserPlus,
   Clock,
 } from 'lucide-react';
-import { teamsApi, Team, TeamPublicStats, PendingRequest } from '../teams.api-client';
+import { teamsApi, Team, TeamPublicStats, TeamAnalytics, PendingRequest } from '../teams.api-client';
+import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
+import TeamAnalyticsSection from '../components/TeamAnalyticsSection';
 import { seasonsApi, Season } from '@/seasons';
 import { useAuth } from '@/auth/contexts/AuthContext';
 
@@ -63,6 +65,7 @@ export default function TeamPublicProfilePage() {
   const [loading, setLoading] = useState(true);
   const [team, setTeam] = useState<Team | null>(null);
   const [stats, setStats] = useState<TeamPublicStats | null>(null);
+  const [analytics, setAnalytics] = useState<TeamAnalytics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
@@ -147,11 +150,13 @@ export default function TeamPublicProfilePage() {
 
       // Fetch stats separately so a stats error doesn't hide the team profile
       try {
-        const statsData = await teamsApi.getTeamPublicStats(
-          id!,
-          defaultSeasonId === 'all' ? undefined : defaultSeasonId
-        );
+        const seasonParam = defaultSeasonId === 'all' ? undefined : defaultSeasonId;
+        const [statsData, analyticsData] = await Promise.all([
+          teamsApi.getTeamPublicStats(id!, seasonParam),
+          teamsApi.getTeamAnalytics(id!, seasonParam).catch(() => null),
+        ]);
         setStats(statsData);
+        setAnalytics(analyticsData);
       } catch (statsErr) {
         console.error('Error fetching team stats:', statsErr);
       }
@@ -170,8 +175,12 @@ export default function TeamPublicProfilePage() {
 
     try {
       setLoadingStats(true);
-      const statsData = await teamsApi.getTeamPublicStats(id, seasonId);
+      const [statsData, analyticsData] = await Promise.all([
+        teamsApi.getTeamPublicStats(id, seasonId),
+        teamsApi.getTeamAnalytics(id, seasonId).catch(() => null),
+      ]);
       setStats(statsData);
+      setAnalytics(analyticsData);
     } catch (err) {
       console.error('Error fetching stats:', err);
     } finally {
@@ -770,6 +779,9 @@ export default function TeamPublicProfilePage() {
           </div>
         )}
 
+        {/* Full Team Analytics (season-aware) */}
+        <TeamAnalyticsSection analytics={analytics} loading={loadingStats} />
+
         {/* Team Members */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
           <div className="flex items-center gap-3 mb-6">
@@ -806,7 +818,22 @@ export default function TeamPublicProfilePage() {
                     </span>
                   </div>
                   {member.user?.meca_id && (
-                    <div className="text-sm text-orange-500 font-mono">#{member.user.meca_id}</div>
+                    <div
+                      className="flex items-center gap-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MecaIdLink
+                        mecaId={String(member.user.meca_id)}
+                        displayText={`#${member.user.meca_id}`}
+                        className="text-sm text-orange-500 font-mono"
+                      />
+                      <MecaIdLink
+                        mecaId={String(member.user.meca_id)}
+                        displayText="View Results →"
+                        className="text-xs text-cyan-400"
+                        hideIfNoLink
+                      />
+                    </div>
                   )}
                 </div>
               </div>

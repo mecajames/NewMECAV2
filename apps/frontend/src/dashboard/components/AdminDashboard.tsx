@@ -245,6 +245,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/members',
         },
         {
+          icon: Users,
+          title: 'Team Management',
+          description: 'Search teams, fix ownership, and manage team rosters',
+          action: 'teams',
+          color: 'purple',
+          navigateTo: '/admin/teams',
+        },
+        {
           icon: CreditCard,
           title: 'Memberships',
           description: 'Manage membership purchases and renewals',

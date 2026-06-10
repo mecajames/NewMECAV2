@@ -11,6 +11,10 @@ interface Props {
   /** Tailwind text-color class. Caller-controlled so a per-page color
    *  scheme (expired = red, active = green, etc.) is preserved. */
   className?: string;
+  /** Render nothing (instead of plain text) when the link is gated off.
+   *  For call-to-action labels like "View Results" that make no sense as
+   *  dead text. */
+  hideIfNoLink?: boolean;
 }
 
 /**
@@ -32,7 +36,7 @@ interface Props {
  * Used by Results, Leaderboard, Standings, and Top 10 so the rule is
  * identical everywhere.
  */
-export function MecaIdLink({ mecaId, displayText, className }: Props) {
+export function MecaIdLink({ mecaId, displayText, className, hideIfNoLink }: Props) {
   const { user, profile } = useAuth();
 
   const isRealMecaId = !!mecaId && mecaId !== '999999' && mecaId !== '0';
@@ -51,6 +55,7 @@ export function MecaIdLink({ mecaId, displayText, className }: Props) {
   const canLink = !!user && isActiveMember && isRealMecaId && targetGateOk;
 
   if (!canLink) {
+    if (hideIfNoLink) return null;
     return <span className={className}>{text}</span>;
   }
   return (

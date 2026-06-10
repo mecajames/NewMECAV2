@@ -128,6 +128,17 @@ export class TeamsController {
     return this.teamsService.getTeamPublicStats(id, seasonId);
   }
 
+  // Public endpoint - full team analytics (leaderboard, charts, class
+  // leaders, wattage/frequency, records, rank), optionally season-filtered
+  @Public()
+  @Get('public/:id/analytics')
+  async getTeamAnalytics(
+    @Param('id') id: string,
+    @Query('seasonId') seasonId?: string,
+  ): Promise<any> {
+    return this.teamsService.getTeamAnalytics(id, seasonId || undefined);
+  }
+
   @Get('can-create')
   async canCreateTeam(@Headers('authorization') authHeader: string): Promise<{ canCreate: boolean; reason?: string }> {
     try {
@@ -203,6 +214,68 @@ export class TeamsController {
   async getMyPendingRequests(@Headers('authorization') authHeader: string): Promise<any[]> {
     const userId = await this.requireAuth(authHeader);
     return this.teamsService.getMyPendingRequests(userId);
+  }
+
+  // ============================================
+  // ADMIN TEAM MANAGEMENT (must be before :id routes)
+  // ============================================
+
+  // Admin: search teams by name (includes inactive/non-public)
+  @Get('admin/search')
+  async adminSearchTeams(
+    @Query('q') q: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<any[]> {
+    const userId = await this.requireAuth(authHeader);
+    await this.teamsService.assertAdmin(userId);
+    return this.teamsService.adminSearchTeams(q);
+  }
+
+  // Admin: search members by name/email/MECA ID with team counts
+  @Get('admin/member-search')
+  async adminSearchMembers(
+    @Query('q') q: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<any[]> {
+    const userId = await this.requireAuth(authHeader);
+    await this.teamsService.assertAdmin(userId);
+    return this.teamsService.adminSearchMembers(q);
+  }
+
+  // Admin: full team-association view for a user (owned + all member rows)
+  @Get('admin/user/:userId')
+  async adminGetUserTeams(
+    @Param('userId') targetUserId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<any> {
+    const userId = await this.requireAuth(authHeader);
+    await this.teamsService.assertAdmin(userId);
+    return this.teamsService.adminGetUserTeams(targetUserId);
+  }
+
+  // Admin: reassign a team to a new owner by MECA ID (adds them to the
+  // roster if needed; optionally removes the previous owner entirely)
+  @Put('admin/:id/reassign-owner')
+  async adminReassignOwner(
+    @Param('id') teamId: string,
+    @Body() data: { meca_id: string; remove_previous?: boolean },
+    @Headers('authorization') authHeader: string,
+  ): Promise<Team> {
+    const userId = await this.requireAuth(authHeader);
+    await this.teamsService.assertAdmin(userId);
+    return this.teamsService.adminReassignOwner(teamId, data.meca_id, !!data.remove_previous);
+  }
+
+  // Admin: activate/deactivate a team
+  @Patch('admin/:id/active')
+  async adminSetTeamActive(
+    @Param('id') teamId: string,
+    @Body() data: { is_active: boolean },
+    @Headers('authorization') authHeader: string,
+  ): Promise<Team> {
+    const userId = await this.requireAuth(authHeader);
+    await this.teamsService.assertAdmin(userId);
+    return this.teamsService.adminSetTeamActive(teamId, !!data.is_active);
   }
 
   @Get('user/:userId')

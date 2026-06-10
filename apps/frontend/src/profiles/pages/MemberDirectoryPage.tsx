@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Search, Car, Music, User, Award } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
+import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
 import { SEOHead, useMemberDirectorySEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
 import { BannerDisplay, useBanners } from '@/banners';
@@ -236,6 +237,17 @@ export default function MemberDirectoryPage() {
                   >
                     View Full Profile
                   </button>
+
+                  {/* Results & Analytics link — only renders for viewers
+                      allowed to open member results (active members/admins) */}
+                  {profile.meca_id && (
+                    <MecaIdLink
+                      mecaId={String(profile.meca_id)}
+                      displayText="View Results & Analytics"
+                      className="block w-full mt-2 py-2 bg-slate-700/50 hover:bg-slate-600 text-cyan-400 rounded-lg transition-colors text-sm font-medium text-center"
+                      hideIfNoLink
+                    />
+                  )}
                 </div>
               </div>
             ))}
