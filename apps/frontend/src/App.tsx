@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { lazyWithReload as lazy } from '@/shared/lazyWithReload';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard, BillingRestrictedGuard, MemberOnlyGate } from '@/auth';
+import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard, BillingRestrictedGuard, MemberOnlyGate, RecoveryRedirect } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
@@ -242,6 +242,7 @@ function App() {
               <PayPalProvider>
               <ReCaptchaProvider version="v2">
                   <ScrollToTop />
+                  <RecoveryRedirect />
                   <PageTracker />
           <ImpersonationBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">

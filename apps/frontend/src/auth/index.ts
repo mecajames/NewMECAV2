@@ -8,6 +8,7 @@ export { ExpiredMembershipGuard } from './components/ExpiredMembershipGuard';
 export { IdleTimeoutGuard } from './components/IdleTimeoutGuard';
 export { default as MaintenanceModeGuard } from './components/MaintenanceModeGuard';
 export { MemberOnlyGate } from './components/MemberOnlyGate';
+export { RecoveryRedirect } from './components/RecoveryRedirect';
 export * from './usePermissions';
 export * from './permissions';
 export { isAdminUser } from './isAdminUser';
