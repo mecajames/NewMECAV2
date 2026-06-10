@@ -4617,12 +4617,16 @@ function MembershipsTab({ member }: { member: Profile }) {
   const canEdit = hasPermission('edit_user');
   const canOverrideMecaId = canEdit && isSuperAdmin(currentUserProfile);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  // Status filter for the memberships list — defaults to Active so early
+  // renewals / old expired rows don't clutter the view.
+  const [membershipFilter, setMembershipFilter] = useState<'active' | 'expired' | 'cancelled' | 'all'>('active');
   const [_membershipTypes, setMembershipTypes] = useState<MembershipTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMembershipWizard, setShowMembershipWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [repairingTeamId, setRepairingTeamId] = useState<string | null>(null);
   const [reconcilingTeams, setReconcilingTeams] = useState(false);
+  const [reconcilingRenewals, setReconcilingRenewals] = useState(false);
   // Record Payment & Reactivate modal — opened from any not-yet-paid membership
   // row. Covers cash/check AND recording a Stripe payment (pi_/sub_) whose
   // webhook never landed, then re-syncs the profile to active.
@@ -4871,6 +4875,36 @@ function MembershipsTab({ member }: { member: Profile }) {
       alert(error?.response?.data?.message || 'Failed to repair team for this membership');
     } finally {
       setRepairingTeamId(null);
+    }
+  };
+
+  const handleReconcileRenewals = async () => {
+    setReconcilingRenewals(true);
+    try {
+      // Always preview (dry run) first, then confirm before applying.
+      const preview = await membershipsApi.adminReconcileRenewals(true);
+      const msg =
+        `Reconcile Renewals — preview (nothing changed yet):\n\n` +
+        `• Backfill blank competitor/vehicle info on ${preview.backfill.updated} membership(s)\n` +
+        `• ${preview.duplicates.groups} member(s) with duplicate active memberships\n` +
+        `• ${preview.duplicates.superseded} old membership(s) will be ended/superseded\n` +
+        `• ${preview.duplicates.subscriptionsToCancel} Stripe subscription(s) will be cancelled (at period end)\n\n` +
+        `Apply these changes now? This cancels live subscriptions and cannot be auto-undone.`;
+      if (!window.confirm(msg)) {
+        setReconcilingRenewals(false);
+        return;
+      }
+      const result = await membershipsApi.adminReconcileRenewals(false);
+      alert(
+        `Done.\nBackfilled: ${result.backfill.updated}\nSuperseded: ${result.duplicates.superseded}\n` +
+        `Subscriptions cancelled: ${result.duplicates.subscriptionsToCancel}`,
+      );
+      fetchMemberships();
+    } catch (error: any) {
+      console.error('Error reconciling renewals:', error);
+      alert(error?.response?.data?.message || 'Failed to reconcile renewals');
+    } finally {
+      setReconcilingRenewals(false);
     }
   };
 
@@ -5242,6 +5276,24 @@ function MembershipsTab({ member }: { member: Profile }) {
     );
   }
 
+  // Classify a membership for the status filter. Cancelled wins over expired
+  // (a cancelled row may also be past its end date); otherwise a past end date
+  // is expired, and everything current (paid OR pending) counts as active.
+  const membershipBucket = (m: Membership): 'active' | 'expired' | 'cancelled' => {
+    if ((m as any).cancelledAt || m.paymentStatus === 'cancelled') return 'cancelled';
+    if (isExpired(m.endDate || '')) return 'expired';
+    return 'active';
+  };
+  const membershipCounts = {
+    active: memberships.filter((m) => membershipBucket(m) === 'active').length,
+    expired: memberships.filter((m) => membershipBucket(m) === 'expired').length,
+    cancelled: memberships.filter((m) => membershipBucket(m) === 'cancelled').length,
+    all: memberships.length,
+  };
+  const filteredMemberships = membershipFilter === 'all'
+    ? memberships
+    : memberships.filter((m) => membershipBucket(m) === membershipFilter);
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
@@ -5262,6 +5314,19 @@ function MembershipsTab({ member }: { member: Profile }) {
               Repair Teams
             </button>
             <button
+              onClick={handleReconcileRenewals}
+              disabled={reconcilingRenewals}
+              className="px-3 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+              title="One-time cleanup: backfill blank renewal info and supersede early-renewal duplicates (cancels old subscriptions). Previews first."
+            >
+              {reconcilingRenewals ? (
+                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Reconcile Renewals
+            </button>
+            <button
               onClick={() => setShowMembershipWizard(true)}
               className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center gap-2"
             >
@@ -5271,6 +5336,27 @@ function MembershipsTab({ member }: { member: Profile }) {
           </div>
         )}
       </div>
+
+      {memberships.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {([
+            ['active', 'Active'],
+            ['expired', 'Expired'],
+            ['cancelled', 'Cancelled'],
+            ['all', 'All'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setMembershipFilter(key)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${membershipFilter === key
+                ? 'bg-orange-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+            >
+              {label} <span className="opacity-70">({membershipCounts[key]})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {memberships.length === 0 ? (
         <div className="text-center py-12 text-gray-400 bg-slate-700 rounded-lg">
@@ -5286,9 +5372,21 @@ function MembershipsTab({ member }: { member: Profile }) {
             </button>
           )}
         </div>
+      ) : filteredMemberships.length === 0 ? (
+        <div className="text-center py-10 text-gray-400 bg-slate-700 rounded-lg">
+          No {membershipFilter === 'all' ? '' : membershipFilter} memberships to show.
+          {membershipFilter !== 'all' && (
+            <button
+              onClick={() => setMembershipFilter('all')}
+              className="ml-2 text-orange-400 hover:text-orange-300 underline"
+            >
+              Show all
+            </button>
+          )}
+        </div>
       ) : (
         <div className="space-y-4">
-          {memberships.map((membership) => (
+          {filteredMemberships.map((membership) => (
             <div
               key={membership.id}
               className={`bg-slate-700 rounded-lg p-4 border-l-4 ${
