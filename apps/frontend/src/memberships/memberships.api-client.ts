@@ -525,6 +525,25 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin one-time cleanup: backfill blank competitor/vehicle info on renewed
+   * memberships, and supersede early-renewal duplicates (cancelling old subs).
+   * Defaults to a dry run; pass dryRun=false to apply.
+   */
+  adminReconcileRenewals: async (dryRun: boolean): Promise<{
+    dryRun: boolean;
+    backfill: { updated: number; details: Array<{ membershipId: string; filled: string[] }> };
+    duplicates: {
+      groups: number;
+      superseded: number;
+      subscriptionsToCancel: number;
+      details: Array<{ userId: string; category: string; keeperId: string; supersededIds: string[] }>;
+    };
+  }> => {
+    const response = await axios.post('/api/memberships/admin/reconcile-renewals', { dryRun });
+    return response.data;
+  },
+
+  /**
    * Update team name for a membership (subject to 30-day edit window)
    */
   updateTeamName: async (id: string, teamName: string, isAdmin?: boolean): Promise<Membership> => {

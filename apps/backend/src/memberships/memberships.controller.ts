@@ -212,6 +212,22 @@ export class MembershipsController {
     return this.membershipsService.reconcileMissingTeams();
   }
 
+  /**
+   * Admin one-time cleanup: backfill blank competitor/vehicle info on renewed
+   * memberships, and supersede early-renewal duplicates (cancelling the old
+   * Stripe subscription unless it's the same one). Defaults to a DRY RUN —
+   * pass { dryRun: false } to apply.
+   */
+  @Post('admin/reconcile-renewals')
+  @HttpCode(HttpStatus.OK)
+  async adminReconcileRenewals(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { dryRun?: boolean },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.reconcileRenewals({ dryRun: body?.dryRun !== false });
+  }
+
   @Post('admin/meca-id/reassign')
   @HttpCode(HttpStatus.NO_CONTENT)
   async adminReassignMecaId(

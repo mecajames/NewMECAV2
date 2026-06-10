@@ -1948,6 +1948,20 @@ export class StripeController {
 
       await em.persistAndFlush(membership);
 
+      // Early-renewal supersede: if this NEW subscription replaces a still-active
+      // membership in the same category, end the old one and cancel its (older,
+      // different) Stripe subscription so the member isn't double-billed.
+      try {
+        await this.membershipsService.supersedePriorActiveMembershipsOnRenewal(
+          membership.id,
+          profile.id,
+          membershipConfig.category,
+          'system',
+        );
+      } catch (err) {
+        console.error('Supersede prior membership on new-subscription renewal failed (non-fatal):', err);
+      }
+
       // Update profile membership status
       await this.membershipSyncService.setProfileActive(profile.id);
 

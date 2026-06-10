@@ -3,6 +3,7 @@ import { EntityManager } from '@mikro-orm/core';
 import {
   PaymentStatus,
   MembershipCategory,
+  MembershipAccountType,
   AdminPaymentMethod,
   AdminCreateMembershipDto,
   OrderStatus,
@@ -436,12 +437,16 @@ export class MembershipsService {
       newMembership.stripePaymentIntentId = data.stripePaymentIntentId;
       newMembership.transactionId = data.transactionId;
 
-      // Competitor info
-      newMembership.competitorName = data.competitorName;
-      newMembership.vehicleLicensePlate = data.vehicleLicensePlate;
-      newMembership.vehicleColor = data.vehicleColor;
-      newMembership.vehicleMake = data.vehicleMake;
-      newMembership.vehicleModel = data.vehicleModel;
+      // Competitor info — carry forward from the member's most recent
+      // membership when the purchase/renewal didn't re-collect it (e.g. a quick
+      // renewal or a "w/Team" upgrade that skips the vehicle form). Without this
+      // a renewed membership comes through blank even though we have the
+      // competitor name, vehicle, and plate on the prior membership.
+      newMembership.competitorName = data.competitorName || mostRecent?.competitorName || undefined;
+      newMembership.vehicleLicensePlate = data.vehicleLicensePlate || mostRecent?.vehicleLicensePlate || undefined;
+      newMembership.vehicleColor = data.vehicleColor || mostRecent?.vehicleColor || undefined;
+      newMembership.vehicleMake = data.vehicleMake || mostRecent?.vehicleMake || undefined;
+      newMembership.vehicleModel = data.vehicleModel || mostRecent?.vehicleModel || undefined;
 
       // Team add-on (for competitors) or included team (for retailer/manufacturer)
       // Also check if membership type config includes team automatically
@@ -545,6 +550,21 @@ export class MembershipsService {
       }
     }
 
+    // Early-renewal supersede: if this purchase renews a member who STILL had
+    // an active membership in this category, end the old one (and cancel its
+    // Stripe subscription unless it's the same one) so they don't carry two
+    // active rows / get double-billed. Master/secondary aware.
+    try {
+      await this.supersedePriorActiveMembershipsOnRenewal(
+        membership.id,
+        data.userId,
+        config.category,
+        'system',
+      );
+    } catch (err) {
+      this.logger.error('Supersede prior membership on renewal failed (non-fatal):', err);
+    }
+
     // Sync profile membership status to ACTIVE
     await this.membershipSyncService.setProfileActive(data.userId);
 
@@ -583,6 +603,239 @@ export class MembershipsService {
     });
 
     return membership;
+  }
+
+  /**
+   * When a member renews while they STILL have an active membership in the same
+   * category (early renewal / a new purchase that did NOT go through the
+   * same-subscription auto-renew webhook), end the prior membership so they
+   * don't carry two active rows.
+   *
+   * Subscription rule:
+   *  - prior on the SAME Stripe subscription as the new membership → left alone
+   *    (that's the same billing relationship; the auto-renew webhook owns it).
+   *  - prior on a DIFFERENT subscription, or the new one is one-time → cancel
+   *    the old subscription at period end so it stops auto-billing.
+   *
+   * Master/secondary aware: never supersedes a SECONDARY here (those renew via
+   * their master), and if the prior was a MASTER the new membership inherits
+   * MASTER and the secondaries are re-pointed to it.
+   */
+  async supersedePriorActiveMembershipsOnRenewal(
+    newMembershipId: string,
+    userId: string,
+    category: MembershipCategory,
+    actorId: string = 'system',
+  ): Promise<void> {
+    const em = this.em.fork();
+    const fresh = await em.findOne(Membership, { id: newMembershipId });
+    if (!fresh) return;
+
+    const now = new Date();
+    const priors = await em.find(
+      Membership,
+      {
+        user: userId,
+        id: { $ne: newMembershipId },
+        paymentStatus: PaymentStatus.PAID,
+        cancelledAt: null,
+        accountType: { $ne: MembershipAccountType.SECONDARY },
+        membershipTypeConfig: { category },
+        $or: [{ endDate: { $gte: now } }, { endDate: null }],
+      },
+      { populate: ['membershipTypeConfig'] },
+    );
+    if (priors.length === 0) return;
+
+    for (const prior of priors) {
+      // Same Stripe subscription as the new membership → same billing
+      // relationship; leave it for the auto-renew webhook to own.
+      if (
+        prior.stripeSubscriptionId &&
+        fresh.stripeSubscriptionId &&
+        prior.stripeSubscriptionId === fresh.stripeSubscriptionId
+      ) {
+        continue;
+      }
+
+      // Master → the new membership takes over as master; re-point secondaries.
+      if (prior.accountType === MembershipAccountType.MASTER) {
+        fresh.accountType = MembershipAccountType.MASTER;
+        const secondaries = await em.find(Membership, { masterMembership: prior.id });
+        for (const sec of secondaries) {
+          sec.masterMembership = em.getReference(Membership, newMembershipId);
+        }
+      }
+
+      // Cancel the old subscription (different/new sub, or one-time replacement)
+      // at period end so it stops billing without an immediate proration.
+      if (prior.stripeSubscriptionId) {
+        try {
+          await this.stripeService.cancelSubscription(prior.stripeSubscriptionId, false);
+          this.logger.log(
+            `Supersede: cancelled old subscription ${prior.stripeSubscriptionId} (membership ${prior.id})`,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Supersede: failed to cancel old subscription ${prior.stripeSubscriptionId}: ${err}`,
+          );
+        }
+      }
+
+      // End the old membership. Keep paymentStatus PAID (it was a real, paid
+      // term — preserves revenue history); flag it superseded and truncate the
+      // term so it drops out of "active".
+      prior.cancelledAt = now;
+      prior.cancelledBy = actorId;
+      prior.cancellationReason = `Superseded by renewal (membership ${newMembershipId})`;
+      prior.cancelAtPeriodEnd = false;
+      if (!prior.endDate || prior.endDate > now) {
+        prior.endDate = new Date(now.getTime() - 1000);
+      }
+
+      this.logger.warn(
+        `Supersede: ended prior membership ${prior.id} (was active) in favor of ${newMembershipId} for user ${userId}`,
+      );
+    }
+
+    await em.flush();
+    await this.membershipSyncService.syncProfileMembershipStatus(userId);
+  }
+
+  /**
+   * One-time cleanup for memberships created BEFORE the renewal fixes:
+   *  1. Backfill — fill blank competitor name / vehicle fields on any membership
+   *     from the best-known values among that member's same-category memberships
+   *     (so renewals that came through blank get their info back).
+   *  2. Duplicates — for any member with more than one ACTIVE membership in the
+   *     same category (early renewals that never superseded the old row), keep
+   *     the one with the latest end date and supersede the rest via
+   *     supersedePriorActiveMembershipsOnRenewal (which also cancels the old
+   *     Stripe subscription unless it's the same one, and re-links secondaries).
+   *
+   * Defaults to a DRY RUN — reports what WOULD change without mutating anything
+   * or touching Stripe. Pass { dryRun: false } to apply.
+   */
+  async reconcileRenewals(opts: { dryRun?: boolean } = {}): Promise<{
+    dryRun: boolean;
+    backfill: { updated: number; details: Array<{ membershipId: string; filled: string[] }> };
+    duplicates: {
+      groups: number;
+      superseded: number;
+      subscriptionsToCancel: number;
+      details: Array<{ userId: string; category: string; keeperId: string; supersededIds: string[] }>;
+    };
+  }> {
+    const dryRun = opts.dryRun !== false; // default true
+    const em = this.em.fork();
+    const now = new Date();
+
+    const all = await em.find(
+      Membership,
+      {},
+      { populate: ['user', 'membershipTypeConfig'], orderBy: { startDate: 'ASC' } },
+    );
+
+    // Group by user + category.
+    const groups = new Map<string, Membership[]>();
+    for (const m of all) {
+      const uid = m.user?.id;
+      const cat = m.membershipTypeConfig?.category;
+      if (!uid || !cat) continue;
+      const key = `${uid}::${cat}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(m);
+    }
+
+    const fields = ['competitorName', 'vehicleMake', 'vehicleModel', 'vehicleColor', 'vehicleLicensePlate'] as const;
+    const backfillDetails: Array<{ membershipId: string; filled: string[] }> = [];
+    const dupDetails: Array<{ userId: string; category: string; keeperId: string; supersededIds: string[] }> = [];
+    let subsToCancel = 0;
+
+    for (const [key, members] of groups) {
+      const sep = key.indexOf('::');
+      const uid = key.slice(0, sep);
+      const cat = key.slice(sep + 2);
+
+      // --- Backfill blanks from the most-recent non-empty value per field ---
+      const best: Record<string, string> = {};
+      for (const m of members) {
+        for (const f of fields) {
+          const v = (m as any)[f];
+          if (v && String(v).trim()) best[f] = v; // members are startDate ASC → last wins = most recent
+        }
+      }
+      for (const m of members) {
+        const filled: string[] = [];
+        for (const f of fields) {
+          const cur = (m as any)[f];
+          if ((!cur || !String(cur).trim()) && best[f]) {
+            filled.push(f);
+            if (!dryRun) (m as any)[f] = best[f];
+          }
+        }
+        if (filled.length) backfillDetails.push({ membershipId: m.id, filled });
+      }
+
+      // --- Duplicate active detection ---
+      const actives = members.filter(
+        (m) =>
+          m.paymentStatus === PaymentStatus.PAID &&
+          !m.cancelledAt &&
+          m.accountType !== MembershipAccountType.SECONDARY &&
+          (!m.endDate || m.endDate >= now),
+      );
+      if (actives.length > 1) {
+        const sorted = [...actives].sort((a, b) => {
+          const ae = a.endDate ? a.endDate.getTime() : Number.MAX_SAFE_INTEGER;
+          const be = b.endDate ? b.endDate.getTime() : Number.MAX_SAFE_INTEGER;
+          if (be !== ae) return be - ae;
+          return (b.startDate?.getTime() ?? 0) - (a.startDate?.getTime() ?? 0);
+        });
+        const keeper = sorted[0];
+        const toSupersede = sorted.slice(1);
+        subsToCancel += toSupersede.filter(
+          (m) => m.stripeSubscriptionId && m.stripeSubscriptionId !== keeper.stripeSubscriptionId,
+        ).length;
+        dupDetails.push({ userId: uid, category: cat, keeperId: keeper.id, supersededIds: toSupersede.map((m) => m.id) });
+      }
+    }
+
+    if (!dryRun) {
+      // Persist the backfilled fields first so the supersede helper (its own
+      // fork) sees them, then supersede each duplicate group via the canonical
+      // helper (handles Stripe cancel + secondary re-link + profile sync).
+      await em.flush();
+      for (const d of dupDetails) {
+        try {
+          await this.supersedePriorActiveMembershipsOnRenewal(
+            d.keeperId,
+            d.userId,
+            d.category as MembershipCategory,
+            'system',
+          );
+        } catch (err) {
+          this.logger.error(`reconcileRenewals: supersede failed for keeper ${d.keeperId}: ${err}`);
+        }
+      }
+    }
+
+    this.logger.warn(
+      `reconcileRenewals (${dryRun ? 'DRY RUN' : 'APPLIED'}): backfill ${backfillDetails.length} row(s); ` +
+        `${dupDetails.length} duplicate group(s), ${dupDetails.reduce((n, d) => n + d.supersededIds.length, 0)} to supersede, ` +
+        `${subsToCancel} subscription(s) to cancel`,
+    );
+
+    return {
+      dryRun,
+      backfill: { updated: backfillDetails.length, details: backfillDetails.slice(0, 200) },
+      duplicates: {
+        groups: dupDetails.length,
+        superseded: dupDetails.reduce((n, d) => n + d.supersededIds.length, 0),
+        subscriptionsToCancel: subsToCancel,
+        details: dupDetails.slice(0, 200),
+      },
+    };
   }
 
   /**
