@@ -28,6 +28,27 @@ if (sessionStorage.getItem('chunk-reload') === '1') {
   window.addEventListener('load', () => sessionStorage.removeItem('chunk-reload'));
 }
 
+// Password-reset entry fix. GoTrue redirects recovery links to the SITE_URL root
+// (the admin generate_link flow ignores redirect_to), so the recovery token lands
+// as `#...&type=recovery` on the homepage. If we let React render there, the
+// now-signed-in recovery session gets bounced by the force-password-change guard
+// to /change-password — which demands the CURRENT password the user doesn't know.
+// Move to /reset-password synchronously, BEFORE React renders, so no guard ever
+// sees the recovery session on a non-exempt route. Runs before Supabase's async
+// detectSessionInUrl consumes the hash, and preserves the hash (the token) so the
+// reset page establishes the recovery session normally.
+if (
+  typeof window !== 'undefined' &&
+  window.location.hash.includes('type=recovery') &&
+  window.location.pathname !== '/reset-password'
+) {
+  window.history.replaceState(
+    null,
+    '',
+    '/reset-password' + window.location.search + window.location.hash,
+  );
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
