@@ -489,10 +489,14 @@ export class MembershipsService {
 
       txEm.persist(newMembership);
 
-      // Assign MECA ID within the same transaction
+      // Assign MECA ID within the same transaction.
+      // Use findMostRecentMembership (active-or-expired), NOT findPreviousMembership
+      // (expired-only) — otherwise an EARLY renewal (member still active) finds no
+      // "previous" membership and mints a brand-new MECA ID instead of keeping the
+      // member's existing one. assignMecaIdToMembership still applies grace rules.
       const previousMembership = canPurchase.existingMembershipId
         ? await txEm.findOne(Membership, { id: canPurchase.existingMembershipId })
-        : await this.mecaIdService.findPreviousMembership(data.userId, config.category);
+        : await this.mecaIdService.findMostRecentMembership(data.userId, config.category);
 
       await this.mecaIdService.assignMecaIdToMembership(newMembership, previousMembership || undefined, txEm);
 
@@ -1126,8 +1130,10 @@ export class MembershipsService {
 
     await em.persistAndFlush(membership);
 
-    // Assign MECA ID - check for previous membership to reactivate
-    const previousMembership = await this.mecaIdService.findPreviousMembership(
+    // Assign MECA ID - reuse the member's existing ID under grace rules.
+    // Most-recent (active-or-expired), not expired-only, so an early renewal
+    // keeps the same MECA ID instead of getting a new one.
+    const previousMembership = await this.mecaIdService.findMostRecentMembership(
       data.userId,
       membershipConfig.category
     );
@@ -1389,10 +1395,11 @@ export class MembershipsService {
     // Persist but don't flush yet - we need to assign MECA ID first
     em.persist(membership);
 
-    // Assign MECA ID before initial flush
+    // Assign MECA ID before initial flush. Most-recent (active-or-expired), not
+    // expired-only, so an early renewal keeps the member's existing MECA ID.
     const previousMembership = canPurchase.existingMembershipId
       ? await em.findOne(Membership, { id: canPurchase.existingMembershipId })
-      : await this.mecaIdService.findPreviousMembership(data.userId, membershipConfig.category);
+      : await this.mecaIdService.findMostRecentMembership(data.userId, membershipConfig.category);
 
     await this.mecaIdService.assignMecaIdToMembership(membership, previousMembership || undefined, em);
 

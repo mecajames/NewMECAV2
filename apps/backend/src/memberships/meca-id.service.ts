@@ -46,10 +46,12 @@ export class MecaIdService {
 
   /**
    * Assign a MECA ID to a membership.
-   * Handles tiered grace-period reactivation for renewals:
-   *   - days 1-30  → silent reclaim
-   *   - days 31-37 → silent reclaim, flagged on history
-   *   - days 38+   → new ID issued (admin can reassign later)
+   * A renewal by the same member always keeps their existing MECA ID (their
+   * permanent competitive identity), no matter how long they lapsed — the only
+   * exception is if the number is now held by a different profile. A brand-new
+   * member (no previousMembership) gets a freshly minted ID. The historical
+   * grace tiers (soft/medium/late) are now recorded for audit only, not used to
+   * decide whether to reuse the number.
    *
    * @param membership The membership to assign a MECA ID to
    * @param previousMembership Optional previous membership for renewal tracking
@@ -64,26 +66,48 @@ export class MecaIdService {
     // Use caller's EM if provided, otherwise fork our own
     const em = callerEm || this.em.fork();
 
-    if (previousMembership?.mecaId && previousMembership.endDate) {
-      const daysSinceExpiry = this.getDaysSinceExpiry(previousMembership.endDate);
+    // A renewal by the SAME member keeps their own MECA ID, regardless of how long
+    // they lapsed. The number is the member's permanent competitive identity — all
+    // their results, achievements, and qualifications hang off it. The old behavior
+    // only reused within a 37-day grace window and otherwise minted a brand-new
+    // number; that stranded returning members (especially V1-migrated members locked
+    // out past their grace window) with a new number and orphaned history. We now
+    // reuse the member's previous number unconditionally, and only mint a new one if
+    // that number is currently held by a DIFFERENT profile (numbers are never
+    // reassigned post-migration, so in practice this never triggers).
+    if (previousMembership?.mecaId) {
+      const mecaId = previousMembership.mecaId;
+      const ownerId = (membership.user as any)?.id ?? (membership.user as any);
+      const takenByOther = await em.count(Profile, {
+        meca_id: String(mecaId),
+        ...(ownerId ? { id: { $ne: ownerId } } : {}),
+      });
 
-      // Reclaim only within soft + medium windows (1-37 days). The 38-45
-      // admin-extension band still preserves history but does NOT reclaim
-      // automatically — an admin must call reassignMecaId() to reattach.
-      if (daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS) {
-        const mecaId = previousMembership.mecaId;
+      if (takenByOther === 0) {
         membership.mecaId = mecaId;
         membership.cardCreatedAt = new Date();
 
-        const tier = daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS ? 'soft' : 'medium';
-        await this.recordReactivation(mecaId, membership, previousMembership.endDate, em, tier);
+        const daysSinceExpiry = previousMembership.endDate
+          ? this.getDaysSinceExpiry(previousMembership.endDate)
+          : 0;
+        const tier =
+          daysSinceExpiry <= 0 ? 'active'
+            : daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS ? 'soft'
+              : daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS ? 'medium'
+                : 'late';
+        await this.recordReactivation(mecaId, membership, previousMembership.endDate ?? new Date(), em, tier);
 
         this.logger.log(
-          `Reactivated MECA ID ${mecaId} for membership ${membership.id} (${daysSinceExpiry.toFixed(1)} days, ${tier} tier)`
+          `Kept MECA ID ${mecaId} for membership ${membership.id} on renewal ` +
+          `(${daysSinceExpiry.toFixed(1)} days since prior end, ${tier})`
         );
 
         return mecaId;
       }
+
+      this.logger.warn(
+        `Previous MECA ID ${mecaId} for membership ${membership.id} is held by another profile — issuing a new ID instead`
+      );
     }
 
     // Assign new MECA ID
@@ -493,7 +517,7 @@ export class MecaIdService {
     membership: Membership,
     previousEndDate: Date,
     em: EntityManager,
-    tier: 'soft' | 'medium' = 'soft',
+    tier: 'active' | 'soft' | 'medium' | 'late' = 'soft',
   ): Promise<void> {
     const tierNote = `tier=${tier} (prev end ${previousEndDate.toISOString().split('T')[0]})`;
     const existingHistory = await em.findOne(MecaIdHistory, {
