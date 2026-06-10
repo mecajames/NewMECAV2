@@ -356,7 +356,9 @@ export class SecurityService {
     // Reuse normal MECA-ID logic so grace-period rules apply (keep old ID if
     // within window, else issue new). The membership is PENDING so the
     // member can't transact yet, but their MECA ID slot is reserved.
-    const previousMembership = await this.mecaIdService.findPreviousMembership(
+    // Most-recent (active-or-expired), not expired-only, so an active member
+    // keeps their existing MECA ID.
+    const previousMembership = await this.mecaIdService.findMostRecentMembership(
       profile.id, config.category,
     );
     await this.mecaIdService.assignMecaIdToMembership(membership, previousMembership || undefined, em);

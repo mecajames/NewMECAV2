@@ -3,6 +3,7 @@ import { EntityManager } from '@mikro-orm/core';
 import {
   PaymentStatus,
   MembershipCategory,
+  MembershipAccountType,
   AdminPaymentMethod,
   AdminCreateMembershipDto,
   OrderStatus,
@@ -436,12 +437,16 @@ export class MembershipsService {
       newMembership.stripePaymentIntentId = data.stripePaymentIntentId;
       newMembership.transactionId = data.transactionId;
 
-      // Competitor info
-      newMembership.competitorName = data.competitorName;
-      newMembership.vehicleLicensePlate = data.vehicleLicensePlate;
-      newMembership.vehicleColor = data.vehicleColor;
-      newMembership.vehicleMake = data.vehicleMake;
-      newMembership.vehicleModel = data.vehicleModel;
+      // Competitor info — carry forward from the member's most recent
+      // membership when the purchase/renewal didn't re-collect it (e.g. a quick
+      // renewal or a "w/Team" upgrade that skips the vehicle form). Without this
+      // a renewed membership comes through blank even though we have the
+      // competitor name, vehicle, and plate on the prior membership.
+      newMembership.competitorName = data.competitorName || mostRecent?.competitorName || undefined;
+      newMembership.vehicleLicensePlate = data.vehicleLicensePlate || mostRecent?.vehicleLicensePlate || undefined;
+      newMembership.vehicleColor = data.vehicleColor || mostRecent?.vehicleColor || undefined;
+      newMembership.vehicleMake = data.vehicleMake || mostRecent?.vehicleMake || undefined;
+      newMembership.vehicleModel = data.vehicleModel || mostRecent?.vehicleModel || undefined;
 
       // Team add-on (for competitors) or included team (for retailer/manufacturer)
       // Also check if membership type config includes team automatically
@@ -484,10 +489,14 @@ export class MembershipsService {
 
       txEm.persist(newMembership);
 
-      // Assign MECA ID within the same transaction
+      // Assign MECA ID within the same transaction.
+      // Use findMostRecentMembership (active-or-expired), NOT findPreviousMembership
+      // (expired-only) — otherwise an EARLY renewal (member still active) finds no
+      // "previous" membership and mints a brand-new MECA ID instead of keeping the
+      // member's existing one. assignMecaIdToMembership still applies grace rules.
       const previousMembership = canPurchase.existingMembershipId
         ? await txEm.findOne(Membership, { id: canPurchase.existingMembershipId })
-        : await this.mecaIdService.findPreviousMembership(data.userId, config.category);
+        : await this.mecaIdService.findMostRecentMembership(data.userId, config.category);
 
       await this.mecaIdService.assignMecaIdToMembership(newMembership, previousMembership || undefined, txEm);
 
@@ -541,6 +550,21 @@ export class MembershipsService {
       }
     }
 
+    // Early-renewal supersede: if this purchase renews a member who STILL had
+    // an active membership in this category, end the old one (and cancel its
+    // Stripe subscription unless it's the same one) so they don't carry two
+    // active rows / get double-billed. Master/secondary aware.
+    try {
+      await this.supersedePriorActiveMembershipsOnRenewal(
+        membership.id,
+        data.userId,
+        config.category,
+        'system',
+      );
+    } catch (err) {
+      this.logger.error('Supersede prior membership on renewal failed (non-fatal):', err);
+    }
+
     // Sync profile membership status to ACTIVE
     await this.membershipSyncService.setProfileActive(data.userId);
 
@@ -579,6 +603,239 @@ export class MembershipsService {
     });
 
     return membership;
+  }
+
+  /**
+   * When a member renews while they STILL have an active membership in the same
+   * category (early renewal / a new purchase that did NOT go through the
+   * same-subscription auto-renew webhook), end the prior membership so they
+   * don't carry two active rows.
+   *
+   * Subscription rule:
+   *  - prior on the SAME Stripe subscription as the new membership → left alone
+   *    (that's the same billing relationship; the auto-renew webhook owns it).
+   *  - prior on a DIFFERENT subscription, or the new one is one-time → cancel
+   *    the old subscription at period end so it stops auto-billing.
+   *
+   * Master/secondary aware: never supersedes a SECONDARY here (those renew via
+   * their master), and if the prior was a MASTER the new membership inherits
+   * MASTER and the secondaries are re-pointed to it.
+   */
+  async supersedePriorActiveMembershipsOnRenewal(
+    newMembershipId: string,
+    userId: string,
+    category: MembershipCategory,
+    actorId: string = 'system',
+  ): Promise<void> {
+    const em = this.em.fork();
+    const fresh = await em.findOne(Membership, { id: newMembershipId });
+    if (!fresh) return;
+
+    const now = new Date();
+    const priors = await em.find(
+      Membership,
+      {
+        user: userId,
+        id: { $ne: newMembershipId },
+        paymentStatus: PaymentStatus.PAID,
+        cancelledAt: null,
+        accountType: { $ne: MembershipAccountType.SECONDARY },
+        membershipTypeConfig: { category },
+        $or: [{ endDate: { $gte: now } }, { endDate: null }],
+      },
+      { populate: ['membershipTypeConfig'] },
+    );
+    if (priors.length === 0) return;
+
+    for (const prior of priors) {
+      // Same Stripe subscription as the new membership → same billing
+      // relationship; leave it for the auto-renew webhook to own.
+      if (
+        prior.stripeSubscriptionId &&
+        fresh.stripeSubscriptionId &&
+        prior.stripeSubscriptionId === fresh.stripeSubscriptionId
+      ) {
+        continue;
+      }
+
+      // Master → the new membership takes over as master; re-point secondaries.
+      if (prior.accountType === MembershipAccountType.MASTER) {
+        fresh.accountType = MembershipAccountType.MASTER;
+        const secondaries = await em.find(Membership, { masterMembership: prior.id });
+        for (const sec of secondaries) {
+          sec.masterMembership = em.getReference(Membership, newMembershipId);
+        }
+      }
+
+      // Cancel the old subscription (different/new sub, or one-time replacement)
+      // at period end so it stops billing without an immediate proration.
+      if (prior.stripeSubscriptionId) {
+        try {
+          await this.stripeService.cancelSubscription(prior.stripeSubscriptionId, false);
+          this.logger.log(
+            `Supersede: cancelled old subscription ${prior.stripeSubscriptionId} (membership ${prior.id})`,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Supersede: failed to cancel old subscription ${prior.stripeSubscriptionId}: ${err}`,
+          );
+        }
+      }
+
+      // End the old membership. Keep paymentStatus PAID (it was a real, paid
+      // term — preserves revenue history); flag it superseded and truncate the
+      // term so it drops out of "active".
+      prior.cancelledAt = now;
+      prior.cancelledBy = actorId;
+      prior.cancellationReason = `Superseded by renewal (membership ${newMembershipId})`;
+      prior.cancelAtPeriodEnd = false;
+      if (!prior.endDate || prior.endDate > now) {
+        prior.endDate = new Date(now.getTime() - 1000);
+      }
+
+      this.logger.warn(
+        `Supersede: ended prior membership ${prior.id} (was active) in favor of ${newMembershipId} for user ${userId}`,
+      );
+    }
+
+    await em.flush();
+    await this.membershipSyncService.syncProfileMembershipStatus(userId);
+  }
+
+  /**
+   * One-time cleanup for memberships created BEFORE the renewal fixes:
+   *  1. Backfill — fill blank competitor name / vehicle fields on any membership
+   *     from the best-known values among that member's same-category memberships
+   *     (so renewals that came through blank get their info back).
+   *  2. Duplicates — for any member with more than one ACTIVE membership in the
+   *     same category (early renewals that never superseded the old row), keep
+   *     the one with the latest end date and supersede the rest via
+   *     supersedePriorActiveMembershipsOnRenewal (which also cancels the old
+   *     Stripe subscription unless it's the same one, and re-links secondaries).
+   *
+   * Defaults to a DRY RUN — reports what WOULD change without mutating anything
+   * or touching Stripe. Pass { dryRun: false } to apply.
+   */
+  async reconcileRenewals(opts: { dryRun?: boolean } = {}): Promise<{
+    dryRun: boolean;
+    backfill: { updated: number; details: Array<{ membershipId: string; filled: string[] }> };
+    duplicates: {
+      groups: number;
+      superseded: number;
+      subscriptionsToCancel: number;
+      details: Array<{ userId: string; category: string; keeperId: string; supersededIds: string[] }>;
+    };
+  }> {
+    const dryRun = opts.dryRun !== false; // default true
+    const em = this.em.fork();
+    const now = new Date();
+
+    const all = await em.find(
+      Membership,
+      {},
+      { populate: ['user', 'membershipTypeConfig'], orderBy: { startDate: 'ASC' } },
+    );
+
+    // Group by user + category.
+    const groups = new Map<string, Membership[]>();
+    for (const m of all) {
+      const uid = m.user?.id;
+      const cat = m.membershipTypeConfig?.category;
+      if (!uid || !cat) continue;
+      const key = `${uid}::${cat}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(m);
+    }
+
+    const fields = ['competitorName', 'vehicleMake', 'vehicleModel', 'vehicleColor', 'vehicleLicensePlate'] as const;
+    const backfillDetails: Array<{ membershipId: string; filled: string[] }> = [];
+    const dupDetails: Array<{ userId: string; category: string; keeperId: string; supersededIds: string[] }> = [];
+    let subsToCancel = 0;
+
+    for (const [key, members] of groups) {
+      const sep = key.indexOf('::');
+      const uid = key.slice(0, sep);
+      const cat = key.slice(sep + 2);
+
+      // --- Backfill blanks from the most-recent non-empty value per field ---
+      const best: Record<string, string> = {};
+      for (const m of members) {
+        for (const f of fields) {
+          const v = (m as any)[f];
+          if (v && String(v).trim()) best[f] = v; // members are startDate ASC → last wins = most recent
+        }
+      }
+      for (const m of members) {
+        const filled: string[] = [];
+        for (const f of fields) {
+          const cur = (m as any)[f];
+          if ((!cur || !String(cur).trim()) && best[f]) {
+            filled.push(f);
+            if (!dryRun) (m as any)[f] = best[f];
+          }
+        }
+        if (filled.length) backfillDetails.push({ membershipId: m.id, filled });
+      }
+
+      // --- Duplicate active detection ---
+      const actives = members.filter(
+        (m) =>
+          m.paymentStatus === PaymentStatus.PAID &&
+          !m.cancelledAt &&
+          m.accountType !== MembershipAccountType.SECONDARY &&
+          (!m.endDate || m.endDate >= now),
+      );
+      if (actives.length > 1) {
+        const sorted = [...actives].sort((a, b) => {
+          const ae = a.endDate ? a.endDate.getTime() : Number.MAX_SAFE_INTEGER;
+          const be = b.endDate ? b.endDate.getTime() : Number.MAX_SAFE_INTEGER;
+          if (be !== ae) return be - ae;
+          return (b.startDate?.getTime() ?? 0) - (a.startDate?.getTime() ?? 0);
+        });
+        const keeper = sorted[0];
+        const toSupersede = sorted.slice(1);
+        subsToCancel += toSupersede.filter(
+          (m) => m.stripeSubscriptionId && m.stripeSubscriptionId !== keeper.stripeSubscriptionId,
+        ).length;
+        dupDetails.push({ userId: uid, category: cat, keeperId: keeper.id, supersededIds: toSupersede.map((m) => m.id) });
+      }
+    }
+
+    if (!dryRun) {
+      // Persist the backfilled fields first so the supersede helper (its own
+      // fork) sees them, then supersede each duplicate group via the canonical
+      // helper (handles Stripe cancel + secondary re-link + profile sync).
+      await em.flush();
+      for (const d of dupDetails) {
+        try {
+          await this.supersedePriorActiveMembershipsOnRenewal(
+            d.keeperId,
+            d.userId,
+            d.category as MembershipCategory,
+            'system',
+          );
+        } catch (err) {
+          this.logger.error(`reconcileRenewals: supersede failed for keeper ${d.keeperId}: ${err}`);
+        }
+      }
+    }
+
+    this.logger.warn(
+      `reconcileRenewals (${dryRun ? 'DRY RUN' : 'APPLIED'}): backfill ${backfillDetails.length} row(s); ` +
+        `${dupDetails.length} duplicate group(s), ${dupDetails.reduce((n, d) => n + d.supersededIds.length, 0)} to supersede, ` +
+        `${subsToCancel} subscription(s) to cancel`,
+    );
+
+    return {
+      dryRun,
+      backfill: { updated: backfillDetails.length, details: backfillDetails.slice(0, 200) },
+      duplicates: {
+        groups: dupDetails.length,
+        superseded: dupDetails.reduce((n, d) => n + d.supersededIds.length, 0),
+        subscriptionsToCancel: subsToCancel,
+        details: dupDetails.slice(0, 200),
+      },
+    };
   }
 
   /**
@@ -873,8 +1130,10 @@ export class MembershipsService {
 
     await em.persistAndFlush(membership);
 
-    // Assign MECA ID - check for previous membership to reactivate
-    const previousMembership = await this.mecaIdService.findPreviousMembership(
+    // Assign MECA ID - reuse the member's existing ID under grace rules.
+    // Most-recent (active-or-expired), not expired-only, so an early renewal
+    // keeps the same MECA ID instead of getting a new one.
+    const previousMembership = await this.mecaIdService.findMostRecentMembership(
       data.userId,
       membershipConfig.category
     );
@@ -1136,10 +1395,11 @@ export class MembershipsService {
     // Persist but don't flush yet - we need to assign MECA ID first
     em.persist(membership);
 
-    // Assign MECA ID before initial flush
+    // Assign MECA ID before initial flush. Most-recent (active-or-expired), not
+    // expired-only, so an early renewal keeps the member's existing MECA ID.
     const previousMembership = canPurchase.existingMembershipId
       ? await em.findOne(Membership, { id: canPurchase.existingMembershipId })
-      : await this.mecaIdService.findPreviousMembership(data.userId, membershipConfig.category);
+      : await this.mecaIdService.findMostRecentMembership(data.userId, membershipConfig.category);
 
     await this.mecaIdService.assignMecaIdToMembership(membership, previousMembership || undefined, em);
 
@@ -2337,19 +2597,21 @@ export class MembershipsService {
   }
 
   /**
-   * Unified "Record Payment & Reactivate" used by admins to recover a member
-   * whose payment succeeded OUTSIDE the new system (cash, check, or a Stripe
-   * payment whose webhook never landed) so their membership row exists but is
-   * not marked PAID and their profile sits at membership_status='none'.
+   * Admin "Record Payment" for a membership. Records a real payment (cash /
+   * check / Stripe) and applies it with one of three MODES — works whatever the
+   * current state (pending, paid, expired, or cancelled):
    *
-   * Unlike applyManualPaymentToMembership this:
-   *  - supports a `stripe` method: enter the Stripe payment-intent (pi_...) and/or
-   *    subscription (sub_...) that already succeeded; we pull the real amount /
-   *    period-end from Stripe and link the ids onto the membership;
-   *  - does NOT hard-reject an already-PAID membership (it re-syncs the profile,
-   *    which is the whole point when the row is paid but the profile never synced),
-   *    and only writes an Order/Invoice the first time it flips PENDING→PAID so we
-   *    don't create duplicate billing records.
+   *   - 'reactivate'   : the payment was actually made but never recorded (e.g. a
+   *                      Stripe webhook never landed) so the membership lapsed.
+   *                      Mark PAID, clear any cancellation, and make the term
+   *                      active again — use the Stripe period end if a sub is
+   *                      given, else keep the existing end date, or extend to a
+   *                      fresh term if it has already passed.
+   *   - 'renew'        : a renewal payment buying a NEW term. Mark PAID, clear
+   *                      cancellation, advance the end date a full term (or to the
+   *                      Stripe period end if given).
+   *   - 'payment_only' : record a payment (e.g. a past-due balance) WITHOUT
+   *                      changing the end date or cancellation state.
    *
    * Returns the Stripe ids/amount so the controller can write the Payment ledger
    * row via PaymentFulfillmentService.recordSubscriptionPayment (kept in the
@@ -2358,6 +2620,7 @@ export class MembershipsService {
   async recordMembershipPayment(
     membershipId: string,
     data: {
+      mode?: 'reactivate' | 'renew' | 'payment_only';
       paymentMethod: 'cash' | 'check' | 'stripe';
       checkNumber?: string;
       cashReceiptNumber?: string;
@@ -2392,14 +2655,12 @@ export class MembershipsService {
     if (!membership) {
       throw new NotFoundException(`Membership ${membershipId} not found`);
     }
-    if (membership.cancelledAt) {
-      throw new BadRequestException('Cannot record a payment on a cancelled membership. Restore/recreate it first.');
-    }
 
     const user = membership.user;
     if (!user) throw new BadRequestException('Membership has no associated user');
 
-    const alreadyPaid = membership.paymentStatus === PaymentStatus.PAID;
+    const mode = data.mode ?? 'reactivate';
+    const now = new Date();
     const configPrice = Number(membership.membershipTypeConfig?.price ?? 0);
     const teamAddonPrice = membership.hasTeamAddon
       ? Number(membership.membershipTypeConfig?.teamAddonPrice ?? 0)
@@ -2411,10 +2672,15 @@ export class MembershipsService {
     let stripePaymentIntentId: string | undefined;
     let stripeSubscriptionId: string | undefined;
     let stripeCustomerId: string | undefined;
+    let stripeCustomerEmail: string | undefined;
     let stripeInvoiceId: string | undefined;
     let stripeChargeId: string | undefined;
     let stripeProductName: string | undefined;
     let paidAt: Date = new Date();
+    // Captured from a Stripe subscription; applied to the end date per-mode below
+    // (NOT mutated inline, so 'payment_only' can leave the term untouched).
+    let stripePeriodEnd: Date | null = null;
+    let stripeCancelAtPeriodEnd = false;
 
     if (data.paymentMethod === 'stripe') {
       const pi = (data.stripePaymentIntentId ?? '').trim();
@@ -2439,6 +2705,7 @@ export class MembershipsService {
         const bundle = await this.stripeService.getSubscriptionDetails(sub);
         stripeSubscriptionId = bundle.id;
         stripeCustomerId = bundle.customerId ?? undefined;
+        stripeCustomerEmail = bundle.customerEmail ?? undefined;
         stripeInvoiceId = bundle.latestInvoiceId ?? undefined;
         stripeChargeId = bundle.chargeId ?? undefined;
         stripeProductName = bundle.productName ?? undefined;
@@ -2447,13 +2714,8 @@ export class MembershipsService {
 
         const liveStatuses = ['active', 'trialing', 'past_due'];
         if (liveStatuses.includes(bundle.status) && bundle.currentPeriodEnd) {
-          membership.endDate = bundle.currentPeriodEnd;
-          membership.cancelAtPeriodEnd = !!bundle.cancelAtPeriodEnd;
-          if (!bundle.cancelAtPeriodEnd) {
-            membership.cancelledAt = undefined;
-            membership.cancellationReason = undefined;
-            membership.cancelledBy = undefined;
-          }
+          stripePeriodEnd = bundle.currentPeriodEnd;
+          stripeCancelAtPeriodEnd = !!bundle.cancelAtPeriodEnd;
         }
         membership.hadLegacySubscription = false;
       }
@@ -2478,6 +2740,33 @@ export class MembershipsService {
 
       amount = data.amountOverride ?? stripeAmount ?? fallbackAmount;
       transactionId = stripePaymentIntentId ?? stripeSubscriptionId ?? `STRIPE-${Date.now()}`;
+
+      // Resolve the Stripe customer email for ownership validation (the PI-only
+      // path doesn't expand the customer like the subscription bundle does).
+      if (!stripeCustomerEmail && stripeCustomerId) {
+        const cust = await this.stripeService.retrieveCustomer(stripeCustomerId);
+        stripeCustomerEmail = cust?.email ?? undefined;
+      }
+
+      // OWNERSHIP CHECK: the entered Stripe id(s) MUST belong to this member, so
+      // an admin can't attach an arbitrary or another member's payment. We've
+      // already validated the ids exist in Stripe (the fetches above throw on a
+      // bad/format-invalid id, and a PI must be 'succeeded'); this confirms they
+      // are the RIGHT member's, matched by the Stripe customer email or a stored
+      // customer id on the profile.
+      const memberEmail = (user.email || '').trim().toLowerCase();
+      const memberCustomerId = ((user as any).stripeCustomerId as string | undefined)?.trim() || undefined;
+      const custEmail = (stripeCustomerEmail || '').trim().toLowerCase();
+      const emailMatches = !!custEmail && !!memberEmail && custEmail === memberEmail;
+      const idMatches = !!stripeCustomerId && !!memberCustomerId && stripeCustomerId === memberCustomerId;
+      if (!emailMatches && !idMatches) {
+        throw new BadRequestException(
+          `That Stripe ${stripeSubscriptionId ? 'subscription' : 'payment'} is linked to ` +
+            `${custEmail ? `"${custEmail}"` : 'a different Stripe customer'}` +
+            `${stripeCustomerId ? ` (${stripeCustomerId})` : ''}, which does not match this member ` +
+            `(${memberEmail || 'no email on file'}). Enter the Stripe id that belongs to this member.`,
+        );
+      }
     } else {
       if (data.paymentMethod === 'check' && !data.checkNumber) {
         throw new BadRequestException('Check number is required for check payments');
@@ -2490,20 +2779,54 @@ export class MembershipsService {
 
     const oldStatus = membership.paymentStatus;
     const oldAmount = membership.amountPaid;
+    const oldEnd = membership.endDate ?? null;
 
+    // Always record the money + link the transaction.
     membership.paymentStatus = PaymentStatus.PAID;
     membership.amountPaid = amount;
     membership.transactionId = transactionId;
     if (stripePaymentIntentId) membership.stripePaymentIntentId = stripePaymentIntentId;
     if (stripeSubscriptionId) membership.stripeSubscriptionId = stripeSubscriptionId;
 
-    // Only mint billing docs the first time we flip the row PAID — re-running
-    // this on an already-paid row is a pure profile re-sync, not a new sale.
+    // Mode-specific term + cancellation handling.
+    if (mode === 'reactivate' || mode === 'renew') {
+      // Restore from any prior cancellation so the row is a live membership again.
+      membership.cancelledAt = undefined;
+      membership.cancellationReason = undefined;
+      membership.cancelledBy = undefined;
+      membership.cancelAtPeriodEnd = stripePeriodEnd ? stripeCancelAtPeriodEnd : false;
+
+      if (stripePeriodEnd) {
+        // Authoritative date straight from Stripe's billing period.
+        membership.endDate = stripePeriodEnd;
+      } else if (mode === 'renew') {
+        // Buy a full new term (extends from current end within grace, else fresh).
+        membership.endDate = this.mecaIdService.computeRenewalEndDate(membership);
+      } else {
+        // reactivate: only extend if the current term has lapsed; otherwise keep
+        // the existing end date (the payment simply wasn't recorded before).
+        if (!membership.endDate || membership.endDate < now) {
+          membership.endDate = this.mecaIdService.computeRenewalEndDate(membership);
+        }
+      }
+
+      // KEEP THE MEMBER'S MECA ID: reactivation/renewal must never mint a new
+      // ID. The membership row keeps its existing mecaId (we don't touch it);
+      // make sure the profile points at that same ID too.
+      if (membership.mecaId != null) {
+        user.meca_id = String(membership.mecaId);
+      }
+    }
+    // payment_only: leave endDate + cancellation untouched — just record money.
+
+    // Mint billing docs for the recorded payment (a real transaction). Skipped
+    // only for a $0 record (e.g. comp), which has no money to invoice.
     let orderId: string | null = null;
     let invoiceId: string | null = null;
-    if (!alreadyPaid) {
+    if (amount > 0) {
       const methodLabel =
         data.paymentMethod === 'stripe' ? 'Stripe' : data.paymentMethod === 'check' ? 'Check' : 'Cash';
+      const modeLabel = mode === 'renew' ? 'renewal' : mode === 'payment_only' ? 'balance' : 'reactivation';
       const orderNumber = `ORD-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
       const order = em.create(Order, {
         orderNumber,
@@ -2515,11 +2838,11 @@ export class MembershipsService {
         discount: '0.00',
         total: amount.toFixed(2),
         currency: 'USD',
-        notes: data.notes ?? `Recorded ${methodLabel} payment (admin recovery)`,
+        notes: data.notes ?? `Recorded ${methodLabel} payment (${modeLabel})`,
       });
       em.create(OrderItem, {
         order,
-        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} payment)`,
+        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} ${modeLabel})`,
         quantity: 1,
         unitPrice: amount.toFixed(2),
         total: amount.toFixed(2),
@@ -2540,7 +2863,7 @@ export class MembershipsService {
         currency: 'USD',
         dueDate: new Date(),
         paidAt,
-        notes: data.notes ?? `Recorded ${methodLabel} payment (admin recovery)`,
+        notes: data.notes ?? `Recorded ${methodLabel} payment (${modeLabel})`,
         companyInfo: {
           name: 'Mobile Electronics Competition Association',
           email: 'billing@mecacaraudio.com',
@@ -2548,7 +2871,7 @@ export class MembershipsService {
       } as any);
       em.create(InvoiceItem, {
         invoice,
-        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} payment)`,
+        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} ${modeLabel})`,
         quantity: 1,
         unitPrice: amount.toFixed(2),
         total: amount.toFixed(2),
@@ -2565,24 +2888,37 @@ export class MembershipsService {
     // Reactivate: recompute profile.membership_status from the now-paid row.
     await this.membershipSyncService.syncProfileMembershipStatus(user.id);
 
+    // Reinstate any competition results earned while the membership was lapsed
+    // (reactivate/renew only). Keeps the member's points/standings whole. Uses
+    // the membership's existing MECA ID (which we never changed).
+    let reinstatedResults = 0;
+    if ((mode === 'reactivate' || mode === 'renew') && membership.mecaId != null) {
+      try {
+        reinstatedResults = await this.competitionResultsService.reinstatePointsForMecaId(membership.mecaId);
+      } catch (err) {
+        this.logger.error('Points reinstatement after record-payment failed (non-fatal):', err);
+      }
+    }
+
     this.adminAuditService.logAction({
       adminUserId: adminId,
       action: 'membership_record_payment',
       resourceType: 'membership',
       resourceId: membership.id,
       description:
-        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} for ${user.email || membership.id}` +
-        (alreadyPaid ? ' (row already PAID — re-synced profile)' : '') +
+        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} (${mode}) for ${user.email || membership.id}` +
         (stripeSubscriptionId ? ` [sub ${stripeSubscriptionId}]` : '') +
         (stripePaymentIntentId ? ` [pi ${stripePaymentIntentId}]` : ''),
-      oldValues: { paymentStatus: oldStatus, amountPaid: oldAmount },
+      oldValues: { paymentStatus: oldStatus, amountPaid: oldAmount, endDate: oldEnd },
       newValues: {
         paymentStatus: PaymentStatus.PAID,
         amountPaid: amount,
         transactionId,
+        mode,
         stripePaymentIntentId: stripePaymentIntentId ?? null,
         stripeSubscriptionId: stripeSubscriptionId ?? null,
         endDate: membership.endDate ?? null,
+        reinstatedResults,
       },
     });
 
@@ -2600,14 +2936,24 @@ export class MembershipsService {
           }
         : undefined;
 
+    const endStr = membership.endDate ? membership.endDate.toLocaleDateString('en-US') : null;
+    const outcome =
+      mode === 'renew'
+        ? `Membership renewed${endStr ? `, active through ${endStr}` : ''}.`
+        : mode === 'payment_only'
+          ? 'Payment recorded against the membership.'
+          : `Membership reactivated${endStr ? `, active through ${endStr}` : ''}.`;
+
+    const pointsNote = reinstatedResults > 0
+      ? ` Reinstated ${reinstatedResults} competition result(s) earned during the lapse.`
+      : '';
+
     return {
       success: true,
       membership,
       orderId,
       invoiceId,
-      message:
-        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} and reactivated the account.` +
-        (alreadyPaid ? ' (Membership was already marked PAID; profile status re-synced.)' : ''),
+      message: `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)}. ${outcome}${pointsNote}`,
       stripe: stripeResult,
     };
   }

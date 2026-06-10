@@ -78,6 +78,7 @@ export function AdminTicketsPage() {
             ticketId={id}
             currentUserId={profile.id}
             isStaff={true}
+            onReplied={() => navigate('/admin/tickets')}
           />
         </div>
       </div>

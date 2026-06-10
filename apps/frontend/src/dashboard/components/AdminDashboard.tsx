@@ -470,6 +470,19 @@ export default function AdminDashboard() {
           color: 'rose',
           navigateTo: '/admin/login-audit',
         },
+        // Super-admin only (James / Mick): full record of every admin action on
+        // members, memberships, billing & invoices. Backend also enforces super
+        // admin, so this card is the only entry point and others can't reach it.
+        ...(viewerIsSuperAdmin
+          ? [{
+              icon: Shield,
+              title: 'Admin Action Log',
+              description: 'Every admin action on members, memberships, billing & invoices (super admin only)',
+              action: 'admin-audit',
+              color: 'rose',
+              navigateTo: '/admin/admin-audit',
+            }]
+          : []),
         {
           icon: ClipboardCheck,
           title: 'QA Testing Checklist',
