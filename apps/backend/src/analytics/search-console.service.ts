@@ -58,7 +58,11 @@ export class SearchConsoleService {
         const credentials = JSON.parse(credentialsJson);
         const auth = new google.auth.GoogleAuth({
           credentials,
-          scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+          // Read-WRITE scope: the readonly scope is enough for analytics queries
+          // and sitemap listing, but sitemaps.submit is a WRITE op and 403s under
+          // readonly. This scope covers both. (Service account also needs ≥Full
+          // permission on the Search Console property.)
+          scopes: ['https://www.googleapis.com/auth/webmasters'],
         });
         this.webmasters = google.webmasters({ version: 'v3', auth });
         this.logger.log('Google Search Console API client initialized');
@@ -216,16 +220,36 @@ export class SearchConsoleService {
   async submitSitemap(): Promise<boolean> {
     if (!this.webmasters) return false;
 
+    // feedpath MUST be a full, absolute URL. For a domain property the siteUrl
+    // is `sc-domain:mecacaraudio.com`, so `${siteUrl}/sitemap.xml` would be the
+    // invalid `sc-domain:mecacaraudio.com/sitemap.xml`. Derive a real https URL.
+    const feedpath = this.resolveSitemapUrl();
+
     try {
       await this.webmasters.sitemaps.submit({
         siteUrl: this.siteUrl,
-        feedpath: `${this.siteUrl}/sitemap.xml`,
+        feedpath,
       });
-      this.logger.log('Sitemap submitted to Google Search Console');
+      this.logger.log(`Sitemap submitted to Google Search Console: ${feedpath}`);
       return true;
     } catch (error: any) {
-      this.logger.error(`Failed to submit sitemap: ${error.message}`);
+      const detail = error?.response?.data?.error?.message || error?.message || 'unknown error';
+      this.logger.error(`Failed to submit sitemap (${feedpath}, site ${this.siteUrl}): ${detail}`);
       return false;
     }
+  }
+
+  /**
+   * The public, absolute sitemap URL to submit. Honors SITEMAP_URL, else builds
+   * it from the configured property — handling both `sc-domain:` (domain) and
+   * `https://` (URL-prefix) property forms.
+   */
+  private resolveSitemapUrl(): string {
+    if (process.env.SITEMAP_URL) return process.env.SITEMAP_URL;
+    const s = this.siteUrl;
+    if (s.startsWith('sc-domain:')) {
+      return `https://${s.slice('sc-domain:'.length)}/sitemap.xml`;
+    }
+    return `${s.replace(/\/+$/, '')}/sitemap.xml`;
   }
 }
