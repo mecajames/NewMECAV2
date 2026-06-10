@@ -18,8 +18,12 @@ export function initializeGA4(): void {
 
   // Initialize dataLayer and gtag
   window.dataLayer = window.dataLayer || [];
-  window.gtag = function (...args: unknown[]) {
-    window.dataLayer.push(args);
+  // gtag.js only processes `arguments` objects pushed onto dataLayer — a
+  // plain array is silently ignored, so this must stay a regular function
+  // pushing `arguments` (never rest params / arrow function).
+  window.gtag = function () {
+    // eslint-disable-next-line prefer-rest-params
+    window.dataLayer.push(arguments);
   };
   window.gtag('js', new Date());
   window.gtag('config', GA_MEASUREMENT_ID, {
@@ -29,8 +33,11 @@ export function initializeGA4(): void {
 
 export function trackPageView(path: string): void {
   if (!GA_MEASUREMENT_ID || !window.gtag) return;
-  window.gtag('config', GA_MEASUREMENT_ID, {
+  // Explicit page_view event — `config` with page_path won't send one
+  // because the initial send_page_view:false persists for the destination.
+  window.gtag('event', 'page_view', {
     page_path: path,
+    page_location: window.location.origin + path,
   });
 }
 
