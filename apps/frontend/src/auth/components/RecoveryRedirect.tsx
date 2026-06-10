@@ -5,31 +5,45 @@ import { supabase } from '@/lib/supabase';
 /**
  * Password-reset safety net.
  *
- * GoTrue redirects a recovery link to its SITE_URL root (e.g. mecacaraudio.com)
- * instead of /reset-password unless the reset URL is in GOTRUE_URI_ALLOW_LIST.
- * When that happens the recovery token lands on the homepage, where nothing
- * processes it and the password reset dead-ends ("link not working").
+ * GoTrue redirects a recovery link to its SITE_URL root (mecacaraudio.com)
+ * instead of /reset-password (the admin generate_link flow ignores redirect_to),
+ * so the recovery token lands on the homepage. Without intervention the
+ * force-password-change guard then bounces the now-signed-in recovery session to
+ * /change-password — which requires the CURRENT password the user doesn't know.
+ * We instead route them to /reset-password, where they can set a new password
+ * with no current-password prompt (and which is exempt from that guard).
  *
- * The Supabase client (detectSessionInUrl) still establishes the recovery
- * session from the URL hash wherever the user lands and fires PASSWORD_RECOVERY.
- * We listen for that and route the user to /reset-password so they can actually
- * set a new password. This is a no-op once the token lands on /reset-password
- * directly (i.e. after the GoTrue allow-list is corrected), and it never fires
- * during normal app use — only a real recovery link emits PASSWORD_RECOVERY.
+ * IMPORTANT: the Supabase client's detectSessionInUrl fires PASSWORD_RECOVERY
+ * very early (during client init), often BEFORE this component subscribes — a
+ * listener alone misses it. So we ALSO capture the recovery hash synchronously
+ * at module load (before detectSessionInUrl consumes and clears the URL) and act
+ * on it the moment we mount, which is what reliably wins the race against the
+ * force-password-change guard. The event listener stays as a backstop.
  *
- * Must be rendered INSIDE the router (uses useNavigate). Client-side navigation
- * preserves the in-memory recovery session regardless of persistSession.
+ * No-op once the token lands on /reset-password directly, and it never fires
+ * during normal app use — only a real recovery link carries type=recovery.
  */
+const ARRIVED_VIA_RECOVERY =
+  typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
+
 export function RecoveryRedirect() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const goToReset = () => {
+      if (window.location.pathname !== '/reset-password') {
+        navigate('/reset-password', { replace: true });
+      }
+    };
+
+    // Primary: synchronous flag captured before the hash was cleared.
+    if (ARRIVED_VIA_RECOVERY) goToReset();
+
+    // Backstop: catch the event if the session is established slightly later.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY' && window.location.pathname !== '/reset-password') {
-        navigate('/reset-password', { replace: true });
-      }
+      if (event === 'PASSWORD_RECOVERY') goToReset();
     });
     return () => subscription.unsubscribe();
   }, [navigate]);
