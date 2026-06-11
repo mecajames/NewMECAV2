@@ -214,6 +214,10 @@ export function TicketList({
       }
       return email;
     }
+    // Guest-flow tickets have no linked reporter — use the guest fields,
+    // same as the ticket detail page does.
+    if (ticket.guest_name) return ticket.guest_name;
+    if (ticket.guest_email) return ticket.guest_email;
     return 'Unknown';
   };
 

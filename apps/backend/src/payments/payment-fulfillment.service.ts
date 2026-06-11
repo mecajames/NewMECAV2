@@ -250,7 +250,9 @@ export class PaymentFulfillmentService {
     const normEmail = email.trim().toLowerCase();
     const lookupEm = this.em.fork();
 
-    const existingProfile = await lookupEm.findOne(Profile, { email: normEmail });
+    // Case-insensitive — profile emails are stored as entered, so an exact
+    // match on the lowercased checkout email misses mixed-case rows.
+    const existingProfile = await lookupEm.findOne(Profile, { email: { $ilike: normEmail } });
     if (existingProfile) return existingProfile.id;
 
     const firstName =

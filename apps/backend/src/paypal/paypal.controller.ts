@@ -541,12 +541,22 @@ export class PayPalController {
               populate: ['user', 'membershipTypeConfig'],
             });
             if (m && !m.cancelledAt) {
-              m.paymentStatus = PaymentStatus.CANCELLED;
-              m.cancelledAt = new Date();
-              m.cancellationReason = `PayPal ${eventType.split('.').pop()?.toLowerCase() || 'cancelled'} via webhook`;
-              m.cancelledBy = 'paypal_webhook';
+              // A cancelled BILLING subscription is NOT a cancelled
+              // membership: the member already paid for the current term,
+              // which runs through endDate. Cancelling the subscription just
+              // means "don't auto-renew" — so detach it and leave the
+              // membership paid (mirrors the Stripe subscription.deleted
+              // handler). Immediate cancellation only happens via explicit
+              // cancel/refund flows.
+              const deadPaypalSubId = m.paypalSubscriptionId;
+              m.paypalSubscriptionId = undefined;
+              m.hadLegacySubscription = true;
+              m.cancelAtPeriodEnd = false;
               await em.flush();
-              this.logger.warn(`Marked membership ${m.id} cancelled (PayPal ${eventType})`);
+              this.logger.warn(
+                `Detached PayPal subscription ${deadPaypalSubId} from membership ${m.id} (${eventType}). ` +
+                `Membership stays paid through ${m.endDate?.toISOString().split('T')[0] ?? 'no end date'}.`,
+              );
 
               this.adminNotificationsService.notifySubscriptionCancelled(m).catch((err) => {
                 this.logger.error(`Failed to notify admins of PayPal subscription cancel: ${err}`);
@@ -560,14 +570,13 @@ export class PayPalController {
                   firstName: m.user?.first_name,
                   membershipType: m.membershipTypeConfig?.name || 'Membership',
                   mecaId: m.mecaId ?? undefined,
-                  cancellationDate: m.cancelledAt || new Date(),
-                  cancellationReason: m.cancellationReason || undefined,
+                  cancellationDate: new Date(),
                   endDate: m.endDate || null,
                   renewalUrl: `${baseUrl}/membership`,
                   paymentMethod: 'paypal',
                   // Reference IDs for member support inquiries.
                   membershipId: m.id,
-                  subscriptionId: m.paypalSubscriptionId || undefined,
+                  subscriptionId: deadPaypalSubId || undefined,
                 }).catch((err) => {
                   this.logger.error(`Failed to send PayPal subscription cancel email to user: ${err}`);
                 });

@@ -23,6 +23,10 @@ export default function AdminAuditPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Filter options come from the data itself (distinct values in the log),
+  // so the dropdowns can never drift from the action types actually logged.
+  const [availableActions, setAvailableActions] = useState<string[]>([]);
+  const [availableResourceTypes, setAvailableResourceTypes] = useState<string[]>([]);
 
   const fetchLog = useCallback(async () => {
     if (!allowed) { setLoading(false); return; }
@@ -40,6 +44,8 @@ export default function AdminAuditPage() {
       setEntries(result.items);
       setTotalPages(result.totalPages);
       setTotal(result.total);
+      if (result.availableActions) setAvailableActions(result.availableActions);
+      if (result.availableResourceTypes) setAvailableResourceTypes(result.availableResourceTypes);
     } catch (err) {
       console.error('Failed to fetch admin audit log:', err);
     } finally {
@@ -47,9 +53,13 @@ export default function AdminAuditPage() {
     }
   }, [actionFilter, resourceTypeFilter, searchTerm, startDate, endDate, page, allowed]);
 
+  // Dropdowns and pagination fetch immediately; text/date inputs are
+  // debounced below (and excluded here so typing doesn't double-fetch).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchLog();
-  }, [actionFilter, resourceTypeFilter, page, fetchLog]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionFilter, resourceTypeFilter, page, allowed]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -57,6 +67,7 @@ export default function AdminAuditPage() {
       fetchLog();
     }, 400);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, startDate, endDate]);
 
   const getActionBadge = (action: string) => {
@@ -176,21 +187,11 @@ export default function AdminAuditPage() {
               className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="">All Actions</option>
-              <option value="role_change">Role Change</option>
-              <option value="membership_update">Membership Update</option>
-              <option value="membership_cancel">Membership Cancel</option>
-              <option value="membership_cancel_at_renewal">Membership Cancel at Renewal</option>
-              <option value="membership_reactivate">Membership Reactivate</option>
-              <option value="membership_refund">Membership Refund</option>
-              <option value="membership_refund_partial">Membership Partial Refund</option>
-              <option value="membership_pause">Membership Pause</option>
-              <option value="membership_resume">Membership Resume</option>
-              <option value="membership_approve">Membership Approve</option>
-              <option value="user_update">User Update</option>
-              <option value="event_create">Event Create</option>
-              <option value="event_update">Event Update</option>
-              <option value="judge_level_change">Judge Level Change</option>
-              <option value="judge_approve">Judge Approve</option>
+              {availableActions.map(action => (
+                <option key={action} value={action}>
+                  {action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </option>
+              ))}
             </select>
             <select
               value={resourceTypeFilter}
@@ -198,11 +199,11 @@ export default function AdminAuditPage() {
               className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="">All Resources</option>
-              <option value="profile">Profile</option>
-              <option value="membership">Membership</option>
-              <option value="event">Event</option>
-              <option value="judge">Judge</option>
-              <option value="event_director">Event Director</option>
+              {availableResourceTypes.map(rt => (
+                <option key={rt} value={rt}>
+                  {rt.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </option>
+              ))}
             </select>
             <input
               type="date"

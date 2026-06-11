@@ -206,8 +206,64 @@ export class MembershipsService {
     if (!membership) {
       throw new NotFoundException(`Membership with ID ${id} not found`);
     }
-    em.assign(membership, data);
+
+    const { paymentStatus, startDate, endDate, ...rest } = data as Record<string, any>;
+
+    // --- Dates: parse + sanity-check. Catches garbage like year "0025"
+    // (imports that read "3/18/25" literally) instead of persisting it.
+    const parseDate = (value: unknown, label: string): Date => {
+      const d = value instanceof Date ? value : new Date(String(value));
+      if (isNaN(d.getTime())) {
+        throw new BadRequestException(`${label} is not a valid date`);
+      }
+      const year = d.getFullYear();
+      if (year < 2000 || year > 2100) {
+        throw new BadRequestException(`${label} year ${year} looks wrong — enter a full 4-digit year`);
+      }
+      return d;
+    };
+    if (startDate !== undefined && startDate !== null && startDate !== '') {
+      membership.startDate = parseDate(startDate, 'Start date');
+    }
+    if (endDate !== undefined && endDate !== null && endDate !== '') {
+      membership.endDate = parseDate(endDate, 'End date');
+    }
+    if (membership.startDate && membership.endDate && membership.endDate < membership.startDate) {
+      throw new BadRequestException('End date cannot be before the start date');
+    }
+
+    // --- Payment status: changing it must keep the row CONSISTENT, not just
+    // repaint the card. Cancelled needs cancelledAt set (other flows treat it
+    // as the truth); Paid must clear the cancellation fields or the hourly /
+    // nightly jobs and list filters will contradict the new status.
+    if (paymentStatus !== undefined && paymentStatus !== membership.paymentStatus) {
+      if (!Object.values(PaymentStatus).includes(paymentStatus)) {
+        throw new BadRequestException(`Invalid payment status "${paymentStatus}"`);
+      }
+      membership.paymentStatus = paymentStatus;
+      if (paymentStatus === PaymentStatus.PAID) {
+        membership.cancelledAt = undefined;
+        membership.cancellationReason = undefined;
+        membership.cancelledBy = undefined;
+        membership.cancelAtPeriodEnd = false;
+      } else if (paymentStatus === PaymentStatus.CANCELLED && !membership.cancelledAt) {
+        membership.cancelledAt = new Date();
+        membership.cancelledBy = 'admin_edit';
+        membership.cancellationReason = membership.cancellationReason ?? 'Status set to cancelled via admin membership edit';
+      }
+    }
+
+    em.assign(membership, rest);
     await em.flush();
+
+    // --- Make the edit REAL: the member's effective status (login gate,
+    // badges, directory) lives on profile.membership_status, which is
+    // computed — recompute it now instead of waiting for the nightly sync.
+    if (membership.user) {
+      await this.membershipSyncService.syncProfileMembershipStatus(membership.user.id);
+    }
+
+    this.clearAdminMembershipsListCache();
     return membership;
   }
 
@@ -218,6 +274,7 @@ export class MembershipsService {
       throw new NotFoundException(`Membership with ID ${id} not found`);
     }
     await em.removeAndFlush(membership);
+    this.clearAdminMembershipsListCache();
   }
 
   async findByUser(userId: string): Promise<Membership[]> {
@@ -1661,7 +1718,11 @@ export class MembershipsService {
 
   // Cache for admin members list memberships
   private adminMembershipsListCache: { data: any[]; timestamp: number } | null = null;
-  private readonly MEMBERSHIPS_LIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  // 60s: long enough to absorb the Members page's bursty parallel loads,
+  // short enough that mutation paths not wired to clearAdminMembershipsListCache
+  // (webhooks, renewals, refunds) can't show stale data for long. The
+  // interactive admin mutations clear it explicitly for instant visibility.
+  private readonly MEMBERSHIPS_LIST_CACHE_TTL = 60 * 1000;
 
   clearAdminMembershipsListCache(): void {
     this.adminMembershipsListCache = null;
@@ -2816,6 +2877,32 @@ export class MembershipsService {
       if (membership.mecaId != null) {
         user.meca_id = String(membership.mecaId);
       }
+
+      // DETACH DEAD SUBSCRIPTIONS: a reactivation must not leave a canceled
+      // Stripe subscription attached — the hourly syncStripeSubscriptionStatus
+      // job sees Stripe's 'canceled' state and re-cancels this membership
+      // within the hour (emailing the member), silently undoing the admin's
+      // reactivation. If the stored subscription isn't live in Stripe, clear
+      // it (the id stays in cancellationReason history / transaction fields
+      // for the audit trail) and flag it as a legacy subscription so the
+      // auto-renewal display reads "needs re-setup" instead of "On".
+      if (membership.stripeSubscriptionId && !stripePeriodEnd) {
+        let subIsLive = false;
+        try {
+          const storedSub = await this.stripeService.getSubscription(membership.stripeSubscriptionId);
+          subIsLive = ['active', 'trialing', 'past_due'].includes(storedSub.status);
+        } catch {
+          subIsLive = false; // deleted / no such subscription
+        }
+        if (!subIsLive) {
+          this.logger.warn(
+            `Record-payment ${mode}: detaching dead Stripe subscription ${membership.stripeSubscriptionId} from membership ${membership.id} so the hourly sync can't re-cancel it`,
+          );
+          membership.stripeSubscriptionId = undefined;
+          membership.hadLegacySubscription = true;
+          membership.cancelAtPeriodEnd = false;
+        }
+      }
     }
     // payment_only: leave endDate + cancellation untouched — just record money.
 
@@ -2948,6 +3035,10 @@ export class MembershipsService {
       ? ` Reinstated ${reinstatedResults} competition result(s) earned during the lapse.`
       : '';
 
+    // The admin Members list serves from a cache — bust it so the
+    // reactivation is visible there immediately, not after the TTL.
+    this.clearAdminMembershipsListCache();
+
     return {
       success: true,
       membership,
@@ -3013,6 +3104,7 @@ export class MembershipsService {
       this.logger.error(`Admin notification failed (non-critical): ${err}`);
     });
 
+    this.clearAdminMembershipsListCache();
     return {
       success: true,
       membership,
@@ -3080,6 +3172,7 @@ export class MembershipsService {
       newValues: { cancelAtPeriodEnd: true, cancellationReason: reason },
     });
 
+    this.clearAdminMembershipsListCache();
     return {
       success: true,
       membership,
@@ -3200,6 +3293,7 @@ export class MembershipsService {
       newValues: { cancelAtPeriodEnd: false },
     });
 
+    this.clearAdminMembershipsListCache();
     return { success: true, membership, message: 'Membership reactivated. Auto-renewal restored.' };
   }
 

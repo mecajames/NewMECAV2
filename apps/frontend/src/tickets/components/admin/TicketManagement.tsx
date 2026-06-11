@@ -523,6 +523,10 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       if (first_name || last_name) return `${first_name || ''} ${last_name || ''}`.trim();
       return email.split('@')[0];
     }
+    // Guest-flow tickets have no linked reporter — use the guest fields,
+    // same as the ticket detail page does.
+    if (ticket.guest_name) return ticket.guest_name;
+    if (ticket.guest_email) return ticket.guest_email.split('@')[0];
     return 'Unknown';
   };
 
@@ -956,6 +960,11 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                     </td>
                     <td className="px-4 py-4">
                       <span className="text-gray-300 text-sm">{getReporterName(ticket)}</span>
+                      {!ticket.reporter && (ticket.guest_name || ticket.guest_email) && (
+                        <span className="ml-1.5 text-[10px] uppercase bg-slate-700 text-gray-400 px-1.5 py-0.5 rounded">
+                          Guest
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4">
                       {ticket.assigned_to ? (
