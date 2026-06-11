@@ -98,12 +98,14 @@ export default function ManualRenewalModal({ memberId, memberName, open, onClose
 
   if (!open) return null;
 
-  // Renewable = PAID, not cancelled, has an end date in the past or future.
-  // We allow expired memberships to be renewed manually too — admin discretion.
+  // Renewable = PAID with an end date. We allow expired memberships to be
+  // renewed manually too — admin discretion. A cancellation stamp only blocks
+  // renewal when the paid term actually ended early (refund/supersede); a
+  // billing-cancelled membership with time left renews from its real end date.
   const renewable = memberships.filter(m =>
     m.paymentStatus === 'paid'
-    && !m.cancelledAt
-    && m.endDate,
+    && m.endDate
+    && !(m.cancelledAt && new Date(m.endDate).getTime() < Date.now()),
   );
   const selected = renewable.find(m => m.id === selectedId) || null;
 

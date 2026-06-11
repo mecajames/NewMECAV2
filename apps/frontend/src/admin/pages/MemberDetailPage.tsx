@@ -5242,8 +5242,30 @@ function MembershipsTab({ member }: { member: Profile }) {
     return new Date(endDate) < new Date();
   };
 
+  // Classify a membership by its PAID TERM, independent of billing. A paid
+  // membership with a future end date is ACTIVE no matter what cancellation
+  // stamps it carries — cancelling the billing subscription only stops
+  // auto-renewal; the paid term still runs through the end date. "Cancelled"
+  // is reserved for memberships whose paid term actually ended (immediate
+  // cancel/refund/supersede), and wins over plain "expired" for those rows.
+  const membershipBucket = (m: Membership): 'active' | 'expired' | 'cancelled' => {
+    const expired = isExpired(m.endDate || '');
+    if (m.paymentStatus === 'paid' && !expired) return 'active';
+    if ((m as any).cancelledAt || (m.paymentStatus as string) === 'cancelled') return 'cancelled';
+    if (expired) return 'expired';
+    return 'active';
+  };
+
   const getStatusBadge = (membership: Membership) => {
-    if (isExpired(membership.endDate || '')) {
+    const bucket = membershipBucket(membership);
+    if (bucket === 'cancelled') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          <X className="h-3 w-3" /> Cancelled
+        </span>
+      );
+    }
+    if (bucket === 'expired') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
           <X className="h-3 w-3" /> Expired
@@ -5276,14 +5298,6 @@ function MembershipsTab({ member }: { member: Profile }) {
     );
   }
 
-  // Classify a membership for the status filter. Cancelled wins over expired
-  // (a cancelled row may also be past its end date); otherwise a past end date
-  // is expired, and everything current (paid OR pending) counts as active.
-  const membershipBucket = (m: Membership): 'active' | 'expired' | 'cancelled' => {
-    if ((m as any).cancelledAt || m.paymentStatus === 'cancelled') return 'cancelled';
-    if (isExpired(m.endDate || '')) return 'expired';
-    return 'active';
-  };
   const membershipCounts = {
     active: memberships.filter((m) => membershipBucket(m) === 'active').length,
     expired: memberships.filter((m) => membershipBucket(m) === 'expired').length,
@@ -5390,7 +5404,7 @@ function MembershipsTab({ member }: { member: Profile }) {
             <div
               key={membership.id}
               className={`bg-slate-700 rounded-lg p-4 border-l-4 ${
-                isExpired(membership.endDate || '') ? 'border-red-500' : 'border-green-500'
+                membershipBucket(membership) === 'active' ? 'border-green-500' : 'border-red-500'
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -5608,6 +5622,21 @@ function MembershipsTab({ member }: { member: Profile }) {
                         </span>
                       )}
                     </div>
+                    {/* Billing state is separate from membership state: a cancelled
+                        subscription only ends auto-renewal. Spell that out so a
+                        stamped-but-paid row doesn't read as a dead membership. */}
+                    {(membership as any).cancelledAt && membershipBucket(membership) === 'active' && (
+                      <div className="col-span-2 text-sm text-amber-400">
+                        ⚠ Subscription cancelled {formatDate((membership as any).cancelledAt)} — will not auto-renew.
+                        Membership remains active{membership.endDate ? ` through ${formatDate(membership.endDate)}` : ''}.
+                      </div>
+                    )}
+                    {membershipBucket(membership) === 'cancelled' && (
+                      <div className="col-span-2 text-sm text-red-400">
+                        Cancelled{(membership as any).cancelledAt ? ` on ${formatDate((membership as any).cancelledAt)}` : ''}
+                        {(membership as any).cancellationReason ? ` — ${(membership as any).cancellationReason}` : ''}
+                      </div>
+                    )}
                     {/* Subscription ID */}
                     {membership.stripeSubscriptionId && (
                       <div>
