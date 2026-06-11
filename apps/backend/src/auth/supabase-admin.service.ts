@@ -266,15 +266,26 @@ export class SupabaseAdminService {
    */
   async findUserByEmail(email: string): Promise<{ userId: string | null; error?: string }> {
     try {
-      const { data, error } = await this.supabaseAdmin.auth.admin.listUsers();
-
-      if (error) {
-        this.logger.error(`Failed to list users: ${error.message}`);
-        return { userId: null, error: error.message };
+      // listUsers() returns 50 users per page by default — a single call only
+      // ever saw the first 50 accounts, so this lookup silently failed for
+      // almost every email once production grew past that. Page through all
+      // users until found.
+      const target = email.toLowerCase();
+      const perPage = 1000;
+      // Hard ceiling (100 pages = 100k users) as a runaway guard
+      for (let page = 1; page <= 100; page++) {
+        const { data, error } = await this.supabaseAdmin.auth.admin.listUsers({ page, perPage });
+        if (error) {
+          this.logger.error(`Failed to list users (page ${page}): ${error.message}`);
+          return { userId: null, error: error.message };
+        }
+        const user = data.users.find(u => u.email?.toLowerCase() === target);
+        if (user) {
+          return { userId: user.id };
+        }
+        if (data.users.length < perPage) break; // last page reached
       }
-
-      const user = data.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-      return { userId: user?.id || null };
+      return { userId: null };
     } catch (error) {
       this.logger.error(`Error finding user by email: ${error}`);
       return {

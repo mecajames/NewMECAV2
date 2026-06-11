@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger, HttpException, InternalServerErrorException } from '@nestjs/common';
 import { EntityManager, raw } from '@mikro-orm/core';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
@@ -113,7 +113,10 @@ export class ProfilesService {
 
   async findByEmail(email: string): Promise<Profile | null> {
     const em = this.em.fork();
-    return em.findOne(Profile, { email });
+    // Case-insensitive: emails are stored as entered, so an exact match
+    // misses "MJames@..." when checking "mjames@..." and duplicate
+    // detection silently fails.
+    return em.findOne(Profile, { email: { $ilike: email.trim() } });
   }
 
   /**
@@ -601,7 +604,14 @@ export class ProfilesService {
       // Rollback: delete the Supabase Auth user since profile creation failed
       this.logger.error(`Profile creation failed, rolling back auth user: ${error}`);
       await this.supabaseAdmin.deleteUser(authResult.userId);
-      throw error;
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      // Surface the underlying failure (e.g. a DB constraint violation) —
+      // a bare rethrow reaches the admin as an opaque "500" with no clue.
+      throw new InternalServerErrorException(
+        `User creation failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

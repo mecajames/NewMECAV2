@@ -75,6 +75,10 @@ export interface AdminAuditResponse {
   total: number;
   page: number;
   totalPages: number;
+  /** Distinct action / resource_type values present in the log — drive the
+   *  filter dropdowns so they never drift from what's actually logged. */
+  availableActions?: string[];
+  availableResourceTypes?: string[];
 }
 
 export const userActivityApi = {

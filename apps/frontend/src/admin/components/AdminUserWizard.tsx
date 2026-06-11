@@ -748,7 +748,13 @@ export default function AdminUserWizard({
       onClose();
     } catch (err) {
       console.error('Error creating user:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create user');
+      // Prefer the backend's error message — the axios default
+      // ("Request failed with status code 500") tells the admin nothing.
+      const serverMsg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      setError(
+        Array.isArray(serverMsg) ? serverMsg.join(', ')
+          : serverMsg || (err instanceof Error ? err.message : 'Failed to create user'),
+      );
     } finally {
       setLoading(false);
     }

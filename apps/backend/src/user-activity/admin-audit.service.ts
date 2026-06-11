@@ -48,7 +48,14 @@ export class AdminAuditService {
     endDate?: string;
     page?: number;
     limit?: number;
-  }): Promise<{ items: any[]; total: number; page: number; totalPages: number }> {
+  }): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    totalPages: number;
+    availableActions: string[];
+    availableResourceTypes: string[];
+  }> {
     const page = options.page || 1;
     const limit = Math.min(options.limit || 50, 100);
     const offset = (page - 1) * limit;
@@ -73,8 +80,15 @@ export class AdminAuditService {
 
     if (options.search) {
       const term = `%${options.search}%`;
-      conditions.push(`(a."description" ILIKE ? OR p."full_name" ILIKE ? OR p."email" ILIKE ?)`);
-      params.push(term, term, term);
+      // full_name is null for many profiles — match the concatenated
+      // first/last name too, or searching an admin by name finds nothing.
+      conditions.push(`(
+        a."description" ILIKE ?
+        OR p."full_name" ILIKE ?
+        OR (COALESCE(p."first_name", '') || ' ' || COALESCE(p."last_name", '')) ILIKE ?
+        OR p."email" ILIKE ?
+      )`);
+      params.push(term, term, term, term);
     }
 
     if (options.startDate) {
@@ -112,11 +126,23 @@ export class AdminAuditService {
       [...params, limit, offset],
     );
 
+    // Distinct values actually present in the log drive the filter
+    // dropdowns — a hardcoded list in the UI drifts as new action types
+    // get logged and then "filters nothing".
+    const actionRows = await conn.execute(
+      `SELECT DISTINCT "action" FROM "public"."admin_audit_log" ORDER BY "action"`,
+    );
+    const resourceTypeRows = await conn.execute(
+      `SELECT DISTINCT "resource_type" FROM "public"."admin_audit_log" ORDER BY "resource_type"`,
+    );
+
     return {
       items: rows,
       total,
       page,
       totalPages: Math.ceil(total / limit),
+      availableActions: actionRows.map((r: any) => r.action).filter(Boolean),
+      availableResourceTypes: resourceTypeRows.map((r: any) => r.resource_type).filter(Boolean),
     };
   }
 }

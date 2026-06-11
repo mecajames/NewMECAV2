@@ -164,23 +164,45 @@ export class ScheduledTasksService {
     this.logger.log(`Checking ${memberships.length} active subscriptions...`);
     let synced = 0;
 
+    // A dead Stripe SUBSCRIPTION is NOT a cancelled MEMBERSHIP. Cancelling
+    // the subscription means "stop auto-renewal" — the member already PAID
+    // for the current term, which runs through endDate regardless. So a
+    // dead subscription is DETACHED (mirroring the customer.subscription.deleted
+    // webhook handler, which this job exists to catch-up for) and the
+    // membership stays paid. Immediate membership cancellation only ever
+    // happens through an explicit cancel/refund flow.
+    const detachDeadSubscription = async (m: Membership, why: string) => {
+      const deadSubId = m.stripeSubscriptionId;
+      m.stripeSubscriptionId = undefined;
+      m.hadLegacySubscription = true;
+      m.cancelAtPeriodEnd = false;
+      synced++;
+      await em.flush();
+      this.logger.warn(
+        `Detached dead Stripe subscription ${deadSubId} from membership ${m.id} (${why}). ` +
+        `Membership stays paid through ${m.endDate?.toISOString().split('T')[0] ?? 'no end date'}.`,
+      );
+
+      await em.populate(m, ['user', 'membershipTypeConfig']);
+      this.adminNotificationsService.notifySubscriptionCancelled(m).catch((err) => {
+        this.logger.error(`Admin notification failed (non-critical): ${err}`);
+      });
+      // Deliberately NO member email here: this job is catch-up for missed
+      // webhooks, so the cancellation may be weeks old — a late "your
+      // subscription has ended" email reads as a new cancellation and
+      // generates confused support tickets. The real-time webhook handler
+      // (customer.subscription.deleted) is the path that emails the member.
+    };
+
     for (const m of memberships) {
       try {
         const sub = await this.stripeService.getSubscription(m.stripeSubscriptionId!);
 
-        // Stripe says ended → reflect in DB
+        // Stripe says the subscription ended → detach it; membership keeps
+        // running through its paid-for endDate.
         if (['canceled', 'incomplete_expired', 'unpaid'].includes(sub.status)) {
-          m.paymentStatus = PaymentStatus.CANCELLED;
-          m.cancelledAt = new Date();
-          m.cancellationReason = `External Stripe state: ${sub.status} — synced by hourly job`;
-          synced++;
-          await em.flush();
-
-          await em.populate(m, ['user', 'membershipTypeConfig']);
-          this.adminNotificationsService.notifySubscriptionCancelled(m).catch((err) => {
-            this.logger.error(`Admin notification failed (non-critical): ${err}`);
-          });
-          this.logger.warn(`Synced membership ${m.id} → cancelled (Stripe: ${sub.status})`);
+          await detachDeadSubscription(m, `Stripe status: ${sub.status}`);
+          continue;
         }
 
         // Cancel-at-period-end drift
@@ -194,19 +216,18 @@ export class ScheduledTasksService {
         // is Stripe's literal error string for a deleted/non-existent sub.
         const msg = String(err?.message ?? err ?? '');
         if (/No such subscription/i.test(msg)) {
-          m.paymentStatus = PaymentStatus.CANCELLED;
-          m.cancelledAt = new Date();
-          m.cancellationReason = 'Stripe subscription not found (deleted) — synced by hourly job';
-          synced++;
-          await em.flush();
-          this.logger.warn(`Synced membership ${m.id} → cancelled (Stripe sub missing)`);
+          await detachDeadSubscription(m, 'subscription not found in Stripe');
         } else {
           this.logger.error(`Failed to sync membership ${m.id}: ${err}`);
         }
       }
     }
 
-    this.logger.log(`Stripe sync complete. Updated ${synced} memberships.`);
+    if (synced > 0) {
+      // Members list serves from a cache — make the detachments visible.
+      this.membershipsService.clearAdminMembershipsListCache();
+    }
+    this.logger.log(`Stripe sync complete. Detached ${synced} dead subscription(s).`);
   }
 
   // =============================================================================
