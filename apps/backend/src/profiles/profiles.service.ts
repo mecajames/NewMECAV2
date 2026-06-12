@@ -121,7 +121,10 @@ export class ProfilesService {
 
   /**
    * Generates the next MECA ID. New memberships start from 701501 (after 701500).
-   * Valid MECA ID range is 701500-799999 (NEW SYSTEM range).
+   * Auto-assignable range is capped at 799998: IDs at 799999 and above are
+   * manually-assigned specials and must never seed the sequence — a profile
+   * holding 799999 once made MAX+1 return 800000, which was both out of range
+   * and already taken (unique-constraint 500 in the Create User wizard).
    */
   async generateNextMecaId(): Promise<string> {
     const em = this.em.fork();
@@ -133,16 +136,19 @@ export class ProfilesService {
       fields: ['meca_id']
     });
 
-    // Extract numeric MECA IDs - only consider NEW SYSTEM range (701500-799999)
+    // Extract numeric MECA IDs - only consider the auto-assignable range (701500-799998)
     const numericIds = profiles
       .map(p => parseInt(p.meca_id || '0', 10))
-      .filter(id => !isNaN(id) && id >= 701500 && id < 800000);
+      .filter(id => !isNaN(id) && id >= 701500 && id < 799999);
 
     // Find the highest ID in the new range
     const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 701500;
 
-    // Return next ID (starts at 701501)
-    return String(maxId + 1);
+    const nextId = maxId + 1;
+    if (nextId > 799998) {
+      throw new Error('MECA ID auto-assign range exhausted (701501-799998) — assign an ID manually');
+    }
+    return String(nextId);
   }
 
   async create(data: Partial<Profile>): Promise<Profile> {
