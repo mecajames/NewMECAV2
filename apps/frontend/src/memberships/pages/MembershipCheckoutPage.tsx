@@ -316,6 +316,36 @@ export default function MembershipCheckoutPage() {
         setAccountExists(true);
         return;
       }
+
+      // Create the member's account NOW — before payment — with the password they
+      // just chose. This makes the buyer authenticated for the rest of checkout,
+      // so the PaymentIntent (and therefore the Stripe webhook) carry a real,
+      // token-verified userId and the backend never has to provision an account
+      // after payment. Previously the account was created post-payment here AND
+      // by the webhook concurrently; that double-create raced, collided on
+      // "email already registered", and dropped paid memberships. Creating it
+      // once, up front, also guarantees the password they typed is the one that
+      // works (no forced password reset).
+      setError(null);
+      setCreatingPaymentIntent(true);
+      const { error: signUpError } = await signUp(
+        formData.email,
+        accountPassword,
+        formData.firstName,
+        formData.lastName,
+      );
+      setCreatingPaymentIntent(false);
+      if (signUpError) {
+        const msg = String(signUpError?.message || '');
+        if (/already|registered|exists/i.test(msg)) {
+          // Registered in the gap since checkAccountExists — send them to login.
+          setAccountExists(true);
+        } else {
+          setError(signUpError.message || 'Could not create your account. Please try again.');
+        }
+        return;
+      }
+      setAccountCreated(true);
     }
 
     // If Stripe is not configured or PayPal is selected, go directly to payment step
@@ -391,30 +421,10 @@ export default function MembershipCheckoutPage() {
     if (!membership) return;
 
     const email = user ? (profile?.email || formData.email) : formData.email;
-    let currentUserId = user?.id;
-
-    // For guests: create account after payment succeeds, then create membership directly
-    if (!user && !accountCreated) {
-      try {
-        const { error: signUpError, data: signUpData } = await signUp(
-          formData.email,
-          accountPassword,
-          formData.firstName,
-          formData.lastName,
-        );
-
-        if (signUpError) {
-          console.error('Account creation failed after payment:', signUpError);
-          // Payment succeeded but account creation failed — still show confirmation
-          // User can create account later with same email
-        } else {
-          currentUserId = signUpData?.user?.id;
-          setAccountCreated(true);
-        }
-      } catch (err) {
-        console.error('Account creation error after payment:', err);
-      }
-    }
+    // Guests are signed up up front in handleContinueToPayment, so by here the
+    // buyer is authenticated either way. (Fall back to the freshly-created
+    // session's user if React state hasn't propagated yet.)
+    const currentUserId = user?.id;
 
     // Always create the membership client-side once we know who the buyer is.
     // The Stripe webhook is the backup path (idempotent on stripePaymentIntentId).
