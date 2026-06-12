@@ -1387,11 +1387,15 @@ export class CompetitionResultsService {
   }
 
   /**
-   * Check if a format/division is eligible for points
-   * Only SPL, SQL, SSI, and MK divisions are eligible
+   * Check if a format/division is eligible for points.
+   * Eligible: SPL, SQL, Show and Shine (SSI), MECA Kids (MK).
+   * Must match the REAL format names stored on competition_classes.format —
+   * the old list only had the abbreviations 'SSI'/'MK', which matched no
+   * actual data, so every Show and Shine / MECA Kids result earned 0 points.
+   * Ride the Light remains non-eligible (unchanged from the original list).
    */
   private isFormatEligible(format: string): boolean {
-    const eligibleFormats = ['SPL', 'SQL', 'SSI', 'MK'];
+    const eligibleFormats = ['SPL', 'SQL', 'SSI', 'SHOW AND SHINE', 'MK', 'MECA KIDS'];
     return eligibleFormats.includes(format.toUpperCase());
   }
 
