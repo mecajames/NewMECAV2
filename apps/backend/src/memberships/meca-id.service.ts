@@ -44,14 +44,31 @@ export class MecaIdService {
   static readonly GRACE_MEDIUM_DAYS = 37;        // days 31-37 : silent reclaim + internal flag
   static readonly GRACE_ADMIN_DAYS = 45;         // days 38-45 : no self reclaim; admin may reassign
 
+  // Relaunch amnesty: the site was down ~2 months around the V2 relaunch, so
+  // through July 5, 2026 a renewal keeps its MECA ID if expired ≤120 days.
+  // After the deadline this reverts to GRACE_ADMIN_DAYS (45). NEVER surface
+  // 45 or 120 in member-facing copy — the announced retention window is 30
+  // days (GRACE_SOFT_DAYS); everything beyond that is silent goodwill.
+  static readonly RELAUNCH_GRACE_DAYS = 120;
+  // End of July 5, 2026 in the westernmost mainland US timezone (PDT, UTC-7).
+  static readonly RELAUNCH_GRACE_DEADLINE = new Date('2026-07-06T07:00:00.000Z');
+
+  /** The ACTUAL (unannounced) MECA ID retention window, in days. */
+  static effectiveRetentionGraceDays(at: Date = new Date()): number {
+    return at < MecaIdService.RELAUNCH_GRACE_DEADLINE
+      ? MecaIdService.RELAUNCH_GRACE_DAYS
+      : MecaIdService.GRACE_ADMIN_DAYS;
+  }
+
   /**
    * Assign a MECA ID to a membership.
-   * A renewal by the same member always keeps their existing MECA ID (their
-   * permanent competitive identity), no matter how long they lapsed — the only
-   * exception is if the number is now held by a different profile. A brand-new
-   * member (no previousMembership) gets a freshly minted ID. The historical
-   * grace tiers (soft/medium/late) are now recorded for audit only, not used to
-   * decide whether to reuse the number.
+   * A renewal by the same member keeps their existing MECA ID when the lapse
+   * is within the actual retention window (effectiveRetentionGraceDays — see
+   * the constants above; member-facing copy only ever says 30 days). Beyond
+   * the window, or if the number is now held by a different profile, a fresh
+   * ID is minted (admins can restore the old number via the reassign tool).
+   * A brand-new member (no previousMembership) gets a freshly minted ID. The
+   * grace tiers (soft/medium/late) are recorded in history for audit.
    *
    * @param membership The membership to assign a MECA ID to
    * @param previousMembership Optional previous membership for renewal tracking
@@ -66,48 +83,56 @@ export class MecaIdService {
     // Use caller's EM if provided, otherwise fork our own
     const em = callerEm || this.em.fork();
 
-    // A renewal by the SAME member keeps their own MECA ID, regardless of how long
-    // they lapsed. The number is the member's permanent competitive identity — all
-    // their results, achievements, and qualifications hang off it. The old behavior
-    // only reused within a 37-day grace window and otherwise minted a brand-new
-    // number; that stranded returning members (especially V1-migrated members locked
-    // out past their grace window) with a new number and orphaned history. We now
-    // reuse the member's previous number unconditionally, and only mint a new one if
-    // that number is currently held by a DIFFERENT profile (numbers are never
-    // reassigned post-migration, so in practice this never triggers).
+    // A renewal by the SAME member keeps their MECA ID while the previous
+    // membership is active or expired within the ACTUAL retention window
+    // (effectiveRetentionGraceDays: 45 days standard, 120-day relaunch
+    // amnesty through July 5 2026 — members are only ever told 30 days).
+    // Beyond the window the number is retired and a fresh ID is minted; an
+    // admin can still restore the old number via the reassign tool. The
+    // number is also never reused if it is currently held by a DIFFERENT
+    // profile.
     if (previousMembership?.mecaId) {
       const mecaId = previousMembership.mecaId;
-      const ownerId = (membership.user as any)?.id ?? (membership.user as any);
-      const takenByOther = await em.count(Profile, {
-        meca_id: String(mecaId),
-        ...(ownerId ? { id: { $ne: ownerId } } : {}),
-      });
+      const daysSinceExpiry = previousMembership.endDate
+        ? this.getDaysSinceExpiry(previousMembership.endDate)
+        : 0;
+      const retentionDays = MecaIdService.effectiveRetentionGraceDays();
 
-      if (takenByOther === 0) {
-        membership.mecaId = mecaId;
-        membership.cardCreatedAt = new Date();
-
-        const daysSinceExpiry = previousMembership.endDate
-          ? this.getDaysSinceExpiry(previousMembership.endDate)
-          : 0;
-        const tier =
-          daysSinceExpiry <= 0 ? 'active'
-            : daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS ? 'soft'
-              : daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS ? 'medium'
-                : 'late';
-        await this.recordReactivation(mecaId, membership, previousMembership.endDate ?? new Date(), em, tier);
-
+      if (daysSinceExpiry > retentionDays) {
         this.logger.log(
-          `Kept MECA ID ${mecaId} for membership ${membership.id} on renewal ` +
-          `(${daysSinceExpiry.toFixed(1)} days since prior end, ${tier})`
+          `MECA ID ${mecaId} not retained for membership ${membership.id}: expired ` +
+          `${daysSinceExpiry.toFixed(1)} days ago (> ${retentionDays}-day retention window) — issuing a new ID`
         );
+      } else {
+        const ownerId = (membership.user as any)?.id ?? (membership.user as any);
+        const takenByOther = await em.count(Profile, {
+          meca_id: String(mecaId),
+          ...(ownerId ? { id: { $ne: ownerId } } : {}),
+        });
 
-        return mecaId;
+        if (takenByOther === 0) {
+          membership.mecaId = mecaId;
+          membership.cardCreatedAt = new Date();
+
+          const tier =
+            daysSinceExpiry <= 0 ? 'active'
+              : daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS ? 'soft'
+                : daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS ? 'medium'
+                  : 'late';
+          await this.recordReactivation(mecaId, membership, previousMembership.endDate ?? new Date(), em, tier);
+
+          this.logger.log(
+            `Kept MECA ID ${mecaId} for membership ${membership.id} on renewal ` +
+            `(${daysSinceExpiry.toFixed(1)} days since prior end, ${tier})`
+          );
+
+          return mecaId;
+        }
+
+        this.logger.warn(
+          `Previous MECA ID ${mecaId} for membership ${membership.id} is held by another profile — issuing a new ID instead`
+        );
       }
-
-      this.logger.warn(
-        `Previous MECA ID ${mecaId} for membership ${membership.id} is held by another profile — issuing a new ID instead`
-      );
     }
 
     // Assign new MECA ID

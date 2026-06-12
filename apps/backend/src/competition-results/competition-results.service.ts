@@ -9,6 +9,7 @@ import { ClassNameMapping } from '../class-name-mappings/class-name-mappings.ent
 import { Season } from '../seasons/seasons.entity';
 import { AuditService } from '../audit/audit.service';
 import { Membership } from '../memberships/memberships.entity';
+import { MecaIdService } from '../memberships/meca-id.service';
 import { WorldFinalsService } from '../world-finals/world-finals.service';
 import { AchievementsService } from '../achievements/achievements.service';
 import { PointsConfigurationService } from '../points-configuration/points-configuration.service';
@@ -27,17 +28,14 @@ export class CompetitionResultsService {
 
   private readonly logger = new Logger(CompetitionResultsService.name);
 
-  // Days past membership end_date during which we still want the back-fill
-  // mechanic to kick in. Matches the MECA ID admin-extension cutoff
-  // (MecaIdService.GRACE_ADMIN_DAYS).
-  private static readonly RESULT_BACKFILL_GRACE_DAYS = 45;
-
   /**
    * If the looked-up MECA ID on an incoming result belongs to a member
-   * whose membership is currently expired but within the 45-day grace
-   * window, rewrite the row to `meca_id = '999999'` and stash the
-   * original ID on `original_meca_id` + flag `pending_back_fill = true`.
-   * The renewal flow will read these flags to restore the rows.
+   * whose membership is currently expired but within the actual MECA ID
+   * retention window (MecaIdService.effectiveRetentionGraceDays — matches
+   * the renewal reuse rule, including the relaunch amnesty), rewrite the
+   * row to `meca_id = '999999'` and stash the original ID on
+   * `original_meca_id` + flag `pending_back_fill = true`. The renewal flow
+   * will read these flags to restore the rows.
    *
    * Mutates transformedData in place.
    */
@@ -61,7 +59,7 @@ export class CompetitionResultsService {
     if (end >= now) return; // still active — leave row alone
 
     const daysSinceExpiry = (now - end) / (1000 * 60 * 60 * 24);
-    if (daysSinceExpiry > CompetitionResultsService.RESULT_BACKFILL_GRACE_DAYS) {
+    if (daysSinceExpiry > MecaIdService.effectiveRetentionGraceDays()) {
       // Beyond grace — the ID is permanently retired. Still record under
       // 999999, but no back-fill will ever happen.
       transformedData.mecaId = '999999';

@@ -125,3 +125,82 @@ describe('CompetitionResults back-fill — simulated', () => {
     expect(rows.find((r) => r.id === 'r5').mecaId).toBe('700321');
   });
 });
+
+/**
+ * MECA ID retention window — the ACTUAL (unannounced) reuse rule applied by
+ * assignMecaIdToMembership: 45 days standard, 120-day relaunch amnesty
+ * through July 5 2026. Member-facing copy only ever says 30 days.
+ */
+describe('MECA ID retention window', () => {
+  function makePrev(endDaysFromNow: number, mecaId = 700321) {
+    return {
+      id: 'm-prev',
+      mecaId,
+      endDate: new Date(Date.now() + endDaysFromNow * 24 * 60 * 60 * 1000),
+      paymentStatus: 'paid',
+    } as any;
+  }
+
+  function makeCallerEm() {
+    return {
+      count: jest.fn().mockResolvedValue(0),       // ID not held by another profile
+      findOne: jest.fn().mockResolvedValue(null),  // no prior history row
+      persist: jest.fn(),
+      flush: jest.fn().mockResolvedValue(undefined),
+    } as any;
+  }
+
+  it('uses the 120-day relaunch amnesty before the deadline and 45 days after', () => {
+    const justBefore = new Date(MecaIdService.RELAUNCH_GRACE_DEADLINE.getTime() - 1000);
+    const justAfter = new Date(MecaIdService.RELAUNCH_GRACE_DEADLINE.getTime() + 1000);
+    expect(MecaIdService.effectiveRetentionGraceDays(justBefore)).toBe(MecaIdService.RELAUNCH_GRACE_DAYS);
+    expect(MecaIdService.effectiveRetentionGraceDays(justAfter)).toBe(MecaIdService.GRACE_ADMIN_DAYS);
+  });
+
+  it('reclaims the previous MECA ID when expired within the effective window', async () => {
+    const svc = new MecaIdService({} as any);
+    const em = makeCallerEm();
+    const withinDays = MecaIdService.effectiveRetentionGraceDays() - 5;
+    const prev = makePrev(-withinDays);
+    const membership = { id: 'm-new', user: { id: 'u1' } } as any;
+
+    const id = await svc.assignMecaIdToMembership(membership, prev, em);
+
+    expect(id).toBe(700321);
+    expect(membership.mecaId).toBe(700321);
+  });
+
+  it('mints a NEW MECA ID when expired beyond the effective window', async () => {
+    // Root em only needs to serve getNextMecaId() for the mint path.
+    const rootEm = {
+      fork: () => ({
+        getConnection: () => ({
+          execute: jest.fn().mockResolvedValue([{ get_next_meca_id: 701999 }]),
+        }),
+      }),
+    } as any;
+    const svc = new MecaIdService(rootEm);
+    const em = makeCallerEm();
+    const beyondDays = MecaIdService.effectiveRetentionGraceDays() + 10;
+    const prev = makePrev(-beyondDays);
+    const membership = { id: 'm-new', user: { id: 'u1' } } as any;
+
+    const id = await svc.assignMecaIdToMembership(membership, prev, em);
+
+    expect(id).toBe(701999);
+    expect(membership.mecaId).toBe(701999);
+    // The previous (retired) ID must not have been reused.
+    expect(membership.mecaId).not.toBe(prev.mecaId);
+  });
+
+  it('still reclaims for an ACTIVE membership (early renewal)', async () => {
+    const svc = new MecaIdService({} as any);
+    const em = makeCallerEm();
+    const prev = makePrev(45); // still active for 45 more days
+    const membership = { id: 'm-new', user: { id: 'u1' } } as any;
+
+    const id = await svc.assignMecaIdToMembership(membership, prev, em);
+
+    expect(id).toBe(700321);
+  });
+});

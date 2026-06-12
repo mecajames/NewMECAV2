@@ -191,14 +191,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async accountExists(
     @Body() body: { email?: string },
-  ): Promise<{ exists: boolean; canLogin: boolean }> {
+  ): Promise<{ exists: boolean; canLogin: boolean; hasActiveMembership: boolean }> {
     const email = (body?.email || '').trim().toLowerCase();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      return { exists: false, canLogin: false };
+      return { exists: false, canLogin: false, hasActiveMembership: false };
     }
     try {
       const rows = await this.em.getConnection().execute(
-        `SELECT p.can_login
+        `SELECT p.can_login, p.membership_status
            FROM auth.users u
            LEFT JOIN public.profiles p ON p.id = u.id
           WHERE lower(u.email) = ?
@@ -206,12 +206,19 @@ export class AuthController {
         [email],
       );
       if (rows?.[0]) {
-        return { exists: true, canLogin: rows[0].can_login !== false };
+        return {
+          exists: true,
+          canLogin: rows[0].can_login !== false,
+          // Lets the membership checkout route an expired/never-member email
+          // into guest renewal instead of a "log in" dead end (the expired
+          // login gate makes that advice impossible to follow).
+          hasActiveMembership: rows[0].membership_status === 'active',
+        };
       }
     } catch (err) {
       this.logger.error(`account-exists: lookup failed for ${email}: ${err}`);
     }
-    return { exists: false, canLogin: false };
+    return { exists: false, canLogin: false, hasActiveMembership: false };
   }
 
   /**

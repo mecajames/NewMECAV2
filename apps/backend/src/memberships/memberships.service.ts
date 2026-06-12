@@ -566,17 +566,7 @@ export class MembershipsService {
     // result rows that were stamped 999999 during the grace window.
     // See docs/features/MEMBERSHIP_LIFECYCLE.md §7.2.
     if (membership.mecaId) {
-      try {
-        const backfilled = await this.competitionResultsService.backFillForRenewal(
-          String(membership.mecaId),
-          String(membership.mecaId),
-        );
-        if (backfilled > 0) {
-          this.logger.log(`Renewal back-fill: ${backfilled} result row(s) restored for MECA ID ${membership.mecaId}`);
-        }
-      } catch (err) {
-        this.logger.error('Renewal back-fill failed (non-fatal)', err);
-      }
+      await this.backFillResultsForRenewal(membership.mecaId);
     }
 
     // Auto-create team if needed (for retailer/manufacturer/team category or competitor with team add-on/includes team)
@@ -3178,6 +3168,25 @@ export class MembershipsService {
       membership,
       message: `Membership scheduled for cancellation. Will be deactivated on ${endDateStr}`,
     };
+  }
+
+  /**
+   * Back-fill any result rows stamped 999999 during the grace window onto a
+   * renewed membership's reclaimed MECA ID. Non-fatal. Used by every renewal
+   * path: createMembership above and the subscription-checkout webhook.
+   */
+  async backFillResultsForRenewal(mecaId: number | string): Promise<void> {
+    try {
+      const backfilled = await this.competitionResultsService.backFillForRenewal(
+        String(mecaId),
+        String(mecaId),
+      );
+      if (backfilled > 0) {
+        this.logger.log(`Renewal back-fill: ${backfilled} result row(s) restored for MECA ID ${mecaId}`);
+      }
+    } catch (err) {
+      this.logger.error('Renewal back-fill failed (non-fatal)', err);
+    }
   }
 
   /**

@@ -155,9 +155,15 @@ export default function MembershipCheckoutPage() {
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  // True when the entered guest email already has a login account — we stop the
-  // signup and point them to log in / reset instead of letting them pay twice.
-  const [accountExists, setAccountExists] = useState(false);
+  // Classification of the entered guest email against existing accounts:
+  //   'active'    — account with an ACTIVE membership → must log in and renew
+  //                 from the My MECA dashboard (checkout blocked)
+  //   'renewable' — account without an active membership (expired, or never a
+  //                 member) → proceed WITHOUT creating an account; payment
+  //                 fulfillment attaches the membership to the existing
+  //                 profile by email and their password is untouched
+  //   'blocked'   — account that cannot log in (banned) → contact support
+  const [existingAccount, setExistingAccount] = useState<'active' | 'renewable' | 'blocked' | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -234,9 +240,26 @@ export default function MembershipCheckoutPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    // Editing the email invalidates any prior "account already exists" notice.
-    if (name === 'email' && accountExists) setAccountExists(false);
+    // Editing the email invalidates any prior account classification.
+    if (name === 'email' && existingAccount) setExistingAccount(null);
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Classify the guest email against existing accounts. Runs on email blur so
+  // the form adapts (hide password fields, show guidance) BEFORE the member
+  // fills everything in, and again authoritatively on Continue.
+  const classifyGuestEmail = async (): Promise<'active' | 'renewable' | 'blocked' | null> => {
+    const email = formData.email.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+    const { exists, canLogin, hasActiveMembership } = await checkAccountExists(email);
+    if (!exists) return null;
+    if (!canLogin) return 'blocked';
+    return hasActiveMembership ? 'active' : 'renewable';
+  };
+
+  const handleEmailBlur = async () => {
+    if (user) return;
+    setExistingAccount(await classifyGuestEmail());
   };
 
   const validateInfoStep = (): boolean => {
@@ -255,8 +278,9 @@ export default function MembershipCheckoutPage() {
       }
     }
 
-    // Password required for guests
-    if (!user) {
+    // Password required for guests creating a NEW account. Returning members
+    // ('renewable') keep their existing account and password — no fields shown.
+    if (!user && existingAccount !== 'renewable') {
       if (!accountPassword) {
         setError('Password is required to create your account');
         return false;
@@ -307,45 +331,50 @@ export default function MembershipCheckoutPage() {
   const handleContinueToPayment = async () => {
     if (!validateInfoStep() || !membership) return;
 
-    // Guests only: stop here if a login account already exists for this email.
-    // Otherwise a returning member who forgot their account would pay first and
-    // only then fail account creation (their auth user already exists).
+    // Guests only: classify the email against existing accounts. An ACTIVE
+    // membership must be renewed from the dashboard (log in); an existing
+    // account WITHOUT one (expired or never a member) proceeds as a guest
+    // renewal — fulfillment attaches the membership to that profile by email.
     if (!user) {
-      const { exists } = await checkAccountExists(formData.email);
-      if (exists) {
-        setAccountExists(true);
-        return;
-      }
+      const classification = await classifyGuestEmail();
+      setExistingAccount(classification);
+      if (classification === 'active' || classification === 'blocked') return;
 
-      // Create the member's account NOW — before payment — with the password they
-      // just chose. This makes the buyer authenticated for the rest of checkout,
-      // so the PaymentIntent (and therefore the Stripe webhook) carry a real,
-      // token-verified userId and the backend never has to provision an account
-      // after payment. Previously the account was created post-payment here AND
-      // by the webhook concurrently; that double-create raced, collided on
-      // "email already registered", and dropped paid memberships. Creating it
-      // once, up front, also guarantees the password they typed is the one that
-      // works (no forced password reset).
-      setError(null);
-      setCreatingPaymentIntent(true);
-      const { error: signUpError } = await signUp(
-        formData.email,
-        accountPassword,
-        formData.firstName,
-        formData.lastName,
-      );
-      setCreatingPaymentIntent(false);
-      if (signUpError) {
-        const msg = String(signUpError?.message || '');
-        if (/already|registered|exists/i.test(msg)) {
-          // Registered in the gap since checkAccountExists — send them to login.
-          setAccountExists(true);
+      if (classification !== 'renewable') {
+        // Brand-new email: create the member's account NOW — before payment —
+        // with the password they just chose. This makes the buyer authenticated
+        // for the rest of checkout, so the PaymentIntent (and therefore the
+        // Stripe webhook) carry a real, token-verified userId and the backend
+        // never has to provision an account after payment. Previously the
+        // account was created post-payment here AND by the webhook concurrently;
+        // that double-create raced, collided on "email already registered", and
+        // dropped paid memberships. Creating it once, up front, also guarantees
+        // the password they typed is the one that works (no forced reset).
+        setError(null);
+        setCreatingPaymentIntent(true);
+        const { error: signUpError } = await signUp(
+          formData.email,
+          accountPassword,
+          formData.firstName,
+          formData.lastName,
+        );
+        setCreatingPaymentIntent(false);
+        if (signUpError) {
+          const msg = String(signUpError?.message || '');
+          if (/already|registered|exists/i.test(msg)) {
+            // Registered in the gap since the email check — reclassify and
+            // either continue as a renewal or send them to log in.
+            const reclassified = await classifyGuestEmail();
+            setExistingAccount(reclassified ?? 'active');
+            if (reclassified !== 'renewable') return;
+          } else {
+            setError(signUpError.message || 'Could not create your account. Please try again.');
+            return;
+          }
         } else {
-          setError(signUpError.message || 'Could not create your account. Please try again.');
+          setAccountCreated(true);
         }
-        return;
       }
-      setAccountCreated(true);
     }
 
     // If Stripe is not configured or PayPal is selected, go directly to payment step
@@ -597,6 +626,20 @@ export default function MembershipCheckoutPage() {
                   </div>
                 </div>
               </div>
+            ) : existingAccount === 'renewable' ? (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-6 mb-8">
+                <div className="flex items-center">
+                  <CheckCircle className="h-6 w-6 text-green-500 mr-3" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Membership Renewed</h3>
+                    <p className="text-gray-400 text-sm">
+                      Your membership has been renewed on your existing MECA account. You can now{' '}
+                      <Link to="/login" className="text-orange-400 underline hover:text-orange-300">log in</Link>{' '}
+                      with your existing password.
+                    </p>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="bg-slate-700/50 rounded-xl p-6 mb-8">
                 <p className="text-gray-400 text-sm">
@@ -709,22 +752,56 @@ export default function MembershipCheckoutPage() {
                     </div>
                   )}
 
-                  {accountExists && (
+                  {existingAccount === 'active' && (
                     <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500 rounded-lg">
                       <p className="text-orange-300 text-sm font-medium mb-1">
-                        You already have a MECA account
+                        You already have an active membership
                       </p>
                       <p className="text-orange-200/90 text-sm">
-                        An account for <span className="font-semibold">{formData.email}</span> already
-                        exists. Please{' '}
+                        The account for <span className="font-semibold">{formData.email}</span> has an
+                        active membership. Please{' '}
                         <Link to="/login" className="underline font-semibold hover:text-white">
                           log in
                         </Link>{' '}
-                        to purchase or renew your membership. Forgot your password? Use{' '}
+                        and renew from your My MECA dashboard. Forgot your password? Use{' '}
                         <Link to="/login" className="underline font-semibold hover:text-white">
                           Forgot password
                         </Link>{' '}
                         on the login page to set a new one.
+                      </p>
+                    </div>
+                  )}
+
+                  {existingAccount === 'renewable' && (
+                    <div className="mb-6 p-4 bg-green-500/10 border border-green-500 rounded-lg">
+                      <p className="text-green-300 text-sm font-medium mb-1">
+                        Welcome back!
+                      </p>
+                      <p className="text-green-200/90 text-sm">
+                        We found your MECA account for{' '}
+                        <span className="font-semibold">{formData.email}</span>. This purchase will
+                        renew your membership on your existing account — no need to create a new one.
+                        You'll keep signing in with your existing password (use{' '}
+                        <Link to="/login" className="underline font-semibold hover:text-white">
+                          Forgot password
+                        </Link>{' '}
+                        if you've forgotten it).
+                      </p>
+                    </div>
+                  )}
+
+                  {existingAccount === 'blocked' && (
+                    <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
+                      <p className="text-red-300 text-sm font-medium mb-1">
+                        There's an issue with this account
+                      </p>
+                      <p className="text-red-200/90 text-sm">
+                        The account for <span className="font-semibold">{formData.email}</span> can't
+                        be renewed online. Please{' '}
+                        <Link to="/support" className="underline font-semibold hover:text-white">
+                          contact support
+                        </Link>{' '}
+                        and we'll help you out.
                       </p>
                     </div>
                   )}
@@ -751,12 +828,17 @@ export default function MembershipCheckoutPage() {
                               name="email"
                               value={formData.email}
                               onChange={handleInputChange}
+                              onBlur={handleEmailBlur}
                               className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
                               placeholder="you@example.com"
                               required
                             />
                           </div>
                         </div>
+                        {/* Returning members keep their existing account & password —
+                            only brand-new emails create one. */}
+                        {existingAccount !== 'renewable' && (
+                        <>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
                             Create Password *
@@ -823,6 +905,8 @@ export default function MembershipCheckoutPage() {
                             <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
                           )}
                         </div>
+                        </>
+                        )}
                       </div>
                     </div>
                   )}
