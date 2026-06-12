@@ -1923,7 +1923,16 @@ export class StripeController {
     }
 
     try {
-      // Create the membership via the memberships service
+      // Renewal-aware creation: find the member's most recent paid membership
+      // in this category so an expired-in-grace renewal keeps its MECA ID,
+      // extends from the prior end date (lifecycle rule A1), and carries the
+      // competitor/vehicle info forward. Previously this path minted a fresh
+      // MECA ID and a flat now+1yr term regardless of renewal state.
+      const previousMembership = await this.mecaIdService.findMostRecentMembership(
+        profile.id,
+        membershipConfig.category,
+      );
+
       const membership = new Membership();
       membership.user = profile;
       membership.membershipTypeConfig = membershipConfig;
@@ -1931,22 +1940,37 @@ export class StripeController {
       membership.paymentStatus = PaymentStatus.PAID;
       membership.stripeSubscriptionId = subscriptionId;
       membership.startDate = new Date();
-
-      // Set end date to 1 year from now
-      const endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 1);
-      membership.endDate = endDate;
+      membership.endDate = this.mecaIdService.computeRenewalEndDate(previousMembership);
 
       // Set competitor name from metadata if available
       const billingFirstName = metadata.billingFirstName || profile.first_name || '';
       const billingLastName = metadata.billingLastName || profile.last_name || '';
-      membership.competitorName = [billingFirstName, billingLastName].filter(Boolean).join(' ');
+      membership.competitorName =
+        [billingFirstName, billingLastName].filter(Boolean).join(' ') ||
+        previousMembership?.competitorName;
 
-      // Assign MECA ID
-      const mecaId = await this.mecaIdService.assignMecaIdToMembership(membership);
+      // The subscription checkout form doesn't collect vehicle info, so a
+      // renewal would otherwise come through blank.
+      membership.vehicleMake = previousMembership?.vehicleMake;
+      membership.vehicleModel = previousMembership?.vehicleModel;
+      membership.vehicleColor = previousMembership?.vehicleColor;
+      membership.vehicleLicensePlate = previousMembership?.vehicleLicensePlate;
+
+      // Assign MECA ID — retention grace rules apply when renewing
+      const mecaId = await this.mecaIdService.assignMecaIdToMembership(
+        membership,
+        previousMembership || undefined,
+        em,
+      );
       membership.mecaId = mecaId;
 
       await em.persistAndFlush(membership);
+
+      // If the renewal reclaimed the prior MECA ID, restore any result rows
+      // stamped 999999 during the grace window.
+      if (previousMembership?.mecaId && mecaId === previousMembership.mecaId) {
+        await this.membershipsService.backFillResultsForRenewal(mecaId);
+      }
 
       // Early-renewal supersede: if this NEW subscription replaces a still-active
       // membership in the same category, end the old one and cancel its (older,

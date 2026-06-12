@@ -23,21 +23,27 @@ export const requestLoginRecovery = async (email: string): Promise<boolean> => {
 };
 
 /**
- * Checks whether a login account already exists for an email. Used by the
- * membership signup form to stop a returning member from re-registering (and
- * paying) before being sent to log in / reset their password. Returns
- * { exists: false } on any error so a transient failure never blocks signup.
+ * Checks whether a login account already exists for an email, and whether it
+ * carries an ACTIVE membership. The membership checkout uses this to route:
+ * active membership → "log in and renew from your dashboard"; existing account
+ * without one (expired or never bought) → guest renewal that attaches to the
+ * existing account; no account → normal signup. Returns { exists: false } on
+ * any error so a transient failure never blocks signup.
  */
 export const checkAccountExists = async (
   email: string,
-): Promise<{ exists: boolean; canLogin: boolean }> => {
+): Promise<{ exists: boolean; canLogin: boolean; hasActiveMembership: boolean }> => {
   try {
-    const { data } = await axios.post<{ exists: boolean; canLogin: boolean }>(
+    const { data } = await axios.post<{ exists: boolean; canLogin: boolean; hasActiveMembership: boolean }>(
       '/api/auth/account-exists',
       { email },
     );
-    return { exists: !!data?.exists, canLogin: !!data?.canLogin };
+    return {
+      exists: !!data?.exists,
+      canLogin: !!data?.canLogin,
+      hasActiveMembership: !!data?.hasActiveMembership,
+    };
   } catch {
-    return { exists: false, canLogin: false };
+    return { exists: false, canLogin: false, hasActiveMembership: false };
   }
 };
