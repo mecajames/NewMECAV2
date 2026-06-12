@@ -711,16 +711,18 @@ describe('TeamsController', () => {
   });
 
   describe('leaveTeam', () => {
-    it('should allow authenticated user to leave their team', async () => {
+    it('should allow authenticated user to leave the specified team', async () => {
       mockAuthSuccess();
 
-      await controller.leaveTeam(VALID_AUTH_HEADER);
+      await controller.leaveTeam(TEST_TEAM_ID, VALID_AUTH_HEADER);
 
-      expect(mockTeamsService.leaveTeam).toHaveBeenCalledWith(TEST_USER_ID);
+      // Per-team mutation MUST key on (teamId, userId) — a userId-only match
+      // removed an arbitrary team for multi-team members (launch-week bug).
+      expect(mockTeamsService.leaveTeam).toHaveBeenCalledWith(TEST_TEAM_ID, TEST_USER_ID);
     });
 
     it('should throw UnauthorizedException when not authenticated', async () => {
-      await expect(controller.leaveTeam(undefined as any)).rejects.toThrow(UnauthorizedException);
+      await expect(controller.leaveTeam(TEST_TEAM_ID, undefined as any)).rejects.toThrow(UnauthorizedException);
       expect(mockTeamsService.leaveTeam).not.toHaveBeenCalled();
     });
   });

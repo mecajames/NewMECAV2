@@ -277,6 +277,23 @@ export class TeamsService {
     return map;
   }
 
+  // Members whose MEMBERSHIP has lapsed are hidden from public team pages and
+  // excluded from team stats; they reappear automatically when they renew
+  // (their profile flips back to active). profiles.membership_status is the
+  // synced source of truth — the same field the teams directory query and the
+  // public member-profile gate already use.
+  private async filterToActiveMembershipUserIds(em: EntityManager, userIds: string[]): Promise<string[]> {
+    const unique = [...new Set(userIds.filter(Boolean))];
+    if (unique.length === 0) return [];
+    const rows = await em.find(
+      Profile,
+      { id: { $in: unique }, membership_status: 'active' } as any,
+      { fields: ['id'] as any },
+    );
+    const active = new Set(rows.map((r) => r.id));
+    return userIds.filter((id) => active.has(id));
+  }
+
   async findAll(): Promise<TeamWithMembers[]> {
     const em = this.em.fork();
     const teams = await em.find(Team, { isActive: true }, {
@@ -1408,6 +1425,9 @@ export class TeamsService {
       }
     }
 
+    // Lapsed members contribute nothing to team stats until they renew.
+    memberUserIds = await this.filterToActiveMembershipUserIds(em, memberUserIds);
+
     if (memberUserIds.length === 0) {
       return {
         topSplScores: [],
@@ -1589,6 +1609,9 @@ export class TeamsService {
     if (memberUserIds.length === 0) {
       throw new NotFoundException(`Team with ID ${teamId} not found`);
     }
+
+    // Lapsed members contribute nothing to team analytics until they renew.
+    memberUserIds = await this.filterToActiveMembershipUserIds(em, memberUserIds);
 
     const profileMap = await this.loadProfileMap(em, memberUserIds);
     const nameOf = (uid: string): string => {
@@ -2072,7 +2095,11 @@ export class TeamsService {
       })
       .map(team => {
       const owner = legacyProfileMap.get(team.captainId);
-      const members = legacyMembersByTeam.get(team.id) || [];
+      // Lapsed members are hidden from the directory cards (and counts)
+      // until they renew — same rule as the team detail page.
+      const members = (legacyMembersByTeam.get(team.id) || []).filter(
+        m => legacyProfileMap.get(m.userId)?.membership_status === 'active',
+      );
       const membersWithUsers = members.map(m => this.buildMemberWithUserFromMap(m, legacyProfileMap));
 
       return {
@@ -2153,7 +2180,12 @@ export class TeamsService {
       const userIds = [team.captainId, ...activeMembers.map(m => m.userId)];
       const profileMap = await this.loadProfileMap(em, userIds);
       const owner = profileMap.get(team.captainId);
-      const membersWithUsers = activeMembers.map(m => this.buildMemberWithUserFromMap(m, profileMap));
+      // Hide roster members whose MEMBERSHIP has lapsed — they reappear when
+      // they renew. Their "active" team_members row is kept (roster intact).
+      const visibleMembers = activeMembers.filter(
+        m => profileMap.get(m.userId)?.membership_status === 'active',
+      );
+      const membersWithUsers = visibleMembers.map(m => this.buildMemberWithUserFromMap(m, profileMap));
 
       return {
         ...team,
@@ -2195,7 +2227,9 @@ export class TeamsService {
       JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
       LEFT JOIN profiles p ON p.id = m.user_id
       WHERE m.id = ?
-      AND m.status = 'active'
+      AND m.payment_status = 'paid'
+      AND (m.end_date >= CURRENT_DATE OR m.end_date IS NULL)
+      AND p.membership_status = 'active'
       AND (
         mtc.category = 'retail'
         OR mtc.category = 'manufacturer'
