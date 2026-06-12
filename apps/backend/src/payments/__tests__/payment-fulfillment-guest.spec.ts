@@ -17,7 +17,8 @@ import { PaymentMethod } from '@newmeca/shared';
 
 function makeService(opts: {
   existingProfileByEmail?: any;     // profile found by email
-  authUserId?: string | null;      // supabaseAdmin.findUserByEmail result
+  authUserId?: string | null;      // supabaseAdmin.findUserByEmail result (1st call)
+  authUserIdOnRetry?: string | null; // findUserByEmail result on the post-collision retry
   provisionedUserId?: string;      // supabaseAdmin.createUserWithPassword result
   provisionFails?: boolean;
   createMembershipImpl?: any;      // override createMembership
@@ -31,8 +32,17 @@ function makeService(opts: {
     notifyNewMembership: jest.fn().mockResolvedValue(undefined),
     notifyOneTimePaymentFailed: jest.fn().mockResolvedValue(undefined),
   };
+  const findUserByEmail = jest.fn();
+  if (opts.authUserIdOnRetry !== undefined) {
+    // Simulate the TOCTOU race: first lookup misses, retry (post-collision) hits.
+    findUserByEmail
+      .mockResolvedValueOnce({ userId: opts.authUserId ?? null })
+      .mockResolvedValueOnce({ userId: opts.authUserIdOnRetry });
+  } else {
+    findUserByEmail.mockResolvedValue({ userId: opts.authUserId ?? null });
+  }
   const supabaseAdmin = {
-    findUserByEmail: jest.fn().mockResolvedValue({ userId: opts.authUserId ?? null }),
+    findUserByEmail,
     createUserWithPassword: jest.fn().mockResolvedValue(
       opts.provisionFails
         ? { success: false, error: 'boom' }
@@ -111,6 +121,37 @@ describe('fulfillMembershipPayment — guest provisioning & no silent drop', () 
     expect(membershipsService.createMembership).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'prof-EXIST' }),
     );
+  });
+
+  it('LINKS the racing auth user when createUser collides (already-registered) — no throw, no admin alert', async () => {
+    // Root cause of the shawnjdistro/towncartabs/sterlinghulling incidents: the
+    // frontend signUp created the auth user in the window between findUserByEmail
+    // (miss) and createUser (collision). We must link, not fail.
+    const { svc, membershipsService, supabaseAdmin, adminNotificationsService } = makeService({
+      authUserId: null, provisionFails: true, authUserIdOnRetry: 'auth-RACED',
+    });
+    await svc.fulfillMembershipPayment({
+      transactionId: 'pi_race', paymentMethod: PaymentMethod.STRIPE, amountCents: 4240, metadata: { ...baseMeta },
+    });
+    expect(supabaseAdmin.createUserWithPassword).toHaveBeenCalledTimes(1);
+    expect(supabaseAdmin.findUserByEmail).toHaveBeenCalledTimes(2); // initial miss + post-collision retry
+    expect(membershipsService.createMembership).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'auth-RACED', skipVehicleValidation: true }),
+    );
+    expect(adminNotificationsService.notifyOneTimePaymentFailed).not.toHaveBeenCalled();
+  });
+
+  it('still THROWS + alerts when createUser fails AND no user exists on retry (genuine failure)', async () => {
+    const { svc, membershipsService, adminNotificationsService } = makeService({
+      authUserId: null, provisionFails: true, authUserIdOnRetry: null,
+    });
+    await expect(
+      svc.fulfillMembershipPayment({
+        transactionId: 'pi_realfail', paymentMethod: PaymentMethod.STRIPE, amountCents: 4240, metadata: { ...baseMeta },
+      }),
+    ).rejects.toThrow(/Failed to provision account/);
+    expect(membershipsService.createMembership).not.toHaveBeenCalled();
+    expect(adminNotificationsService.notifyOneTimePaymentFailed).toHaveBeenCalledTimes(1);
   });
 
   it('THROWS and alerts admins when there is no userId AND no email (never silent)', async () => {

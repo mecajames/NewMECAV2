@@ -3384,13 +3384,17 @@ export class MembershipsService {
         target.endDate = bundle.currentPeriodEnd;
       }
       target.cancelAtPeriodEnd = !!bundle.cancelAtPeriodEnd;
-      if (!bundle.cancelAtPeriodEnd) {
-        target.cancelledAt = undefined;
-        target.cancellationReason = undefined;
-        target.cancelledBy = undefined;
-      }
+      // A live subscription means the membership itself is not cancelled —
+      // even when the sub is set to cancel at period end, the paid term runs
+      // through endDate and only auto-renewal stops. Clear any membership-
+      // level cancellation stamp; cancelAtPeriodEnd above keeps the billing
+      // intent visible.
+      target.cancelledAt = undefined;
+      target.cancellationReason = undefined;
+      target.cancelledBy = undefined;
     }
     await em.flush();
+    this.clearAdminMembershipsListCache();
 
     this.logger.log(
       `Admin ${adminId} assigned subscription ${stripeSubscriptionId} (status=${bundle.status}) to membership ${membershipId}` +

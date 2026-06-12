@@ -274,10 +274,28 @@ export class PaymentFulfillmentService {
         lastName,
         forcePasswordChange: true,
       });
-      if (!created.success || !created.userId) {
-        throw new Error(`Failed to provision account for ${normEmail}: ${created.error || 'unknown error'}`);
+      if (created.success && created.userId) {
+        userId = created.userId;
+      } else {
+        // TOCTOU race: a concurrent creator (the frontend's client-side signUp
+        // on the checkout success screen, or a duplicate webhook delivery) can
+        // create this auth user in the window between our findUserByEmail check
+        // above and createUser here. GoTrue then rejects our insert with
+        // "already been registered" (or a generic "Database error creating new
+        // user" on the unique-constraint hit). Before, we threw — abandoning the
+        // payment with no profile/membership while Stripe kept the money. Now we
+        // re-resolve and LINK to the row that already exists, so the buyer is
+        // provisioned regardless of who won the race.
+        const retry = await this.supabaseAdmin.findUserByEmail(normEmail);
+        if (retry.userId) {
+          this.logger.warn(
+            `createUser collided for ${normEmail} (${created.error}); linking existing auth user ${retry.userId} instead of failing`,
+          );
+          userId = retry.userId;
+        } else {
+          throw new Error(`Failed to provision account for ${normEmail}: ${created.error || 'unknown error'}`);
+        }
       }
-      userId = created.userId;
     }
 
     // Ensure a profile row exists for this auth user.
