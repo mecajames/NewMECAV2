@@ -640,31 +640,71 @@ export class ProfilesService {
 
       const now = new Date();
       const fullName = [dto.firstName, dto.lastName].filter(Boolean).join(' ').trim() || dto.email;
-      const profile = em.create(Profile, {
-        id: authResult.userId,
-        email: dto.email,
-        first_name: dto.firstName,
-        last_name: dto.lastName,
-        full_name: fullName,
-        phone: dto.phone,
-        role: dto.role || 'competitor',
-        membership_status: 'none',
-        meca_id: mecaId,
-        is_staff: isAdminUser({ role: dto.role }),
-        force_password_change: dto.forcePasswordChange ?? false,
-        account_type: AccountType.MEMBER,
-        can_apply_judge: false,
-        can_apply_event_director: false,
-        maintenance_login_allowed: false,
-        login_banned: false,
-        analytics_opt_out: false,
-        restricted_to_billing: false,
-        member_since: now,
-        created_at: now,
-        updated_at: now,
-      });
 
-      await em.persistAndFlush(profile);
+      // Fill a profile entity with the wizard's data. Set properties
+      // explicitly (NOT em.assign — serializedName fields break it).
+      const applyWizardFields = (p: Profile) => {
+        p.email = dto.email;
+        p.first_name = dto.firstName;
+        p.last_name = dto.lastName;
+        p.full_name = fullName;
+        p.phone = dto.phone;
+        p.role = (dto.role || 'competitor') as any;
+        p.membership_status = 'none';
+        p.meca_id = mecaId;
+        p.is_staff = isAdminUser({ role: dto.role });
+        p.force_password_change = dto.forcePasswordChange ?? false;
+        p.account_type = AccountType.MEMBER;
+        p.member_since = p.member_since || now;
+        p.updated_at = now;
+      };
+
+      // A profile row may ALREADY exist for the just-created auth user id —
+      // a database trigger/hook on auth.users can provision a skeleton
+      // profile the moment the auth user is inserted. A blind insert then
+      // dies on profiles_pkey (this 500'd the Create User wizard on
+      // 2026-06-11). Adopt and fill the row instead of inserting over it.
+      let profile = await em.findOne(Profile, { id: authResult.userId });
+      if (profile) {
+        this.logger.warn(
+          `Profile ${authResult.userId} already existed when creating ${dto.email} ` +
+          `(auto-provisioned by a DB trigger/hook?) — adopting it instead of inserting`,
+        );
+        applyWizardFields(profile);
+      } else {
+        profile = em.create(Profile, {
+          id: authResult.userId,
+          email: dto.email,
+          membership_status: 'none',
+          can_apply_judge: false,
+          can_apply_event_director: false,
+          maintenance_login_allowed: false,
+          login_banned: false,
+          analytics_opt_out: false,
+          restricted_to_billing: false,
+          created_at: now,
+        } as any);
+        applyWizardFields(profile);
+      }
+
+      try {
+        await em.persistAndFlush(profile);
+      } catch (flushErr: any) {
+        // The provisioning hook may run asynchronously — the row can appear
+        // between our existence check and the flush. Re-read and adopt once.
+        if (!/duplicate key|profiles_pkey/i.test(String(flushErr?.message || ''))) {
+          throw flushErr;
+        }
+        const retryEm = this.em.fork();
+        const existing = await retryEm.findOne(Profile, { id: authResult.userId });
+        if (!existing) throw flushErr;
+        this.logger.warn(
+          `Profile ${authResult.userId} appeared concurrently during create for ${dto.email} — adopting it`,
+        );
+        applyWizardFields(existing);
+        await retryEm.flush();
+        profile = existing;
+      }
 
       // Send email if requested (after successful profile creation)
       if (dto.sendEmail) {
