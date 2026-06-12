@@ -93,6 +93,66 @@ export class ProfilesService {
     }
   }
 
+  /**
+   * Safety net: ensure every auth user has a public.profiles row.
+   *
+   * Profiles are normally created on first login (frontend → POST
+   * /api/profiles/ensure). When that path doesn't run — a stale frontend bundle,
+   * a Google OAuth callback that bounces before calling ensure, or ensureProfile
+   * throwing — the auth user is left "orphaned": a working login with NO profile,
+   * which 404s the dashboard and blocks membership checkout. This sweep backfills
+   * any such user so they can never get stuck waiting on the frontend. Idempotent
+   * (ensureProfile no-ops when the profile already exists) and fault-isolated per
+   * user, so one bad row can't abort the rest.
+   */
+  // System/no-login accounts that must NOT be auto-converted into member
+  // profiles (e.g. the org contact inbox). Kept out of both the cron sweep and
+  // the DB signup trigger.
+  private static readonly NO_AUTOPROFILE_EMAILS = new Set<string>([
+    'mecacaraudio@gmail.com',
+  ]);
+
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async backfillMissingProfiles(): Promise<void> {
+    try {
+      const em = this.em.fork();
+      const existing = await em.find(Profile, {}, { fields: ['id'] });
+      const haveProfile = new Set(existing.map((p) => p.id));
+
+      const client = this.supabaseAdmin.getClient();
+      const perPage = 1000;
+      let created = 0;
+      let failed = 0;
+      // Page through all auth users (mirrors SupabaseAdminService.findUserByEmail).
+      for (let page = 1; page <= 100; page++) {
+        const { data, error } = await client.auth.admin.listUsers({ page, perPage });
+        if (error) {
+          this.logger.error(`backfillMissingProfiles: listUsers page ${page} failed: ${error.message}`);
+          break;
+        }
+        for (const u of data.users) {
+          if (haveProfile.has(u.id)) continue;
+          if (u.email && ProfilesService.NO_AUTOPROFILE_EMAILS.has(u.email.toLowerCase())) continue;
+          try {
+            await this.ensureProfile(u.id);
+            created++;
+          } catch (e) {
+            failed++;
+            this.logger.error(
+              `backfillMissingProfiles: ensureProfile failed for ${u.id} (${u.email}): ${e instanceof Error ? e.message : e}`,
+            );
+          }
+        }
+        if (data.users.length < perPage) break; // last page
+      }
+      if (created > 0 || failed > 0) {
+        this.logger.warn(`backfillMissingProfiles: created ${created} missing profile(s), ${failed} failed`);
+      }
+    } catch (e) {
+      this.logger.error(`backfillMissingProfiles sweep failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
   async findAll(page: number = 1, limit: number = 10): Promise<Profile[]> {
     const em = this.em.fork();
     const offset = (page - 1) * limit;
@@ -120,9 +180,20 @@ export class ProfilesService {
   }
 
   /**
-   * Generates the next MECA ID. New memberships start from 701501 (after 701500).
-   * Valid MECA ID range is 701500-799999 (NEW SYSTEM range).
+   * Generates the next MECA ID. New members start from 701501 (after 701500).
+   *
+   * Assignable range is 701500-789999. The TOP of the nominal new-system range
+   * is reserved for special/legacy IDs (799996-800000, plus 85xxxx / 9xxxxx
+   * manufacturer & legacy blocks). Those must NOT advance the counter: including
+   * them made max() jump to 799999 → returned 800000, which is out of range and
+   * collides with `profiles_meca_id_unique` — so generateNextMecaId would THROW
+   * and every ensureProfile / new-member assignment after it would fail. Cap
+   * below the reserved block (799998 is too high — 799996-799998 already exist),
+   * so normal members currently max out around 7015xx, leaving ~88k of headroom.
    */
+  private static readonly MECA_ID_MIN = 701500;
+  private static readonly MECA_ID_MAX_ASSIGNABLE = 789999; // below the reserved 799996+ block
+
   async generateNextMecaId(): Promise<string> {
     const em = this.em.fork();
 
@@ -133,15 +204,22 @@ export class ProfilesService {
       fields: ['meca_id']
     });
 
-    // Extract numeric MECA IDs - only consider NEW SYSTEM range (701500-799999)
+    // Only consider the NORMAL assignable block — exclude reserved high IDs.
     const numericIds = profiles
       .map(p => parseInt(p.meca_id || '0', 10))
-      .filter(id => !isNaN(id) && id >= 701500 && id < 800000);
+      .filter(id => !isNaN(id)
+        && id >= ProfilesService.MECA_ID_MIN
+        && id <= ProfilesService.MECA_ID_MAX_ASSIGNABLE);
 
-    // Find the highest ID in the new range
-    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 701500;
+    // Find the highest ID in the normal block
+    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : ProfilesService.MECA_ID_MIN;
 
-    // Return next ID (starts at 701501)
+    if (maxId + 1 > ProfilesService.MECA_ID_MAX_ASSIGNABLE) {
+      throw new InternalServerErrorException(
+        `MECA ID range exhausted (reached ${maxId}); cannot assign a new ID without extending the assignable range`,
+      );
+    }
+
     return String(maxId + 1);
   }
 

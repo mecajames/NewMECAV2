@@ -47,19 +47,34 @@ export default function LoginPage() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { signIn, resetPassword, signInWithOAuth } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Browser autofill on a full page load (the idle-timeout redirect is the
+  // only member-facing one) fills the inputs WITHOUT firing React onChange,
+  // so submitting right away sends empty state to Supabase and the member
+  // gets "Invalid login credentials" despite seeing filled fields. Read the
+  // live DOM values at submit time so autofilled credentials are honored.
+  const liveFieldValue = (form: HTMLFormElement, id: string, fallback: string): string => {
+    const field = form.elements.namedItem(id);
+    return field instanceof HTMLInputElement ? field.value : fallback;
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setSuccess('');
     setLoading(true);
 
-    const { error } = await signIn(email, password);
+    const liveEmail = liveFieldValue(e.currentTarget, 'email', email);
+    const livePassword = liveFieldValue(e.currentTarget, 'password', password);
+    if (liveEmail !== email) setEmail(liveEmail);
+    if (livePassword !== password) setPassword(livePassword);
+
+    const { error } = await signIn(liveEmail, livePassword);
 
     if (error) {
       // A member migrated from the old site may have an account they never set a
       // password for — a password login can never succeed for them. Detect that
       // and auto-send a set-password link instead of a dead-end error.
-      const passwordSetupRequired = await requestLoginRecovery(email);
+      const passwordSetupRequired = await requestLoginRecovery(liveEmail);
       if (passwordSetupRequired) {
         setError('');
         setSuccess(
@@ -77,19 +92,22 @@ export default function LoginPage() {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
+  const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setSuccess('');
     setLoading(true);
 
-    if (!email) {
+    const liveEmail = liveFieldValue(e.currentTarget, 'email', email);
+    if (liveEmail !== email) setEmail(liveEmail);
+
+    if (!liveEmail) {
       setError('Please enter your email address');
       setLoading(false);
       return;
     }
 
-    const { error } = await resetPassword(email);
+    const { error } = await resetPassword(liveEmail);
 
     if (error) {
       setError(error.message);
@@ -159,7 +177,9 @@ export default function LoginPage() {
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   id="email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
@@ -178,7 +198,9 @@ export default function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
                     id="password"
+                    name="password"
                     type="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"

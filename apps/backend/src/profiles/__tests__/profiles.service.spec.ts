@@ -5,6 +5,7 @@ import { ProfilesService } from '../profiles.service';
 import { Profile } from '../profiles.entity';
 import { SupabaseAdminService } from '../../auth/supabase-admin.service';
 import { EmailService } from '../../email/email.service';
+import { AdminAuditService } from '../../user-activity/admin-audit.service';
 import { createMockEntityManager } from '../../../test/mocks/mikro-orm.mock';
 import { createMockProfile } from '../../../test/utils/test-utils';
 import { AccountType } from '@newmeca/shared';
@@ -60,6 +61,10 @@ describe('ProfilesService', () => {
         {
           provide: EmailService,
           useValue: mockEmailService,
+        },
+        {
+          provide: AdminAuditService,
+          useValue: { logAction: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();
@@ -808,9 +813,10 @@ describe('ProfilesService', () => {
       expect(result).toBe('701511');
     });
 
-    it('should ignore MECA IDs outside the 701500-799999 range', async () => {
+    it('should ignore MECA IDs outside the 701500-799998 range', async () => {
       mockEm.find.mockResolvedValueOnce([
         { meca_id: '100001' }, // old system, below range
+        { meca_id: '799999' }, // manually-assigned special, above auto-assign cap
         { meca_id: '800000' }, // above range
         { meca_id: '701503' }, // in range
       ] as any);
@@ -818,6 +824,14 @@ describe('ProfilesService', () => {
       const result = await service.generateNextMecaId();
 
       expect(result).toBe('701504');
+    });
+
+    it('should throw instead of issuing an ID past the 799998 cap', async () => {
+      mockEm.find.mockResolvedValueOnce([
+        { meca_id: '799998' }, // range fully consumed
+      ] as any);
+
+      await expect(service.generateNextMecaId()).rejects.toThrow(/range exhausted/);
     });
 
     it('should handle non-numeric MECA IDs gracefully', async () => {
