@@ -6647,12 +6647,14 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
     const fetchData = async () => {
       try {
         setLoading(true);
+        // axios (not raw fetch) — the interceptor attaches the Authorization
+        // header; bare fetch sent these unauthenticated and they 401'd.
         const [ordersRes, invoicesRes] = await Promise.all([
-          fetch(`/api/orders/user/${member.id}`).then(r => r.json()),
-          fetch(`/api/invoices/user/${member.id}`).then(r => r.json()),
+          axios.get(`/api/orders/user/${member.id}`),
+          axios.get(`/api/invoices/user/${member.id}`),
         ]);
-        setOrders(ordersRes.data || []);
-        setInvoices(invoicesRes.data || []);
+        setOrders(ordersRes.data?.data || ordersRes.data || []);
+        setInvoices(invoicesRes.data?.data || invoicesRes.data || []);
       } catch (error) {
         console.error('Error fetching orders/invoices:', error);
       } finally {
