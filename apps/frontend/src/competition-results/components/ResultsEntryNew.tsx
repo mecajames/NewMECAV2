@@ -321,11 +321,13 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load results when event selected
+  // Load results when event selected; scope the class list to the event's season
   useEffect(() => {
     if (selectedEventId) {
       fetchExistingResults();
       fetchImportedSessions();
+      const evt = events.find(e => e.id === selectedEventId);
+      fetchCompetitionClasses(evt?.season_id || undefined);
     }
   }, [selectedEventId]);
 
@@ -451,9 +453,17 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     }
   };
 
-  const fetchCompetitionClasses = async () => {
+  const fetchCompetitionClasses = async (seasonId?: string) => {
     try {
-      const data = await competitionClassesApi.getActive();
+      // Classes are season-scoped: once an event is selected, only offer the
+      // classes belonging to that event's season. An out-of-season class must
+      // never attach to a result — the backend bounces those to the admin
+      // Pending Results queue.
+      const data = seasonId
+        ? (await competitionClassesApi.getBySeason(seasonId)).filter(
+            (c) => (c as any).is_active !== false,
+          )
+        : await competitionClassesApi.getActive();
       setCompetitionClasses(data);
     } catch (error) {
       console.error('Error fetching competition classes:', error);

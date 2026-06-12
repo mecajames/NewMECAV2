@@ -3,6 +3,7 @@ import { BadRequestException, InternalServerErrorException } from '@nestjs/commo
 import { CompetitionResultsController } from '../competition-results.controller';
 import { CompetitionResultsService } from '../competition-results.service';
 import { ResultsImportService } from '../results-import.service';
+import { SupabaseAdminService } from '../../auth/supabase-admin.service';
 import { Request } from 'express';
 
 describe('CompetitionResultsController', () => {
@@ -48,6 +49,14 @@ describe('CompetitionResultsController', () => {
       providers: [
         { provide: CompetitionResultsService, useValue: mockCompetitionResultsService },
         { provide: ResultsImportService, useValue: mockResultsImportService },
+        {
+          provide: SupabaseAdminService,
+          useValue: { getClient: jest.fn(), findUserByEmail: jest.fn() },
+        },
+        {
+          provide: 'EntityManager',
+          useValue: { fork: jest.fn(), findOne: jest.fn(), find: jest.fn() },
+        },
       ],
     }).compile();
 

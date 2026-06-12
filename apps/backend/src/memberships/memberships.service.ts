@@ -2074,23 +2074,6 @@ export class MembershipsService {
       membership.user.meca_id = String(newMecaId);
     }
 
-    // Create audit history record
-    try {
-      const { MecaIdHistory } = await import('./meca-id-history.entity');
-      const historyRecord = new MecaIdHistory();
-      historyRecord.mecaId = newMecaId;
-      historyRecord.membership = membership;
-      historyRecord.profile = membership.user;
-      historyRecord.assignedAt = new Date();
-      historyRecord.notes = `SUPER ADMIN OVERRIDE by ${adminUserId}: Changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
-        (sameUserSource ? ` Reverted to member's own ID (source membership ${sameUserSource.id}).` : '') +
-        ` Reason: ${reason}`;
-      em.persist(historyRecord);
-    } catch (historyError) {
-      this.logger.error('Failed to create MECA ID history record:', historyError);
-      // Don't fail the override if history creation fails
-    }
-
     try {
       await em.flush();
     } catch (err: any) {
@@ -2104,6 +2087,27 @@ export class MembershipsService {
         );
       }
       throw err;
+    }
+
+    // Audit history — written in its OWN flush after the override is applied,
+    // so a history hiccup can never block or undo the change. The table's
+    // chk_meca_id_owner constraint allows exactly ONE owner (membership XOR
+    // profile); this record previously set BOTH, which violated the
+    // constraint inside the main flush and 500'd the whole override (prod,
+    // 2026-06-12).
+    try {
+      const { MecaIdHistory } = await import('./meca-id-history.entity');
+      const historyRecord = new MecaIdHistory();
+      historyRecord.mecaId = newMecaId;
+      historyRecord.membership = membership;
+      historyRecord.assignedAt = new Date();
+      historyRecord.notes = `SUPER ADMIN OVERRIDE by ${adminUserId}: Changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
+        (sameUserSource ? ` Reverted to member's own ID (source membership ${sameUserSource.id}).` : '') +
+        ` Reason: ${reason}`;
+      em.persist(historyRecord);
+      await em.flush();
+    } catch (historyError) {
+      this.logger.error('Failed to create MECA ID history record (non-fatal):', historyError);
     }
 
     // On a same-user reassignment, move the competition results that were

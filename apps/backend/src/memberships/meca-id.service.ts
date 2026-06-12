@@ -135,6 +135,35 @@ export class MecaIdService {
       }
     }
 
+    // SINGLE-ID RULE (James, 2026-06-12): a brand-new member's profile may
+    // already carry a MECA ID — the admin wizard and public signup assign one
+    // at profile creation, historically from DIFFERENT generators than the
+    // membership mint, which left members with two numbers (e.g. profile
+    // 701538 / membership 701522). Adopt the profile's number when no
+    // membership row holds it yet, so the member has ONE id everywhere.
+    // A member buying a membership in a second category still mints a
+    // distinct id per membership (their first membership holds the number).
+    const ownerId = (membership.user as any)?.id ?? (membership.user as any);
+    let ownerProfile: Profile | null = null;
+    if (ownerId) {
+      ownerProfile = await em.findOne(Profile, { id: ownerId });
+      const profileMecaId = ownerProfile?.meca_id
+        ? parseInt(String(ownerProfile.meca_id), 10)
+        : NaN;
+      if (!isNaN(profileMecaId) && profileMecaId > 0 && profileMecaId !== 999999) {
+        const heldByMembership = await em.count(Membership, { mecaId: profileMecaId });
+        if (heldByMembership === 0) {
+          membership.mecaId = profileMecaId;
+          membership.cardCreatedAt = new Date();
+          await this.createHistoryRecord(profileMecaId, membership, em);
+          this.logger.log(
+            `Adopted profile MECA ID ${profileMecaId} for membership ${membership.id} (single-id rule)`,
+          );
+          return profileMecaId;
+        }
+      }
+    }
+
     // Assign new MECA ID
     this.logger.log(`Getting next MECA ID for membership ${membership.id}`);
     const newMecaId = await this.getNextMecaId();
@@ -147,6 +176,16 @@ export class MecaIdService {
     // Create history record
     this.logger.log(`Creating history record for MECA ID ${newMecaId}`);
     await this.createHistoryRecord(newMecaId, membership, em);
+
+    // Keep the profile aligned: when the owner's profile has no MECA ID yet
+    // (e.g. provisioned by payment fulfillment), mirror the minted one onto
+    // it so search/profile/card all agree.
+    if (ownerProfile && !ownerProfile.meca_id) {
+      ownerProfile.meca_id = String(newMecaId);
+      this.logger.log(
+        `Mirrored minted MECA ID ${newMecaId} onto profile ${ownerProfile.id} (was empty)`,
+      );
+    }
 
     this.logger.log(`Assigned new MECA ID ${newMecaId} to membership ${membership.id}`);
 
