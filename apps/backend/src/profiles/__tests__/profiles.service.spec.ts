@@ -23,8 +23,9 @@ describe('ProfilesService', () => {
     // Add findAndCount to mock (not in default createMockEntityManager)
     (mockEm as any).findAndCount = jest.fn().mockResolvedValue([[], 0]);
 
-    // Add getConnection().execute to mock
-    mockConnection = { execute: jest.fn().mockResolvedValue([]) };
+    // Add getConnection().execute to mock. Default to a valid generator row —
+    // profile creation now calls get_next_meca_id() through this connection.
+    mockConnection = { execute: jest.fn().mockResolvedValue([{ id: 701501 }]) };
     (mockEm as any).getConnection = jest.fn().mockReturnValue(mockConnection);
 
     mockSupabaseAdmin = {
@@ -146,11 +147,8 @@ describe('ProfilesService', () => {
 
   describe('create', () => {
     it('should auto-generate MECA ID when not provided', async () => {
-      // Mock generateNextMecaId: find returns profiles with known meca_ids
-      mockEm.find.mockResolvedValueOnce([
-        { meca_id: '701501' },
-        { meca_id: '701502' },
-      ] as any);
+      // generateNextMecaId delegates to the unified get_next_meca_id() DB function
+      mockConnection.execute.mockResolvedValueOnce([{ id: 701503 }]);
 
       const profileData: Partial<Profile> = {
         id: 'new-user-id',
@@ -162,12 +160,7 @@ describe('ProfilesService', () => {
 
       const result = await service.create(profileData);
 
-      // The first em.find call is for generateNextMecaId
-      expect(mockEm.find).toHaveBeenCalledWith(Profile, {
-        meca_id: { $ne: null },
-      }, {
-        fields: ['meca_id'],
-      });
+      expect(mockConnection.execute).toHaveBeenCalledWith('SELECT get_next_meca_id() AS id');
       expect(mockEm.create).toHaveBeenCalled();
       expect(mockEm.persistAndFlush).toHaveBeenCalled();
       expect(result).toBeDefined();
@@ -788,62 +781,30 @@ describe('ProfilesService', () => {
   // ============================================
 
   describe('generateNextMecaId', () => {
-    it('should return 701501 when no existing profiles', async () => {
-      mockEm.find.mockResolvedValueOnce([]);
-
-      const result = await service.generateNextMecaId();
-
-      expect(result).toBe('701501');
-      expect(mockEm.find).toHaveBeenCalledWith(Profile, {
-        meca_id: { $ne: null },
-      }, {
-        fields: ['meca_id'],
-      });
-    });
-
-    it('should return next ID after highest existing in new range', async () => {
-      mockEm.find.mockResolvedValueOnce([
-        { meca_id: '701501' },
-        { meca_id: '701510' },
-        { meca_id: '701505' },
-      ] as any);
+    // The service now delegates to the unified get_next_meca_id() database
+    // function (single source of truth shared with membership creation and
+    // public signup) — the gap-fill/range logic itself lives in SQL.
+    it('should delegate to the unified get_next_meca_id() database function', async () => {
+      mockConnection.execute.mockResolvedValueOnce([{ id: 701511 }]);
 
       const result = await service.generateNextMecaId();
 
       expect(result).toBe('701511');
+      expect(mockConnection.execute).toHaveBeenCalledWith('SELECT get_next_meca_id() AS id');
     });
 
-    it('should ignore MECA IDs outside the 701500-799998 range', async () => {
-      mockEm.find.mockResolvedValueOnce([
-        { meca_id: '100001' }, // old system, below range
-        { meca_id: '799999' }, // manually-assigned special, above auto-assign cap
-        { meca_id: '800000' }, // above range
-        { meca_id: '701503' }, // in range
-      ] as any);
-
-      const result = await service.generateNextMecaId();
-
-      expect(result).toBe('701504');
-    });
-
-    it('should throw instead of issuing an ID past the 799998 cap', async () => {
-      mockEm.find.mockResolvedValueOnce([
-        { meca_id: '799998' }, // range fully consumed
-      ] as any);
+    it('should surface a clear error when the generator raises (range exhausted)', async () => {
+      mockConnection.execute.mockRejectedValueOnce(
+        new Error('MECA ID auto-assign range exhausted (701501-789999)'),
+      );
 
       await expect(service.generateNextMecaId()).rejects.toThrow(/range exhausted/);
     });
 
-    it('should handle non-numeric MECA IDs gracefully', async () => {
-      mockEm.find.mockResolvedValueOnce([
-        { meca_id: 'ABC123' },
-        { meca_id: null },
-        { meca_id: '701502' },
-      ] as any);
+    it('should throw when the generator returns no value', async () => {
+      mockConnection.execute.mockResolvedValueOnce([]);
 
-      const result = await service.generateNextMecaId();
-
-      expect(result).toBe('701503');
+      await expect(service.generateNextMecaId()).rejects.toThrow(/returned no value/);
     });
   });
 

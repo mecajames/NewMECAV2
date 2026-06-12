@@ -203,4 +203,46 @@ describe('MECA ID retention window', () => {
 
     expect(id).toBe(700321);
   });
+
+  it('adopts the profile pre-assigned MECA ID for a brand-new membership (single-id rule)', async () => {
+    // The admin wizard / public signup assign a MECA ID at profile creation;
+    // the first membership must use the SAME number, not mint a second one
+    // (prod 2026-06-12: profile 701538 vs membership 701522).
+    const svc = new MecaIdService({} as any);
+    const em = {
+      count: jest.fn().mockResolvedValue(0), // no membership holds the number
+      findOne: jest.fn().mockResolvedValue({ id: 'u1', meca_id: '701600' }), // owner profile
+      persist: jest.fn(),
+      flush: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const membership = { id: 'm-new', user: { id: 'u1' } } as any;
+
+    const id = await svc.assignMecaIdToMembership(membership, undefined, em);
+
+    expect(id).toBe(701600);
+    expect(membership.mecaId).toBe(701600);
+  });
+
+  it('mints a distinct ID when the profile number is already held by a membership (second category)', async () => {
+    const rootEm = {
+      fork: () => ({
+        getConnection: () => ({
+          execute: jest.fn().mockResolvedValue([{ get_next_meca_id: 701777 }]),
+        }),
+      }),
+    } as any;
+    const svc = new MecaIdService(rootEm);
+    const em = {
+      count: jest.fn().mockResolvedValue(1), // their first membership holds 701600
+      findOne: jest.fn().mockResolvedValue({ id: 'u1', meca_id: '701600' }),
+      persist: jest.fn(),
+      flush: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const membership = { id: 'm-second', user: { id: 'u1' } } as any;
+
+    const id = await svc.assignMecaIdToMembership(membership, undefined, em);
+
+    expect(id).toBe(701777);
+    expect(membership.mecaId).toBe(701777);
+  });
 });

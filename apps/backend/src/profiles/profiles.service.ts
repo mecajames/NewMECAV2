@@ -182,45 +182,34 @@ export class ProfilesService {
   /**
    * Generates the next MECA ID. New members start from 701501 (after 701500).
    *
-   * Assignable range is 701500-789999. The TOP of the nominal new-system range
-   * is reserved for special/legacy IDs (799996-800000, plus 85xxxx / 9xxxxx
-   * manufacturer & legacy blocks). Those must NOT advance the counter: including
-   * them made max() jump to 799999 → returned 800000, which is out of range and
-   * collides with `profiles_meca_id_unique` — so generateNextMecaId would THROW
-   * and every ensureProfile / new-member assignment after it would fail. Cap
-   * below the reserved block (799998 is too high — 799996-799998 already exist),
-   * so normal members currently max out around 7015xx, leaving ~88k of headroom.
+   * Assignable range is 701501-789999 (enforced inside get_next_meca_id()).
+   * The TOP of the nominal new-system range is reserved for special/legacy
+   * IDs (799996-800000, plus 85xxxx / 9xxxxx manufacturer & legacy blocks)
+   * and must never be auto-assigned — counting those once made a MAX+1
+   * generator return the already-taken 800000 and 500 the Create User
+   * wizard.
    */
-  private static readonly MECA_ID_MIN = 701500;
-  private static readonly MECA_ID_MAX_ASSIGNABLE = 789999; // below the reserved 799996+ block
-
   async generateNextMecaId(): Promise<string> {
+    // Delegate to the unified get_next_meca_id() database function — the
+    // single source of truth shared with membership creation and public
+    // signup. It gap-fills over BOTH profiles and memberships within the
+    // assignable block (701501..MECA_ID_MAX_ASSIGNABLE) and raises when
+    // exhausted. The old JS MAX+1-over-profiles here disagreed with the
+    // membership generator, handing wizard-created members two different
+    // numbers (profile 701538 / membership 701522 on prod, 2026-06-12).
     const em = this.em.fork();
-
-    // Get all profiles with MECA IDs
-    const profiles = await em.find(Profile, {
-      meca_id: { $ne: null }
-    }, {
-      fields: ['meca_id']
-    });
-
-    // Only consider the NORMAL assignable block — exclude reserved high IDs.
-    const numericIds = profiles
-      .map(p => parseInt(p.meca_id || '0', 10))
-      .filter(id => !isNaN(id)
-        && id >= ProfilesService.MECA_ID_MIN
-        && id <= ProfilesService.MECA_ID_MAX_ASSIGNABLE);
-
-    // Find the highest ID in the normal block
-    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : ProfilesService.MECA_ID_MIN;
-
-    if (maxId + 1 > ProfilesService.MECA_ID_MAX_ASSIGNABLE) {
+    try {
+      const rows = await em.getConnection().execute('SELECT get_next_meca_id() AS id');
+      const nextId = rows?.[0]?.id;
+      if (!nextId) {
+        throw new Error('get_next_meca_id() returned no value');
+      }
+      return String(nextId);
+    } catch (err) {
       throw new InternalServerErrorException(
-        `MECA ID range exhausted (reached ${maxId}); cannot assign a new ID without extending the assignable range`,
+        `MECA ID generation failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-
-    return String(maxId + 1);
   }
 
   async create(data: Partial<Profile>): Promise<Profile> {

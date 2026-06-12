@@ -700,14 +700,30 @@ export class CompetitionResultsService {
     if (classRef) {
       const classEntity = await em.findOne(CompetitionClass, { id: classRef.id ?? classRef });
       if (classEntity) {
-        if (classEntity.format) {
-          transformedData.format = classEntity.format;
-        }
-        if (classEntity.name) {
-          transformedData.competitionClass = classEntity.name;
-        }
-        if (classEntity.unlimitedWattage) {
-          transformedData.wattage = -1;
+        // SEASON GUARD (James, 2026-06-12): classes are season-scoped — a
+        // result may only link a class from its own season. A class that
+        // exists only in ANOTHER season must not silently attach just
+        // because it's in the system; unlinking here routes the row to the
+        // admin Pending Results queue below, with a note explaining why.
+        const seasonRef: any = transformedData.season;
+        const resultSeasonId: string | null = seasonRef ? (seasonRef.id ?? seasonRef) : null;
+        if (resultSeasonId && classEntity.seasonId && classEntity.seasonId !== resultSeasonId) {
+          this.logger.warn(
+            `Result links class "${classEntity.name}" (${classEntity.format}) from a different season — sending to admin review`,
+          );
+          transformedData.competitionClassEntity = undefined;
+          transformedData.notes = (transformedData.notes ? transformedData.notes + ' | ' : '') +
+            `Class "${classEntity.name}" (${classEntity.format}) is not part of this event's season`;
+        } else {
+          if (classEntity.format) {
+            transformedData.format = classEntity.format;
+          }
+          if (classEntity.name) {
+            transformedData.competitionClass = classEntity.name;
+          }
+          if (classEntity.unlimitedWattage) {
+            transformedData.wattage = -1;
+          }
         }
       }
     }
@@ -716,9 +732,9 @@ export class CompetitionResultsService {
     // goes to the admin "Pending Results" queue. This happens when an Event
     // Director enters/imports a result whose class name matches nothing in
     // the system and chooses "send to admin for review" (EDs can't create
-    // classes). Withhold points until an admin resolves it — points are
-    // recomputed on approval. Admin/ED matched entries always carry a
-    // class_id and skip this entirely.
+    // classes), and when the season guard above unlinked an out-of-season
+    // class. Withhold points until an admin resolves it — points are
+    // recomputed on approval.
     if (!transformedData.competitionClassEntity) {
       transformedData.needsClassReview = true;
       transformedData.pointsEarned = 0;
@@ -1334,9 +1350,14 @@ export class CompetitionResultsService {
 
     const em = this.em.fork();
     const now = new Date();
-    const graceCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+    // Same effective window as MECA ID retention and the 999999 back-fill
+    // stamping (45 days standard, 120-day relaunch amnesty through July 5
+    // 2026) so a renewal that keeps the member's ID also releases their
+    // held points. Members are only ever told 30 days.
+    const graceDays = MecaIdService.effectiveRetentionGraceDays();
+    const graceCutoff = new Date(now.getTime() - graceDays * 24 * 60 * 60 * 1000);
 
-    // Find most recent expired membership for this MECA ID (expired within 45 days)
+    // Find most recent expired membership for this MECA ID (expired within the window)
     const membership = await em.findOne(Membership, {
       mecaId: mecaIdNum,
       paymentStatus: PaymentStatus.PAID,
@@ -1889,8 +1910,14 @@ export class CompetitionResultsService {
     const profiles = await em.find(Profile, {});
     const today = new Date();
 
-    // Fetch all competition classes to match class names
-    const competitionClasses = await em.find(CompetitionClass, {});
+    // Classes are season-scoped: only match classes belonging to this event's
+    // season (James, 2026-06-12). A class that exists only in another season
+    // must NOT silently attach — the row imports unmatched and lands in the
+    // admin Pending Results queue for review instead.
+    const competitionClasses = await em.find(
+      CompetitionClass,
+      eventSeasonId ? { season: eventSeasonId } : {},
+    );
 
     // Fetch all active memberships with MECA IDs for the new membership-based system
     // Points-eligible categories: Competitor, Retailer, Manufacturer
@@ -2025,15 +2052,22 @@ export class CompetitionResultsService {
           if (foundClass) {
             classId = foundClass.id;
           } else {
-            // 2. Check the class name mappings table
+            // 2. Check the class name mappings table. The mapped target must
+            // also belong to this event's season — otherwise treat as
+            // unmatched so the row goes to admin review.
             const mapping = await em.findOne(ClassNameMapping, {
               sourceName: { $ilike: result.class },
               isActive: true,
             });
 
             if (mapping?.targetClassId) {
-              classId = mapping.targetClassId;
-              console.log(`[IMPORT] Mapped "${result.class}" to class ID ${classId} via mapping table`);
+              const mappedClass = await em.findOne(CompetitionClass, { id: mapping.targetClassId });
+              if (mappedClass && (!eventSeasonId || mappedClass.seasonId === eventSeasonId)) {
+                classId = mappedClass.id;
+                console.log(`[IMPORT] Mapped "${result.class}" to class ID ${classId} via mapping table`);
+              } else {
+                console.warn(`[IMPORT] Mapping for "${result.class}" targets a class outside this event's season - sending to admin review`);
+              }
             } else {
               // 3. Log unmapped class for admin attention
               console.warn(`[IMPORT] No class match found for "${result.class}" (${result.format}) - will show as Unknown`);
@@ -2878,8 +2912,12 @@ export class CompetitionResultsService {
     const profiles = await em.find(Profile, {});
     const today = new Date();
 
-    // Fetch all competition classes
-    const competitionClasses = await em.find(CompetitionClass, {});
+    // Classes are season-scoped — same rule as importResults: only this
+    // event's season may match; out-of-season names go to admin review.
+    const competitionClasses = await em.find(
+      CompetitionClass,
+      eventSeasonId ? { season: eventSeasonId } : {},
+    );
 
     // Get existing results for this event (for replacement)
     const existingResults = await em.find(CompetitionResult, { event: eventId });
@@ -3020,12 +3058,16 @@ export class CompetitionResultsService {
           if (foundClass) {
             classId = foundClass.id;
           } else {
+            // Mapped target must belong to this event's season too.
             const mapping = await em.findOne(ClassNameMapping, {
               sourceName: { $ilike: result.class },
               isActive: true,
             });
             if (mapping?.targetClassId) {
-              classId = mapping.targetClassId;
+              const mappedClass = await em.findOne(CompetitionClass, { id: mapping.targetClassId });
+              if (mappedClass && (!eventSeasonId || mappedClass.seasonId === eventSeasonId)) {
+                classId = mappedClass.id;
+              }
             }
           }
         }
