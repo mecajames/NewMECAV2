@@ -168,6 +168,18 @@ export default function MyMecaDashboardPage() {
     state: '',
   });
 
+  // Per-class analytics ("Performance by Class"): Y-axis metric toggle and the
+  // set of class series the member has hidden (keyed `${format}::${class}`).
+  const [classChartMetric, setClassChartMetric] = useState<'score' | 'points'>('score');
+  const [hiddenClassSeries, setHiddenClassSeries] = useState<Set<string>>(new Set());
+  const toggleClassSeries = (key: string) => {
+    setHiddenClassSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   // Results filter state
   const [resultsFilters, setResultsFilters] = useState({
     seasonId: '',
@@ -4298,6 +4310,57 @@ export default function MyMecaDashboardPage() {
       }));
     };
 
+    // ---- Per-class breakdown ("Performance by Class") -----------------------
+    // Formats and classes are distinct: each FORMAT gets its own chart (their
+    // score scales differ and must never share a Y-axis), and within it each
+    // CLASS the member ran is its own line. X-axis = that format's events in
+    // chronological order; a class with no entry at an event simply has no
+    // point there.
+    const getClassChartForFormat = (formatName: string): { classes: string[]; data: any[] } => {
+      const fmtResults = filteredResults.filter((r) => getResultFormat(r) === formatName);
+      const classes = [...new Set(
+        fmtResults.map((r) => (r.competition_class || '').trim()).filter(Boolean),
+      )].sort((a, b) => a.localeCompare(b));
+
+      const byEvent = new Map<string, any>();
+      [...fmtResults]
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .forEach((r) => {
+          const key = (r as any).event?.id || r.event?.title || r.created_at;
+          if (!byEvent.has(key)) byEvent.set(key, { event: r.event?.title || 'Event' });
+          const cls = (r.competition_class || '').trim();
+          if (cls) {
+            byEvent.get(key)[cls] = classChartMetric === 'points' ? (r.points_earned || 0) : (r.score || 0);
+          }
+        });
+      return { classes, data: [...byEvent.values()] };
+    };
+
+    // Per-class stat cards within a format.
+    const getClassStatsForFormat = (formatName: string) => {
+      const fmtResults = filteredResults.filter((r) => getResultFormat(r) === formatName);
+      const map = new Map<string, { count: number; points: number; scores: number[]; best: number; wins: number }>();
+      for (const r of fmtResults) {
+        const cls = (r.competition_class || '').trim();
+        if (!cls) continue;
+        if (!map.has(cls)) map.set(cls, { count: 0, points: 0, scores: [], best: 0, wins: 0 });
+        const s = map.get(cls)!;
+        s.count++;
+        s.points += r.points_earned || 0;
+        s.scores.push(r.score || 0);
+        s.best = Math.max(s.best, r.score || 0);
+        if (r.placement === 1) s.wins++;
+      }
+      return map;
+    };
+
+    // Distinct colors for class lines (cycled). Kept separate from CHART_COLORS
+    // so adding a class color never shifts the format-chart palette.
+    const CLASS_LINE_COLORS = [
+      '#f97316', '#3b82f6', '#22c55e', '#eab308', '#a855f7',
+      '#ec4899', '#06b6d4', '#ef4444', '#84cc16', '#f59e0b',
+    ];
+
     // Calculate placement stats
     const totalPlacements = placementBreakdown.first + placementBreakdown.second + placementBreakdown.third + placementBreakdown.other;
     const winRate = totalPlacements > 0 ? ((placementBreakdown.first / totalPlacements) * 100).toFixed(0) : '0';
@@ -4347,6 +4410,12 @@ export default function MyMecaDashboardPage() {
         const ob = formatOrder.get(b) ?? Number.POSITIVE_INFINITY;
         return oa - ob || a.localeCompare(b);
       });
+
+    // Formats where the member ran 2+ classes — the per-class breakdown only
+    // adds value there (a single-class format is already the combined chart).
+    const multiClassFormats = formatsWithData.filter(
+      (f) => getClassChartForFormat(f).classes.length >= 2,
+    );
 
     return (
       <div className="space-y-6">
@@ -4666,6 +4735,134 @@ export default function MyMecaDashboardPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* NEW: Performance by Class — one chart per format, one line per class.
+            Only formats where the member ran 2+ classes appear here; single-
+            class formats are already covered by the combined charts above. */}
+        {multiClassFormats.length > 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <h2 className="text-2xl font-bold text-white">Performance by Class</h2>
+              {/* Score / Points toggle (applies to every per-class chart) */}
+              <div className="inline-flex rounded-lg overflow-hidden border border-slate-600">
+                {(['score', 'points'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setClassChartMetric(m)}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                      classChartMetric === m
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {m === 'score' ? 'Score' : 'Points'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-gray-400 text-sm mb-6">
+              Each class you ran is its own line. Use the chips to show or hide a class.
+            </p>
+
+            <div className="space-y-8">
+              {multiClassFormats.map((format) => {
+                const { classes, data } = getClassChartForFormat(format);
+                const classStats = getClassStatsForFormat(format);
+                const isSPL = format.toUpperCase().includes('SPL');
+                const unit = classChartMetric === 'score' ? (isSPL ? ' dB' : '') : ' pts';
+                const colorFor = (cls: string) =>
+                  CLASS_LINE_COLORS[classes.indexOf(cls) % CLASS_LINE_COLORS.length];
+
+                return (
+                  <div key={format} className="bg-slate-700/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-white">{format} — by Class</h3>
+                      <span className="text-sm text-cyan-400">{classes.length} classes</span>
+                    </div>
+
+                    {/* Show/hide chips per class */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {classes.map((cls) => {
+                        const key = `${format}::${cls}`;
+                        const hidden = hiddenClassSeries.has(key);
+                        const color = colorFor(cls);
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => toggleClassSeries(key)}
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              hidden
+                                ? 'border-slate-600 text-slate-500 bg-transparent'
+                                : 'border-transparent text-white'
+                            }`}
+                            style={hidden ? undefined : { backgroundColor: `${color}33`, borderColor: color }}
+                            title={hidden ? `Show ${cls}` : `Hide ${cls}`}
+                          >
+                            <span
+                              className="w-2.5 h-2.5 rounded-full"
+                              style={{ backgroundColor: hidden ? '#64748b' : color }}
+                            />
+                            {cls}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Multi-line chart: one line per (visible) class */}
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={data}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis dataKey="event" tick={{ fill: '#9ca3af', fontSize: 10 }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} domain={['auto', 'auto']} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
+                            labelStyle={{ color: '#fff' }}
+                            formatter={(value: number, nameKey: string) => [`${value}${unit}`, nameKey]}
+                          />
+                          {classes
+                            .filter((cls) => !hiddenClassSeries.has(`${format}::${cls}`))
+                            .map((cls) => (
+                              <Line
+                                key={cls}
+                                type="monotone"
+                                dataKey={cls}
+                                name={cls}
+                                stroke={colorFor(cls)}
+                                strokeWidth={2}
+                                dot={{ r: 3 }}
+                                connectNulls
+                              />
+                            ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Per-class stat cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
+                      {classes.map((cls) => {
+                        const s = classStats.get(cls);
+                        if (!s) return null;
+                        const avg = s.count > 0 ? (s.scores.reduce((a, b) => a + b, 0) / s.count).toFixed(1) : '0';
+                        return (
+                          <div key={cls} className="bg-slate-800/60 rounded-lg p-3 border-l-4" style={{ borderColor: colorFor(cls) }}>
+                            <p className="text-white text-sm font-medium truncate" title={cls}>{cls}</p>
+                            <p className="text-gray-400 text-xs mb-2">{s.count} events · {s.wins} win{s.wins === 1 ? '' : 's'}</p>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-400">Avg <span className="text-white font-semibold">{avg}{isSPL ? ' dB' : ''}</span></span>
+                              <span className="text-gray-400">Best <span className="text-orange-400 font-semibold">{s.best.toFixed(1)}{isSPL ? ' dB' : ''}</span></span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">Points <span className="text-cyan-400 font-semibold">{s.points}</span></p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
