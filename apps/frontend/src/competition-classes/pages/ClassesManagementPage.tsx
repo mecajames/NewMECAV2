@@ -40,6 +40,60 @@ export default function ClassesManagementPage() {
       setBackfillRunning(false);
     }
   };
+
+  // Open the duplicate-merge tool and scan the selected season for likely dupes.
+  const openDupModal = async () => {
+    if (!selectedSeasonId) {
+      alert('Pick a season first (the filter above) to scan for duplicate classes.');
+      return;
+    }
+    setShowDupModal(true);
+    setDupMsg(null);
+    setDupLoading(true);
+    try {
+      const groups = await competitionResultsApi.getDuplicateClasses(selectedSeasonId);
+      setDupGroups(groups);
+      const defaults: Record<string, string> = {};
+      for (const g of groups) defaults[g.canonical.id] = g.canonical.id;
+      setKeeperByGroup(defaults);
+    } catch (err: any) {
+      setDupMsg(err?.response?.data?.message || err?.message || 'Failed to scan for duplicates');
+    } finally {
+      setDupLoading(false);
+    }
+  };
+
+  const handleMergeGroup = async (group: DupGroup) => {
+    const members = [group.canonical, ...group.duplicates];
+    const keeperId = keeperByGroup[group.canonical.id] || group.canonical.id;
+    const keeper = members.find((m) => m.id === keeperId);
+    const duplicateIds = members.filter((m) => m.id !== keeperId).map((m) => m.id);
+    if (duplicateIds.length === 0) return;
+    if (!window.confirm(
+      `Merge ${duplicateIds.length} class(es) into "${keeper?.name}"?\n\n` +
+      `All results from the other class(es) will be moved into "${keeper?.name}", ` +
+      `the duplicate class(es) will be DELETED, and standings for this season will be recalculated.\n\n` +
+      `This cannot be undone.`,
+    )) return;
+    setMergingGroup(group.canonical.id);
+    setDupMsg(null);
+    try {
+      const r = await competitionResultsApi.mergeClasses(keeperId, duplicateIds);
+      let msg = `Merged into "${keeper?.name}": moved ${r.resultsMoved} result(s), deleted ${r.classesDeleted} class(es). Season recalculated.`;
+      if (r.collisions.length > 0) {
+        msg += ` ⚠ ${r.collisions.length} competitor/event(s) now have more than one result in this class — review these manually.`;
+      }
+      setDupMsg(msg);
+      // Drop the merged group and refresh the class list.
+      setDupGroups((prev) => prev.filter((g) => g.canonical.id !== group.canonical.id));
+      await fetchClasses();
+    } catch (err: any) {
+      setDupMsg(err?.response?.data?.message || err?.message || 'Merge failed');
+    } finally {
+      setMergingGroup(null);
+    }
+  };
+
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<CompetitionClass[]>([]);
@@ -47,6 +101,21 @@ export default function ClassesManagementPage() {
   const [loading, setLoading] = useState(true);
   const [editingClass, setEditingClass] = useState<CompetitionClass | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // ---- Duplicate-class merge tool ----
+  type DupGroup = {
+    format: string;
+    canonical: { id: string; name: string; abbreviation: string; resultCount: number };
+    duplicates: Array<{ id: string; name: string; abbreviation: string; resultCount: number }>;
+  };
+  const [showDupModal, setShowDupModal] = useState(false);
+  const [dupLoading, setDupLoading] = useState(false);
+  const [dupGroups, setDupGroups] = useState<DupGroup[]>([]);
+  // Per-group chosen keeper (defaults to the suggested canonical). Keyed by the
+  // group's suggested canonical id (stable for the loaded list).
+  const [keeperByGroup, setKeeperByGroup] = useState<Record<string, string>>({});
+  const [mergingGroup, setMergingGroup] = useState<string | null>(null);
+  const [dupMsg, setDupMsg] = useState<string | null>(null);
 
   // Filters
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
@@ -690,6 +759,16 @@ export default function ClassesManagementPage() {
                 {backfillRunning ? 'Backfilling…' : 'Backfill Format from Class'}
               </button>
             )}
+            {isAdmin && (
+              <button
+                onClick={openDupModal}
+                title="Scan the selected season for duplicate classes (same class entered under different names) and merge them so standings are correct."
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                <Award className="h-5 w-5" />
+                Find &amp; Merge Duplicates
+              </button>
+            )}
             <button
               onClick={() => navigate('/dashboard/admin')}
               className="flex items-center gap-2 px-4 sm:px-6 py-2 text-sm sm:text-base bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
@@ -1209,6 +1288,103 @@ export default function ClassesManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Duplicate-class merge modal */}
+      {showDupModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-8 px-4">
+          <div className="bg-slate-800 rounded-xl w-full max-w-3xl shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <div>
+                <h2 className="text-xl font-bold text-white">Find &amp; Merge Duplicate Classes</h2>
+                <p className="text-gray-400 text-sm mt-1">
+                  {seasons.find((s) => s.id === selectedSeasonId)?.name || 'Selected season'} — same class entered under different names. Pick the one to keep; the rest are merged into it and deleted.
+                </p>
+              </div>
+              <button onClick={() => setShowDupModal(false)} className="text-gray-400 hover:text-white">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-5 max-h-[60vh] overflow-y-auto">
+              {dupMsg && (
+                <div className="mb-4 px-4 py-3 rounded-lg bg-slate-900 border border-slate-700 text-sm text-gray-200">
+                  {dupMsg}
+                </div>
+              )}
+              {dupLoading ? (
+                <div className="text-center py-10 text-gray-400">
+                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" /> Scanning for duplicates…
+                </div>
+              ) : dupGroups.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  No duplicate classes detected in this season. (The scan matches names ignoring case, spaces and punctuation — classes named with genuinely different words won't be auto-grouped.)
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {dupGroups.map((g) => {
+                    const members = [g.canonical, ...g.duplicates];
+                    const keeperId = keeperByGroup[g.canonical.id] || g.canonical.id;
+                    const isMerging = mergingGroup === g.canonical.id;
+                    return (
+                      <div key={g.canonical.id} className="bg-slate-900 rounded-lg p-4 border border-slate-700">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="px-2 py-0.5 bg-cyan-500/15 text-cyan-300 text-xs font-semibold rounded-full">{g.format}</span>
+                          <button
+                            onClick={() => handleMergeGroup(g)}
+                            disabled={isMerging}
+                            className="px-4 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors"
+                          >
+                            {isMerging ? 'Merging…' : 'Merge'}
+                          </button>
+                        </div>
+                        <p className="text-gray-400 text-xs mb-2">Select the class to KEEP:</p>
+                        <div className="space-y-1.5">
+                          {members.map((m) => {
+                            const keep = m.id === keeperId;
+                            return (
+                              <label
+                                key={m.id}
+                                className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer border ${
+                                  keep ? 'border-green-500 bg-green-500/10' : 'border-slate-700 bg-slate-800'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`keeper-${g.canonical.id}`}
+                                  checked={keep}
+                                  onChange={() => setKeeperByGroup((prev) => ({ ...prev, [g.canonical.id]: m.id }))}
+                                  className="text-green-500 focus:ring-green-500"
+                                />
+                                <span className="flex-1 text-white text-sm">
+                                  {m.name}
+                                  <span className="text-gray-500 ml-2">({m.abbreviation})</span>
+                                </span>
+                                <span className="text-xs text-gray-400">{m.resultCount} result{m.resultCount === 1 ? '' : 's'}</span>
+                                <span className={`text-xs font-medium ${keep ? 'text-green-400' : 'text-amber-400'}`}>
+                                  {keep ? 'Keep' : 'Merge & delete'}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end p-5 border-t border-slate-700">
+              <button
+                onClick={() => setShowDupModal(false)}
+                className="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

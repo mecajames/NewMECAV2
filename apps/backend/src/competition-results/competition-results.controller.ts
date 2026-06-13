@@ -240,6 +240,40 @@ export class CompetitionResultsController {
     };
   }
 
+  /**
+   * Admin: suggested duplicate-class groups for a season (read-only). Used by
+   * the Classes Management "Find Duplicates" tool.
+   */
+  @Get('admin/duplicate-classes')
+  async getDuplicateClasses(
+    @Headers('authorization') authHeader: string,
+    @Query('seasonId') seasonId: string,
+  ): Promise<any> {
+    await this.requireAdmin(authHeader);
+    if (!seasonId) throw new BadRequestException('seasonId is required');
+    return this.competitionResultsService.getDuplicateClassSuggestions(seasonId);
+  }
+
+  /**
+   * Admin: merge duplicate classes (same season) into one canonical class —
+   * moves results, repoints import mappings, deletes the duplicates, and
+   * recalculates the season. Returns a report incl. any (event,member)
+   * collisions for manual review.
+   */
+  @Post('admin/merge-classes')
+  @HttpCode(HttpStatus.OK)
+  async mergeClasses(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { canonicalClassId?: string; duplicateClassIds?: string[] },
+  ): Promise<any> {
+    await this.requireAdmin(authHeader);
+    const canonicalClassId = (body?.canonicalClassId || '').trim();
+    const duplicateClassIds = Array.isArray(body?.duplicateClassIds) ? body.duplicateClassIds : [];
+    if (!canonicalClassId) throw new BadRequestException('canonicalClassId is required');
+    if (duplicateClassIds.length === 0) throw new BadRequestException('At least one duplicate class is required');
+    return this.competitionResultsService.mergeClasses(canonicalClassId, duplicateClassIds, 'admin');
+  }
+
   @Post('link-competitors')
   @HttpCode(HttpStatus.OK)
   async linkCompetitors(): Promise<{ message: string; linked: number; alreadyLinked: number; noMatch: number }> {

@@ -1862,6 +1862,169 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Suggest groups of duplicate classes within a season. Classes are grouped
+   * by format + normalized name (case/space/punctuation-insensitive), and any
+   * group with 2+ members is a suggested merge. The canonical guess is the
+   * member that looks admin-created — a real abbreviation (abbreviation !=
+   * name), then most results, then a set display order; the import-created
+   * ones (abbreviation == name, the create-unknown-class fingerprint) become
+   * the duplicates. Read-only; the admin confirms before merging.
+   */
+  async getDuplicateClassSuggestions(seasonId: string): Promise<Array<{
+    format: string;
+    canonical: { id: string; name: string; abbreviation: string; resultCount: number };
+    duplicates: Array<{ id: string; name: string; abbreviation: string; resultCount: number }>;
+  }>> {
+    const em = this.em.fork();
+    const classes = await em.find(CompetitionClass, { season: seasonId });
+    if (classes.length === 0) return [];
+
+    // Result counts per class for this season's classes.
+    const ids = classes.map((c) => c.id);
+    const countRows: Array<{ class_id: string; c: string }> = await em.getConnection().execute(
+      `SELECT class_id, COUNT(*)::int AS c FROM competition_results
+        WHERE class_id IN (${ids.map(() => '?').join(',')})
+        GROUP BY class_id`,
+      ids,
+    );
+    const countById = new Map(countRows.map((r) => [r.class_id, Number(r.c)]));
+
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const groups = new Map<string, CompetitionClass[]>();
+    for (const cls of classes) {
+      const key = `${(cls.format || '').toLowerCase()}::${norm(cls.name)}`;
+      const list = groups.get(key) || [];
+      list.push(cls);
+      groups.set(key, list);
+    }
+
+    const looksAdminCreated = (c: CompetitionClass) =>
+      (c.abbreviation || '').trim() !== '' && c.abbreviation !== c.name;
+
+    const suggestions: any[] = [];
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      // Rank best-canonical-first: real abbreviation, then most results,
+      // then a set display order.
+      const ranked = [...list].sort((a, b) => {
+        const aw = (looksAdminCreated(a) ? 1 : 0);
+        const bw = (looksAdminCreated(b) ? 1 : 0);
+        if (aw !== bw) return bw - aw;
+        const ac = countById.get(a.id) ?? 0;
+        const bc = countById.get(b.id) ?? 0;
+        if (ac !== bc) return bc - ac;
+        return (b.displayOrder ?? 0) - (a.displayOrder ?? 0);
+      });
+      const [canonical, ...dups] = ranked;
+      const shape = (c: CompetitionClass) => ({
+        id: c.id, name: c.name, abbreviation: c.abbreviation, resultCount: countById.get(c.id) ?? 0,
+      });
+      suggestions.push({ format: canonical.format, canonical: shape(canonical), duplicates: dups.map(shape) });
+    }
+    // Most-impactful groups first.
+    suggestions.sort((a, b) =>
+      b.duplicates.reduce((s: number, d: any) => s + d.resultCount, 0) -
+      a.duplicates.reduce((s: number, d: any) => s + d.resultCount, 0));
+    return suggestions;
+  }
+
+  /**
+   * Merge duplicate classes into a canonical class (same season only): move
+   * every result off the duplicates onto the canonical (re-stamping class_id,
+   * class name and format), repoint any class-name import mappings, DELETE the
+   * duplicate class rows, then recalculate the season so standings correct
+   * themselves. Returns a report including any (event, member) collisions —
+   * cases where a competitor ended up with >1 result in the canonical class
+   * at the same event (left for manual review, never auto-deleted).
+   */
+  async mergeClasses(
+    canonicalClassId: string,
+    duplicateClassIds: string[],
+    adminId: string,
+  ): Promise<{
+    resultsMoved: number;
+    classesDeleted: number;
+    seasonId: string;
+    collisions: Array<{ eventId: string; mecaId: string; count: number }>;
+  }> {
+    const dupIds = [...new Set((duplicateClassIds || []).filter((id) => id && id !== canonicalClassId))];
+    if (dupIds.length === 0) {
+      throw new BadRequestException('Select at least one duplicate class to merge.');
+    }
+
+    const em = this.em.fork();
+    const canonical = await em.findOne(CompetitionClass, { id: canonicalClassId });
+    if (!canonical) throw new NotFoundException(`Canonical class ${canonicalClassId} not found`);
+
+    const dups = await em.find(CompetitionClass, { id: { $in: dupIds } });
+    if (dups.length !== dupIds.length) {
+      throw new BadRequestException('One or more selected duplicate classes no longer exist.');
+    }
+    // Same-season guard — never merge across seasons (would mix standings).
+    const canonicalSeasonId = (canonical as any).season?.id ?? canonical.seasonId;
+    for (const d of dups) {
+      const ds = (d as any).season?.id ?? d.seasonId;
+      if (ds !== canonicalSeasonId) {
+        throw new BadRequestException('All classes in a merge must belong to the same season.');
+      }
+    }
+
+    const conn = em.getConnection();
+    const inDups = `(${dupIds.map(() => '?').join(',')})`;
+
+    // 1. Move results onto the canonical class (re-stamp id, name, format).
+    const moveRes: any = await conn.execute(
+      `UPDATE competition_results
+          SET class_id = ?, competition_class = ?, format = ?
+        WHERE class_id IN ${inDups}`,
+      [canonicalClassId, canonical.name, canonical.format, ...dupIds],
+    );
+    const resultsMoved = moveRes?.rowCount ?? moveRes?.affectedRows ?? 0;
+
+    // 2. Repoint any class-name import mappings so future imports match the
+    //    canonical, not a soon-to-be-deleted duplicate.
+    await conn.execute(
+      `UPDATE class_name_mappings SET target_class_id = ? WHERE target_class_id IN ${inDups}`,
+      [canonicalClassId, ...dupIds],
+    );
+
+    // 3. Collisions: a competitor with >1 result in the canonical class at the
+    //    same event after the move (manual review — we never auto-delete).
+    const collisions: Array<{ eventId: string; mecaId: string; count: number }> = (
+      await conn.execute(
+        `SELECT event_id AS "eventId", meca_id AS "mecaId", COUNT(*)::int AS count
+           FROM competition_results
+          WHERE class_id = ?
+          GROUP BY event_id, meca_id
+         HAVING COUNT(*) > 1`,
+        [canonicalClassId],
+      )
+    ).map((r: any) => ({ eventId: r.eventId, mecaId: String(r.mecaId), count: Number(r.count) }));
+
+    // 4. Delete the now-empty duplicate class rows.
+    await conn.execute(`DELETE FROM competition_classes WHERE id IN ${inDups}`, dupIds);
+
+    this.logger.warn(
+      `CLASS MERGE by ${adminId}: ${dups.length} class(es) [${dups.map((d) => d.name).join(', ')}] ` +
+      `→ "${canonical.name}" (${canonical.format}); moved ${resultsMoved} result(s)`,
+    );
+
+    // 5. Recalculate the season so placements/points/standings correct themselves.
+    try {
+      await this.recalculateSeasonPoints(canonicalSeasonId);
+    } catch (err) {
+      this.logger.error(`Season recalc after class merge failed (non-fatal): ${err}`);
+    }
+
+    this.logger.log(
+      `Class merge complete: ${dups.length} → "${canonical.name}", ${resultsMoved} results moved, ` +
+      `${collisions.length} collision group(s)`,
+    );
+
+    return { resultsMoved, classesDeleted: dups.length, seasonId: canonicalSeasonId, collisions };
+  }
+
+  /**
    * Import multiple results from a file
    * Looks up competitors by MECA ID and handles null competitor_id properly
    */
