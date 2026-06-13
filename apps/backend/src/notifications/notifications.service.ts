@@ -85,7 +85,35 @@ export class NotificationsService {
 
   async create(data: Partial<Notification>): Promise<Notification> {
     const em = this.em.fork();
-    const notification = em.create(Notification, data as any);
+
+    // The relations arrive from the client as nested `{ id }` objects
+    // (e.g. { user: { id }, fromUser: { id } }). Passing those straight to
+    // em.create makes MikroORM treat them as BRAND-NEW Profiles to insert
+    // (it then demands full_name etc. and 500s — "Value for Profile.full_name
+    // is required"). Resolve them to references to the EXISTING profiles, and
+    // require/validate the recipient.
+    const pickId = (v: any): string | undefined =>
+      typeof v === 'string' ? v : v && typeof v === 'object' ? v.id : undefined;
+
+    const userId = pickId((data as any).user);
+    if (!userId) {
+      throw new BadRequestException('A recipient user id is required');
+    }
+    const recipient = await em.findOne(Profile, { id: userId }, { fields: ['id'] });
+    if (!recipient) {
+      throw new NotFoundException(`Recipient user ${userId} not found`);
+    }
+    const fromUserId = pickId((data as any).fromUser);
+
+    const notification = em.create(Notification, {
+      user: em.getReference(Profile, userId),
+      fromUser: fromUserId ? em.getReference(Profile, fromUserId) : undefined,
+      title: data.title!,
+      message: data.message!,
+      type: (data.type as NotificationType) || 'message',
+      link: data.link || undefined,
+      read: false,
+    } as any);
     await em.persistAndFlush(notification);
     return notification;
   }
