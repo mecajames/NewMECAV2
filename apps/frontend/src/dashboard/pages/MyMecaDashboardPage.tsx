@@ -185,6 +185,16 @@ export default function MyMecaDashboardPage() {
   // to A-vs-B; cleared, they revert to the full all-events view.
   const [compareEventA, setCompareEventA] = useState<string>('');
   const [compareEventB, setCompareEventB] = useState<string>('');
+  // Classes the member has hidden from the comparison (default: all shown).
+  // Populated from the classes run at the two selected events.
+  const [compareHiddenClasses, setCompareHiddenClasses] = useState<Set<string>>(new Set());
+  const toggleCompareClass = (cls: string) => {
+    setCompareHiddenClasses((prev) => {
+      const next = new Set(prev);
+      if (next.has(cls)) next.delete(cls); else next.add(cls);
+      return next;
+    });
+  };
 
   // Results filter state
   const [resultsFilters, setResultsFilters] = useState({
@@ -4476,21 +4486,28 @@ export default function MyMecaDashboardPage() {
     const compareLabelA = compareEventList.find((e) => e.key === compareEventA)?.label || 'Event A';
     const compareLabelB = compareEventList.find((e) => e.key === compareEventB)?.label || 'Event B';
 
-    // One row per class run at EITHER selected event, with the chosen metric
-    // for Event A and Event B (null = class not run at that event). Grouped
-    // horizontal bars read clearly even when the two events shared few classes.
+    // Classes the member ran at EITHER selected event (the filter chip list).
+    // From all results (not season-filtered) so cross-season pairs resolve.
+    const compareClasses = comparing
+      ? [...new Set(
+          results
+            .filter((r) => eventKey(r) === compareEventA || eventKey(r) === compareEventB)
+            .map((r) => (r.competition_class || '').trim())
+            .filter(Boolean),
+        )].sort((a, b) => a.localeCompare(b))
+      : [];
+    const compareVisibleClasses = compareClasses.filter((c) => !compareHiddenClasses.has(c));
+
+    // One row per VISIBLE class, with the chosen metric for Event A and Event B
+    // (null = class not run at that event).
     const buildCompareBarData = (metric: 'score' | 'points' | 'wattage' | 'frequency') => {
-      // From all results (not season-filtered) so cross-season pairs resolve.
       const aResults = results.filter((r) => eventKey(r) === compareEventA);
       const bResults = results.filter((r) => eventKey(r) === compareEventB);
-      const classes = [...new Set(
-        [...aResults, ...bResults].map((r) => (r.competition_class || '').trim()).filter(Boolean),
-      )].sort((a, b) => a.localeCompare(b));
       const valAt = (rows: any[], cls: string): number | null => {
         const row = rows.find((r) => (r.competition_class || '').trim() === cls);
         return row ? metricValue(row, metric) : null;
       };
-      return classes.map((cls) => ({ class: cls, A: valAt(aResults, cls), B: valAt(bResults, cls) }));
+      return compareVisibleClasses.map((cls) => ({ class: cls, A: valAt(aResults, cls), B: valAt(bResults, cls) }));
     };
 
     // All four metrics shown together when comparing. Score has no single unit
@@ -5018,6 +5035,42 @@ export default function MyMecaDashboardPage() {
             {compareAValid && compareBValid && compareEventA === compareEventB && (
               <p className="text-gray-400 text-sm mt-3">Pick two different events to compare.</p>
             )}
+
+            {/* Class filter — populated by the classes run at the two selected
+                events. Toggle which classes appear in the comparison charts. */}
+            {comparing && compareClasses.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-slate-700">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-gray-400 text-sm mr-1">Classes:</span>
+                  {compareClasses.map((cls) => {
+                    const hidden = compareHiddenClasses.has(cls);
+                    return (
+                      <button
+                        key={cls}
+                        onClick={() => toggleCompareClass(cls)}
+                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          hidden
+                            ? 'border-slate-600 text-slate-500 bg-transparent'
+                            : 'border-orange-500 text-white bg-orange-500/20'
+                        }`}
+                        title={hidden ? `Show ${cls}` : `Hide ${cls}`}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full ${hidden ? 'bg-slate-500' : 'bg-orange-400'}`} />
+                        {cls}
+                      </button>
+                    );
+                  })}
+                  {compareHiddenClasses.size > 0 && (
+                    <button
+                      onClick={() => setCompareHiddenClasses(new Set())}
+                      className="text-orange-400 hover:text-orange-300 text-xs ml-1"
+                    >
+                      Show all
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -5030,7 +5083,11 @@ export default function MyMecaDashboardPage() {
               <h2 className="text-2xl font-bold text-white mb-1">{label}: {compareLabelA} vs {compareLabelB}</h2>
               <p className="text-gray-400 text-sm mb-6">One bar per event for each class. A missing bar means you didn't run that class at that event.</p>
               {data.length === 0 ? (
-                <p className="text-gray-400 text-sm">No classes found for the selected events.</p>
+                <p className="text-gray-400 text-sm">
+                  {compareClasses.length > 0
+                    ? 'All classes are hidden — turn one on above to compare.'
+                    : 'No classes found for the selected events.'}
+                </p>
               ) : (
                 <div style={{ height: Math.max(200, data.length * 64) }}>
                   <ResponsiveContainer width="100%" height="100%">
