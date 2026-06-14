@@ -20,7 +20,7 @@ import { getMyRetailerListing, getMyManufacturerListing } from '@/api-client/bus
 import type { Judge } from '@newmeca/shared';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line
+  PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts';
 import { EventRatingsPanel } from '@/ratings';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
@@ -167,6 +167,34 @@ export default function MyMecaDashboardPage() {
     seasonId: '',
     state: '',
   });
+
+  // Per-class analytics ("Performance by Class"): Y-axis metric toggle and the
+  // set of class series the member has hidden (keyed `${format}::${class}`).
+  const [classChartMetric, setClassChartMetric] = useState<'score' | 'points' | 'wattage' | 'frequency'>('score');
+  const [hiddenClassSeries, setHiddenClassSeries] = useState<Set<string>>(new Set());
+  const toggleClassSeries = (key: string) => {
+    setHiddenClassSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  // "Compare Events": two chosen event keys. When BOTH are set (and differ),
+  // the analytics tab enters comparison mode — the metric trend charts switch
+  // to A-vs-B; cleared, they revert to the full all-events view.
+  const [compareEventA, setCompareEventA] = useState<string>('');
+  const [compareEventB, setCompareEventB] = useState<string>('');
+  // Classes the member has hidden from the comparison (default: all shown).
+  // Populated from the classes run at the two selected events.
+  const [compareHiddenClasses, setCompareHiddenClasses] = useState<Set<string>>(new Set());
+  const toggleCompareClass = (cls: string) => {
+    setCompareHiddenClasses((prev) => {
+      const next = new Set(prev);
+      if (next.has(cls)) next.delete(cls); else next.add(cls);
+      return next;
+    });
+  };
 
   // Results filter state
   const [resultsFilters, setResultsFilters] = useState({
@@ -4298,6 +4326,82 @@ export default function MyMecaDashboardPage() {
       }));
     };
 
+    // ---- Per-class breakdown ("Performance by Class") -----------------------
+    // Formats and classes are distinct: each FORMAT gets its own chart (their
+    // score scales differ and must never share a Y-axis), and within it each
+    // CLASS the member ran is its own line. X-axis = that format's events in
+    // chronological order; a class with no entry at an event simply has no
+    // point there.
+    // Order the timeline by the EVENT date, not the row's created_at — imported
+    // historical results carry import-time created_at, which scrambles the
+    // chronology (e.g. a September final plotting before a June event).
+    const resultTime = (r: any): number =>
+      new Date(r.event?.event_date || r.created_at || 0).getTime();
+
+    // Shared metric extraction used by both the per-class chart and the
+    // Compare Events section, so they always agree on what each metric means.
+    const metricValue = (r: any, metric: 'score' | 'points' | 'wattage' | 'frequency'): number => {
+      switch (metric) {
+        case 'points': return r.points_earned || 0;
+        case 'wattage': return r.wattage || 0;
+        case 'frequency': return r.frequency || 0;
+        default: return r.score || 0;
+      }
+    };
+    const metricUnit = (metric: string, isSPL: boolean): string =>
+      metric === 'score' ? (isSPL ? ' dB' : '')
+        : metric === 'points' ? ' pts'
+          : metric === 'wattage' ? ' W'
+            : ' Hz';
+
+    // A stable per-event key for grouping/selection.
+    const eventKey = (r: any): string => (r as any).event?.id || r.event?.title || r.created_at;
+
+    const getClassChartForFormat = (formatName: string): { classes: string[]; data: any[] } => {
+      const fmtResults = filteredResults.filter((r) => getResultFormat(r) === formatName);
+      const classes = [...new Set(
+        fmtResults.map((r) => (r.competition_class || '').trim()).filter(Boolean),
+      )].sort((a, b) => a.localeCompare(b));
+
+      const byEvent = new Map<string, any>();
+      [...fmtResults]
+        .sort((a, b) => resultTime(a) - resultTime(b))
+        .forEach((r) => {
+          const key = eventKey(r);
+          if (!byEvent.has(key)) byEvent.set(key, { event: r.event?.title || 'Event' });
+          const cls = (r.competition_class || '').trim();
+          if (cls) {
+            byEvent.get(key)[cls] = metricValue(r, classChartMetric);
+          }
+        });
+      return { classes, data: [...byEvent.values()] };
+    };
+
+    // Per-class stat cards within a format.
+    const getClassStatsForFormat = (formatName: string) => {
+      const fmtResults = filteredResults.filter((r) => getResultFormat(r) === formatName);
+      const map = new Map<string, { count: number; points: number; scores: number[]; best: number; wins: number }>();
+      for (const r of fmtResults) {
+        const cls = (r.competition_class || '').trim();
+        if (!cls) continue;
+        if (!map.has(cls)) map.set(cls, { count: 0, points: 0, scores: [], best: 0, wins: 0 });
+        const s = map.get(cls)!;
+        s.count++;
+        s.points += r.points_earned || 0;
+        s.scores.push(r.score || 0);
+        s.best = Math.max(s.best, r.score || 0);
+        if (r.placement === 1) s.wins++;
+      }
+      return map;
+    };
+
+    // Distinct colors for class lines (cycled). Kept separate from CHART_COLORS
+    // so adding a class color never shifts the format-chart palette.
+    const CLASS_LINE_COLORS = [
+      '#f97316', '#3b82f6', '#22c55e', '#eab308', '#a855f7',
+      '#ec4899', '#06b6d4', '#ef4444', '#84cc16', '#f59e0b',
+    ];
+
     // Calculate placement stats
     const totalPlacements = placementBreakdown.first + placementBreakdown.second + placementBreakdown.third + placementBreakdown.other;
     const winRate = totalPlacements > 0 ? ((placementBreakdown.first / totalPlacements) * 100).toFixed(0) : '0';
@@ -4347,6 +4451,73 @@ export default function MyMecaDashboardPage() {
         const ob = formatOrder.get(b) ?? Number.POSITIVE_INFINITY;
         return oa - ob || a.localeCompare(b);
       });
+
+    // Formats where the member ran 2+ classes — the per-class breakdown only
+    // adds value there (a single-class format is already the combined chart).
+    const multiClassFormats = formatsWithData.filter(
+      (f) => getClassChartForFormat(f).classes.length >= 2,
+    );
+
+    // ---- Compare Events ------------------------------------------------------
+    // Comparison spans the member's ENTIRE history (all `results`, NOT the
+    // season-filtered set) so they can pit an event from one season against
+    // another to see progress over time. Each label carries its season so
+    // cross-season picks are unambiguous. Most-recent first.
+    const seasonNameById = new Map(seasons.map((s) => [s.id, s.name]));
+    const compareEventList = (() => {
+      const m = new Map<string, { key: string; title: string; label: string; t: number }>();
+      for (const r of results) {
+        const key = eventKey(r);
+        if (!m.has(key)) {
+          const title = r.event?.title || 'Event';
+          const seasonName = r.season_id ? seasonNameById.get(r.season_id) : undefined;
+          const label = `${title}${seasonName ? ` · ${seasonName}` : ''}`;
+          m.set(key, { key, title, label, t: resultTime(r) });
+        }
+      }
+      return [...m.values()].sort((a, b) => b.t - a.t);
+    })();
+    // Comparison is ACTIVE only when both picks are valid and different — that's
+    // the signal that flips the metric charts from trend to A-vs-B. With nothing
+    // (or one event) picked, the page stays in the full all-events view.
+    const compareAValid = compareEventList.some((e) => e.key === compareEventA);
+    const compareBValid = compareEventList.some((e) => e.key === compareEventB);
+    const comparing = compareAValid && compareBValid && compareEventA !== compareEventB;
+    const compareLabelA = compareEventList.find((e) => e.key === compareEventA)?.label || 'Event A';
+    const compareLabelB = compareEventList.find((e) => e.key === compareEventB)?.label || 'Event B';
+
+    // Classes the member ran at EITHER selected event (the filter chip list).
+    // From all results (not season-filtered) so cross-season pairs resolve.
+    const compareClasses = comparing
+      ? [...new Set(
+          results
+            .filter((r) => eventKey(r) === compareEventA || eventKey(r) === compareEventB)
+            .map((r) => (r.competition_class || '').trim())
+            .filter(Boolean),
+        )].sort((a, b) => a.localeCompare(b))
+      : [];
+    const compareVisibleClasses = compareClasses.filter((c) => !compareHiddenClasses.has(c));
+
+    // One row per VISIBLE class, with the chosen metric for Event A and Event B
+    // (null = class not run at that event).
+    const buildCompareBarData = (metric: 'score' | 'points' | 'wattage' | 'frequency') => {
+      const aResults = results.filter((r) => eventKey(r) === compareEventA);
+      const bResults = results.filter((r) => eventKey(r) === compareEventB);
+      const valAt = (rows: any[], cls: string): number | null => {
+        const row = rows.find((r) => (r.competition_class || '').trim() === cls);
+        return row ? metricValue(row, metric) : null;
+      };
+      return compareVisibleClasses.map((cls) => ({ class: cls, A: valAt(aResults, cls), B: valAt(bResults, cls) }));
+    };
+
+    // All four metrics shown together when comparing. Score has no single unit
+    // across formats, so it's shown unit-less in the mixed comparison.
+    const COMPARE_METRICS: { key: 'score' | 'points' | 'wattage' | 'frequency'; label: string; unit: string }[] = [
+      { key: 'score', label: 'Score', unit: '' },
+      { key: 'points', label: 'Points', unit: ' pts' },
+      { key: 'wattage', label: 'Wattage', unit: ' W' },
+      { key: 'frequency', label: 'Frequency', unit: ' Hz' },
+    ];
 
     return (
       <div className="space-y-6">
@@ -4509,7 +4680,7 @@ export default function MyMecaDashboardPage() {
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                           <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} />
                           <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                          <Tooltip content={<CustomBarTooltip />} />
+                          <Tooltip cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }} content={<CustomBarTooltip />} />
                           <Bar dataKey="score" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
@@ -4670,8 +4841,281 @@ export default function MyMecaDashboardPage() {
           </div>
         )}
 
-        {/* NEW: Points Progress Line Chart - Only show if there are enough results */}
-        {filteredResults.length > 2 && (
+        {/* NEW: Performance by Class — one chart per format, one line per class.
+            Only formats where the member ran 2+ classes appear here; single-
+            class formats are already covered by the combined charts above. */}
+        {multiClassFormats.length > 0 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <h2 className="text-2xl font-bold text-white">Performance by Class</h2>
+              {/* Metric toggle (applies to every per-class chart) */}
+              <div className="inline-flex rounded-lg overflow-hidden border border-slate-600">
+                {([
+                  ['score', 'Score'],
+                  ['points', 'Points'],
+                  ['wattage', 'Wattage'],
+                  ['frequency', 'Frequency'],
+                ] as const).map(([m, label]) => (
+                  <button
+                    key={m}
+                    onClick={() => setClassChartMetric(m)}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                      classChartMetric === m
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-gray-400 text-sm mb-6">
+              Each class you ran is its own line. Use the chips to show or hide a class.
+            </p>
+
+            <div className="space-y-8">
+              {multiClassFormats.map((format) => {
+                const { classes, data } = getClassChartForFormat(format);
+                const classStats = getClassStatsForFormat(format);
+                const isSPL = format.toUpperCase().includes('SPL');
+                const unit = metricUnit(classChartMetric, isSPL);
+                const colorFor = (cls: string) =>
+                  CLASS_LINE_COLORS[classes.indexOf(cls) % CLASS_LINE_COLORS.length];
+
+                return (
+                  <div key={format} className="bg-slate-700/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-white">{format} — by Class</h3>
+                      <span className="text-sm text-cyan-400">{classes.length} classes</span>
+                    </div>
+
+                    {/* Show/hide chips per class */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {classes.map((cls) => {
+                        const key = `${format}::${cls}`;
+                        const hidden = hiddenClassSeries.has(key);
+                        const color = colorFor(cls);
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => toggleClassSeries(key)}
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              hidden
+                                ? 'border-slate-600 text-slate-500 bg-transparent'
+                                : 'border-transparent text-white'
+                            }`}
+                            style={hidden ? undefined : { backgroundColor: `${color}33`, borderColor: color }}
+                            title={hidden ? `Show ${cls}` : `Hide ${cls}`}
+                          >
+                            <span
+                              className="w-2.5 h-2.5 rounded-full"
+                              style={{ backgroundColor: hidden ? '#64748b' : color }}
+                            />
+                            {cls}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Multi-line chart: one line per (visible) class */}
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={data}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis dataKey="event" tick={{ fill: '#9ca3af', fontSize: 10 }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} domain={['auto', 'auto']} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
+                            labelStyle={{ color: '#fff' }}
+                            formatter={(value: number, nameKey: string) => [`${value}${unit}`, nameKey]}
+                          />
+                          {classes
+                            .filter((cls) => !hiddenClassSeries.has(`${format}::${cls}`))
+                            .map((cls) => (
+                              <Line
+                                key={cls}
+                                type="monotone"
+                                dataKey={cls}
+                                name={cls}
+                                stroke={colorFor(cls)}
+                                strokeWidth={2}
+                                // Larger filled dots so a class with a single
+                                // result still reads as a clear point, not a
+                                // speck (many members run a class only once).
+                                dot={{ r: 4, fill: colorFor(cls), strokeWidth: 0 }}
+                                activeDot={{ r: 6 }}
+                                connectNulls
+                              />
+                            ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Per-class stat cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
+                      {classes.map((cls) => {
+                        const s = classStats.get(cls);
+                        if (!s) return null;
+                        const avg = s.count > 0 ? (s.scores.reduce((a, b) => a + b, 0) / s.count).toFixed(1) : '0';
+                        return (
+                          <div key={cls} className="bg-slate-800/60 rounded-lg p-3 border-l-4" style={{ borderColor: colorFor(cls) }}>
+                            <p className="text-white text-sm font-medium truncate" title={cls}>{cls}</p>
+                            <p className="text-gray-400 text-xs mb-2">{s.count} events · {s.wins} win{s.wins === 1 ? '' : 's'}</p>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-400">Avg <span className="text-white font-semibold">{avg}{isSPL ? ' dB' : ''}</span></span>
+                              <span className="text-gray-400">Best <span className="text-orange-400 font-semibold">{s.best.toFixed(1)}{isSPL ? ' dB' : ''}</span></span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">Points <span className="text-cyan-400 font-semibold">{s.points}</span></p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* NEW: Compare Events — pick any two of your events. While both are
+            chosen the metric charts below switch to A-vs-B; clear to revert to
+            the full all-events view. */}
+        {compareEventList.length >= 2 && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <h2 className="text-2xl font-bold text-white">Compare Events</h2>
+              {comparing && (
+                <button
+                  onClick={() => { setCompareEventA(''); setCompareEventB(''); }}
+                  className="text-orange-400 hover:text-orange-300 text-sm flex items-center gap-1"
+                >
+                  <X className="h-4 w-4" />
+                  Clear comparison
+                </button>
+              )}
+            </div>
+            <p className="text-gray-400 text-sm mb-4">
+              {comparing
+                ? 'Comparing two events — every chart below shows Event A vs Event B. Clear to go back to your full history.'
+                : 'Pick any two of your events — even from different seasons — to compare them across score, points, wattage and frequency. Leave blank to see your full history and averages.'}
+            </p>
+
+            {/* Event pickers */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.secondary }} />
+                <select
+                  value={compareEventA}
+                  onChange={(e) => setCompareEventA(e.target.value)}
+                  className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500 max-w-xs"
+                >
+                  <option value="">Select event…</option>
+                  {compareEventList.map((ev) => (
+                    <option key={ev.key} value={ev.key}>{ev.label}</option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-gray-500 text-sm font-medium">vs</span>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.primary }} />
+                <select
+                  value={compareEventB}
+                  onChange={(e) => setCompareEventB(e.target.value)}
+                  className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500 max-w-xs"
+                >
+                  <option value="">Select event…</option>
+                  {compareEventList.map((ev) => (
+                    <option key={ev.key} value={ev.key}>{ev.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {compareAValid && compareBValid && compareEventA === compareEventB && (
+              <p className="text-gray-400 text-sm mt-3">Pick two different events to compare.</p>
+            )}
+
+            {/* Class filter — populated by the classes run at the two selected
+                events. Toggle which classes appear in the comparison charts. */}
+            {comparing && compareClasses.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-slate-700">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-gray-400 text-sm mr-1">Classes:</span>
+                  {compareClasses.map((cls) => {
+                    const hidden = compareHiddenClasses.has(cls);
+                    return (
+                      <button
+                        key={cls}
+                        onClick={() => toggleCompareClass(cls)}
+                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          hidden
+                            ? 'border-slate-600 text-slate-500 bg-transparent'
+                            : 'border-orange-500 text-white bg-orange-500/20'
+                        }`}
+                        title={hidden ? `Show ${cls}` : `Hide ${cls}`}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full ${hidden ? 'bg-slate-500' : 'bg-orange-400'}`} />
+                        {cls}
+                      </button>
+                    );
+                  })}
+                  {compareHiddenClasses.size > 0 && (
+                    <button
+                      onClick={() => setCompareHiddenClasses(new Set())}
+                      className="text-orange-400 hover:text-orange-300 text-xs ml-1"
+                    >
+                      Show all
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* COMPARING: all four metrics as A-vs-B grouped horizontal bars (per
+            class). Reads clearly even when the two events shared few classes. */}
+        {comparing && COMPARE_METRICS.map(({ key, label, unit }) => {
+          const data = buildCompareBarData(key);
+          return (
+            <div key={key} className="bg-slate-800 rounded-xl p-6 shadow-lg">
+              <h2 className="text-2xl font-bold text-white mb-1">{label}: {compareLabelA} vs {compareLabelB}</h2>
+              <p className="text-gray-400 text-sm mb-6">One bar per event for each class. A missing bar means you didn't run that class at that event.</p>
+              {data.length === 0 ? (
+                <p className="text-gray-400 text-sm">
+                  {compareClasses.length > 0
+                    ? 'All classes are hidden — turn one on above to compare.'
+                    : 'No classes found for the selected events.'}
+                </p>
+              ) : (
+                <div style={{ height: Math.max(200, data.length * 64) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data} layout="vertical" margin={{ left: 24, right: 16 }} barCategoryGap="20%">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 11 }} domain={[0, 'auto']} />
+                      <YAxis type="category" dataKey="class" width={120} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
+                        contentStyle={{ backgroundColor: '#334155', border: 'none', borderRadius: '8px' }}
+                        labelStyle={{ color: '#fff' }}
+                        formatter={(value: number, nameKey: string) =>
+                          value == null ? ['—', nameKey] : [`${value}${unit}`, nameKey]
+                        }
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="A" name={compareLabelA} fill={CHART_COLORS.secondary} radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="B" name={compareLabelB} fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* NEW: Points Progress Line Chart - hidden while comparing two events */}
+        {!comparing && filteredResults.length > 2 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Points Progress</h2>
             <div className="h-64">
@@ -4704,8 +5148,8 @@ export default function MyMecaDashboardPage() {
           </div>
         )}
 
-        {/* NEW: SPL Score Progress Line Chart - Only show if there are SPL results */}
-        {formatStats['SPL'] && formatStats['SPL'].count > 2 && (
+        {/* NEW: SPL Score Progress Line Chart - hidden while comparing two events */}
+        {!comparing && formatStats['SPL'] && formatStats['SPL'].count > 2 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">SPL Score Progress</h2>
             <div className="h-64">
@@ -4742,8 +5186,8 @@ export default function MyMecaDashboardPage() {
           </div>
         )}
 
-        {/* Wattage Progress Line Chart */}
-        {filteredResults.length > 0 && (
+        {/* Wattage Progress Line Chart - hidden while comparing two events */}
+        {!comparing && filteredResults.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Wattage Progress</h2>
             <div className="h-64">
@@ -4779,8 +5223,8 @@ export default function MyMecaDashboardPage() {
           </div>
         )}
 
-        {/* Frequency Progress Line Chart */}
-        {filteredResults.length > 0 && (
+        {/* Frequency Progress Line Chart - hidden while comparing two events */}
+        {!comparing && filteredResults.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Frequency Progress</h2>
             <div className="h-64">

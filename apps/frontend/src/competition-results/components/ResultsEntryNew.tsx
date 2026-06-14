@@ -202,8 +202,6 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   const memberSearchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
   const skipMemberSearchRef = useRef(false);
 
-  const availableFormats = ['SPL', 'SQL', 'Show and Shine', 'Ride the Light'];
-
   // Member search for MECA ID / Name auto-population
   const doMemberSearch = useCallback(async (query: string) => {
     if (skipMemberSearchRef.current) {
@@ -1117,6 +1115,22 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   }
 
   const selectedEvent = events.find(e => e.id === selectedEventId);
+
+  // Formats available for entry are DERIVED from the classes that actually
+  // exist in the selected event's season — never a hardcoded list. This locks
+  // entry to the active season's real format/class set so results can't be
+  // filed under a format/class from another season, which splits standings
+  // and creates the "same class under different names" problem EDs reported.
+  const seasonScopedClasses = competitionClasses.filter(
+    (c) => (selectedEvent?.season_id ? (c as any).season_id === selectedEvent.season_id : true),
+  );
+  const FORMAT_ORDER = ['SPL', 'SQL', 'Show and Shine', 'Ride the Light', 'MECA Kids', 'Dueling Demo'];
+  const availableFormats = [...new Set(seasonScopedClasses.map((c) => c.format).filter(Boolean))]
+    .sort((a, b) => {
+      const ia = FORMAT_ORDER.indexOf(a);
+      const ib = FORMAT_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+    });
 
   return (
     <div className="max-w-7xl mx-auto">

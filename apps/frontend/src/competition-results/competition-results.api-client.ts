@@ -269,6 +269,30 @@ export const competitionResultsApi = {
     return response.data;
   },
 
+  /** Admin — suggested duplicate-class groups for a season. */
+  getDuplicateClasses: async (seasonId: string): Promise<Array<{
+    format: string;
+    canonical: { id: string; name: string; abbreviation: string; resultCount: number };
+    duplicates: Array<{ id: string; name: string; abbreviation: string; resultCount: number }>;
+  }>> => {
+    const response = await axios.get('/api/competition-results/admin/duplicate-classes', { params: { seasonId } });
+    return response.data;
+  },
+
+  /** Admin — merge duplicate classes into a canonical class (same season). */
+  mergeClasses: async (canonicalClassId: string, duplicateClassIds: string[]): Promise<{
+    resultsMoved: number;
+    classesDeleted: number;
+    seasonId: string;
+    collisions: Array<{ eventId: string; mecaId: string; count: number }>;
+  }> => {
+    const response = await axios.post('/api/competition-results/admin/merge-classes', {
+      canonicalClassId,
+      duplicateClassIds,
+    });
+    return response.data;
+  },
+
   /**
    * Admin-only — list every result whose class_id can't be resolved
    * (deleted/inactive class AND no text fallback match). These rows
