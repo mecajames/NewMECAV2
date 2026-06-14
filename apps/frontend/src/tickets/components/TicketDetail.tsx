@@ -235,6 +235,7 @@ export function TicketDetail({
     | 'internal'
     | 'reopen'
     | 'reassign'
+    | 'escalate_reassign'
     | 'department';
   const [adminSubmitOpen, setAdminSubmitOpen] = useState(false);
   const [adminSubmitChoice, setAdminSubmitChoice] = useState<AdminSubmitChoice | null>(null);
@@ -243,6 +244,9 @@ export function TicketDetail({
   // Header status pill click-to-change menu (the no-reply housekeeping path).
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement>(null);
+  // Header priority pill click-to-change menu (staff only).
+  const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  const priorityMenuRef = useRef<HTMLDivElement>(null);
   const [departments, setDepartments] = useState<TicketDepartmentResponse[]>([]);
 
   // Image lightbox state. Index is into a filtered list of image-only
@@ -627,6 +631,7 @@ export function TicketDetail({
   type AdminAction =
     | { kind: 'status'; status: TicketStatus }
     | { kind: 'reassign'; assigneeId: string }
+    | { kind: 'escalate_reassign'; assigneeId: string }
     | { kind: 'department'; departmentId: string };
 
   const handleSubmitComment = async (
@@ -743,6 +748,12 @@ export function TicketDetail({
             updated = await ticketsApi.changeStatus(ticketId, adminAction.status);
           } else if (adminAction.kind === 'reassign') {
             updated = await ticketsApi.assign(ticketId, adminAction.assigneeId);
+          } else if (adminAction.kind === 'escalate_reassign') {
+            // Two-step: escalate the status, then reassign to the chosen
+            // staffer. assign() returns the freshest ticket, so keep its
+            // result as the final state.
+            await ticketsApi.changeStatus(ticketId, 'escalated' as TicketStatus);
+            updated = await ticketsApi.assign(ticketId, adminAction.assigneeId);
           } else if (adminAction.kind === 'department') {
             updated = await ticketsApi.update(ticketId, {
               department_id: adminAction.departmentId,
@@ -804,6 +815,27 @@ export function TicketDetail({
     }
   };
 
+  // Staff-only: change the ticket priority directly from the header pill,
+  // no reply required. Goes through PATCH /tickets/:id (update).
+  const handlePillPriorityChange = async (nextPriority: TicketPriority) => {
+    if (!ticketId || !ticket) return;
+    if (nextPriority === ticket.priority) {
+      setPriorityMenuOpen(false);
+      return;
+    }
+    setPriorityMenuOpen(false);
+    setActionLoading(true);
+    try {
+      const updated = await ticketsApi.update(ticketId, { priority: nextPriority });
+      setTicket(updated);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to change priority';
+      alert(msg);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Member-facing reopen: the reporter can reopen their own resolved/closed
   // ticket. Backend authorizes reporter-or-admin.
   const handleReopen = async () => {
@@ -832,6 +864,18 @@ export function TicketDetail({
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [statusMenuOpen]);
+
+  // Close the priority pill menu on outside click.
+  useEffect(() => {
+    if (!priorityMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (priorityMenuRef.current && !priorityMenuRef.current.contains(e.target as Node)) {
+        setPriorityMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [priorityMenuOpen]);
 
   const handleAssign = async () => {
     if (!ticketId || !assigneeId) return;
@@ -918,7 +962,7 @@ export function TicketDetail({
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1 flex-wrap">
-            <span className="text-sm font-mono text-orange-400">{ticket.ticket_number}</span>
+            <span className="text-lg font-mono font-bold text-orange-400">{ticket.ticket_number}</span>
             {/* Status pill.
                 - Staff: clickable. Opens an inline menu of allowed
                   transitions (the no-reply housekeeping path). Reply-driven
@@ -979,9 +1023,54 @@ export function TicketDetail({
                 {customerStatusLabels[ticket.status]}
               </span>
             )}
-            <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>
-              {priorityConfig[ticket.priority].label}
-            </span>
+            {/* Priority pill.
+                - Staff: clickable. Opens an inline menu to set priority
+                  directly (no reply required).
+                - Members: static span — read-only. */}
+            {isStaff ? (
+              <div className="relative" ref={priorityMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setPriorityMenuOpen((v) => !v)}
+                  disabled={actionLoading}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${priorityConfig[ticket.priority].className}`}
+                  aria-haspopup="menu"
+                  aria-expanded={priorityMenuOpen}
+                  title="Click to change priority"
+                >
+                  {priorityConfig[ticket.priority].label}
+                  <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
+                </button>
+                {priorityMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full mt-1 z-30 min-w-[10rem] bg-slate-800 border border-slate-600 rounded-lg shadow-xl py-1"
+                  >
+                    <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-500">
+                      Change priority
+                    </div>
+                    {(Object.keys(priorityConfig) as TicketPriority[]).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => handlePillPriorityChange(p)}
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-700 flex items-center gap-2"
+                      >
+                        <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityConfig[p].className}`}>
+                          {priorityConfig[p].label}
+                        </span>
+                        {p === ticket.priority && <span className="ml-auto text-[10px] text-gray-400">current</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>
+                {priorityConfig[ticket.priority].label}
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-white">{ticket.title}</h1>
         </div>
@@ -1313,7 +1402,7 @@ export function TicketDetail({
                   onPaste={handlePaste}
                   placeholder="Write a comment... (you can paste screenshots directly with Ctrl+V)"
                   rows={3}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-y min-h-[88px]"
                 />
 
                 {/* Pending attachment previews */}
@@ -1378,7 +1467,7 @@ export function TicketDetail({
                           className="w-4 h-4 rounded border-slate-600 text-orange-600 focus:ring-orange-500 bg-slate-700"
                         />
                         <Eye className="w-4 h-4" />
-                        Internal note (staff only)
+                        Internal Note
                       </label>
                     )}
                     {/* Staff-only: save the composed reply as a reusable
@@ -1414,7 +1503,7 @@ export function TicketDetail({
                           className="w-4 h-4 rounded border-slate-600 text-orange-600 focus:ring-orange-500 bg-slate-700"
                         />
                         <PenLine className="w-4 h-4" />
-                        Don't include my signature
+                        No signature
                       </label>
                     )}
                     {/* Member-only: lets the reporter close their own ticket
@@ -2157,7 +2246,8 @@ export function TicketDetail({
           an admin can leave a private note for the next assignee and
           reassign in the same submit. */}
       {adminSubmitOpen && (() => {
-        const needsAssignee = adminSubmitChoice === 'reassign';
+        const needsAssignee =
+          adminSubmitChoice === 'reassign' || adminSubmitChoice === 'escalate_reassign';
         const needsDepartment = adminSubmitChoice === 'department';
         const canSubmit =
           !!adminSubmitChoice &&
@@ -2262,6 +2352,12 @@ export function TicketDetail({
                   <AlertTriangle className="w-4 h-4 text-red-400" />,
                   `${Noun} & Escalate`,
                   `Post the ${noun}, then flag the ticket for senior support.`,
+                )}
+                {canMoveTo('escalated') && choiceOption(
+                  'escalate_reassign',
+                  <AlertTriangle className="w-4 h-4 text-red-400" />,
+                  `${Noun} & Escalate & Reassign`,
+                  `Post the ${noun}, escalate the ticket, then assign it to the chosen staff member.`,
                 )}
                 {canMoveTo('pending_internal_review') && choiceOption(
                   'internal',
@@ -2379,6 +2475,9 @@ export function TicketDetail({
                         break;
                       case 'reassign':
                         action = { kind: 'reassign', assigneeId: adminSubmitReassignId };
+                        break;
+                      case 'escalate_reassign':
+                        action = { kind: 'escalate_reassign', assigneeId: adminSubmitReassignId };
                         break;
                       case 'department':
                         action = { kind: 'department', departmentId: adminSubmitDepartmentId };

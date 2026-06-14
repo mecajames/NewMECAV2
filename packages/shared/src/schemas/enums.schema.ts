@@ -291,6 +291,9 @@ export const TICKET_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
     TicketStatus.AWAITING_RESPONSE,
     TicketStatus.ON_HOLD,
     TicketStatus.ESCALATED,
+    // Both Resolve and Close are valid from a brand-new ticket: Resolve = we
+    // fixed something; Close = no fix needed (informational / not an issue).
+    TicketStatus.RESOLVED,
     TicketStatus.CLOSED,
   ],
   [TicketStatus.IN_PROGRESS]: [
