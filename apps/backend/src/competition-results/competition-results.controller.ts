@@ -274,6 +274,22 @@ export class CompetitionResultsController {
     return this.competitionResultsService.mergeClasses(canonicalClassId, duplicateClassIds, 'admin');
   }
 
+  /**
+   * Admin: mark a set of classes as "not duplicates" so the duplicate scan
+   * stops suggesting them (e.g. SQ2 vs SQ2+).
+   */
+  @Post('admin/ignore-duplicate-classes')
+  @HttpCode(HttpStatus.OK)
+  async ignoreDuplicateClasses(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { classIds?: string[] },
+  ): Promise<any> {
+    await this.requireAdmin(authHeader);
+    const classIds = Array.isArray(body?.classIds) ? body.classIds : [];
+    if (classIds.length < 2) throw new BadRequestException('At least two class ids are required');
+    return this.competitionResultsService.ignoreDuplicateGroup(classIds);
+  }
+
   @Post('link-competitors')
   @HttpCode(HttpStatus.OK)
   async linkCompetitors(): Promise<{ message: string; linked: number; alreadyLinked: number; noMatch: number }> {

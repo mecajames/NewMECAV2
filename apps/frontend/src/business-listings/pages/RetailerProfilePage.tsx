@@ -166,6 +166,27 @@ export default function RetailerProfilePage() {
     return parts.length > 0 ? parts.join(', ') : null;
   };
 
+  // Hooks must run on EVERY render in the same order — keep this above the
+  // loading/error early returns. useRetailerProfileSEO uses useMemo internally,
+  // so calling it after an early return changed the hook count between renders
+  // and crashed the page with React error #310. It already tolerates null.
+  const seoProps = useRetailerProfileSEO(retailer ? {
+    id: retailer.id,
+    name: retailer.businessName,
+    description: retailer.description,
+    image: retailer.profileImageUrl,
+    address: {
+      street: retailer.streetAddress,
+      city: retailer.city,
+      state: retailer.state,
+      zip: retailer.postalCode,
+      country: retailer.country,
+    },
+    phone: retailer.businessPhone,
+    email: retailer.businessEmail,
+    website: retailer.website,
+  } : null);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
@@ -194,23 +215,6 @@ export default function RetailerProfilePage() {
 
   const address = formatAddress();
   const storeTypeInfo = STORE_TYPE_LABELS[retailer.storeType] || { label: retailer.storeType, description: '' };
-
-  const seoProps = useRetailerProfileSEO(retailer ? {
-    id: retailer.id,
-    name: retailer.businessName,
-    description: retailer.description,
-    image: retailer.profileImageUrl,
-    address: {
-      street: retailer.streetAddress,
-      city: retailer.city,
-      state: retailer.state,
-      zip: retailer.postalCode,
-      country: retailer.country,
-    },
-    phone: retailer.businessPhone,
-    email: retailer.businessEmail,
-    website: retailer.website,
-  } : null);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">

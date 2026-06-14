@@ -1,4 +1,4 @@
-import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, ChevronRight, Bell, Users, ClipboardList, Shield, ShoppingBag, FileText } from 'lucide-react';
+import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Award, ChevronDown, ChevronRight, Bell, Users, ClipboardList, Shield, ShoppingBag, FileText, Store, Factory } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -76,6 +76,8 @@ export default function Navbar() {
     if (path.startsWith('/rulebooks')) return 'rulebooks';
     if (path.startsWith('/members')) return 'members';
     if (path.startsWith('/teams')) return 'teams';
+    if (path.startsWith('/retailers')) return 'retailers';
+    if (path.startsWith('/manufacturers')) return 'manufacturers';
     if (path === '/shop' || path.startsWith('/shop/products')) return 'shop';
     if (path.startsWith('/shop/')) return 'cart'; // cart/checkout/orders - no nav highlight
     if (path.startsWith('/dashboard')) return 'dashboard';
@@ -259,7 +261,7 @@ export default function Navbar() {
             >
               <button
                 className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                  currentPage === 'members' || currentPage === 'teams'
+                  currentPage === 'members' || currentPage === 'teams' || currentPage === 'retailers' || currentPage === 'manufacturers'
                     ? 'bg-orange-600 text-white'
                     : 'text-gray-300 hover:bg-slate-800 hover:text-white'
                 }`}
@@ -291,6 +293,26 @@ export default function Navbar() {
                     >
                       <Shield className="h-4 w-4" />
                       Teams Directory
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/retailers');
+                        setMembersMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Store className="h-4 w-4" />
+                      Retailers
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/manufacturers');
+                        setMembersMenuOpen(false);
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-4 py-2 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors whitespace-nowrap"
+                    >
+                      <Factory className="h-4 w-4" />
+                      Manufacturers
                     </button>
                   </div>
                 </div>
@@ -758,6 +780,34 @@ export default function Navbar() {
                 >
                   <Shield className="h-5 w-5" />
                   Teams Directory
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/retailers');
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                    currentPage === 'retailers'
+                      ? 'bg-orange-600 text-white'
+                      : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Store className="h-5 w-5" />
+                  Retailers
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/manufacturers');
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-base font-medium ${
+                    currentPage === 'manufacturers'
+                      ? 'bg-orange-600 text-white'
+                      : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Factory className="h-5 w-5" />
+                  Manufacturers
                 </button>
               </>
             )}

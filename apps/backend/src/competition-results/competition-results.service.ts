@@ -6,6 +6,7 @@ import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CompetitionClass } from '../competition-classes/competition-classes.entity';
 import { ClassNameMapping } from '../class-name-mappings/class-name-mappings.entity';
+import { SiteSettings } from '../site-settings/site-settings.entity';
 import { Season } from '../seasons/seasons.entity';
 import { AuditService } from '../audit/audit.service';
 import { Membership } from '../memberships/memberships.entity';
@@ -1889,7 +1890,14 @@ export class CompetitionResultsService {
     );
     const countById = new Map(countRows.map((r) => [r.class_id, Number(r.c)]));
 
-    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Groups the admin has explicitly marked "not duplicates" — skip these.
+    const ignores = await this.getMergeIgnores(em);
+
+    // Normalize for grouping: lowercase + collapse whitespace ONLY. We must
+    // NOT strip punctuation — that wrongly merged genuinely different classes
+    // like "SQ2" and "SQ2+" (the "+" is meaningful). This now only groups
+    // names that differ by case or spacing.
+    const norm = (s: string) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
     const groups = new Map<string, CompetitionClass[]>();
     for (const cls of classes) {
       const key = `${(cls.format || '').toLowerCase()}::${norm(cls.name)}`;
@@ -1904,6 +1912,10 @@ export class CompetitionResultsService {
     const suggestions: any[] = [];
     for (const list of groups.values()) {
       if (list.length < 2) continue;
+      // Skip groups the admin marked "not duplicates" (matched by the exact
+      // set of class ids, sorted).
+      const groupKey = [...list].map((c) => c.id).sort().join(',');
+      if (ignores.has(groupKey)) continue;
       // Rank best-canonical-first: real abbreviation, then most results,
       // then a set display order.
       const ranked = [...list].sort((a, b) => {
@@ -1926,6 +1938,54 @@ export class CompetitionResultsService {
       b.duplicates.reduce((s: number, d: any) => s + d.resultCount, 0) -
       a.duplicates.reduce((s: number, d: any) => s + d.resultCount, 0));
     return suggestions;
+  }
+
+  // site_settings key holding the JSON array of "not a duplicate" group keys
+  // (each = the group's class ids, sorted, comma-joined).
+  private static readonly MERGE_IGNORE_KEY = 'duplicate_class_merge_ignores';
+
+  private async getMergeIgnores(em: EntityManager): Promise<Set<string>> {
+    try {
+      const row = await em.findOne(SiteSettings, { setting_key: CompetitionResultsService.MERGE_IGNORE_KEY });
+      if (!row?.setting_value) return new Set();
+      const arr = JSON.parse(row.setting_value);
+      return new Set(Array.isArray(arr) ? arr.map((x: any) => String(x)) : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  /**
+   * Mark a set of classes as "not duplicates" so the scan stops suggesting
+   * them as a group (e.g. SQ2 vs SQ2+ — genuinely different classes). Stored
+   * in site_settings; keyed by the sorted class-id set so it's stable.
+   */
+  async ignoreDuplicateGroup(classIds: string[]): Promise<{ ignored: string }> {
+    const key = [...new Set((classIds || []).filter(Boolean))].sort().join(',');
+    if (!key || !key.includes(',')) {
+      throw new BadRequestException('Provide at least two class ids to mark as not duplicates.');
+    }
+    const em = this.em.fork();
+    let row = await em.findOne(SiteSettings, { setting_key: CompetitionResultsService.MERGE_IGNORE_KEY });
+    const current: string[] = (() => {
+      try { return row?.setting_value ? JSON.parse(row.setting_value) : []; } catch { return []; }
+    })();
+    if (!current.includes(key)) current.push(key);
+    if (row) {
+      row.setting_value = JSON.stringify(current);
+    } else {
+      // No unique-constraint upsert here — site_settings has the key unique,
+      // so a plain create is fine for the first write.
+      row = em.create(SiteSettings, {
+        setting_key: CompetitionResultsService.MERGE_IGNORE_KEY,
+        setting_value: JSON.stringify(current),
+        setting_type: 'json',
+        description: 'Class-id groups an admin marked as NOT duplicates (merge tool skip list)',
+      } as any);
+      em.persist(row);
+    }
+    await em.flush();
+    return { ignored: key };
   }
 
   /**

@@ -94,6 +94,23 @@ export default function ClassesManagementPage() {
     }
   };
 
+  // Mark a suggested group as "not duplicates" so it never appears again
+  // (e.g. SQ2 vs SQ2+). Persists server-side and drops it from the list now.
+  const handleSkipGroup = async (group: DupGroup) => {
+    const ids = [group.canonical.id, ...group.duplicates.map((d) => d.id)];
+    setMergingGroup(group.canonical.id);
+    setDupMsg(null);
+    try {
+      await competitionResultsApi.ignoreDuplicateClasses(ids);
+      setDupGroups((prev) => prev.filter((g) => g.canonical.id !== group.canonical.id));
+      setDupMsg('Marked as not duplicates — this group won\'t be suggested again.');
+    } catch (err: any) {
+      setDupMsg(err?.response?.data?.message || err?.message || 'Failed to skip group');
+    } finally {
+      setMergingGroup(null);
+    }
+  };
+
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [classes, setClasses] = useState<CompetitionClass[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<CompetitionClass[]>([]);
@@ -1329,13 +1346,23 @@ export default function ClassesManagementPage() {
                       <div key={g.canonical.id} className="bg-slate-900 rounded-lg p-4 border border-slate-700">
                         <div className="flex items-center justify-between mb-3">
                           <span className="px-2 py-0.5 bg-cyan-500/15 text-cyan-300 text-xs font-semibold rounded-full">{g.format}</span>
-                          <button
-                            onClick={() => handleMergeGroup(g)}
-                            disabled={isMerging}
-                            className="px-4 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors"
-                          >
-                            {isMerging ? 'Merging…' : 'Merge'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSkipGroup(g)}
+                              disabled={isMerging}
+                              title="These are different classes — never suggest this group again"
+                              className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-gray-200 font-medium rounded-lg transition-colors"
+                            >
+                              Not duplicates
+                            </button>
+                            <button
+                              onClick={() => handleMergeGroup(g)}
+                              disabled={isMerging}
+                              className="px-4 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors"
+                            >
+                              {isMerging ? 'Merging…' : 'Merge'}
+                            </button>
+                          </div>
                         </div>
                         <p className="text-gray-400 text-xs mb-2">Select the class to KEEP:</p>
                         <div className="space-y-1.5">
