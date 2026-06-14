@@ -422,6 +422,18 @@ export class EventRegistrationsController {
     return this.eventRegistrationsService.processRefund(id);
   }
 
+  // Admin: permanently delete a registration/interest (Interests "delete"
+  // action). Admin-guarded, unlike the public DELETE :id above.
+  @Delete('admin/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async adminDeleteRegistration(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.requireAdmin(authHeader);
+    return this.eventRegistrationsService.delete(id);
+  }
+
   @Get('admin/event/:eventId/stats')
   async getEventCheckInStats(
     @Headers('authorization') authHeader: string,

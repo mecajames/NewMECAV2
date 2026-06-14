@@ -1154,6 +1154,31 @@ export class ScheduledTasksService {
   }
 
   /**
+   * Discard abandoned paid pre-registrations — rows still AWAITING_PAYMENT
+   * (checkout started, never paid) older than 2 hours. A confirmed payment
+   * flips the row to CONFIRMED long before this runs, so only truly abandoned
+   * checkouts are removed — making "nothing left behind" true.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleAbandonedAwaitingPaymentCleanup() {
+    try {
+      const em = this.em.fork();
+      const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      // Guard against a stale shared build resolving the enum to undefined.
+      const awaiting = RegistrationStatus.AWAITING_PAYMENT ?? 'awaiting_payment';
+      const stale = await em.find(EventRegistration, {
+        registrationStatus: awaiting as any,
+        createdAt: { $lt: cutoff },
+      });
+      if (stale.length === 0) return;
+      await em.removeAndFlush(stale);
+      this.logger.log(`Discarded ${stale.length} abandoned awaiting-payment registration(s)`);
+    } catch (error) {
+      this.logger.error('Error cleaning up abandoned awaiting-payment registrations:', error);
+    }
+  }
+
+  /**
    * Manually trigger log rotation (for testing)
    */
   async triggerLogRotation(): Promise<{ success: boolean; message: string }> {

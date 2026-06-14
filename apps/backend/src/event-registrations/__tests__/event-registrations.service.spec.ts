@@ -8,6 +8,8 @@ import { Event } from '../../events/events.entity';
 import { Profile } from '../../profiles/profiles.entity';
 import { QrCodeService } from '../qr-code.service';
 import { EmailService } from '../../email/email.service';
+import { AdminNotificationsService } from '../../admin-notifications/admin-notifications.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { createMockEntityManager } from '../../../test/mocks/mikro-orm.mock';
 import { createMockEventRegistration, createMockEvent } from '../../../test/utils/test-utils';
 import { RegistrationStatus, PaymentStatus } from '@newmeca/shared';
@@ -20,6 +22,10 @@ describe('EventRegistrationsService', () => {
 
   beforeEach(async () => {
     mockEm = createMockEntityManager();
+    // adminList reads raw event_id/order rows via the connection.
+    (mockEm as any).getConnection = jest.fn().mockReturnValue({
+      execute: jest.fn().mockResolvedValue([]),
+    });
 
     mockQrCodeService = {
       generateCheckInData: jest.fn().mockResolvedValue({
@@ -49,6 +55,14 @@ describe('EventRegistrationsService', () => {
         {
           provide: EmailService,
           useValue: mockEmailService,
+        },
+        {
+          provide: AdminNotificationsService,
+          useValue: { notifyNewEventRegistration: jest.fn(), notify: jest.fn() },
+        },
+        {
+          provide: NotificationsService,
+          useValue: { createForUser: jest.fn(), create: jest.fn() },
         },
       ],
     }).compile();
@@ -426,7 +440,10 @@ describe('EventRegistrationsService', () => {
       const result = await service.findByEmail('TEST@EXAMPLE.COM');
 
       expect(mockEm.fork).toHaveBeenCalled();
-      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, { email: 'test@example.com' }, {
+      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, {
+        email: 'test@example.com',
+        registrationStatus: { $ne: RegistrationStatus.AWAITING_PAYMENT },
+      }, {
         populate: ['event', 'classes'],
         orderBy: { createdAt: 'DESC' },
       });
@@ -454,7 +471,10 @@ describe('EventRegistrationsService', () => {
       const result = await service.findByUser('user-123');
 
       expect(mockEm.fork).toHaveBeenCalled();
-      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, { user: 'user-123' }, {
+      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, {
+        user: 'user-123',
+        registrationStatus: { $ne: RegistrationStatus.AWAITING_PAYMENT },
+      }, {
         populate: ['event', 'classes'],
         orderBy: { createdAt: 'DESC' },
       });
@@ -762,19 +782,21 @@ describe('EventRegistrationsService', () => {
       const result = await service.adminList({});
 
       expect(mockEm.fork).toHaveBeenCalled();
-      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, {}, {
+      // "All" view excludes the invisible awaiting-payment rows.
+      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, {
+        registrationStatus: { $ne: RegistrationStatus.AWAITING_PAYMENT },
+      }, {
         populate: ['event', 'user', 'classes'],
         orderBy: { createdAt: 'DESC' },
         limit: 20,
         offset: 0,
       });
-      expect(result).toEqual({
-        registrations: mockRegs,
-        total: 1,
-        page: 1,
-        limit: 20,
-        totalPages: 1,
-      });
+      // adminList now returns a mapped DTO shape, not raw entities.
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
+      expect(result.totalPages).toBe(1);
+      expect(result.registrations).toHaveLength(1);
     });
 
     it('should apply eventId filter', async () => {
@@ -1107,7 +1129,9 @@ describe('EventRegistrationsService', () => {
       const result = await service.getStats();
 
       expect(mockEm.fork).toHaveBeenCalled();
-      expect(mockEm.count).toHaveBeenCalledWith(EventRegistration, {});
+      expect(mockEm.count).toHaveBeenCalledWith(EventRegistration, {
+        registrationStatus: { $nin: [RegistrationStatus.INTERESTED, RegistrationStatus.AWAITING_PAYMENT] },
+      });
       expect(result).toEqual({ totalRegistrations: 42 });
     });
 
@@ -1131,7 +1155,10 @@ describe('EventRegistrationsService', () => {
       const result = await service.getCountByEvent('event-1');
 
       expect(mockEm.fork).toHaveBeenCalled();
-      expect(mockEm.count).toHaveBeenCalledWith(EventRegistration, { event: 'event-1' });
+      expect(mockEm.count).toHaveBeenCalledWith(EventRegistration, {
+        event: 'event-1',
+        registrationStatus: { $nin: [RegistrationStatus.INTERESTED, RegistrationStatus.AWAITING_PAYMENT] },
+      });
       expect(result).toEqual({ count: 15 });
     });
 
@@ -1187,7 +1214,10 @@ describe('EventRegistrationsService', () => {
       const result = await service.findByEvent('event-1');
 
       expect(mockEm.fork).toHaveBeenCalled();
-      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, { event: 'event-1' }, {
+      expect(mockEm.find).toHaveBeenCalledWith(EventRegistration, {
+        event: 'event-1',
+        registrationStatus: { $ne: RegistrationStatus.AWAITING_PAYMENT },
+      }, {
         populate: ['user', 'classes'],
         orderBy: { createdAt: 'DESC' },
       });

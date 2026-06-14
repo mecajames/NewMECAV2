@@ -670,7 +670,9 @@ export default function EventDetailPage() {
 
           {/* Action Buttons */}
           <div className="space-y-3">
-            {event.status === 'upcoming' && (
+            {/* Pre-Register only when this event has pre-registration enabled.
+                Otherwise only the "I'm Interested" button shows below. */}
+            {event.status === 'upcoming' && (event as any).allow_pre_registration && (
               <button
                 onClick={() => navigate(`/events/${eventId}/register`)}
                 className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"

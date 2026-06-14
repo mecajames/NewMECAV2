@@ -57,6 +57,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
     non_member_entry_fee: '',
     has_gate_fee: '' as '' | 'yes' | 'no',
     gate_fee: '',
+    allow_pre_registration: false,
     formats: [] as string[],
     points_multiplier: '1',
     event_type: 'standard',
@@ -325,6 +326,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       non_member_entry_fee: formData.non_member_entry_fee ? parseFloat(formData.non_member_entry_fee) : null,
       has_gate_fee: formData.has_gate_fee === 'yes',
       gate_fee: formData.gate_fee ? parseFloat(formData.gate_fee) : null,
+      allow_pre_registration: formData.allow_pre_registration,
       formats: formData.formats.length > 0 ? formData.formats : null,
       points_multiplier: parseInt(formData.points_multiplier),
       event_type: formData.event_type,
@@ -429,6 +431,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       non_member_entry_fee: (event as any).non_member_entry_fee?.toString() || '',
       has_gate_fee: (event as any).has_gate_fee ? 'yes' : 'no',
       gate_fee: (event as any).gate_fee?.toString() || '',
+      allow_pre_registration: !!(event as any).allow_pre_registration,
       formats: event.formats || [],
       points_multiplier: (event as any).points_multiplier?.toString() || '1',
       event_type: (event as any).event_type || 'standard',
@@ -479,6 +482,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       non_member_entry_fee: '',
       has_gate_fee: '',
       gate_fee: '',
+      allow_pre_registration: false,
       points_multiplier: '1',
       event_type: 'standard',
       formats: [],
@@ -1752,6 +1756,28 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                     />
                   </div>
                 )}
+              </div>
+
+              {/* Pre-registration toggle — when off, the public event page only
+                  shows "I'm Interested"; when on, it offers paid pre-registration. */}
+              <div className="bg-slate-700/40 border border-slate-600 rounded-lg p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.allow_pre_registration}
+                    onChange={(e) =>
+                      setFormData({ ...formData, allow_pre_registration: e.target.checked })
+                    }
+                    className="mt-1 w-4 h-4 rounded border-slate-500 bg-slate-600 text-orange-500 focus:ring-orange-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-white">Allow pre-registration</span>
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      When enabled, competitors can pre-register and pay for this event online.
+                      When off, the event page only shows the "I'm Interested" button.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <div className="flex gap-4">

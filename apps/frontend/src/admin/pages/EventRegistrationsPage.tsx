@@ -21,6 +21,7 @@ import {
   Printer,
   Loader2,
   X,
+  Trash2,
 } from 'lucide-react';
 import { usePermissions } from '@/auth';
 import { eventsApi, Event } from '@/events/events.api-client';
@@ -51,7 +52,8 @@ export default function EventRegistrationsPage() {
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
   const [paymentFilter, setPaymentFilter] = useState(searchParams.get('paymentStatus') || 'all');
   const [checkInFilter, setCheckInFilter] = useState(searchParams.get('checkedIn') || 'all');
-  const [registrationType, setRegistrationType] = useState(searchParams.get('registrationType') || 'all');
+  // Default to Registrations (paid/real entries); admins toggle to Interests/All.
+  const [registrationType, setRegistrationType] = useState(searchParams.get('registrationType') || 'registrations');
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
   const [limit] = useState(20);
 
@@ -63,6 +65,10 @@ export default function EventRegistrationsPage() {
   // Action state
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [scoreSheetLoading, setScoreSheetLoading] = useState(false);
+  // Cancel-a-paid-registration modal: offer refund-then-cancel.
+  const [cancelTarget, setCancelTarget] = useState<EventRegistration | null>(null);
+  const [cancelRefundFirst, setCancelRefundFirst] = useState(true);
+  const [cancelProcessing, setCancelProcessing] = useState(false);
 
   const handleViewScoreSheets = async () => {
     if (eventFilter === 'all') return;
@@ -197,6 +203,43 @@ export default function EventRegistrationsPage() {
       alert('Failed to process refund');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  // Delete an interest/registration outright (Interests "delete" action).
+  const handleDelete = async (id: string) => {
+    if (!confirm('Permanently delete this entry? This cannot be undone.')) return;
+    setActionLoading(id);
+    try {
+      await eventRegistrationsApi.adminDelete(id);
+      await fetchRegistrations();
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      alert('Failed to delete entry');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Confirm the cancel-a-paid-registration modal: optionally refund first
+  // (which also cancels), otherwise just cancel.
+  const confirmCancelPaid = async () => {
+    if (!cancelTarget) return;
+    setCancelProcessing(true);
+    try {
+      if (cancelRefundFirst && cancelTarget.paymentStatus === 'paid') {
+        // processRefund refunds AND sets the registration to cancelled.
+        await eventRegistrationsApi.adminRefund(cancelTarget.id);
+      } else {
+        await eventRegistrationsApi.adminCancel(cancelTarget.id);
+      }
+      setCancelTarget(null);
+      await fetchRegistrations();
+    } catch (error) {
+      console.error('Error cancelling registration:', error);
+      alert('Failed to cancel registration');
+    } finally {
+      setCancelProcessing(false);
     }
   };
 
@@ -582,9 +625,11 @@ export default function EventRegistrationsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Payment
-                  </th>
+                  {registrationType !== 'interests' && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Payment
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Check-In
                   </th>
@@ -599,8 +644,8 @@ export default function EventRegistrationsPage() {
               <tbody className="bg-slate-800 divide-y divide-slate-700">
                 {registrations.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-gray-400">
-                      No registrations found matching your criteria.
+                    <td colSpan={registrationType !== 'interests' ? 8 : 7} className="px-6 py-12 text-center text-gray-400">
+                      No {registrationType === 'interests' ? 'interests' : 'registrations'} found matching your criteria.
                     </td>
                   </tr>
                 ) : (
@@ -611,12 +656,34 @@ export default function EventRegistrationsPage() {
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-medium text-white">
-                            {reg.firstName} {reg.lastName}
-                          </div>
+                          {(reg.firstName || reg.lastName) && (
+                            <div className="text-sm font-medium text-white">
+                              {reg.userId ? (
+                                <button
+                                  onClick={() => navigate(`/admin/members/${reg.userId}`)}
+                                  className="text-orange-400 hover:text-orange-300 hover:underline"
+                                  title="View member profile"
+                                >
+                                  {reg.firstName} {reg.lastName}
+                                </button>
+                              ) : (
+                                <>{reg.firstName} {reg.lastName}</>
+                              )}
+                            </div>
+                          )}
                           <div className="text-sm text-gray-400 flex items-center gap-1">
                             <Mail className="h-3 w-3" />
-                            {reg.email}
+                            {reg.userId ? (
+                              <button
+                                onClick={() => navigate(`/admin/members/${reg.userId}`)}
+                                className="hover:text-orange-300 hover:underline"
+                                title="View member profile"
+                              >
+                                {reg.email}
+                              </button>
+                            ) : (
+                              reg.email
+                            )}
                           </div>
                           {reg.phone && (
                             <div className="text-sm text-gray-400 flex items-center gap-1">
@@ -624,16 +691,19 @@ export default function EventRegistrationsPage() {
                               {reg.phone}
                             </div>
                           )}
+                          {reg.userId && (
+                            <div className="text-xs text-green-400 mt-0.5">Member{reg.mecaId ? ` · #${reg.mecaId}` : ''}</div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-white">
                           {reg.event?.title || 'Unknown Event'}
                         </div>
-                        {reg.event?.event_date && (
+                        {(reg.event?.eventDate || reg.event?.event_date) && (
                           <div className="text-sm text-gray-400 flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            {new Date(reg.event.event_date).toLocaleDateString()}
+                            {new Date(reg.event.eventDate || reg.event.event_date).toLocaleDateString()}
                           </div>
                         )}
                       </td>
@@ -660,17 +730,39 @@ export default function EventRegistrationsPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(reg.registrationStatus)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          {getPaymentBadge(reg.paymentStatus)}
-                          {reg.amountPaid && (
-                            <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                              <DollarSign className="h-3 w-3" />
-                              ${reg.amountPaid.toFixed(2)}
+                      {registrationType !== 'interests' && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {reg.registrationType === 'interest' ? (
+                            <span className="text-gray-500 text-sm">—</span>
+                          ) : (
+                            <div>
+                              {/* Paid/refunded links to the order + invoice + payment in billing */}
+                              {(reg.paymentStatus === 'paid' || reg.paymentStatus === 'refunded') && reg.orderId ? (
+                                <button
+                                  onClick={() => navigate(`/admin/billing/orders/${reg.orderId}`)}
+                                  title="View order, invoice & payment"
+                                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 hover:bg-green-200 hover:underline"
+                                >
+                                  {reg.paymentStatus === 'refunded' ? 'Refunded' : 'Paid'}
+                                </button>
+                              ) : (
+                                getPaymentBadge(reg.paymentStatus)
+                              )}
+                              {reg.paymentMethod && (
+                                <div className="text-xs text-gray-400 mt-1 capitalize">
+                                  via {reg.paymentMethod === 'paypal' ? 'PayPal' : 'Stripe'}
+                                </div>
+                              )}
+                              {reg.amountPaid != null && reg.amountPaid > 0 && (
+                                <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                  <DollarSign className="h-3 w-3" />
+                                  ${reg.amountPaid.toFixed(2)}
+                                </div>
+                              )}
                             </div>
                           )}
-                        </div>
-                      </td>
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         {reg.checkedIn ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -690,10 +782,11 @@ export default function EventRegistrationsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                        {reg.registeredAt
-                          ? new Date(reg.registeredAt).toLocaleDateString()
-                          : new Date(reg.created_at || '').toLocaleDateString()
-                        }
+                        {(() => {
+                          const raw = reg.registeredAt || reg.createdAt || reg.created_at;
+                          const d = raw ? new Date(raw) : null;
+                          return d && !isNaN(d.getTime()) ? d.toLocaleDateString() : '—';
+                        })()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
@@ -704,26 +797,59 @@ export default function EventRegistrationsPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          {reg.registrationStatus !== 'cancelled' && (
-                            <button
-                              onClick={() => handleCancel(reg.id)}
-                              disabled={actionLoading === reg.id}
-                              className="text-red-500 hover:text-red-400 disabled:opacity-50"
-                              title="Cancel Registration"
-                            >
-                              <Ban className="h-4 w-4" />
-                            </button>
-                          )}
-                          {reg.paymentStatus === 'paid' && reg.registrationStatus !== 'cancelled' && (
-                            <button
-                              onClick={() => handleRefund(reg.id)}
-                              disabled={actionLoading === reg.id}
-                              className="text-blue-500 hover:text-blue-400 disabled:opacity-50"
-                              title="Process Refund"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </button>
-                          )}
+
+                          {reg.registrationType === 'interest' ? (
+                            <>
+                              {/* Interests: cancel + delete */}
+                              {reg.registrationStatus !== 'cancelled' && (
+                                <button
+                                  onClick={() => handleCancel(reg.id)}
+                                  disabled={actionLoading === reg.id}
+                                  className="text-red-500 hover:text-red-400 disabled:opacity-50"
+                                  title="Cancel Interest"
+                                >
+                                  <Ban className="h-4 w-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDelete(reg.id)}
+                                disabled={actionLoading === reg.id}
+                                className="text-red-600 hover:text-red-500 disabled:opacity-50"
+                                title="Delete Interest"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : reg.registrationStatus !== 'cancelled' ? (
+                            <>
+                              {/* Paid registrations: refund + cancel (cancel offers refund-first) */}
+                              {reg.paymentStatus === 'paid' && (
+                                <button
+                                  onClick={() => handleRefund(reg.id)}
+                                  disabled={actionLoading === reg.id}
+                                  className="text-blue-500 hover:text-blue-400 disabled:opacity-50"
+                                  title="Process Refund"
+                                >
+                                  <RefreshCw className="h-4 w-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  if (reg.paymentStatus === 'paid') {
+                                    setCancelRefundFirst(true);
+                                    setCancelTarget(reg);
+                                  } else {
+                                    handleCancel(reg.id);
+                                  }
+                                }}
+                                disabled={actionLoading === reg.id}
+                                className="text-red-500 hover:text-red-400 disabled:opacity-50"
+                                title="Cancel Registration"
+                              >
+                                <Ban className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -761,6 +887,65 @@ export default function EventRegistrationsPage() {
           )}
         </div>
       </div>
+
+      {/* Cancel a PAID registration — offer to refund first, then cancel */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-slate-800 rounded-xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <h2 className="text-lg font-bold text-white">Cancel Registration</h2>
+              <button onClick={() => setCancelTarget(null)} className="text-gray-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-gray-300 text-sm">
+                Cancel the registration for{' '}
+                <span className="font-semibold text-white">
+                  {cancelTarget.firstName} {cancelTarget.lastName}
+                </span>
+                {cancelTarget.event?.title ? <> in <span className="font-semibold text-white">{cancelTarget.event.title}</span></> : null}?
+              </p>
+              <p className="text-sm text-gray-400">
+                This registration was paid
+                {cancelTarget.amountPaid != null && cancelTarget.amountPaid > 0 ? ` ($${cancelTarget.amountPaid.toFixed(2)})` : ''}
+                {cancelTarget.paymentMethod ? ` via ${cancelTarget.paymentMethod === 'paypal' ? 'PayPal' : 'Stripe'}` : ''}.
+              </p>
+              <label className="flex items-start gap-3 cursor-pointer bg-slate-700/50 border border-slate-600 rounded-lg p-3">
+                <input
+                  type="checkbox"
+                  checked={cancelRefundFirst}
+                  onChange={(e) => setCancelRefundFirst(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-slate-500 bg-slate-600 text-orange-500 focus:ring-orange-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-white">Refund the payment first</span>
+                  <span className="block text-xs text-gray-400 mt-0.5">
+                    Processes a refund, then cancels. Uncheck to cancel WITHOUT refunding (the payment stays as-is).
+                  </span>
+                </span>
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-slate-700">
+              <button
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelProcessing}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg disabled:opacity-50"
+              >
+                Keep Registration
+              </button>
+              <button
+                onClick={confirmCancelPaid}
+                disabled={cancelProcessing}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg disabled:opacity-50 flex items-center gap-2"
+              >
+                {cancelProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
+                {cancelRefundFirst ? 'Refund & Cancel' : 'Cancel Only'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
