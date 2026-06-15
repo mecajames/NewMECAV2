@@ -37,7 +37,13 @@ export interface EventRegistration {
   classes?: EventRegistrationClass[];
   event?: any;
   created_at?: string;
+  createdAt?: string;
   updated_at?: string;
+  // Admin-list DTO additions (event-registrations.service.adminList):
+  registrationType?: 'registration' | 'interest';
+  userId?: string | null;
+  orderId?: string | null;
+  paymentMethod?: 'stripe' | 'paypal' | null;
 }
 
 export interface EventRegistrationClass {
@@ -262,6 +268,10 @@ export const eventRegistrationsApi = {
   adminRefund: async (id: string): Promise<EventRegistration> => {
     const response = await axios.post(`/api/event-registrations/admin/${id}/refund`);
     return response.data;
+  },
+
+  adminDelete: async (id: string): Promise<void> => {
+    await axios.delete(`/api/event-registrations/admin/${id}`);
   },
 
   getEventCheckInStats: async (eventId: string): Promise<{ total: number; checkedIn: number; pending: number }> => {

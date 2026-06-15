@@ -21,7 +21,7 @@ import { MasterSecondaryService } from '../memberships/master-secondary.service'
 import { MecaIdService } from '../memberships/meca-id.service';
 import { MembershipSyncService } from '../memberships/membership-sync.service';
 import { Membership } from '../memberships/memberships.entity';
-import { PaymentStatus } from '@newmeca/shared';
+import { PaymentStatus, RegistrationStatus } from '@newmeca/shared';
 import { QuickBooksService } from '../quickbooks/quickbooks.service';
 import { EventRegistrationsService, CreateRegistrationDto } from '../event-registrations/event-registrations.service';
 import { OrdersService } from '../orders/orders.service';
@@ -368,7 +368,20 @@ export class StripeController {
     const tax = await this.taxService.calculateTax(totalAmount);
     totalAmount += tax.taxAmount;
 
-    // Create the registration in pending state
+    // Convert price to cents for Stripe
+    const amountInCents = Math.round(totalAmount * 100);
+
+    // Create the registration. A PAID pre-registration starts as
+    // AWAITING_PAYMENT so it's invisible everywhere until payment confirms —
+    // an abandoned checkout leaves nothing behind (a cron discards stale
+    // awaiting rows). A $0 registration has nothing to pay, so it's created
+    // pending and confirmed immediately below.
+    // Guard against a stale @newmeca/shared build resolving the (new) enum
+    // value to undefined — fall back to the literal so the row never gets a
+    // null status.
+    const initialStatus = amountInCents > 0
+      ? ((RegistrationStatus.AWAITING_PAYMENT ?? 'awaiting_payment') as RegistrationStatus)
+      : RegistrationStatus.PENDING;
     const registration = await this.eventRegistrationsService.createRegistration({
       eventId: data.eventId,
       userId: data.userId,
@@ -390,10 +403,21 @@ export class StripeController {
       includeMembership: data.includeMembership,
       membershipTypeConfigId: data.membershipTypeConfigId,
       mecaId: data.mecaId,
-    }, isMember);
+    }, isMember, initialStatus);
 
-    // Convert price to cents for Stripe
-    const amountInCents = Math.round(totalAmount * 100);
+    // $0 registration (free) — nothing to charge: confirm immediately and
+    // create the order/invoice, skipping Stripe entirely.
+    if (amountInCents <= 0) {
+      await this.eventRegistrationsService.markAsPaid(registration.id, 'free-registration', 0);
+      this.createOrderAndInvoiceFromRegistration(registration.id).catch((error) => {
+        console.error('Order/Invoice creation failed for free registration (non-critical):', error);
+      });
+      return {
+        clientSecret: 'free-no-payment',
+        paymentIntentId: 'free-registration',
+        registrationId: registration.id,
+      };
+    }
 
     // Create metadata
     const metadata: Record<string, string> = {

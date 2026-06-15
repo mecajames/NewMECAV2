@@ -75,6 +75,12 @@ export class Event {
   nonMemberEntryFee?: number;
 
   // Gate Fee
+  // When true, the public event page offers paid pre-registration (the
+  // "Pre-Register" button + checkout). When false (default), only the
+  // "I'm Interested" button shows — not every event takes pre-registrations.
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'allow_pre_registration', serializedName: 'allow_pre_registration' })
+  allowPreRegistration?: boolean;
+
   @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'has_gate_fee', serializedName: 'has_gate_fee' })
   hasGateFee?: boolean;
 

@@ -9,6 +9,7 @@ import { QaDeveloperFix } from './qa-developer-fix.entity';
 import { QaMasterItem } from './qa-master-item.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { CHECKLIST_SECTIONS } from './qa-checklist-data';
+import { adminRecipientWhere } from '../auth/is-admin.helper';
 
 // Shape used by both round-creation and mid-round add for new custom items.
 export interface CustomItemInput {
@@ -1158,7 +1159,7 @@ export class QaService {
 
   async getAdminUsers() {
     const em = this.em.fork();
-    const admins = await em.find(Profile, { $or: [{ role: 'admin' }, { is_staff: true }] }, {
+    const admins = await em.find(Profile, adminRecipientWhere() as any, {
       fields: ['id', 'first_name', 'last_name', 'email'],
       orderBy: { last_name: 'ASC', first_name: 'ASC' },
     });

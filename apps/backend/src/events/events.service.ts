@@ -271,6 +271,7 @@ export class EventsService {
       if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
       if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
       if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
+      if ((data as any).allow_pre_registration !== undefined) transformedData.allowPreRegistration = (data as any).allow_pre_registration;
 
       // Handle relationships using Reference.createFromPK for proper MikroORM pattern
       const eventDirectorId = (data as any).event_director_id;
@@ -413,6 +414,7 @@ export class EventsService {
         if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
         if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
         if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
+        if ((data as any).allow_pre_registration !== undefined) transformedData.allowPreRegistration = (data as any).allow_pre_registration;
 
         // Handle relationships using Reference.createFromPK for proper MikroORM pattern
         const eventDirectorId = (data as any).event_director_id;
@@ -558,6 +560,7 @@ export class EventsService {
     if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
     if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
     if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
+    if ((data as any).allow_pre_registration !== undefined) transformedData.allowPreRegistration = (data as any).allow_pre_registration;
 
     // Copy fields that don't need transformation
     if (data.title !== undefined) transformedData.title = data.title;

@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { EventRegistration } from './event-registrations.entity';
 import { EventRegistrationClass } from './event-registration-classes.entity';
 import { Event } from '../events/events.entity';
+import { Order } from '../orders/orders.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { EmailVerificationToken } from '../auth/email-verification-token.entity';
@@ -96,6 +97,14 @@ export interface CheckInResponse {
     info?: string;
   };
 }
+
+// Guarded status literals. If the @newmeca/shared build the running backend
+// resolves is stale, RegistrationStatus.AWAITING_PAYMENT can be `undefined` —
+// and a `$nin: [..., undefined]` becomes SQL `NOT IN (..., NULL)`, which is
+// NULL for EVERY row, silently returning zero results. Falling back to the
+// literal keeps these queries correct regardless of build state.
+const ST_INTERESTED = (RegistrationStatus.INTERESTED ?? 'interested') as RegistrationStatus;
+const ST_AWAITING = (RegistrationStatus.AWAITING_PAYMENT ?? 'awaiting_payment') as RegistrationStatus;
 
 @Injectable()
 export class EventRegistrationsService {
@@ -198,7 +207,11 @@ export class EventRegistrationsService {
   /**
    * Create a new event registration (for both guests and logged-in users).
    */
-  async createRegistration(dto: CreateRegistrationDto, isMember: boolean): Promise<EventRegistration> {
+  async createRegistration(
+    dto: CreateRegistrationDto,
+    isMember: boolean,
+    initialStatus: RegistrationStatus = RegistrationStatus.PENDING,
+  ): Promise<EventRegistration> {
     const em = this.em.fork();
 
     // Verify event exists
@@ -229,7 +242,7 @@ export class EventRegistrationsService {
     registration.vehicleModel = dto.vehicleModel;
     registration.vehicleInfo = dto.vehicleInfo;
     registration.notes = dto.notes;
-    registration.registrationStatus = RegistrationStatus.PENDING;
+    registration.registrationStatus = initialStatus;
     registration.paymentStatus = PaymentStatus.PENDING;
     registration.membershipPurchasedDuringRegistration = dto.includeMembership ?? false;
     registration.event = Reference.createFromPK(Event, dto.eventId) as any;
@@ -307,7 +320,11 @@ export class EventRegistrationsService {
    */
   async findByEmail(email: string): Promise<EventRegistration[]> {
     const em = this.em.fork();
-    return em.find(EventRegistration, { email: email.toLowerCase() }, {
+    return em.find(EventRegistration, {
+      email: email.toLowerCase(),
+      // Hide not-yet-paid pre-registrations (invisible until paid).
+      registrationStatus: { $ne: ST_AWAITING },
+    }, {
       populate: ['event', 'classes'],
       orderBy: { createdAt: 'DESC' },
     });
@@ -318,7 +335,10 @@ export class EventRegistrationsService {
    */
   async findByUser(userId: string): Promise<EventRegistration[]> {
     const em = this.em.fork();
-    return em.find(EventRegistration, { user: userId }, {
+    return em.find(EventRegistration, {
+      user: userId,
+      registrationStatus: { $ne: ST_AWAITING },
+    }, {
       populate: ['event', 'classes'],
       orderBy: { createdAt: 'DESC' },
     });
@@ -515,7 +535,7 @@ export class EventRegistrationsService {
    * Admin: List registrations with filters.
    */
   async adminList(filters: AdminListFilters): Promise<{
-    registrations: EventRegistration[];
+    registrations: any[];
     total: number;
     page: number;
     limit: number;
@@ -544,11 +564,15 @@ export class EventRegistrationsService {
     if (filters.status) {
       where.registrationStatus = filters.status;
     }
-    // Registration type filter
+    // Registration type filter. AWAITING_PAYMENT rows (paid pre-registrations
+    // not yet paid) are NEVER shown — they don't exist until payment confirms.
     if (filters.registrationType === 'registrations') {
-      where.registrationStatus = { $ne: RegistrationStatus.INTERESTED };
+      where.registrationStatus = { $nin: [ST_INTERESTED, ST_AWAITING] };
     } else if (filters.registrationType === 'interests') {
-      where.registrationStatus = RegistrationStatus.INTERESTED;
+      where.registrationStatus = ST_INTERESTED;
+    } else if (!filters.status) {
+      // "All" view: everything except the invisible awaiting-payment rows.
+      where.registrationStatus = { $ne: ST_AWAITING };
     }
     if (filters.paymentStatus) {
       where.paymentStatus = filters.paymentStatus;
@@ -576,8 +600,90 @@ export class EventRegistrationsService {
       em.count(EventRegistration, where),
     ]);
 
+    // Resolve each registration's event by reading the raw event_id FK
+    // straight from the table — NOT the ORM relation, which was coming back
+    // without a title (showing "Unknown Event" even though the event exists).
+    const regIds = registrations.map((r) => r.id);
+    const eventIdByReg = new Map<string, string>();
+    if (regIds.length > 0) {
+      const regRows: Array<{ id: string; event_id: string | null }> = await em
+        .getConnection()
+        .execute(
+          `SELECT id, event_id FROM event_registrations WHERE id IN (${regIds.map(() => '?').join(',')})`,
+          regIds,
+        );
+      for (const row of regRows) {
+        if (row.event_id) eventIdByReg.set(row.id, row.event_id);
+      }
+    }
+    const evIds = [...new Set([...eventIdByReg.values()])];
+    const eventById = new Map<string, { id: string; title: string; eventDate: Date }>();
+    if (evIds.length > 0) {
+      const evRows: Array<{ id: string; title: string; event_date: Date }> = await em
+        .getConnection()
+        .execute(
+          `SELECT id, title, event_date FROM events WHERE id IN (${evIds.map(() => '?').join(',')})`,
+          evIds,
+        );
+      for (const e of evRows) eventById.set(e.id, { id: e.id, title: e.title, eventDate: e.event_date });
+    }
+
+    const billedIds = registrations
+      .filter((r) => r.paymentStatus === PaymentStatus.PAID || r.paymentStatus === PaymentStatus.REFUNDED)
+      .map((r) => r.id);
+    const orderIdByReg = new Map<string, string>();
+    if (billedIds.length > 0) {
+      const likeClauses = billedIds.map(() => 'notes LIKE ?').join(' OR ');
+      const params = billedIds.map((id) => `%registrationId:${id}%`);
+      const orderRows: Array<{ id: string; notes: string }> = await em
+        .getConnection()
+        .execute(`SELECT id, notes FROM orders WHERE ${likeClauses}`, params);
+      for (const row of orderRows) {
+        const m = /registrationId:([0-9a-fA-F-]+)/.exec(row.notes || '');
+        if (m && billedIds.includes(m[1])) orderIdByReg.set(m[1], row.id);
+      }
+    }
+
+    // Stripe vs PayPal from the registration's own fields (the reliable signal):
+    // a Stripe payment intent id means Stripe; otherwise a transaction id on a
+    // paid row means PayPal.
+    const paymentMethodOf = (r: EventRegistration): 'stripe' | 'paypal' | null => {
+      if (r.paymentStatus !== PaymentStatus.PAID && r.paymentStatus !== PaymentStatus.REFUNDED) return null;
+      if (r.stripePaymentIntentId) return 'stripe';
+      if (r.transactionId) return 'paypal';
+      return null;
+    };
+
+    // Explicit, flat shape — never rely on relation serialization (the old
+    // path returned "Unknown Event"/"Invalid Date" because the nested event
+    // and camelCase dates didn't reach the client cleanly).
+    const data = registrations.map((r) => ({
+      id: r.id,
+      registrationType: r.registrationStatus === ST_INTERESTED ? 'interest' : 'registration',
+      event: eventById.get(eventIdByReg.get(r.id) ?? '') ?? null,
+      firstName: r.firstName ?? null,
+      lastName: r.lastName ?? null,
+      email: r.email ?? null,
+      phone: r.phone ?? null,
+      userId: r.user?.id ?? null,
+      mecaId: r.mecaId ?? null,
+      registrationStatus: r.registrationStatus,
+      paymentStatus: r.paymentStatus,
+      paymentMethod: paymentMethodOf(r),
+      amountPaid: r.amountPaid != null ? Number(r.amountPaid) : null,
+      orderId: orderIdByReg.get(r.id) ?? null,
+      classes: (typeof (r.classes as any)?.getItems === 'function'
+        ? (r.classes as any).getItems()
+        : (Array.isArray(r.classes) ? (r.classes as any) : []))
+        .map((c: any) => ({ format: c?.format, className: c?.className })),
+      checkedIn: r.checkedIn,
+      checkedInAt: r.checkedInAt ?? null,
+      registeredAt: r.registeredAt ?? null,
+      createdAt: r.createdAt ?? null,
+    }));
+
     return {
-      registrations,
+      registrations: data,
       total,
       page,
       limit,
@@ -722,7 +828,11 @@ export class EventRegistrationsService {
 
   async findByEvent(eventId: string): Promise<EventRegistration[]> {
     const em = this.em.fork();
-    return em.find(EventRegistration, { event: eventId }, {
+    return em.find(EventRegistration, {
+      event: eventId,
+      // Not-yet-paid pre-registrations are invisible until paid.
+      registrationStatus: { $ne: ST_AWAITING },
+    }, {
       populate: ['user', 'classes'],
       orderBy: { createdAt: 'DESC' },
     });
@@ -731,7 +841,7 @@ export class EventRegistrationsService {
   async getStats(): Promise<{ totalRegistrations: number }> {
     const em = this.em.fork();
     const totalRegistrations = await em.count(EventRegistration, {
-      registrationStatus: { $ne: RegistrationStatus.INTERESTED },
+      registrationStatus: { $nin: [ST_INTERESTED, ST_AWAITING] },
     });
     return { totalRegistrations };
   }
@@ -740,7 +850,7 @@ export class EventRegistrationsService {
     const em = this.em.fork();
     const count = await em.count(EventRegistration, {
       event: eventId,
-      registrationStatus: { $ne: RegistrationStatus.INTERESTED },
+      registrationStatus: { $nin: [ST_INTERESTED, ST_AWAITING] },
     });
     return { count };
   }
@@ -1058,6 +1168,26 @@ export class EventRegistrationsService {
     }
 
     await em.removeAndFlush(registration);
+  }
+
+  /**
+   * Discard abandoned paid pre-registrations — rows still AWAITING_PAYMENT
+   * (checkout started, never paid) older than `olderThanHours`. This is what
+   * makes "nothing left behind" true: a confirmed payment flips the row to
+   * CONFIRMED long before this runs, so only truly abandoned checkouts match.
+   * Returns the number removed.
+   */
+  async cleanupAbandonedAwaitingPayment(olderThanHours = 2): Promise<number> {
+    const em = this.em.fork();
+    const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+    const stale = await em.find(EventRegistration, {
+      registrationStatus: ST_AWAITING,
+      createdAt: { $lt: cutoff },
+    });
+    if (stale.length === 0) return 0;
+    await em.removeAndFlush(stale);
+    this.logger.log(`Cleaned up ${stale.length} abandoned awaiting-payment registration(s)`);
+    return stale.length;
   }
 
   async confirmRegistration(id: string): Promise<EventRegistration> {

@@ -5,7 +5,7 @@ import { EmailService } from '../email/email.service';
 import { AnalyticsService, SummaryStats, TopPage, TrafficSource } from './analytics.service';
 import { SearchConsoleService } from './search-console.service';
 import { Profile } from '../profiles/profiles.entity';
-import { UserRole } from '@newmeca/shared';
+import { adminRecipientWhere } from '../auth/is-admin.helper';
 
 interface SearchQueryData {
   query: string;
@@ -84,7 +84,9 @@ export class AnalyticsEmailService {
 
   private async getAdminEmails(): Promise<string[]> {
     const em = this.em.fork();
-    const admins = await em.find(Profile, { role: UserRole.ADMIN }, {
+    // Canonical admin set (role='admin' OR is_staff OR protected MECA ID),
+    // matching isAdminUser() so staff/protected admins get the report too.
+    const admins = await em.find(Profile, adminRecipientWhere() as any, {
       fields: ['email'],
     });
     return admins

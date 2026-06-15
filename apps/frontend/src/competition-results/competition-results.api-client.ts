@@ -293,6 +293,12 @@ export const competitionResultsApi = {
     return response.data;
   },
 
+  /** Admin — mark a group of classes as NOT duplicates so the scan skips them. */
+  ignoreDuplicateClasses: async (classIds: string[]): Promise<{ ignored: string }> => {
+    const response = await axios.post('/api/competition-results/admin/ignore-duplicate-classes', { classIds });
+    return response.data;
+  },
+
   /**
    * Admin-only — list every result whose class_id can't be resolved
    * (deleted/inactive class AND no text fallback match). These rows
