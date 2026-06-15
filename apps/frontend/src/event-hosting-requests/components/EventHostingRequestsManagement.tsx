@@ -390,6 +390,7 @@ export default function EventHostingRequestsManagement() {
       has_hosted_before: selectedRequest.has_hosted_before,
       member_entry_fee: selectedRequest.member_entry_fee || '',
       non_member_entry_fee: selectedRequest.non_member_entry_fee || '',
+      points_multiplier: selectedRequest.points_multiplier ?? 1,
       has_gate_fee: selectedRequest.has_gate_fee,
       gate_fee: selectedRequest.gate_fee || '',
       pre_registration_available: selectedRequest.pre_registration_available,
@@ -1155,6 +1156,15 @@ export default function EventHostingRequestsManagement() {
                       ) : (
                         <span className="text-gray-500">No</span>
                       )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Points Multiplier (requested)</p>
+                    <p className="text-white">
+                      <span className="text-orange-400 font-semibold">{selectedRequest.points_multiplier || 1}X</span>
+                      <span className="text-gray-400 ml-1">
+                        {selectedRequest.points_multiplier === 2 ? '(Regional)' : selectedRequest.points_multiplier === 3 ? '(State/Major)' : selectedRequest.points_multiplier === 4 ? '(Championship)' : '(Local)'}
+                      </span>
                     </p>
                   </div>
                   <div>
@@ -1988,6 +1998,19 @@ export default function EventHostingRequestsManagement() {
                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                       placeholder="e.g., $25"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Points Multiplier</label>
+                    <select
+                      value={String(editFormData.points_multiplier ?? 1)}
+                      onChange={(e) => handleEditFormChange('points_multiplier', parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="1">1X - Local events</option>
+                      <option value="2">2X - Regional events</option>
+                      <option value="3">3X - State/Major events</option>
+                      <option value="4">4X - Championship events</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">Has Gate Fee?</label>

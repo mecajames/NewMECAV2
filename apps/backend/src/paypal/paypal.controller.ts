@@ -636,6 +636,34 @@ export class PayPalController {
               await em.flush();
               this.logger.log(`Extended membership ${m.id} via PayPal ${eventType}`);
 
+              // Record a billing-ledger Payment row for this PayPal renewal so it
+              // shows up in billing + the reconciliation (mirrors the Stripe
+              // invoice.paid path, which previously was the only renewal that
+              // wrote a ledger row). Idempotent on the PayPal webhook event id.
+              const lastPaymentValue = event.resource?.billing_info?.last_payment?.amount?.value;
+              const renewalAmount = lastPaymentValue ? parseFloat(lastPaymentValue) : Number(m.amountPaid || 0);
+              const renewalCurrency = event.resource?.billing_info?.last_payment?.amount?.currency_code || 'USD';
+              this.paymentFulfillmentService.recordSubscriptionPayment({
+                membershipId: m.id,
+                userId: m.user?.id ?? null,
+                invoiceId: eventId, // PayPal webhook event id → externalPaymentId (unique per renewal)
+                subscriptionId: paypalSubId,
+                amount: renewalAmount,
+                currency: renewalCurrency,
+                status: PaymentStatus.PAID,
+                paymentMethod: PaymentMethod.PAYPAL,
+                source: 'paypal_subscription_renewed_webhook',
+              }).catch((err) => {
+                this.logger.error(`Failed to record PayPal renewal payment row (non-critical): ${err}`);
+              });
+
+              // Notify admins of the renewal (admin alert email + bell). The Stripe
+              // renewal path already did this; PayPal previously did not, so PayPal
+              // renewals were invisible to admins.
+              this.adminNotificationsService.notifySubscriptionRenewal(m, m.endDate!).catch((err) => {
+                this.logger.error(`Failed to notify admins of PayPal subscription renewal: ${err}`);
+              });
+
               // Send renewal confirmation to the member
               const memberEmail = m.user?.email;
               if (memberEmail && m.mecaId != null) {

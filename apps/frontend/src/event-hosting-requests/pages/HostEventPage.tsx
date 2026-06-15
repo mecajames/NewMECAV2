@@ -90,6 +90,8 @@ export default function HostEventPage() {
     day3EndTime: '',
     // Competition Formats
     selectedFormats: [] as string[],
+    // Points Multiplier (1X local, 2X regional, 3X state/major, 4X championship)
+    pointsMultiplier: '1',
     // Location
     addressLine1: '',
     addressLine2: '',
@@ -210,6 +212,8 @@ export default function HostEventPage() {
         day_3_end_time: formData.isMultiDay ? formData.day3EndTime : null,
         // Competition Formats
         competition_formats: formData.selectedFormats,
+        // Points Multiplier
+        points_multiplier: parseInt(formData.pointsMultiplier),
         // Location
         address_line_1: formData.addressLine1,
         address_line_2: formData.addressLine2,
@@ -272,6 +276,7 @@ export default function HostEventPage() {
         day3StartTime: '',
         day3EndTime: '',
         selectedFormats: [],
+        pointsMultiplier: '1',
         addressLine1: '',
         addressLine2: '',
         city: '',
@@ -791,6 +796,27 @@ export default function HostEventPage() {
               ) : (
                 <p className="text-gray-400">Loading competition formats...</p>
               )}
+            </div>
+
+            {/* Points Multiplier */}
+            <div>
+              <label className="block text-sm font-semibold text-white mb-2">
+                Points Multiplier <span className="text-orange-500">*</span>
+              </label>
+              <select
+                required
+                value={formData.pointsMultiplier}
+                onChange={(e) => setFormData({ ...formData, pointsMultiplier: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="1">1X - Local events</option>
+                <option value="2">2X - Regional events</option>
+                <option value="3">3X - State/Major events</option>
+                <option value="4">4X - Championship events</option>
+              </select>
+              <p className="text-sm text-gray-400 mt-2">
+                How much this event's results count toward season standings. MECA staff may adjust this when approving your event.
+              </p>
             </div>
 
             {/* Event Schedule */}

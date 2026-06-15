@@ -898,6 +898,17 @@ export class ShopService {
     } catch (error) {
       this.logger.error(`Failed to send payment receipt email for order ${order.orderNumber}: ${error}`);
     }
+
+    const userId = this.getOrderUserId(order);
+    if (userId) {
+      await this.notificationsService.createForUser({
+        userId,
+        title: `Payment received — order ${order.orderNumber}`,
+        message: `We've received your payment of $${Number(order.totalAmount).toFixed(2)}. Your order is confirmed and being prepared.`,
+        type: 'info',
+        link: `/shop/orders/${order.id}`,
+      });
+    }
   }
 
   private async sendShippingNotificationEmail(order: ShopOrder): Promise<void> {

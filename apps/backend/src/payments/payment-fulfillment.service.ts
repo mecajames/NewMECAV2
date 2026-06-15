@@ -714,6 +714,10 @@ export class PaymentFulfillmentService {
     productName?: string | null;
     paidAt?: Date | null;
     source: string;
+    // Defaults to STRIPE for backwards-compat. PayPal subscription renewals
+    // pass PAYPAL so the ledger row is attributed correctly (and the Stripe
+    // PI/charge/customer fields are left empty — PayPal keys on externalPaymentId).
+    paymentMethod?: PaymentMethod;
   }): Promise<Payment | null> {
     const { membershipId, invoiceId, chargeId, paymentIntentId } = opts;
     if (!invoiceId && !chargeId && !paymentIntentId) {
@@ -749,7 +753,7 @@ export class PaymentFulfillmentService {
       user: userId ? em.getReference(Profile, userId) : undefined,
       membership: em.getReference(Membership, membershipId),
       paymentType: PaymentType.MEMBERSHIP,
-      paymentMethod: PaymentMethod.STRIPE,
+      paymentMethod: opts.paymentMethod ?? PaymentMethod.STRIPE,
       paymentStatus: status,
       amount: opts.amount.toFixed(2),
       currency: (opts.currency || 'USD').toUpperCase(),

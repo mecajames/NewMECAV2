@@ -97,6 +97,8 @@ export default function EDSubmitEventPage() {
     day3EndTime: '',
     // Competition Formats
     selectedFormats: [] as string[],
+    // Points Multiplier (1X local, 2X regional, 3X state/major, 4X championship)
+    pointsMultiplier: '1',
     // Location
     addressLine1: '',
     addressLine2: '',
@@ -227,6 +229,8 @@ export default function EDSubmitEventPage() {
         day_3_end_time: formData.isMultiDay ? formData.day3EndTime || undefined : undefined,
         // Competition Formats
         competition_formats: formData.selectedFormats.length > 0 ? formData.selectedFormats : undefined,
+        // Points Multiplier
+        points_multiplier: parseInt(formData.pointsMultiplier),
         // Location
         address_line_1: formData.addressLine1 || undefined,
         address_line_2: formData.addressLine2 || undefined,
@@ -575,6 +579,28 @@ export default function EDSubmitEventPage() {
               </div>
             </div>
           )}
+
+          {/* Points Multiplier */}
+          <div className="bg-slate-800 rounded-xl p-6">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-orange-500" />
+              Points Multiplier <span className="text-orange-500">*</span>
+            </h2>
+            <p className="text-sm text-gray-400 mb-4">
+              How much this event's results count toward season standings. An admin may adjust this when approving the event.
+            </p>
+            <select
+              required
+              value={formData.pointsMultiplier}
+              onChange={(e) => setFormData({ ...formData, pointsMultiplier: e.target.value })}
+              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="1">1X - Local events</option>
+              <option value="2">2X - Regional events</option>
+              <option value="3">3X - State/Major events</option>
+              <option value="4">4X - Championship events</option>
+            </select>
+          </div>
 
           {/* Venue Information */}
           <div className="bg-slate-800 rounded-xl p-6">

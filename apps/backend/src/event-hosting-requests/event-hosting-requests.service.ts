@@ -145,6 +145,7 @@ export class EventHostingRequestsService {
     if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
     if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
     if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
+    if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
     if ((data as any).pre_registration_available !== undefined) transformedData.preRegistrationAvailable = (data as any).pre_registration_available;
 
     // Additional Services
@@ -235,6 +236,7 @@ export class EventHostingRequestsService {
     if ((data as any).non_member_entry_fee !== undefined) transformedData.nonMemberEntryFee = (data as any).non_member_entry_fee;
     if ((data as any).has_gate_fee !== undefined) transformedData.hasGateFee = (data as any).has_gate_fee;
     if ((data as any).gate_fee !== undefined) transformedData.gateFee = (data as any).gate_fee;
+    if ((data as any).points_multiplier !== undefined) transformedData.pointsMultiplier = (data as any).points_multiplier;
     if ((data as any).pre_registration_available !== undefined) transformedData.preRegistrationAvailable = (data as any).pre_registration_available;
     if ((data as any).competition_formats !== undefined) transformedData.competitionFormats = (data as any).competition_formats;
 
@@ -897,6 +899,9 @@ export class EventHostingRequestsService {
       venue_postal_code: request.postalCode,
       venue_country: request.country || 'United States',
       max_participants: request.expectedParticipants,
+      // Carry the requester/ED-selected points multiplier into the event so the
+      // admin doesn't have to re-enter it on approval (defaults 1X local).
+      points_multiplier: request.pointsMultiplier ?? 1,
       status: EventStatus.PENDING, // Event starts in pending status
     };
 
