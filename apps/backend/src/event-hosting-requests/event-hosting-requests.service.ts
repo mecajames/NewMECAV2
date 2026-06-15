@@ -3,6 +3,7 @@ import { EntityManager, Reference } from '@mikro-orm/core';
 import { EventHostingRequest } from './event-hosting-requests.entity';
 import { EventHostingRequestMessage } from './event-hosting-request-message.entity';
 import { EventHostingRequestStatus, EDAssignmentStatus, FinalApprovalStatus, EventStatus, EventTypeOption, SenderRole, RecipientType, UserRole } from '@newmeca/shared';
+import { adminRecipientWhere } from '../auth/is-admin.helper';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
 import { EventDirector } from '../event-directors/event-director.entity';
@@ -491,7 +492,7 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Notify admins
-    const admins = await em.find(Profile, { role: UserRole.ADMIN });
+    const admins = await em.find(Profile, adminRecipientWhere() as any);
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,
@@ -543,7 +544,7 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Notify admins (but NOT the requestor)
-    const admins = await em.find(Profile, { role: UserRole.ADMIN });
+    const admins = await em.find(Profile, adminRecipientWhere() as any);
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,
@@ -620,7 +621,7 @@ export class EventHostingRequestsService {
 
     // Notify admins if message is for them
     if (recipientType === RecipientType.ADMIN || recipientType === RecipientType.ALL) {
-      const admins = await em.find(Profile, { role: UserRole.ADMIN });
+      const admins = await em.find(Profile, adminRecipientWhere() as any);
       for (const admin of admins) {
         if (admin.id !== senderId) {
           await this.notificationsService.create({
@@ -912,7 +913,7 @@ export class EventHostingRequestsService {
     await em.flush();
 
     // Notify admins about the created event
-    const admins = await em.find(Profile, { role: UserRole.ADMIN });
+    const admins = await em.find(Profile, adminRecipientWhere() as any);
     for (const admin of admins) {
       await this.notificationsService.create({
         user: admin.id,

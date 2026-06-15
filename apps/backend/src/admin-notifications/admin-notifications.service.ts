@@ -9,7 +9,8 @@ import { ShopOrder } from '../shop/entities/shop-order.entity';
 import { Order } from '../orders/orders.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { Payment } from '../payments/payments.entity';
-import { UserRole, PaymentStatus, ShopOrderStatus } from '@newmeca/shared';
+import { PaymentStatus, ShopOrderStatus } from '@newmeca/shared';
+import { adminRecipientWhere } from '../auth/is-admin.helper';
 
 @Injectable()
 export class AdminNotificationsService {
@@ -26,17 +27,17 @@ export class AdminNotificationsService {
 
   private async getAdminEmails(): Promise<string[]> {
     const em = this.em.fork();
-    const admins = await em.find(Profile, {
-      role: UserRole.ADMIN,
-    }, { fields: ['email'] });
+    // Match the canonical admin set (role='admin' OR is_staff OR protected
+    // MECA ID) — resolving by role alone dropped staff/protected admins
+    // (e.g. James, 202401) from every admin alert email.
+    const admins = await em.find(Profile, adminRecipientWhere() as any, { fields: ['email'] });
     return admins.map(a => a.email).filter((e): e is string => !!e);
   }
 
   private async getAdminUserIds(): Promise<string[]> {
     const em = this.em.fork();
-    const admins = await em.find(Profile, {
-      role: UserRole.ADMIN,
-    }, { fields: ['id'] });
+    // Same canonical admin set — drives who gets the in-app bell notification.
+    const admins = await em.find(Profile, adminRecipientWhere() as any, { fields: ['id'] });
     return admins.map(a => a.id);
   }
 

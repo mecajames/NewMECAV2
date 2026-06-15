@@ -4,6 +4,7 @@ import { RetailerListing, GalleryImage } from './retailer-listing.entity';
 import { ManufacturerListing } from './manufacturer-listing.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { adminRecipientWhere } from '../auth/is-admin.helper';
 
 interface CreateRetailerDto {
   businessName: string;
@@ -75,7 +76,7 @@ export class BusinessListingsService {
     const em = this.em.fork();
     const admins = await em.find(
       Profile,
-      { $or: [{ role: 'admin' }, { is_staff: true }] },
+      adminRecipientWhere() as any,
       { fields: ['id'] },
     );
     return admins.map(a => a.id);

@@ -641,7 +641,7 @@ export class ProfilesService {
         p.role = (dto.role || 'competitor') as any;
         p.membership_status = 'none';
         p.meca_id = mecaId;
-        p.is_staff = isAdminUser({ role: dto.role });
+        p.is_staff = isAdminUser({ role: dto.role, meca_id: mecaId });
         p.force_password_change = dto.forcePasswordChange ?? false;
         p.account_type = AccountType.MEMBER;
         p.member_since = p.member_since || now;
