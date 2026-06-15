@@ -163,6 +163,12 @@ export class EventHostingRequest {
   @Property({ type: 'text', nullable: true, fieldName: 'gate_fee', serializedName: 'gate_fee' })
   gateFee?: string;
 
+  // Points Multiplier (1X = local, 2X = regional, 3X = state/major, 4X = championship).
+  // Selected by the requester/ED on submission; carried into the created event when
+  // an admin approves the request. Mirrors events.points_multiplier.
+  @Property({ type: 'integer', nullable: true, default: 1, fieldName: 'points_multiplier', serializedName: 'points_multiplier' })
+  pointsMultiplier?: number;
+
   @Enum(() => EventHostingRequestStatus)
   status: EventHostingRequestStatus = EventHostingRequestStatus.PENDING;
 

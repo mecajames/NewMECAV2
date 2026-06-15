@@ -117,6 +117,8 @@ export interface EventHostingRequest {
   // Gate Fee
   has_gate_fee?: boolean;
   gate_fee?: string;
+  // Points Multiplier (1X local, 2X regional, 3X state/major, 4X championship)
+  points_multiplier?: number;
   // Status
   status: EventHostingRequestStatus;
   // Admin Response (legacy)

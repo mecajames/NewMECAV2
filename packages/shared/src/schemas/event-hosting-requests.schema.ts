@@ -71,6 +71,8 @@ export const CreateEventHostingRequestApiSchema = z.object({
   non_member_entry_fee: z.number().min(0).optional(),
   has_gate_fee: z.boolean().optional(),
   gate_fee: z.number().min(0).optional(),
+  // Points multiplier: 1X local, 2X regional, 3X state/major, 4X championship
+  points_multiplier: z.number().int().min(1).max(4).optional(),
   pre_registration_available: z.boolean().optional(),
 
   // Additional Services
@@ -126,6 +128,7 @@ export const EventHostingRequestSchema = z.object({
   nonMemberEntryFee: z.number().nullable(),
   hasGateFee: z.boolean().nullable(),
   gateFee: z.number().nullable(),
+  pointsMultiplier: z.number().nullable(),
   preRegistrationAvailable: z.boolean().nullable(),
   additionalServices: z.array(z.string()).nullable(),
   otherServicesDetails: z.string().nullable(),
