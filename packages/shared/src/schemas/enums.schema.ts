@@ -306,7 +306,12 @@ export const TICKET_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   ],
   [TicketStatus.AWAITING_RESPONSE]: [
     TicketStatus.IN_PROGRESS,
+    TicketStatus.PENDING_INTERNAL_REVIEW,
     TicketStatus.ON_HOLD,
+    // A ticket waiting on the customer can still be escalated or sent to
+    // internal review — staff shouldn't have to flip it back to In Progress
+    // first. (Was missing here; every other active status allows ESCALATED.)
+    TicketStatus.ESCALATED,
     TicketStatus.RESOLVED,
     TicketStatus.CLOSED,
   ],
