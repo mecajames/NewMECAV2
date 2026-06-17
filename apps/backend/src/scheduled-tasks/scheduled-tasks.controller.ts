@@ -124,4 +124,19 @@ export class ScheduledTasksController {
     await this.requireAdmin(authHeader);
     return this.scheduledTasksService.triggerRenewalBackfillForExpired();
   }
+
+  /**
+   * Reconcile profiles.membership_status against the membership/comp source of
+   * truth — fixes stale 'active' labels left on members who lapsed by date.
+   * Pass { dryRun: true } to PREVIEW the change counts without writing anything.
+   * The same reconciliation runs automatically every day. Admin only.
+   */
+  @Post('reconcile-membership-status')
+  async reconcileMembershipStatus(
+    @Headers('authorization') authHeader: string,
+    @Body('dryRun') dryRun?: boolean,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.scheduledTasksService.reconcileMembershipStatuses({ dryRun: !!dryRun });
+  }
 }

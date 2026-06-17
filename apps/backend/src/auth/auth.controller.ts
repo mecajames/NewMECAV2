@@ -198,7 +198,14 @@ export class AuthController {
     }
     try {
       const rows = await this.em.getConnection().execute(
-        `SELECT p.can_login, p.membership_status
+        `SELECT
+            p.can_login AS can_login,
+            EXISTS (
+              SELECT 1 FROM public.memberships m
+               WHERE m.user_id = u.id
+                 AND m.payment_status = 'paid'
+                 AND (m.end_date IS NULL OR m.end_date > now())
+            ) AS has_active_membership
            FROM auth.users u
            LEFT JOIN public.profiles p ON p.id = u.id
           WHERE lower(u.email) = ?
@@ -209,10 +216,14 @@ export class AuthController {
         return {
           exists: true,
           canLogin: rows[0].can_login !== false,
-          // Lets the membership checkout route an expired/never-member email
-          // into guest renewal instead of a "log in" dead end (the expired
-          // login gate makes that advice impossible to follow).
-          hasActiveMembership: rows[0].membership_status === 'active',
+          // Compute "active" from the memberships table (a PAID membership not
+          // past its end_date) — the SOURCE OF TRUTH — NOT the denormalized
+          // profiles.membership_status. That column goes stale when a
+          // membership lapses by date and nothing flips it, and a stale
+          // 'active' sent EXPIRED members to a "please log in" dead end (they
+          // can't log in — the expired-login gate signs them out). Using the
+          // truth lets the checkout route them into guest renewal instead.
+          hasActiveMembership: rows[0].has_active_membership === true,
         };
       }
     } catch (err) {
